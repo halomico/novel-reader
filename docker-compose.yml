@@ -1,0 +1,16 @@
+services:
+  app:
+    build: .
+    container_name: novel-reader
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      NOVEL_LIBRARY_DIR: /app/library/books
+      DATABASE_PATH: /app/data/novels.db
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./library/books:/app/library/books:ro
+      - ./data:/app/data

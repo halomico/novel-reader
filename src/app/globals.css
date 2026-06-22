@@ -1,0 +1,703 @@
+:root {
+  color-scheme: light;
+  --bg: #f4efe5;
+  --bg-soft: #fbf7ef;
+  --surface: #fffaf2;
+  --surface-strong: #f1e5d3;
+  --text: #3d2a1f;
+  --muted: #8a7462;
+  --border: #e0d0bb;
+  --accent: #a9362b;
+  --accent-strong: #8e2a22;
+  --shadow: 0 10px 30px rgb(84 54 31 / 10%);
+  --reader-font-size: 19px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #19130f;
+    --bg-soft: #211813;
+    --surface: #251c16;
+    --surface-strong: #33271f;
+    --text: #eadcca;
+    --muted: #bba58f;
+    --border: #46372d;
+    --accent: #d07467;
+    --accent-strong: #e38b7e;
+    --shadow: 0 10px 30px rgb(0 0 0 / 24%);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #19130f;
+  --bg-soft: #211813;
+  --surface: #251c16;
+  --surface-strong: #33271f;
+  --text: #eadcca;
+  --muted: #bba58f;
+  --border: #46372d;
+  --accent: #d07467;
+  --accent-strong: #e38b7e;
+  --shadow: 0 10px 30px rgb(0 0 0 / 24%);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4efe5;
+  --bg-soft: #fbf7ef;
+  --surface: #fffaf2;
+  --surface-strong: #f1e5d3;
+  --text: #3d2a1f;
+  --muted: #8a7462;
+  --border: #e0d0bb;
+  --accent: #a9362b;
+  --accent-strong: #8e2a22;
+  --shadow: 0 10px 30px rgb(84 54 31 / 10%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+}
+
+body {
+  min-height: 100%;
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgb(169 54 43 / 8%), transparent 26rem),
+    linear-gradient(180deg, var(--bg-soft), var(--bg));
+  color: var(--text);
+  font-family:
+    "Noto Serif SC",
+    "Source Han Serif SC",
+    "Songti SC",
+    SimSun,
+    serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.appShell,
+.readerShell {
+  width: min(1120px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 22px 0 56px;
+}
+
+.readerShell {
+  width: min(960px, calc(100% - 28px));
+}
+
+.siteHeader {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: auto minmax(180px, 440px) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+  backdrop-filter: blur(18px);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--accent);
+  font-size: 25px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.searchForm {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 7px 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 8px 22px rgb(84 54 31 / 8%);
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.searchForm:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
+  box-shadow: 0 10px 26px rgb(84 54 31 / 12%);
+}
+
+.searchForm input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.searchForm button,
+.jumpForm button,
+.segmentedControl button {
+  border: 0;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fffaf2;
+  cursor: pointer;
+}
+
+.searchForm button {
+  padding: 7px 12px;
+}
+
+.searchForm .searchSubmit {
+  background: transparent;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.searchModeMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 34px;
+  z-index: 25;
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  box-shadow: 0 8px 22px rgb(84 54 31 / 10%);
+}
+
+.searchModeMenu button {
+  min-width: 48px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.searchModeMenu button.isActive {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.iconLink,
+.pageButton,
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  justify-self: end;
+  gap: 8px;
+}
+
+.iconLink {
+  width: 42px;
+  height: 42px;
+  cursor: pointer;
+}
+
+.catalogHero,
+.settingsHero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 34px 0 22px;
+}
+
+.catalogSummary {
+  display: flex;
+  justify-content: flex-end;
+  padding: 22px 0 16px;
+  color: var(--muted);
+}
+
+.catalogSummary p {
+  margin: 0;
+}
+
+.catalogHero h1,
+.settingsHero h1 {
+  margin: 0;
+  font-size: clamp(34px, 6vw, 58px);
+  line-height: 1.05;
+  letter-spacing: 0;
+}
+
+.catalogHero p,
+.settingsHero p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.eyebrow {
+  margin-bottom: 8px;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.bookGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.bookCard {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 7px 11px;
+  min-height: 82px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease;
+}
+
+.bookCard:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border));
+}
+
+.bookMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 42px;
+  border-radius: 4px;
+  background: var(--surface-strong);
+  color: var(--accent);
+}
+
+.bookTitle {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emptyState {
+  padding: 36px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.emptyState h2 {
+  margin: 0 0 10px;
+}
+
+.emptyState p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.pageButton {
+  width: 40px;
+  height: 40px;
+}
+
+.isDisabled {
+  opacity: 0.42;
+}
+
+.pageStatus {
+  color: var(--muted);
+}
+
+.jumpForm {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.jumpForm input {
+  width: 78px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.jumpForm button {
+  padding: 9px 13px;
+}
+
+.readerToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0 22px;
+}
+
+.readerToolbarSticky {
+  position: sticky;
+  top: 66px;
+  z-index: 15;
+  padding: 10px 0 14px;
+  background: color-mix(in srgb, var(--bg-soft) 86%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.backLink {
+  gap: 7px;
+  padding: 9px 13px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.readerPage {
+  padding: clamp(24px, 5vw, 56px);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.readerTitle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 32px;
+  color: var(--accent);
+}
+
+.readerTitle h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(28px, 5vw, 44px);
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.readerText {
+  color: var(--text);
+  font-size: var(--reader-font-size);
+  line-height: 2.05;
+  overflow-wrap: anywhere;
+}
+
+.readerSegment {
+  scroll-margin-top: 132px;
+  white-space: pre-wrap;
+}
+
+.readerSegment.isHit,
+.readerSegment.isClientHit {
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+.searchHero {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.bookSearch {
+  position: relative;
+  display: grid;
+  flex: 1;
+  max-width: 440px;
+}
+
+.bookSearchForm {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-soft);
+}
+
+.bookSearchForm input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.bookSearchForm button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 7px;
+  padding: 9px 11px;
+  background: var(--accent);
+  color: #fffaf2;
+  cursor: pointer;
+}
+
+.bookSearchPanel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 18;
+  display: grid;
+  width: min(520px, 78vw);
+  max-height: min(420px, 62vh);
+  gap: 8px;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.searchMessage,
+.searchHero p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.bookSearchResults {
+  display: grid;
+  gap: 8px;
+}
+
+.bookSearchResults button {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.searchResults {
+  display: grid;
+  gap: 12px;
+}
+
+.searchResultCard {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.searchResultCard:hover {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border));
+}
+
+.searchResultBody {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.searchResultBody strong {
+  font-size: 18px;
+}
+
+.searchResultBody span {
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+mark {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text);
+}
+
+.readerSearchMark {
+  padding: 0 2px;
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
+.settingsPanel {
+  display: grid;
+  gap: 16px;
+  max-width: 760px;
+}
+
+.settingBlock,
+.previewReader {
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.settingBlock h2 {
+  margin: 0 0 14px;
+  font-size: 20px;
+}
+
+.segmentedControl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.segmentedControl button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 14px;
+  background: var(--surface-strong);
+  color: var(--text);
+}
+
+.segmentedControl button.isActive {
+  background: var(--accent);
+  color: #fffaf2;
+}
+
+.rangeRow {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+}
+
+.rangeRow input {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.rangeRow strong {
+  min-width: 54px;
+  color: var(--text);
+}
+
+.previewReader {
+  color: var(--text);
+  font-size: var(--reader-font-size);
+  line-height: 2;
+}
+
+.previewReader p {
+  margin: 0;
+}
+
+@media (max-width: 820px) {
+  .appShell,
+  .readerShell {
+    width: min(100% - 22px, 720px);
+    padding-top: 12px;
+  }
+
+  .siteHeader {
+    grid-template-columns: 1fr auto;
+  }
+
+  .brand {
+    font-size: 22px;
+  }
+
+  .searchForm {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .catalogHero,
+  .settingsHero {
+    align-items: start;
+    flex-direction: column;
+    padding-top: 24px;
+  }
+
+  .bookGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .readerPage {
+    padding: 22px 16px;
+  }
+
+  .readerToolbarSticky {
+    top: 112px;
+  }
+
+  .bookSearchPanel {
+    width: min(100%, calc(100vw - 22px));
+  }
+
+  .readerText {
+    line-height: 1.95;
+  }
+
+  .rangeRow {
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .rangeRow strong {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 821px) and (max-width: 1060px) {
+  .bookGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

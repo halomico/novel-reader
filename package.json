@@ -1,0 +1,40 @@
+{
+  "name": "novel-reader",
+  "version": "1.0.0",
+  "description": "A clean Chinese novel reader with configurable local library storage.",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "scan:books": "tsx scripts/scan-books.ts",
+    "index:content": "tsx scripts/index-content.ts",
+    "test": "node --import tsx --test src/lib/filename.test.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "iconv-lite": "^0.6.3",
+    "lucide-react": "^0.468.0",
+    "next": "^15.5.19",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "overrides": {
+    "postcss": "^8.5.15"
+  },
+  "keywords": [
+    "novel",
+    "reader",
+    "sqlite",
+    "nextjs"
+  ],
+  "author": "",
+  "license": "ISC"
+}
