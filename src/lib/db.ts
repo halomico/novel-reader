@@ -24,14 +24,15 @@ function migrateNovelsAllowDuplicateTitles(db: DatabaseSync) {
       title TEXT NOT NULL,
       file_name TEXT NOT NULL,
       relative_path TEXT NOT NULL UNIQUE,
+      content_hash TEXT,
       size_bytes INTEGER NOT NULL,
       mtime_ms INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
-    INSERT INTO novels_new (id, title, file_name, relative_path, size_bytes, mtime_ms, created_at, updated_at)
-    SELECT id, title, file_name, relative_path, size_bytes, mtime_ms, created_at, updated_at
+    INSERT INTO novels_new (id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, created_at, updated_at)
+    SELECT id, title, file_name, relative_path, NULL, size_bytes, mtime_ms, created_at, updated_at
     FROM novels;
 
     DROP TABLE novels;
@@ -39,6 +40,15 @@ function migrateNovelsAllowDuplicateTitles(db: DatabaseSync) {
 
     COMMIT;
   `);
+}
+
+function migrateNovelsContentHash(db: DatabaseSync) {
+  const columns = db.prepare("PRAGMA table_info(novels)").all() as Array<{ name: string }>;
+  if (columns.some((column) => column.name === "content_hash")) {
+    return;
+  }
+
+  db.exec("ALTER TABLE novels ADD COLUMN content_hash TEXT;");
 }
 
 function initialize(db: DatabaseSync) {
@@ -51,6 +61,7 @@ function initialize(db: DatabaseSync) {
       title TEXT NOT NULL,
       file_name TEXT NOT NULL,
       relative_path TEXT NOT NULL UNIQUE,
+      content_hash TEXT,
       size_bytes INTEGER NOT NULL,
       mtime_ms INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -95,6 +106,8 @@ function initialize(db: DatabaseSync) {
       FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE
     );
   `);
+  migrateNovelsContentHash(db);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_novels_title_hash ON novels(title, content_hash);");
 }
 
 export function getDb(): DatabaseSync {

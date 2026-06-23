@@ -29,7 +29,7 @@ async function main() {
   const novels = db
     .prepare(
       `
-      SELECT n.id, n.title, n.file_name, n.relative_path, n.size_bytes, n.mtime_ms, n.created_at, n.updated_at
+      SELECT n.id, n.title, n.file_name, n.relative_path, n.content_hash, n.size_bytes, n.mtime_ms, n.created_at, n.updated_at
       FROM novels n
       LEFT JOIN search_index_state s ON s.novel_id = n.id
       WHERE s.novel_id IS NULL

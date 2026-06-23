@@ -479,9 +479,64 @@ input {
 }
 
 .pageEllipsis {
+  position: relative;
+  border: 0;
+  background: transparent;
   min-width: 26px;
   padding: 0 4px;
   color: color-mix(in srgb, var(--muted) 74%, transparent);
+  cursor: pointer;
+}
+
+.pageEllipsis:hover,
+.pageEllipsis:focus-visible {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
+.pageJump {
+  position: relative;
+  display: inline-flex;
+}
+
+.pageJumpPanel {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 7px);
+  z-index: 40;
+  display: grid;
+  grid-template-columns: 58px auto;
+  gap: 4px;
+  min-width: 116px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface) 98%, transparent);
+  box-shadow: 0 8px 18px rgb(84 54 31 / 12%);
+  transform: translateX(-50%);
+}
+
+.pageJumpPanel input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 4px 6px;
+  background: var(--bg-soft);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.pageJumpPanel button {
+  border: 0;
+  border-radius: 7px;
+  padding: 4px 7px;
+  background: var(--accent);
+  color: #fffaf2;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.2;
 }
 
 .backLink {
@@ -773,6 +828,591 @@ mark {
   margin: 0;
 }
 
+.adminShell,
+.adminLoginShell {
+  width: min(1180px, calc(100% - 28px));
+  margin: 0 auto;
+  padding: 22px 0 56px;
+}
+
+.adminLoginShell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+}
+
+.adminLoginPanel,
+.adminPanel,
+.adminForbidden {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.adminLoginPanel {
+  width: min(420px, 100%);
+  padding: 22px;
+}
+
+.adminLoginBrand,
+.adminTopbar,
+.adminTitleBlock,
+.adminTopActions,
+.adminPanelHeader,
+.adminUploadForm,
+.adminTableFooter,
+.adminStatCard,
+.adminPaths p {
+  display: flex;
+  align-items: center;
+}
+
+.adminLoginBrand,
+.adminTitleBlock {
+  gap: 12px;
+}
+
+.adminLogo {
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--accent);
+}
+
+.adminLoginBrand p,
+.adminTitleBlock p,
+.adminPanelHeader p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.adminLoginBrand h1,
+.adminTitleBlock h1,
+.adminPanelHeader h2 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+.adminLoginForm,
+.adminSettingsForm {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.adminLoginForm label,
+.adminSettingsForm label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.adminLoginForm input,
+.adminSettingsForm input,
+.adminSettingsForm textarea,
+.adminSettingsForm select,
+.adminSearchForm input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 9px 10px;
+  background: var(--bg-soft);
+  color: var(--text);
+}
+
+.adminSettingsForm textarea {
+  resize: vertical;
+}
+
+.adminLoginForm button,
+.adminSettingsForm button,
+.adminUploadForm button,
+.adminSearchForm button,
+.adminDangerButton,
+.adminForbidden button {
+  border: 0;
+  border-radius: 7px;
+  padding: 9px 14px;
+  background: var(--accent);
+  color: #fffaf2;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.adminLoginForm button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.adminBackHome {
+  display: block;
+  margin-top: 14px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 14px;
+}
+
+.adminNotice {
+  position: relative;
+  z-index: 60;
+  margin: 14px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.adminNotice.isSuccess {
+  border-color: color-mix(in srgb, #2e7d52 48%, var(--border));
+  background: color-mix(in srgb, #2e7d52 12%, var(--surface));
+}
+
+.adminNotice.isWarning {
+  border-color: color-mix(in srgb, #b7791f 48%, var(--border));
+  background: color-mix(in srgb, #b7791f 12%, var(--surface));
+}
+
+.adminNotice.isError {
+  border-color: color-mix(in srgb, #b42318 48%, var(--border));
+  background: color-mix(in srgb, #b42318 12%, var(--surface));
+}
+
+.adminTopbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  backdrop-filter: blur(18px);
+}
+
+.adminTopActions {
+  gap: 8px;
+}
+
+.adminIconButton {
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.adminStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.adminStatCard {
+  gap: 10px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.adminStatCard span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.adminStatCard strong {
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.65fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.adminPanel,
+.adminForbidden {
+  padding: 16px;
+}
+
+.adminPanelHeader {
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.adminSearchForm {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 220px) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.adminUploadForm {
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-strong) 38%, transparent);
+}
+
+.adminUploadForm label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--muted);
+}
+
+.adminUploadForm input {
+  max-width: 260px;
+}
+
+.adminUploadForm button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.adminUploadStatus {
+  flex: 1 0 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.adminTableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.adminTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.adminTable th,
+.adminTable td {
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.adminTable th {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.adminTable td {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminTable tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.adminTableFooter {
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.adminDangerButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: #b42318;
+}
+
+.adminFieldGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.adminPaths {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.adminPaths p {
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.adminPaths span {
+  min-width: 0;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminForbidden {
+  width: min(460px, 100%);
+  margin: 12vh auto 0;
+  text-align: center;
+}
+
+.adminLayout {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.adminSidebar {
+  position: sticky;
+  top: 18px;
+  display: grid;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.adminBrandCompact {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--accent);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.adminBrandCompact span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminSideNav {
+  display: grid;
+  gap: 5px;
+}
+
+.adminSideNav a,
+.adminSideNav span {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border-radius: 7px;
+  padding: 9px 10px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.adminSideNav a:hover,
+.adminSideNav a:focus-visible,
+.adminSideNav .isActive {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
+.adminSideNav .isDisabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.adminMain {
+  min-width: 0;
+}
+
+.adminMain .adminTopbar {
+  padding-top: 0;
+}
+
+.adminMain .adminTitleBlock h1 {
+  font-size: 21px;
+}
+
+.adminSettingsPanel {
+  max-width: 760px;
+}
+
+.adminSettingsForm button {
+  justify-self: end;
+  padding: 7px 16px;
+  border-radius: 999px;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.adminHome {
+  display: grid;
+  gap: 14px;
+}
+
+.adminHomeGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.adminHomeLink {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.adminHomeLink:hover,
+.adminHomeLink:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+}
+
+.adminHomeLink > svg {
+  color: var(--accent);
+}
+
+.adminHomeLink span {
+  display: grid;
+  gap: 3px;
+}
+
+.adminHomeLink small {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.adminHomePaths {
+  margin-top: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.adminTitleSearchForm {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 300px) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 6px 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 8px 20px rgb(84 54 31 / 7%);
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background 140ms ease;
+}
+
+.adminTitleSearchForm:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
+  background: color-mix(in srgb, var(--surface) 98%, transparent);
+  box-shadow: 0 10px 24px rgb(84 54 31 / 12%);
+}
+
+.adminTitleSearchForm input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.adminTitleSearchForm button {
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 11px;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.adminTitleSearchForm button:hover,
+.adminTitleSearchForm button:focus-visible {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.adminInlineMessage {
+  margin: -4px 0 12px;
+  color: var(--accent);
+  font-size: 14px;
+}
+
+.adminCheckbox {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.adminSortLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: var(--muted);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.adminSortLink:hover,
+.adminSortLink:focus-visible,
+.adminSortLink.isActive {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
+.adminDangerButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 @media (max-width: 820px) {
   .appShell,
   .readerShell {
@@ -864,6 +1504,85 @@ mark {
 
   .settingsGrid {
     grid-template-columns: 1fr;
+  }
+
+  .adminShell,
+  .adminLoginShell {
+    width: min(100% - 20px, 720px);
+    padding-top: 12px;
+  }
+
+  .adminLayout {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .adminSidebar {
+    position: static;
+  }
+
+  .adminSideNav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .adminSideNav a,
+  .adminSideNav span {
+    justify-content: center;
+    padding: 8px 6px;
+    font-size: 13px;
+  }
+
+  .adminTopbar,
+  .adminPanelHeader,
+  .adminUploadForm,
+  .adminTableFooter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .adminTopbar {
+    position: static;
+  }
+
+  .adminTopActions {
+    align-self: flex-end;
+  }
+
+  .adminStats,
+  .adminGrid,
+  .adminFieldGrid,
+  .adminHomeGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .adminSearchForm {
+    grid-template-columns: auto 1fr;
+  }
+
+  .adminSearchForm button {
+    grid-column: 1 / -1;
+  }
+
+  .adminTitleSearchForm {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    width: 100%;
+  }
+
+  .adminUploadForm input {
+    max-width: 100%;
+  }
+
+  .adminTable th:nth-child(3),
+  .adminTable td:nth-child(3),
+  .adminTable th:nth-child(5),
+  .adminTable td:nth-child(5) {
+    display: none;
+  }
+
+  .pageJumpPanel {
+    left: auto;
+    right: -48px;
+    transform: none;
   }
 }
 

@@ -11,6 +11,7 @@ export type Novel = {
   title: string;
   file_name: string;
   relative_path: string;
+  content_hash: string | null;
   size_bytes: number;
   mtime_ms: number;
   created_at: string;
@@ -67,7 +68,7 @@ export function listNovels(params: { page?: number; q?: string; pageSize?: numbe
 
     const candidates = db
       .prepare(
-        `SELECT id, title, file_name, relative_path, size_bytes, mtime_ms, created_at, updated_at
+        `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, created_at, updated_at
          FROM novels
          ORDER BY title COLLATE NOCASE ASC, id ASC`,
       )
@@ -96,7 +97,7 @@ export function listNovels(params: { page?: number; q?: string; pageSize?: numbe
 
   const books = db
     .prepare(
-      `SELECT id, title, file_name, relative_path, size_bytes, mtime_ms, created_at, updated_at
+      `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, created_at, updated_at
        FROM novels
        ORDER BY title COLLATE NOCASE ASC, id ASC
        LIMIT ? OFFSET ?`,
@@ -117,7 +118,7 @@ export function getNovelById(id: number): Novel | null {
   const db = getDb();
   const book = db
     .prepare(
-      `SELECT id, title, file_name, relative_path, size_bytes, mtime_ms, created_at, updated_at
+      `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, created_at, updated_at
        FROM novels
        WHERE id = ?`,
     )

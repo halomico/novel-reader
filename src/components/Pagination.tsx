@@ -1,5 +1,8 @@
+"use client";
+
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
+import { FormEvent, useState } from "react";
 
 type PageItem = number | "ellipsis";
 
@@ -8,6 +11,16 @@ function pageHref(page: number, query: string, basePath: string) {
   params.set("page", String(page));
   if (query) {
     params.set("q", query);
+  }
+  return `${basePath}?${params.toString()}`;
+}
+
+function pageHrefWithParams(page: number, query: string, basePath: string, extraParams: Record<string, string | undefined>) {
+  const params = new URLSearchParams(pageHref(page, query, basePath).split("?")[1]);
+  for (const [key, value] of Object.entries(extraParams)) {
+    if (value) {
+      params.set(key, value);
+    }
   }
   return `${basePath}?${params.toString()}`;
 }
@@ -37,16 +50,83 @@ function getPageItems(page: number, totalPages: number): PageItem[] {
   return items;
 }
 
+function PageJump({
+  totalPages,
+  query,
+  basePath,
+  extraParams,
+  index,
+}: {
+  totalPages: number;
+  query: string;
+  basePath: string;
+  extraParams: Record<string, string | undefined>;
+  index: number;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [value, setValue] = useState("");
+
+  function jump(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const numericPage = Number(value);
+    if (!Number.isFinite(numericPage)) {
+      return;
+    }
+    const nextPage = Math.min(Math.max(Math.floor(numericPage), 1), totalPages);
+    window.location.assign(pageHrefWithParams(nextPage, query, basePath, extraParams));
+  }
+
+  return (
+    <span
+      className="pageJump"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setIsOpen(false);
+        }
+      }}
+    >
+      <button
+        className="pageEllipsis"
+        type="button"
+        aria-expanded={isOpen}
+        aria-controls={`page-jump-${index}`}
+        aria-label="输入页码跳转"
+        onClick={() => setIsOpen((current) => !current)}
+      >
+        ...
+      </button>
+      {isOpen ? (
+        <form className="pageJumpPanel" id={`page-jump-${index}`} onSubmit={jump}>
+          <input
+            autoFocus
+            inputMode="numeric"
+            min="1"
+            max={totalPages}
+            name="page"
+            placeholder="页码"
+            type="number"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+          />
+          <button type="submit">跳转</button>
+        </form>
+      ) : null}
+    </span>
+  );
+}
+
 export function Pagination({
   page,
   totalPages,
   query,
   basePath = "/",
+  extraParams = {},
 }: {
   page: number;
   totalPages: number;
   query: string;
   basePath?: string;
+  extraParams?: Record<string, string | undefined>;
 }) {
   const canGoPrev = page > 1;
   const canGoNext = page < totalPages;
@@ -59,7 +139,7 @@ export function Pagination({
   return (
     <nav className="pagination" aria-label="小说列表分页">
       {canGoPrev ? (
-        <Link className="pageButton" href={pageHref(page - 1, query, basePath)} aria-label="上一页">
+        <Link className="pageButton" href={pageHrefWithParams(page - 1, query, basePath, extraParams)} aria-label="上一页">
           <ChevronLeft size={18} aria-hidden="true" />
         </Link>
       ) : (
@@ -71,15 +151,13 @@ export function Pagination({
       <div className="pageList" aria-label={`第 ${page} 页，共 ${totalPages} 页`}>
         {pageItems.map((item, index) =>
           item === "ellipsis" ? (
-            <span className="pageEllipsis" aria-hidden="true" key={`ellipsis-${index}`}>
-              …
-            </span>
+            <PageJump totalPages={totalPages} query={query} basePath={basePath} extraParams={extraParams} index={index} key={`ellipsis-${index}`} />
           ) : item === page ? (
             <span className="pageNumber isActive" aria-current="page" key={item}>
               {item}
             </span>
           ) : (
-            <Link className="pageNumber" href={pageHref(item, query, basePath)} key={item} aria-label={`第 ${item} 页`}>
+            <Link className="pageNumber" href={pageHrefWithParams(item, query, basePath, extraParams)} key={item} aria-label={`第 ${item} 页`}>
               {item}
             </Link>
           ),
@@ -87,7 +165,7 @@ export function Pagination({
       </div>
 
       {canGoNext ? (
-        <Link className="pageButton" href={pageHref(page + 1, query, basePath)} aria-label="下一页">
+        <Link className="pageButton" href={pageHrefWithParams(page + 1, query, basePath, extraParams)} aria-label="下一页">
           <ChevronRight size={18} aria-hidden="true" />
         </Link>
       ) : (

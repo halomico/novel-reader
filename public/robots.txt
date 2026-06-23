@@ -1,3 +1,4 @@
 User-agent: *
 Allow: /books/
 Allow: /search
+Disallow: /admin

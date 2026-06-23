@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ThemeScript } from "@/components/ThemeScript";
 import { getSiteTitle } from "@/lib/config";
+import { readSiteSettings } from "@/lib/site-settings";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -9,10 +10,12 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const settings = readSiteSettings();
+
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
-        <ThemeScript />
+        <ThemeScript defaultTheme={settings.adminTheme} />
       </head>
       <body>{children}</body>
     </html>

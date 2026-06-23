@@ -1,8 +1,8 @@
-export function ThemeScript() {
+export function ThemeScript({ defaultTheme = "system" }: { defaultTheme?: "system" | "light" | "dark" }) {
   const code = `
     (function () {
       try {
-        var theme = localStorage.getItem("novel-theme") || "system";
+        var theme = localStorage.getItem("novel-theme") || ${JSON.stringify(defaultTheme)};
         var uiMode = localStorage.getItem("novel-ui-mode") || "standard";
         var fontSize = Number(localStorage.getItem("novel-font-size") || "19");
         if (!Number.isFinite(fontSize) || fontSize < 5 || fontSize > 50) {

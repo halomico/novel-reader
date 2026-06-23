@@ -1,0 +1,75 @@
+import { LockKeyhole } from "lucide-react";
+import type { Metadata } from "next";
+import Link from "next/link";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { loginAdminAction } from "../actions";
+import { getAdminAccessState } from "@/lib/admin-access";
+import { getAdminSession, isAdminSecurityConfigured } from "@/lib/admin-auth";
+import { getSiteName } from "@/lib/config";
+
+export const dynamic = "force-dynamic";
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
+
+type AdminLoginPageProps = {
+  searchParams: Promise<{
+    error?: string;
+  }>;
+};
+
+export default async function AdminLoginPage({ searchParams }: AdminLoginPageProps) {
+  const session = await getAdminSession();
+  if (session) {
+    redirect("/admin");
+  }
+
+  const params = await searchParams;
+  const headerStore = await headers();
+  const access = getAdminAccessState(headerStore);
+  const siteName = getSiteName();
+  const configured = isAdminSecurityConfigured();
+  const error = params.error || "";
+
+  return (
+    <main className="adminLoginShell">
+      <section className="adminLoginPanel">
+        <div className="adminLoginBrand">
+          <span className="adminLogo" aria-hidden="true">
+            <LockKeyhole size={24} />
+          </span>
+          <div>
+            <p>{siteName}</p>
+            <h1>后台管理</h1>
+          </div>
+        </div>
+
+        {!access.allowed ? <p className="adminNotice isError">{access.reason}</p> : null}
+        {!configured ? <p className="adminNotice isWarning">请先在 .env 配置 ADMIN_PASSWORD 或 ADMIN_PASSWORD_SHA256，以及 ADMIN_SESSION_SECRET。</p> : null}
+        {error ? <p className="adminNotice isError">{error}</p> : null}
+
+        <form className="adminLoginForm" action={loginAdminAction}>
+          <label>
+            <span>用户名</span>
+            <input name="username" autoComplete="username" disabled={!access.allowed || !configured} />
+          </label>
+          <label>
+            <span>密码</span>
+            <input name="password" type="password" autoComplete="current-password" disabled={!access.allowed || !configured} />
+          </label>
+          <button type="submit" disabled={!access.allowed || !configured}>
+            登录
+          </button>
+        </form>
+
+        <Link className="adminBackHome" href="/">
+          返回前台
+        </Link>
+      </section>
+    </main>
+  );
+}
