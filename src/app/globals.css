@@ -153,7 +153,6 @@ input {
   color: var(--text);
 }
 
-.jumpForm button,
 .segmentedControl button {
   border: 0;
   border-radius: 7px;
@@ -425,44 +424,64 @@ input {
 
 .pagination {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 6px;
   margin-top: 28px;
 }
 
 .pageButton {
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
+  box-shadow: none;
 }
 
 .isDisabled {
   opacity: 0.42;
 }
 
-.pageStatus {
-  color: var(--muted);
-}
-
-.jumpForm {
+.pageList {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  color: var(--muted);
-}
-
-.jumpForm input {
-  width: 78px;
-  padding: 8px;
+  justify-content: center;
+  gap: 4px;
+  padding: 3px;
   border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--surface);
-  color: var(--text);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  box-shadow: 0 8px 20px rgb(84 54 31 / 7%);
 }
 
-.jumpForm button {
-  padding: 9px 13px;
+.pageNumber,
+.pageEllipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  padding: 0 9px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.pageNumber:hover,
+.pageNumber:focus-visible {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
+.pageNumber.isActive {
+  background: var(--accent);
+  color: #fffaf2;
+}
+
+.pageEllipsis {
+  min-width: 26px;
+  padding: 0 4px;
+  color: color-mix(in srgb, var(--muted) 74%, transparent);
 }
 
 .backLink {

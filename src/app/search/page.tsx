@@ -11,6 +11,7 @@ import {
 } from "@/lib/config";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { normalizeSearchPage, searchNovelContent, SearchResult, validateSearchKeyword } from "@/lib/search";
+import { countSearchChars, findSearchTermRanges, SearchTermPattern } from "@/lib/search-query";
 
 export const dynamic = "force-dynamic";
 
@@ -25,21 +26,31 @@ function getClientKey(cookieHeader: string, forwardedFor: string | null): string
   return forwardedFor?.split(",")[0]?.trim() || cookieHeader || "anonymous";
 }
 
-function highlightSnippet(snippet: string, keyword: string) {
-  const parts = snippet.split(keyword);
-  if (parts.length === 1) {
+function highlightSnippet(snippet: string, terms: SearchTermPattern[]) {
+  const ranges = findSearchTermRanges(snippet, terms);
+  if (!ranges.length) {
     return snippet;
   }
 
-  return parts.map((part, index) => (
-    <span key={`${part}-${index}`}>
-      {part}
-      {index < parts.length - 1 ? <mark>{keyword}</mark> : null}
-    </span>
-  ));
+  const nodes = [];
+  let cursor = 0;
+
+  for (const range of ranges) {
+    if (range.start > cursor) {
+      nodes.push(<span key={`text-${cursor}`}>{snippet.slice(cursor, range.start)}</span>);
+    }
+    nodes.push(<mark key={`mark-${range.start}`}>{snippet.slice(range.start, range.end)}</mark>);
+    cursor = range.end;
+  }
+
+  if (cursor < snippet.length) {
+    nodes.push(<span key={`text-${cursor}`}>{snippet.slice(cursor)}</span>);
+  }
+
+  return nodes;
 }
 
-function renderResults(results: SearchResult[], keyword: string, page: number, pageSize: number) {
+function renderResults(results: SearchResult[], keyword: string, terms: SearchTermPattern[], page: number, pageSize: number) {
   const start = (page - 1) * pageSize;
   return results.slice(start, start + pageSize).map((result) => {
     const from = `/search?q=${encodeURIComponent(keyword)}&page=${page}`;
@@ -54,7 +65,7 @@ function renderResults(results: SearchResult[], keyword: string, page: number, p
         </span>
         <span className="searchResultBody">
           <strong>{result.title}</strong>
-          <span>{highlightSnippet(result.snippet, keyword)}</span>
+          <span>{highlightSnippet(result.snippet, terms)}</span>
         </span>
       </Link>
     );
@@ -72,7 +83,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   if (validation.ok) {
     const perMinute =
-      Array.from(validation.keyword).length === 2 ? getSearchShortQueryRateLimitPerMinute() : getSearchRateLimitPerMinute();
+      countSearchChars(validation.query.anchorTerm) === 2 ? getSearchShortQueryRateLimitPerMinute() : getSearchRateLimitPerMinute();
     const limit = checkRateLimit({
       key: `search:${getClientKey(headerStore.get("cookie") || "", headerStore.get("x-forwarded-for"))}`,
       limit: perMinute,
@@ -82,7 +93,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     if (!limit.allowed) {
       message = `搜索太频繁，请 ${limit.retryAfterSeconds} 秒后再试`;
     } else {
-      results = searchNovelContent(validation.keyword);
+      results = searchNovelContent(validation.query);
       message = results.length ? "" : "没有找到匹配正文";
     }
   }
@@ -102,7 +113,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         {message ? <p className="searchMessage">{message}</p> : null}
       </section>
 
-      {results.length > 0 ? <section className="searchResults">{renderResults(results, validation.keyword, page, pageSize)}</section> : null}
+      {results.length > 0 && validation.ok ? (
+        <section className="searchResults">{renderResults(results, validation.keyword, validation.query.highlightTerms, page, pageSize)}</section>
+      ) : null}
 
       {results.length > pageSize ? <Pagination page={page} totalPages={totalPages} query={validation.keyword} basePath="/search" /> : null}
     </main>

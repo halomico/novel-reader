@@ -3,6 +3,7 @@ import path from "node:path";
 import { getLibraryDir } from "./config";
 import { getDb } from "./db";
 import { createNovelSegments, NovelSegment } from "./segments";
+import { matchesParsedSearchQuery, parseSearchQuery } from "./search-query";
 import { decodeNovelBuffer } from "./text";
 
 export type Novel = {
@@ -23,6 +24,7 @@ export type NovelListResult = {
   totalBooks: number;
   totalPages: number;
   query: string;
+  message?: string;
 };
 
 const DEFAULT_PAGE_SIZE = 15;
@@ -48,12 +50,46 @@ export function listNovels(params: { page?: number; q?: string; pageSize?: numbe
   const db = getDb();
   const pageSize = normalizePageSize(params.pageSize);
   const query = (params.q || "").trim();
-  const where = query ? "WHERE title LIKE ?" : "";
-  const values = query ? [`%${query}%`] : [];
+
+  if (query) {
+    const validation = parseSearchQuery(query, { mode: "title" });
+    if (!validation.ok) {
+      return {
+        books: [],
+        page: 1,
+        pageSize,
+        totalBooks: 0,
+        totalPages: 1,
+        query: validation.keyword,
+        message: validation.message,
+      };
+    }
+
+    const candidates = db
+      .prepare(
+        `SELECT id, title, file_name, relative_path, size_bytes, mtime_ms, created_at, updated_at
+         FROM novels
+         ORDER BY title COLLATE NOCASE ASC, id ASC`,
+      )
+      .all() as Novel[];
+    const matchedBooks = candidates.filter((book) => matchesParsedSearchQuery(book.title, validation.query));
+    const totalPages = Math.ceil(matchedBooks.length / pageSize);
+    const page = normalizePage(params.page || 1, totalPages);
+    const offset = (page - 1) * pageSize;
+
+    return {
+      books: matchedBooks.slice(offset, offset + pageSize),
+      page,
+      pageSize,
+      totalBooks: matchedBooks.length,
+      totalPages: Math.max(totalPages, 1),
+      query: validation.keyword,
+    };
+  }
 
   const totalBooks = db
-    .prepare(`SELECT COUNT(*) AS count FROM novels ${where}`)
-    .get(...values) as { count: number };
+    .prepare("SELECT COUNT(*) AS count FROM novels")
+    .get() as { count: number };
   const totalPages = Math.ceil(totalBooks.count / pageSize);
   const page = normalizePage(params.page || 1, totalPages);
   const offset = (page - 1) * pageSize;
@@ -62,11 +98,10 @@ export function listNovels(params: { page?: number; q?: string; pageSize?: numbe
     .prepare(
       `SELECT id, title, file_name, relative_path, size_bytes, mtime_ms, created_at, updated_at
        FROM novels
-       ${where}
        ORDER BY title COLLATE NOCASE ASC, id ASC
        LIMIT ? OFFSET ?`,
     )
-    .all(...values, pageSize, offset) as Novel[];
+    .all(pageSize, offset) as Novel[];
 
   return {
     books,

@@ -2,6 +2,13 @@
 
 import { Search } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
+import {
+  createSearchSnippet,
+  findSearchTermRanges,
+  matchesParsedSearchQuery,
+  parseSearchQuery,
+  SearchTermPattern,
+} from "@/lib/search-query";
 
 type SearchMode = "title" | "content" | "current";
 type MessageTone = "success" | "warning" | "error";
@@ -17,17 +24,6 @@ const options: Array<{ value: SearchMode; label: string; action: string; placeho
 ];
 
 const originalTextBySegment = new WeakMap<HTMLElement, string>();
-
-function createSnippet(content: string, keyword: string): string {
-  const index = content.indexOf(keyword);
-  if (index < 0) {
-    return content.trim().slice(0, 100);
-  }
-
-  const start = Math.max(0, index - 44);
-  const end = Math.min(content.length, index + keyword.length + 68);
-  return `${start > 0 ? "..." : ""}${content.slice(start, end).trim()}${end < content.length ? "..." : ""}`;
-}
 
 function getReaderSegments(): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>(".readerSegment"));
@@ -49,28 +45,26 @@ function clearHighlights(segments: HTMLElement[]) {
   }
 }
 
-function highlightSegment(segment: HTMLElement, keyword: string) {
+function highlightSegment(segment: HTMLElement, terms: SearchTermPattern[]) {
   const text = originalTextBySegment.get(segment) || segment.textContent || "";
   if (!originalTextBySegment.has(segment)) {
     originalTextBySegment.set(segment, text);
   }
 
+  const ranges = findSearchTermRanges(text, terms);
   const fragment = document.createDocumentFragment();
   let cursor = 0;
-  let index = text.indexOf(keyword, cursor);
 
-  while (index >= 0) {
-    if (index > cursor) {
-      fragment.append(document.createTextNode(text.slice(cursor, index)));
+  for (const range of ranges) {
+    if (range.start > cursor) {
+      fragment.append(document.createTextNode(text.slice(cursor, range.start)));
     }
 
     const mark = document.createElement("mark");
     mark.className = "readerSearchMark";
-    mark.textContent = keyword;
+    mark.textContent = text.slice(range.start, range.end);
     fragment.append(mark);
-
-    cursor = index + keyword.length;
-    index = text.indexOf(keyword, cursor);
+    cursor = range.end;
   }
 
   if (cursor < text.length) {
@@ -180,7 +174,7 @@ export function HeaderSearch({
   function searchCurrentBook(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextKeyword = keyword.trim();
-    const length = Array.from(nextKeyword).length;
+    const validation = parseSearchQuery(nextKeyword);
     const segments = getReaderSegments();
     clearHighlights(segments);
 
@@ -191,8 +185,8 @@ export function HeaderSearch({
       return;
     }
 
-    if (length < 2 || length > 30) {
-      showMessage("请输入 2 到 30 个字的关键字", "warning");
+    if (!validation.ok) {
+      showMessage(validation.message, "warning");
       setResults([]);
       setIsCurrentPanelOpen(false);
       return;
@@ -202,11 +196,11 @@ export function HeaderSearch({
 
     for (const segment of segments) {
       const text = segment.textContent || "";
-      if (text.includes(nextKeyword)) {
-        highlightSegment(segment, nextKeyword);
+      if (matchesParsedSearchQuery(text, validation.query)) {
+        highlightSegment(segment, validation.query.highlightTerms);
         nextResults.push({
           segmentIndex: segment.dataset.segmentIndex || "0",
-          snippet: createSnippet(text, nextKeyword),
+          snippet: createSearchSnippet(text, validation.query.highlightTerms, 44, 68),
         });
       }
 

@@ -56,7 +56,7 @@ export default async function Home({ searchParams }: HomeProps) {
         </section>
       ) : (
         <section className="emptyState">
-          <h2>未找到匹配内容</h2>
+          <h2>{result.message || "未找到匹配内容"}</h2>
         </section>
       )}
 
