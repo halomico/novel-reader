@@ -56,8 +56,7 @@ export default async function Home({ searchParams }: HomeProps) {
         </section>
       ) : (
         <section className="emptyState">
-          <h2>还没有可显示的小说</h2>
-          <p>把 `.txt` 文件放入配置的书库目录后，执行 `npm run scan:books`。</p>
+          <h2>未找到匹配内容</h2>
         </section>
       )}
 

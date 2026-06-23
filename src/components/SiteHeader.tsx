@@ -7,9 +7,11 @@ import { ThemeToggle } from "./ThemeToggle";
 export function SiteHeader({
   query = "",
   defaultSearchMode = "title",
+  showCurrentSearch = false,
 }: {
   query?: string;
-  defaultSearchMode?: "title" | "content";
+  defaultSearchMode?: "title" | "content" | "current";
+  showCurrentSearch?: boolean;
 }) {
   const siteName = getSiteName();
 
@@ -19,7 +21,7 @@ export function SiteHeader({
         <BookOpen size={24} aria-hidden="true" />
         <span>{siteName}</span>
       </Link>
-      <HeaderSearch query={query} defaultMode={defaultSearchMode} />
+      <HeaderSearch query={query} defaultMode={defaultSearchMode} showCurrentSearch={showCurrentSearch} />
       <div className="headerActions">
         <ThemeToggle />
         <Link className="iconLink" href="/settings" aria-label="阅读设置" title="阅读设置">

@@ -13,9 +13,8 @@ export function BackButton({ fallbackHref = "/" }: { fallbackHref?: string }) {
   }
 
   return (
-    <button className="backLink" type="button" onClick={goBack}>
+    <button className="backLink" type="button" onClick={goBack} aria-label="返回" title="返回">
       <ArrowLeft size={18} aria-hidden="true" />
-      <span>返回</span>
     </button>
   );
 }

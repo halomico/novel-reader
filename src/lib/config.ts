@@ -40,7 +40,7 @@ export function getGlobalSearchMaxResults(): number {
 }
 
 export function getSearchResultsPageSize(): number {
-  return readIntConfig("SEARCH_RESULTS_PAGE_SIZE", 15, 1, 50);
+  return readIntConfig("SEARCH_RESULTS_PAGE_SIZE", 20, 1, 50);
 }
 
 export function getSearchRateLimitPerMinute(): number {

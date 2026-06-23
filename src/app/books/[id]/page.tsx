@@ -1,7 +1,5 @@
 import { BookOpenText } from "lucide-react";
 import { notFound } from "next/navigation";
-import { BackButton } from "@/components/BackButton";
-import { BookSearch } from "@/components/BookSearch";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getNovelById, readNovelSegments } from "@/lib/books";
 
@@ -12,17 +10,9 @@ type BookPageProps = {
     id: string;
   }>;
   searchParams: Promise<{
-    from?: string;
     hit?: string;
   }>;
 };
-
-function getSafeReturnHref(value: string | undefined): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) {
-    return "/";
-  }
-  return value;
-}
 
 export default async function BookPage({ params, searchParams }: BookPageProps) {
   const { id } = await params;
@@ -39,16 +29,11 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
   }
 
   const segments = await readNovelSegments(book);
-  const returnHref = getSafeReturnHref(query.from);
   const hitSegment = Number(query.hit);
 
   return (
     <main className="readerShell">
-      <SiteHeader />
-      <div className="readerToolbar readerToolbarSticky">
-        <BackButton fallbackHref={returnHref} />
-        <BookSearch />
-      </div>
+      <SiteHeader defaultSearchMode="current" showCurrentSearch />
 
       <article className="readerPage">
         <header className="readerTitle">

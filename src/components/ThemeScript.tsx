@@ -3,6 +3,7 @@ export function ThemeScript() {
     (function () {
       try {
         var theme = localStorage.getItem("novel-theme") || "system";
+        var uiMode = localStorage.getItem("novel-ui-mode") || "standard";
         var fontSize = Number(localStorage.getItem("novel-font-size") || "19");
         if (!Number.isFinite(fontSize) || fontSize < 5 || fontSize > 50) {
           fontSize = 19;
@@ -12,6 +13,7 @@ export function ThemeScript() {
         } else {
           document.documentElement.removeAttribute("data-theme");
         }
+        document.documentElement.dataset.uiMode = uiMode === "minimal" ? "minimal" : "standard";
         document.documentElement.style.setProperty("--reader-font-size", fontSize + "px");
       } catch (error) {}
     })();

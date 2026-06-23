@@ -11,11 +11,8 @@ export default function SettingsPage() {
   return (
     <main className="appShell">
       <SiteHeader />
-      <div className="readerToolbar">
-        <BackButton />
-      </div>
       <section className="settingsHero">
-        <p className="eyebrow">阅读偏好</p>
+        <BackButton />
         <h1>设置</h1>
       </section>
       <SettingsPanel previewText={previewText} />

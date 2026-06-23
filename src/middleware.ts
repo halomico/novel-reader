@@ -72,12 +72,6 @@ function plainResponse(message: string, status: number, retryAfterSeconds?: numb
 }
 
 export function middleware(request: NextRequest) {
-  if (request.nextUrl.pathname === "/search") {
-    const response = NextResponse.next();
-    response.headers.set("X-Robots-Tag", "noindex, noarchive");
-    return response;
-  }
-
   const userAgent = request.headers.get("user-agent") || "";
   const shouldBlockHeadless = readBool("CONTENT_BLOCK_HEADLESS_BROWSERS", true);
 
@@ -97,5 +91,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/books/:path*", "/search"],
+  matcher: ["/books/:path*"],
 };
