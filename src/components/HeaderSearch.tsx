@@ -7,7 +7,7 @@ import {
   findSearchTermRanges,
   matchesParsedSearchQuery,
   parseSearchQuery,
-  SearchTermPattern,
+  type SearchTermPattern,
 } from "@/lib/search-query";
 
 type SearchMode = "title" | "content" | "current";

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
@@ -56,12 +56,14 @@ function PageJump({
   basePath,
   extraParams,
   index,
+  onPageChange,
 }: {
   totalPages: number;
   query: string;
   basePath: string;
   extraParams: Record<string, string | undefined>;
   index: number;
+  onPageChange?: (page: number) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [value, setValue] = useState("");
@@ -73,6 +75,12 @@ function PageJump({
       return;
     }
     const nextPage = Math.min(Math.max(Math.floor(numericPage), 1), totalPages);
+    if (onPageChange) {
+      onPageChange(nextPage);
+      setIsOpen(false);
+      setValue("");
+      return;
+    }
     window.location.assign(pageHrefWithParams(nextPage, query, basePath, extraParams));
   }
 
@@ -121,12 +129,14 @@ export function Pagination({
   query,
   basePath = "/",
   extraParams = {},
+  onPageChange,
 }: {
   page: number;
   totalPages: number;
   query: string;
   basePath?: string;
   extraParams?: Record<string, string | undefined>;
+  onPageChange?: (page: number) => void;
 }) {
   const canGoPrev = page > 1;
   const canGoNext = page < totalPages;
@@ -137,11 +147,17 @@ export function Pagination({
   }
 
   return (
-    <nav className="pagination" aria-label="小说列表分页">
+    <nav className="pagination" aria-label="分页导航">
       {canGoPrev ? (
-        <Link className="pageButton" href={pageHrefWithParams(page - 1, query, basePath, extraParams)} aria-label="上一页">
-          <ChevronLeft size={18} aria-hidden="true" />
-        </Link>
+        onPageChange ? (
+          <button className="pageButton" type="button" onClick={() => onPageChange(page - 1)} aria-label="上一页">
+            <ChevronLeft size={18} aria-hidden="true" />
+          </button>
+        ) : (
+          <Link className="pageButton" href={pageHrefWithParams(page - 1, query, basePath, extraParams)} aria-label="上一页">
+            <ChevronLeft size={18} aria-hidden="true" />
+          </Link>
+        )
       ) : (
         <span className="pageButton isDisabled" aria-hidden="true">
           <ChevronLeft size={18} />
@@ -151,11 +167,23 @@ export function Pagination({
       <div className="pageList" aria-label={`第 ${page} 页，共 ${totalPages} 页`}>
         {pageItems.map((item, index) =>
           item === "ellipsis" ? (
-            <PageJump totalPages={totalPages} query={query} basePath={basePath} extraParams={extraParams} index={index} key={`ellipsis-${index}`} />
+            <PageJump
+              totalPages={totalPages}
+              query={query}
+              basePath={basePath}
+              extraParams={extraParams}
+              index={index}
+              onPageChange={onPageChange}
+              key={`ellipsis-${index}`}
+            />
           ) : item === page ? (
             <span className="pageNumber isActive" aria-current="page" key={item}>
               {item}
             </span>
+          ) : onPageChange ? (
+            <button className="pageNumber" type="button" key={item} onClick={() => onPageChange(item)} aria-label={`第 ${item} 页`}>
+              {item}
+            </button>
           ) : (
             <Link className="pageNumber" href={pageHrefWithParams(item, query, basePath, extraParams)} key={item} aria-label={`第 ${item} 页`}>
               {item}
@@ -165,9 +193,15 @@ export function Pagination({
       </div>
 
       {canGoNext ? (
-        <Link className="pageButton" href={pageHrefWithParams(page + 1, query, basePath, extraParams)} aria-label="下一页">
-          <ChevronRight size={18} aria-hidden="true" />
-        </Link>
+        onPageChange ? (
+          <button className="pageButton" type="button" onClick={() => onPageChange(page + 1)} aria-label="下一页">
+            <ChevronRight size={18} aria-hidden="true" />
+          </button>
+        ) : (
+          <Link className="pageButton" href={pageHrefWithParams(page + 1, query, basePath, extraParams)} aria-label="下一页">
+            <ChevronRight size={18} aria-hidden="true" />
+          </Link>
+        )
       ) : (
         <span className="pageButton isDisabled" aria-hidden="true">
           <ChevronRight size={18} />

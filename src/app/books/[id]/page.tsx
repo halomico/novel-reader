@@ -1,7 +1,9 @@
 import { BookOpenText } from "lucide-react";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getNovelById, readNovelSegments } from "@/lib/books";
+import { checkContentAccess } from "@/lib/content-access";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +17,18 @@ type BookPageProps = {
 };
 
 export default async function BookPage({ params, searchParams }: BookPageProps) {
+  const access = checkContentAccess(await headers());
+  if (!access.allowed) {
+    return (
+      <main className="readerShell">
+        <SiteHeader />
+        <section className="emptyState">
+          <h2>{access.message}</h2>
+        </section>
+      </main>
+    );
+  }
+
   const { id } = await params;
   const query = await searchParams;
   const bookId = Number(id);

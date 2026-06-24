@@ -1,10 +1,9 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import test from "node:test";
 import { matchesParsedSearchQuery, parseSearchQuery } from "./search-query";
 
 function validQuery(value: string) {
   const validation = parseSearchQuery(value);
-  assert.equal(validation.ok, true);
   if (!validation.ok) {
     throw new Error(validation.message);
   }
@@ -12,15 +11,15 @@ function validQuery(value: string) {
 }
 
 test("single keyword must be 2 to 15 chars", () => {
-  assert.equal(parseSearchQuery("a").ok, false);
-  assert.equal(parseSearchQuery("ab").ok, true);
-  assert.equal(parseSearchQuery("abcdefghijklmnop").ok, false);
+  assert.equal(parseSearchQuery("张").ok, false);
+  assert.equal(parseSearchQuery("张三").ok, true);
+  assert.equal(parseSearchQuery("一二三四五六七八九十一二三四五六").ok, false);
 });
 
 test("space separated terms default to AND", () => {
   const query = validQuery("张 三丰");
   assert.equal(query.anchorTerm, "三丰");
-  assert.equal(matchesParsedSearchQuery("张真人名叫张三丰", query), true);
+  assert.equal(matchesParsedSearchQuery("武当真人名叫张三丰", query), true);
   assert.equal(matchesParsedSearchQuery("张真人路过武当", query), false);
 });
 
@@ -98,19 +97,30 @@ test("punctuation is ignored and cannot be searched alone", () => {
 });
 
 test("multi keyword effective length is limited to 200 chars", () => {
-  const longTerm = "甲".repeat(201);
+  const longTerm = "田".repeat(201);
   assert.equal(parseSearchQuery(`三丰 "${longTerm}"`).ok, false);
 });
 
 test("title search can match punctuation and quoted operators", () => {
+  assert.equal(parseSearchQuery("女", { mode: "title" }).ok, true);
+  assert.equal(parseSearchQuery("女".repeat(31), { mode: "title" }).ok, false);
+
   const punctuationQuery = parseSearchQuery("##", { mode: "title" });
   assert.equal(punctuationQuery.ok, true);
   assert.equal(punctuationQuery.ok && matchesParsedSearchQuery("##给女王", punctuationQuery.query), true);
 
-  const titleQuery = parseSearchQuery("## OR \"(M系)\"", { mode: "title" });
+  const titleQuery = parseSearchQuery("## OR \"(M系\"", { mode: "title" });
   assert.equal(titleQuery.ok, true);
   assert.equal(titleQuery.ok && matchesParsedSearchQuery("(M系)被捕", titleQuery.query), true);
   assert.equal(titleQuery.ok && matchesParsedSearchQuery("普通书名", titleQuery.query), false);
+});
+
+test("index search supports one-char contains matching and ignores symbols", () => {
+  const singleQuery = parseSearchQuery("可", { mode: "index" });
+  assert.equal(singleQuery.ok, true);
+  assert.equal(singleQuery.ok && matchesParsedSearchQuery("可爱女生", singleQuery.query), true);
+  assert.equal(parseSearchQuery("！", { mode: "index" }).ok, false);
+  assert.equal(parseSearchQuery("可".repeat(31), { mode: "index" }).ok, false);
 });
 
 test("content search rejects punctuation-only terms before SQL", () => {

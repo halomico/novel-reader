@@ -1,10 +1,19 @@
 import { getDb } from "./db";
-import { getGlobalSearchMaxResults } from "./config";
+import { getContentIndexMaxSegments, getGlobalSearchMaxResults, isFrontendAutoIndexEnabled } from "./config";
 import {
-  countSearchChars,
+  findBestIndexedContentTerm,
+  getIndexedNovelIds,
+  getContentIndexTermStatus,
+  markContentIndexTermUsed,
+  saveContentIndexTerm,
+} from "./content-index";
+import { getContentIndexDb } from "./content-index-db";
+import { readNovelContent, type Novel } from "./books";
+import { createNovelSegments } from "./segments";
+import {
   createSearchSnippet,
-  escapeLikePattern,
   matchesParsedSearchQuery,
+  normalizeSearchText,
   ParsedSearchQuery,
   parseSearchQuery,
   SearchQueryValidation,
@@ -19,9 +28,18 @@ export type SearchResult = {
   snippet: string;
 };
 
-function toFtsContentQuery(value: string): string {
-  return `content : "${value.replace(/"/g, '""')}"`;
-}
+export type SearchResultSet = {
+  results: SearchResult[];
+  searchedBooks: number;
+};
+
+export type SearchNovelContentProgress = {
+  totalBooks: number;
+  searchedBooks: number;
+  resultCount: number;
+  indexedTerm?: string;
+  cacheSegmentCount: number;
+};
 
 export function validateSearchKeyword(value: string | undefined): SearchValidation {
   return parseSearchQuery(value);
@@ -35,49 +53,21 @@ export function normalizeSearchPage(value: string | number | undefined, totalPag
   return Math.min(Math.floor(page), Math.max(totalPages, 1));
 }
 
-function getCandidateLimit(maxResults: number): number {
-  return Math.min(Math.max(maxResults * 80, 1000), 20000);
-}
-
-export function searchNovelContent(query: ParsedSearchQuery): SearchResult[] {
+export async function searchNovelContent(
+  query: ParsedSearchQuery,
+  onProgress?: (progress: SearchNovelContentProgress) => void,
+): Promise<SearchResultSet> {
   const db = getDb();
+  const indexDb = getContentIndexDb();
   const maxResults = getGlobalSearchMaxResults();
-  const candidateLimit = getCandidateLimit(maxResults);
-  const charLength = countSearchChars(query.anchorTerm);
-  const rows =
-    charLength >= 3
-      ? db
-          .prepare(
-            `
-            SELECT n.id AS novelId, n.title, novel_segments_fts.segment_index AS segmentIndex, s.content
-            FROM novel_segments_fts
-            JOIN novels n ON n.id = novel_segments_fts.novel_id
-            JOIN novel_segments s ON s.novel_id = novel_segments_fts.novel_id AND s.segment_index = novel_segments_fts.segment_index
-              WHERE novel_segments_fts MATCH ?
-            ORDER BY novel_segments_fts.novel_id ASC, novel_segments_fts.segment_index ASC
-              LIMIT ?
-          `,
-          )
-          .all(toFtsContentQuery(query.anchorTerm), candidateLimit)
-      : db
-          .prepare(
-            `
-            SELECT n.id AS novelId, n.title, s.segment_index AS segmentIndex, s.content
-            FROM novel_segments s
-            JOIN novels n ON n.id = s.novel_id
-            WHERE s.content LIKE ? ESCAPE '\\'
-            ORDER BY s.novel_id ASC, s.segment_index ASC
-              LIMIT ?
-          `,
-          )
-          .all(`%${escapeLikePattern(query.anchorTerm)}%`, candidateLimit);
-
+  const maxIndexSegments = getContentIndexMaxSegments();
   const results: SearchResult[] = [];
   const matchedNovelIds = new Set<number>();
+  let searchedBooks = 0;
 
-  for (const row of rows as Array<{ novelId: number; title: string; segmentIndex: number; content: string }>) {
+  function pushMatch(row: { novelId: number; title: string; segmentIndex: number; content: string }): boolean {
     if (matchedNovelIds.has(row.novelId) || !matchesParsedSearchQuery(row.content, query)) {
-      continue;
+      return false;
     }
 
     matchedNovelIds.add(row.novelId);
@@ -88,10 +78,87 @@ export function searchNovelContent(query: ParsedSearchQuery): SearchResult[] {
       snippet: createSearchSnippet(row.content, query.highlightTerms),
     });
 
-    if (results.length >= maxResults) {
+    return results.length >= maxResults;
+  }
+
+  const indexedTerm = findBestIndexedContentTerm(indexDb, query.anchorTerm);
+  if (indexedTerm) {
+    markContentIndexTermUsed(indexDb, indexedTerm.term);
+  }
+  const anchorStatus = getContentIndexTermStatus(indexDb, query.anchorTerm);
+  const shouldCacheAnchor = isFrontendAutoIndexEnabled() && !anchorStatus;
+  const cacheNovelIds = new Set<number>();
+  let cacheSegmentCount = 0;
+  let cacheLimitExceeded = false;
+  const indexedNovelIds = indexedTerm ? new Set(getIndexedNovelIds(indexDb, indexedTerm.term)) : null;
+  const candidates = (
+    db
+      .prepare(
+        `
+        SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, created_at, updated_at
+        FROM novels
+        ORDER BY id ASC
+      `,
+      )
+      .all() as Novel[]
+  ).filter((novel) => !indexedNovelIds || indexedNovelIds.has(novel.id));
+
+  onProgress?.({
+    totalBooks: candidates.length,
+    searchedBooks,
+    resultCount: results.length,
+    indexedTerm: indexedTerm?.term,
+    cacheSegmentCount,
+  });
+
+  for (const novel of candidates) {
+    let content: string;
+    try {
+      content = await readNovelContent(novel);
+    } catch {
+      continue;
+    }
+    searchedBooks += 1;
+
+    let novelHasAnchor = false;
+    for (const segment of createNovelSegments(content)) {
+      if (shouldCacheAnchor && !cacheLimitExceeded && normalizeSearchText(segment.content).includes(query.anchorTerm)) {
+        cacheSegmentCount += 1;
+        novelHasAnchor = true;
+        cacheLimitExceeded = cacheSegmentCount > maxIndexSegments;
+      }
+
+      const reachedMaxResults =
+        results.length < maxResults &&
+        pushMatch({ novelId: novel.id, title: novel.title, segmentIndex: segment.segmentIndex, content: segment.content });
+      if (reachedMaxResults && (!shouldCacheAnchor || cacheLimitExceeded)) {
+        break;
+      }
+    }
+
+    if (novelHasAnchor) {
+      cacheNovelIds.add(novel.id);
+    }
+
+    onProgress?.({
+      totalBooks: candidates.length,
+      searchedBooks,
+      resultCount: results.length,
+      indexedTerm: indexedTerm?.term,
+      cacheSegmentCount,
+    });
+
+    if (results.length >= maxResults && (!shouldCacheAnchor || cacheLimitExceeded)) {
       break;
     }
   }
 
-  return results;
+  if (shouldCacheAnchor) {
+    saveContentIndexTerm(indexDb, query.anchorTerm, cacheNovelIds, cacheSegmentCount, {
+      maxSegments: maxIndexSegments,
+      source: "auto",
+    });
+  }
+
+  return { results, searchedBooks };
 }

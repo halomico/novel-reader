@@ -1,4 +1,4 @@
-import {
+﻿import {
   getAdminAllowedIps,
   getAdminBlockedIps,
   getAdminOutboundAllowedIps,
@@ -76,11 +76,11 @@ export function getClientIp(headers: Headers): string {
 }
 
 export function getAdminAccessState(headers: Headers): AdminAccessState {
+  const clientIp = getClientIp(headers);
   if (!isAdminEnabled()) {
-    return { allowed: false, clientIp: getClientIp(headers), reason: "后台管理未启用" };
+    return { allowed: false, clientIp, reason: "后台管理未启用" };
   }
 
-  const clientIp = getClientIp(headers);
   const blockedIps = getAdminBlockedIps();
   const allowedIps = getAdminAllowedIps();
 

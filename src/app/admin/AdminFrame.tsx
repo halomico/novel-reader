@@ -1,4 +1,4 @@
-import { BookOpen, LogOut, Settings, ShieldCheck, Users } from "lucide-react";
+﻿import { BookOpen, LogOut, Search, Settings, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -9,7 +9,7 @@ import { getSiteName } from "@/lib/config";
 import { logoutAdminAction } from "./actions";
 
 type AdminFrameProps = {
-  active: "home" | "books" | "settings";
+  active: "home" | "books" | "indexes" | "settings";
   notice?: string;
   tone?: "success" | "warning" | "error";
   children: React.ReactNode;
@@ -17,6 +17,7 @@ type AdminFrameProps = {
 
 const navItems = [
   { href: "/admin/books", label: "小说管理", value: "books", icon: BookOpen },
+  { href: "/admin/indexes", label: "搜索索引", value: "indexes", icon: Search },
   { href: "/admin/settings", label: "系统设置", value: "settings", icon: Settings },
   { href: "#", label: "用户管理", value: "users", icon: Users, disabled: true },
 ];
@@ -29,6 +30,19 @@ function noticeClass(tone?: string) {
     return "adminNotice isWarning";
   }
   return "adminNotice isSuccess";
+}
+
+function titleFor(active: AdminFrameProps["active"]): string {
+  if (active === "home") {
+    return "后台首页";
+  }
+  if (active === "books") {
+    return "小说管理";
+  }
+  if (active === "indexes") {
+    return "搜索索引";
+  }
+  return "系统设置";
 }
 
 export async function AdminFrame({ active, notice = "", tone, children }: AdminFrameProps) {
@@ -87,7 +101,7 @@ export async function AdminFrame({ active, notice = "", tone, children }: AdminF
       <section className="adminMain">
         <header className="adminTopbar">
           <div className="adminTitleBlock">
-            <h1>{active === "home" ? "后台首页" : active === "books" ? "小说管理" : "系统设置"}</h1>
+            <h1>{titleFor(active)}</h1>
           </div>
           <div className="adminTopActions">
             <ThemeToggle />

@@ -4,6 +4,7 @@ import { Pagination } from "@/components/Pagination";
 import { AdminBookTable } from "@/components/AdminBookTable";
 import { AdminBookUpload } from "@/components/AdminBookUpload";
 import { listAdminBooks } from "@/lib/admin-books";
+import { getAdminBookPageSize } from "@/lib/config";
 import { AdminFrame } from "../AdminFrame";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +28,13 @@ type AdminBooksPageProps = {
 
 export default async function AdminBooksPage({ searchParams }: AdminBooksPageProps) {
   const params = await searchParams;
-  const bookList = listAdminBooks({ page: Number(params.page || "1"), q: params.q || "", pageSize: 20, sort: params.sort, dir: params.dir });
+  const bookList = listAdminBooks({
+    page: Number(params.page || "1"),
+    q: params.q || "",
+    pageSize: getAdminBookPageSize(),
+    sort: params.sort,
+    dir: params.dir,
+  });
 
   return (
     <AdminFrame active="books" notice={params.notice} tone={params.tone}>

@@ -1,4 +1,4 @@
-import path from "node:path";
+﻿import path from "node:path";
 import { readSiteSettings } from "./site-settings";
 
 function resolveFromProject(value: string): string {
@@ -11,6 +11,10 @@ export function getLibraryDir(): string {
 
 export function getDatabasePath(): string {
   return resolveFromProject(process.env.DATABASE_PATH || "./data/novels.db");
+}
+
+export function getContentIndexDatabasePath(): string {
+  return resolveFromProject(process.env.CONTENT_INDEX_DB_PATH || "./data/content-index.db");
 }
 
 export function getSiteName(): string {
@@ -29,7 +33,7 @@ export function getSettingsPreviewText(): string {
 
   return (
     process.env.SETTINGS_PREVIEW_TEXT ||
-    "夜色像一页慢慢翻开的纸，灯下的字迹温润清晰。读到安静处，页面不抢戏，只把故事稳稳托住。"
+    "夜色像一页慢慢翻开的纸，灯下的字迹温润清明。读到安静处，页面不抢戏，只把故事稳稳托住。"
   );
 }
 
@@ -39,22 +43,6 @@ function readIntConfig(name: string, fallback: number, min: number, max: number)
     return fallback;
   }
   return Math.min(Math.max(Math.floor(value), min), max);
-}
-
-export function getGlobalSearchMaxResults(): number {
-  return readIntConfig("GLOBAL_SEARCH_MAX_RESULTS", 200, 1, 1000);
-}
-
-export function getSearchResultsPageSize(): number {
-  return readIntConfig("SEARCH_RESULTS_PAGE_SIZE", 20, 1, 50);
-}
-
-export function getSearchRateLimitPerMinute(): number {
-  return readIntConfig("SEARCH_RATE_LIMIT_PER_MINUTE", 8, 1, 120);
-}
-
-export function getSearchShortQueryRateLimitPerMinute(): number {
-  return readIntConfig("SEARCH_SHORT_QUERY_RATE_LIMIT_PER_MINUTE", 3, 1, 120);
 }
 
 function readSettingInt(settingValue: number, envName: string, fallback: number, min: number, max: number): number {
@@ -79,12 +67,92 @@ function splitList(value: string): string[] {
     .filter(Boolean);
 }
 
+export function getGlobalSearchMaxResults(): number {
+  return readSettingInt(readSiteSettings().globalSearchMaxResults, "GLOBAL_SEARCH_MAX_RESULTS", 200, 1, 1000);
+}
+
+export function getCatalogPageSize(): number {
+  return readSettingInt(readSiteSettings().catalogPageSize, "CATALOG_PAGE_SIZE", 15, 1, 100);
+}
+
+export function getSearchResultsPageSize(): number {
+  return readSettingInt(readSiteSettings().searchResultsPageSize, "SEARCH_RESULTS_PAGE_SIZE", 20, 1, 100);
+}
+
+export function getAdminBookPageSize(): number {
+  return readSettingInt(readSiteSettings().adminBookPageSize, "ADMIN_BOOK_PAGE_SIZE", 20, 1, 200);
+}
+
+export function getAdminIndexPageSize(): number {
+  return readSettingInt(readSiteSettings().adminIndexPageSize, "ADMIN_INDEX_PAGE_SIZE", 30, 1, 200);
+}
+
+export function getSearchRateLimitPerMinute(): number {
+  return readSettingInt(readSiteSettings().searchRateLimitPerMinute, "SEARCH_RATE_LIMIT_PER_MINUTE", 8, 1, 120);
+}
+
+export function getSearchShortQueryRateLimitPerMinute(): number {
+  return readSettingInt(readSiteSettings().searchShortQueryRateLimitPerMinute, "SEARCH_SHORT_QUERY_RATE_LIMIT_PER_MINUTE", 3, 1, 120);
+}
+
+export function getFrontendSearchConcurrencyLimit(): number {
+  return readSettingInt(readSiteSettings().frontendSearchConcurrencyLimit, "FRONTEND_SEARCH_CONCURRENCY_LIMIT", 10, 1, 50);
+}
+
+export function getContentRateLimitPerMinute(): number {
+  return readSettingInt(readSiteSettings().contentRateLimitPerMinute, "CONTENT_RATE_LIMIT_PER_MINUTE", 60, 1, 600);
+}
+
+export function getContentRateLimitWindowSeconds(): number {
+  return readSettingInt(readSiteSettings().contentRateLimitWindowSeconds, "CONTENT_RATE_LIMIT_WINDOW_SECONDS", 60, 10, 3600);
+}
+
+export function shouldBlockHeadlessBrowsers(): boolean {
+  return readSiteSettings().contentBlockHeadlessBrowsers && readBoolConfig("CONTENT_BLOCK_HEADLESS_BROWSERS", true);
+}
+
+export function getContentIndexMaxSegments(): number {
+  return readSettingInt(readSiteSettings().contentIndexMaxSegments, "CONTENT_INDEX_MAX_SEGMENTS", 5000, 1, 100000);
+}
+
+export function isFrontendAutoIndexEnabled(): boolean {
+  return readSiteSettings().frontendAutoIndexEnabled && readBoolConfig("FRONTEND_AUTO_CONTENT_INDEX", true);
+}
+
+export function getContentIndexSoftLimitBytes(): number {
+  return readSettingInt(readSiteSettings().contentIndexSoftLimitBytes, "CONTENT_INDEX_SOFT_LIMIT_BYTES", 2684354560, 1, 10 * 1024 ** 3);
+}
+
+export function getContentIndexHardLimitBytes(): number {
+  const softLimit = getContentIndexSoftLimitBytes();
+  return Math.max(
+    softLimit,
+    readSettingInt(readSiteSettings().contentIndexHardLimitBytes, "CONTENT_INDEX_HARD_LIMIT_BYTES", 3221225472, 1, 10 * 1024 ** 3),
+  );
+}
+
+export function isManualIndexMaxSegmentsEnabled(): boolean {
+  return readSiteSettings().manualIndexMaxSegmentsEnabled;
+}
+
+export function getManualIndexMaxSegments(): number {
+  return readSettingInt(readSiteSettings().manualIndexMaxSegments, "MANUAL_CONTENT_INDEX_MAX_SEGMENTS", 50000, 1, 1000000);
+}
+
+export function getContentIndexTerms(): string[] {
+  return splitList(process.env.CONTENT_INDEX_TERMS || "");
+}
+
+export function shouldShowProgressBars(): boolean {
+  return readSiteSettings().showProgressBars;
+}
+
 export function isAdminEnabled(): boolean {
   return readBoolConfig("ADMIN_ENABLED", true);
 }
 
 export function getAdminUsername(): string {
-  return process.env.ADMIN_USERNAME || "admin";
+  return readSiteSettings().adminUsername || process.env.ADMIN_USERNAME || "admin";
 }
 
 export function getAdminPassword(): string {
@@ -92,7 +160,7 @@ export function getAdminPassword(): string {
 }
 
 export function getAdminPasswordSha256(): string {
-  return process.env.ADMIN_PASSWORD_SHA256 || "";
+  return readSiteSettings().adminPasswordSha256 || process.env.ADMIN_PASSWORD_SHA256 || "";
 }
 
 export function getAdminSessionSecret(): string {
@@ -113,6 +181,26 @@ export function getAdminRateLimitPerMinute(): number {
 
 export function getAdminLoginRateLimitPerMinute(): number {
   return readSettingInt(readSiteSettings().adminLoginRateLimitPerMinute, "ADMIN_LOGIN_RATE_LIMIT_PER_MINUTE", 6, 1, 120);
+}
+
+export function isAdminLoginRateLimitEnabled(): boolean {
+  return readSiteSettings().adminLoginRateLimitEnabled;
+}
+
+export function shouldAdminLoginRateLimitBan(): boolean {
+  return readSiteSettings().adminLoginRateLimitBanEnabled;
+}
+
+export function isAdminOperationRateLimitEnabled(): boolean {
+  return readSiteSettings().adminOperationRateLimitEnabled || readBoolConfig("ADMIN_OPERATION_RATE_LIMIT_ENABLED", false);
+}
+
+export function getAdminOperationRateLimitPerMinute(): number {
+  return readSettingInt(readSiteSettings().adminOperationRateLimitPerMinute, "ADMIN_OPERATION_RATE_LIMIT_PER_MINUTE", 60, 1, 600);
+}
+
+export function shouldAdminOperationRateLimitBan(): boolean {
+  return readSiteSettings().adminOperationRateLimitBanEnabled;
 }
 
 export function getAdminAllowedIps(): string[] {
@@ -143,6 +231,7 @@ export function getConfiguredPaths() {
   return {
     libraryDir: getLibraryDir(),
     databasePath: getDatabasePath(),
+    contentIndexDatabasePath: process.env.CONTENT_INDEX_DB_PATH || "./data/content-index.db",
     adminSettingsPath: process.env.ADMIN_SETTINGS_PATH || "./data/admin-settings.json",
   };
 }

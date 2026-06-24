@@ -130,6 +130,7 @@ input {
   align-items: center;
   gap: 8px;
   min-width: 0;
+  min-height: 42px;
   padding: 6px 7px 6px 12px;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -243,15 +244,21 @@ input {
 }
 
 :root[data-ui-mode="minimal"] .siteHeader {
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) 92px;
   gap: 8px;
+}
+
+:root[data-ui-mode="minimal"] .headerActions {
+  width: 92px;
+  min-width: 92px;
+  justify-content: flex-end;
 }
 
 :root[data-ui-mode="minimal"] .searchForm {
   grid-template-columns: 28px minmax(0, 1fr) auto;
   justify-self: end;
-  width: min(440px, calc(100vw - 220px));
-  min-width: 36px;
+  width: 42px;
+  min-width: 42px;
   overflow: visible;
   transition:
     width 160ms ease,
@@ -274,11 +281,22 @@ input {
   grid-row: 1;
 }
 
+:root[data-ui-mode="minimal"] .searchForm:hover,
+:root[data-ui-mode="minimal"] .searchForm:focus-within,
+:root[data-ui-mode="minimal"] .searchForm.isPinnedOpen {
+  position: absolute;
+  top: 12px;
+  right: 100px;
+  z-index: 60;
+  width: min(440px, calc(100vw - 124px));
+  padding: 6px 7px 6px 6px;
+}
+
 :root[data-ui-mode="minimal"] .searchForm:not(:hover):not(:focus-within):not(.isPinnedOpen) {
   grid-template-columns: 28px;
   gap: 0;
-  width: 36px;
-  padding: 3px;
+  width: 42px;
+  padding: 6px;
 }
 
 :root[data-ui-mode="minimal"] .searchForm:not(:hover):not(:focus-within):not(.isPinnedOpen) .searchIconButton {
@@ -433,7 +451,14 @@ input {
 .pageButton {
   width: 34px;
   height: 34px;
+  padding: 0;
   box-shadow: none;
+  cursor: pointer;
+}
+
+.pageButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
 }
 
 .isDisabled {
@@ -465,6 +490,12 @@ input {
   font-size: 14px;
   font-weight: 700;
   text-decoration: none;
+}
+
+button.pageNumber {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
 }
 
 .pageNumber:hover,
@@ -594,6 +625,80 @@ input {
   display: grid;
   gap: 12px;
   margin-bottom: 24px;
+}
+
+.contentProgressPanel {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 8px 20px rgb(84 54 31 / 8%);
+}
+
+.contentProgressHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.contentProgressHeader strong {
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.contentProgressTrack {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-strong) 72%, transparent);
+}
+
+.contentProgressTrack span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 180ms ease;
+}
+
+.contentProgressPanel p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.adminIndexProgress {
+  gap: 7px;
+  margin: 8px 0 14px;
+  padding: 10px 12px;
+}
+
+.adminIndexProgressActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.adminIndexProgressActions button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.adminIndexProgressActions button:hover,
+.adminIndexProgressActions button:focus-visible {
+  text-decoration: underline;
 }
 
 .currentSearchPanel {
@@ -861,6 +966,7 @@ mark {
 .adminTopActions,
 .adminPanelHeader,
 .adminUploadForm,
+.adminIndexForm,
 .adminTableFooter,
 .adminStatCard,
 .adminPaths p {
@@ -919,6 +1025,8 @@ mark {
 .adminSettingsForm input,
 .adminSettingsForm textarea,
 .adminSettingsForm select,
+.adminIndexForm input,
+.adminIndexForm textarea,
 .adminSearchForm input {
   width: 100%;
   border: 1px solid var(--border);
@@ -932,10 +1040,17 @@ mark {
   resize: vertical;
 }
 
+.adminIndexForm textarea {
+  min-height: 104px;
+  resize: vertical;
+}
+
 .adminLoginForm button,
 .adminSettingsForm button,
 .adminUploadForm button,
+.adminIndexForm button,
 .adminSearchForm button,
+.adminIconTextButton,
 .adminDangerButton,
 .adminForbidden button {
   border: 0;
@@ -1014,7 +1129,7 @@ mark {
 
 .adminStats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
   margin: 14px 0;
 }
@@ -1077,6 +1192,56 @@ mark {
   background: color-mix(in srgb, var(--surface-strong) 38%, transparent);
 }
 
+.adminIndexForm {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.adminIndexForm label {
+  display: grid;
+  flex: 1;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.adminIndexForm button,
+.adminIconTextButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.adminIndexStatus {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.adminIndexStatus.isIndexed {
+  background: color-mix(in srgb, #2e7d52 12%, transparent);
+  color: #2e7d52;
+}
+
+.adminIndexStatus.isSkipped {
+  background: color-mix(in srgb, #b7791f 13%, transparent);
+  color: #9a5b10;
+}
+
+.adminIconTextButton {
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: color-mix(in srgb, #b42318 10%, transparent);
+  color: #b42318;
+  font-size: 13px;
+}
+
 .adminUploadForm label {
   display: inline-flex;
   align-items: center;
@@ -1089,7 +1254,8 @@ mark {
   max-width: 260px;
 }
 
-.adminUploadForm button:disabled {
+.adminUploadForm button:disabled,
+.adminIndexForm button:disabled {
   cursor: not-allowed;
   opacity: 0.52;
 }
@@ -1269,6 +1435,54 @@ mark {
   max-width: 760px;
 }
 
+.adminSettingsSection {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-strong) 22%, transparent);
+}
+
+.adminSettingsSection h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.adminSwitchLabel {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-strong) 36%, transparent);
+}
+
+.adminSwitchLabel span {
+  display: grid;
+  gap: 3px;
+}
+
+.adminSwitchLabel strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.adminSwitchLabel small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.adminSwitchLabel input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
 .adminSettingsForm button {
   justify-self: end;
   padding: 7px 16px;
@@ -1376,10 +1590,36 @@ mark {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
+.adminIndexSearchForm {
+  grid-template-columns: 16px minmax(120px, 1fr) auto;
+  width: min(430px, 100%);
+  margin: 10px 0 10px;
+  padding: 4px 5px 4px 9px;
+  box-shadow: 0 6px 16px rgb(84 54 31 / 6%);
+}
+
+.adminIndexSearchForm input {
+  font-size: 13px;
+}
+
+.adminIndexSearchForm button {
+  padding: 5px 10px;
+}
+
 .adminInlineMessage {
   margin: -4px 0 12px;
   color: var(--accent);
   font-size: 14px;
+}
+
+.adminTableToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 8px 0 10px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .adminCheckbox {
@@ -1434,39 +1674,23 @@ mark {
   }
 
   :root[data-ui-mode="minimal"] .siteHeader {
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) 42px 92px;
     gap: 8px;
   }
 
   :root[data-ui-mode="minimal"] .searchForm {
     grid-column: 2;
     grid-row: 1;
-    width: min(360px, calc(100vw - 126px));
+    width: 42px;
   }
 
-  :root[data-ui-mode="minimal"] .searchForm:hover:not(:focus-within):not(.isPinnedOpen) {
-    grid-template-columns: 28px;
-    gap: 0;
-    width: 36px;
-    padding: 3px;
-  }
-
-  :root[data-ui-mode="minimal"] .searchForm:hover:not(:focus-within):not(.isPinnedOpen) .searchIconButton {
-    grid-column: 1;
-  }
-
-  :root[data-ui-mode="minimal"] .searchForm:hover:not(:focus-within):not(.isPinnedOpen) input,
-  :root[data-ui-mode="minimal"] .searchForm:hover:not(:focus-within):not(.isPinnedOpen) .searchSubmit,
-  :root[data-ui-mode="minimal"] .searchForm:hover:not(:focus-within):not(.isPinnedOpen) .searchModeMenu,
-  :root[data-ui-mode="minimal"] .searchForm:hover:not(:focus-within):not(.isPinnedOpen) .currentSearchPanel {
-    display: none;
-  }
-
+  :root[data-ui-mode="minimal"] .searchForm:hover,
   :root[data-ui-mode="minimal"] .searchForm:focus-within,
   :root[data-ui-mode="minimal"] .searchForm.isPinnedOpen {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    width: 100%;
+    grid-column: 2;
+    grid-row: 1;
+    right: 100px;
+    width: min(360px, calc(100vw - 122px));
   }
 
   .catalogHero,
@@ -1522,7 +1746,7 @@ mark {
   }
 
   .adminSideNav {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   }
 
   .adminSideNav a,
@@ -1534,8 +1758,10 @@ mark {
 
   .adminTopbar,
   .adminPanelHeader,
+  .adminIndexForm,
   .adminUploadForm,
-  .adminTableFooter {
+  .adminTableFooter,
+  .adminTableToolbar {
     align-items: stretch;
     flex-direction: column;
   }

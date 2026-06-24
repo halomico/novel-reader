@@ -1,11 +1,9 @@
+﻿import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
-import { revalidatePath } from "next/cache";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
-import { persistBlockedIp } from "@/lib/admin-ban";
-import { getAdminRateLimitPerMinute } from "@/lib/config";
+import { checkAdminOperationLimit } from "@/lib/admin-operation-limit";
 import { saveUploadedNovels } from "@/lib/novel-files";
-import { checkRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,19 +18,14 @@ export async function POST(request: NextRequest) {
     return jsonError(access.reason || "当前请求不能访问后台", 403);
   }
 
-  const limit = checkRateLimit({
-    key: `admin-upload:${access.clientIp}`,
-    limit: getAdminRateLimitPerMinute(),
-    windowMs: 60_000,
-  });
-  if (!limit.allowed) {
-    const blocked = persistBlockedIp(access.clientIp);
-    return jsonError(blocked ? "上传太频繁，当前 IP 已加入黑名单" : `上传太频繁，请 ${limit.retryAfterSeconds} 秒后再试`, 429);
-  }
-
   const session = await getAdminSession();
   if (!session) {
     return jsonError("请先登录后台", 401);
+  }
+
+  const limitedMessage = checkAdminOperationLimit(access.clientIp, "books-upload");
+  if (limitedMessage) {
+    return jsonError(limitedMessage, 429);
   }
 
   const formData = await request.formData();

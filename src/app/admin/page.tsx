@@ -1,8 +1,9 @@
 ﻿import type { Metadata } from "next";
-import { BookOpen, Database, HardDrive, Settings } from "lucide-react";
+import { BookOpen, Database, HardDrive, Search, Settings } from "lucide-react";
 import Link from "next/link";
 import { AdminFrame } from "./AdminFrame";
 import { getAdminBookStats } from "@/lib/admin-books";
+import { getContentIndexStorageSummary } from "@/lib/content-index";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -28,6 +29,7 @@ function formatBytes(bytes: number): string {
 
 export default function AdminPage() {
   const stats = getAdminBookStats();
+  const indexStats = getContentIndexStorageSummary();
 
   return (
     <AdminFrame active="home">
@@ -48,6 +50,16 @@ export default function AdminPage() {
             <span>书库体积</span>
             <strong>{formatBytes(stats.totalSizeBytes)}</strong>
           </div>
+          <div className="adminStatCard">
+            <Search size={20} aria-hidden="true" />
+            <span>索引库</span>
+            <strong>{formatBytes(indexStats.databaseBytes)}</strong>
+          </div>
+          <div className="adminStatCard">
+            <Database size={20} aria-hidden="true" />
+            <span>索引词</span>
+            <strong>{indexStats.termCount}</strong>
+          </div>
         </div>
 
         <div className="adminHomeGrid">
@@ -63,6 +75,13 @@ export default function AdminPage() {
             <span>
               <strong>系统设置</strong>
               <small>站点名称、访问规则和后台偏好</small>
+            </span>
+          </Link>
+          <Link className="adminHomeLink" href="/admin/indexes">
+            <Search size={19} aria-hidden="true" />
+            <span>
+              <strong>搜索索引</strong>
+              <small>查看、添加和删除正文搜索缓存</small>
             </span>
           </Link>
         </div>

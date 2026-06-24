@@ -70,31 +70,6 @@ function initialize(db: DatabaseSync) {
 
     CREATE INDEX IF NOT EXISTS idx_novels_title ON novels(title);
 
-    CREATE TABLE IF NOT EXISTS novel_segments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      novel_id INTEGER NOT NULL,
-      segment_index INTEGER NOT NULL,
-      char_start INTEGER NOT NULL,
-      char_end INTEGER NOT NULL,
-      content TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(novel_id, segment_index),
-      FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_novel_segments_novel ON novel_segments(novel_id, segment_index);
-
-    CREATE VIRTUAL TABLE IF NOT EXISTS novel_segments_fts USING fts5(
-      title,
-      content,
-      novel_id UNINDEXED,
-      segment_index UNINDEXED,
-      char_start UNINDEXED,
-      char_end UNINDEXED,
-      tokenize="trigram"
-    );
-
     CREATE TABLE IF NOT EXISTS search_index_state (
       novel_id INTEGER PRIMARY KEY,
       size_bytes INTEGER NOT NULL,
@@ -105,6 +80,7 @@ function initialize(db: DatabaseSync) {
       indexed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE
     );
+
   `);
   migrateNovelsContentHash(db);
   db.exec("CREATE INDEX IF NOT EXISTS idx_novels_title_hash ON novels(title, content_hash);");

@@ -1,10 +1,10 @@
-export type SearchExpression =
+﻿export type SearchExpression =
   | { type: "term"; value: string; normalized: string; required: boolean; phrase: boolean }
   | { type: "and"; left: SearchExpression; right: SearchExpression }
   | { type: "or"; left: SearchExpression; right: SearchExpression }
   | { type: "not"; child: SearchExpression };
 
-export type SearchMatchMode = "content" | "title";
+export type SearchMatchMode = "content" | "title" | "index";
 
 export type SearchTermPattern = {
   value: string;
@@ -34,9 +34,11 @@ type SearchToken =
   | { type: "term"; value: string; normalized: string; required: boolean; phrase: boolean }
   | { type: "and" | "or" | "not" | "lparen" | "rparen" };
 
-const MIN_SINGLE_KEYWORD_CHARS = 2;
+const MIN_CONTENT_SINGLE_KEYWORD_CHARS = 2;
+const MIN_LOOSE_SINGLE_KEYWORD_CHARS = 1;
 const MIN_MULTI_KEYWORD_CHARS = 1;
-const MAX_KEYWORD_CHARS = 15;
+const MAX_CONTENT_KEYWORD_CHARS = 15;
+const MAX_LOOSE_KEYWORD_CHARS = 30;
 const MAX_PHRASE_CHARS = 50;
 const MAX_MULTI_QUERY_CHARS = 200;
 const SEARCH_SYNTAX_ERROR = "搜索语法有误，请检查 AND、OR、NOT、+、-、引号和括号的位置";
@@ -57,10 +59,23 @@ function isIgnoredSearchChar(char: string): boolean {
   return /[\s\p{P}\p{S}]/u.test(char);
 }
 
+function isIgnoredPhrasePunctuation(char: string): boolean {
+  return /[\p{P}\p{S}]/u.test(char);
+}
+
 export function normalizeSearchText(value: string): string {
   return Array.from(value)
     .filter((char) => !isIgnoredSearchChar(char))
     .join("")
+    .toLowerCase();
+}
+
+function normalizeContentPhraseText(value: string): string {
+  return Array.from(value)
+    .filter((char) => !isIgnoredPhrasePunctuation(char))
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim()
     .toLowerCase();
 }
 
@@ -80,6 +95,42 @@ function createSearchTextIndex(value: string): { normalized: string; positions: 
   return { normalized, positions };
 }
 
+function createContentPhraseIndex(value: string): { normalized: string; positions: number[] } {
+  let normalized = "";
+  const positions: number[] = [];
+  let index = 0;
+  let previousWasSpace = false;
+
+  for (const char of value) {
+    if (isIgnoredPhrasePunctuation(char)) {
+      index += char.length;
+      continue;
+    }
+
+    if (/\s/u.test(char)) {
+      if (!previousWasSpace && normalized) {
+        normalized += " ";
+        positions.push(index);
+      }
+      previousWasSpace = true;
+      index += char.length;
+      continue;
+    }
+
+    normalized += char.toLowerCase();
+    positions.push(index);
+    previousWasSpace = false;
+    index += char.length;
+  }
+
+  if (normalized.endsWith(" ")) {
+    normalized = normalized.slice(0, -1);
+    positions.pop();
+  }
+
+  return { normalized, positions };
+}
+
 function uniqueValues(values: string[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -90,16 +141,15 @@ function uniqueValues(values: string[]): string[] {
       result.push(value);
     }
   }
-
   return result;
 }
 
 function isQuoteStart(char: string): boolean {
-  return char === "\"" || char === "“" || char === "＂";
+  return char === "\"" || char === "“" || char === "‘";
 }
 
 function isQuoteEnd(char: string): boolean {
-  return char === "\"" || char === "”" || char === "＂";
+  return char === "\"" || char === "”" || char === "’";
 }
 
 function tokenizeSearchQuery(keyword: string): { ok: true; tokens: SearchToken[]; hasOperator: boolean } | { ok: false; message: string } {
@@ -405,24 +455,53 @@ function collectGuaranteedTerms(expression: SearchExpression, negated = false): 
 
 function findAnchorTerm(requiredTerms: SearchTermInfo[]): string {
   return requiredTerms
-    .filter((term) => !term.phrase && countSearchChars(term.normalized) >= MIN_SINGLE_KEYWORD_CHARS)
+    .filter((term) => !term.phrase && countSearchChars(term.normalized) >= MIN_CONTENT_SINGLE_KEYWORD_CHARS)
     .sort((left, right) => countSearchChars(right.normalized) - countSearchChars(left.normalized))[0]?.normalized || "";
 }
 
+function getSingleKeywordMinChars(mode: SearchMatchMode): number {
+  return mode === "content" ? MIN_CONTENT_SINGLE_KEYWORD_CHARS : MIN_LOOSE_SINGLE_KEYWORD_CHARS;
+}
+
+function getKeywordMaxChars(mode: SearchMatchMode): number {
+  return mode === "content" ? MAX_CONTENT_KEYWORD_CHARS : MAX_LOOSE_KEYWORD_CHARS;
+}
+
+function singleKeywordLengthMessage(mode: SearchMatchMode): string {
+  if (mode === "content") {
+    return "单关键词需为 2 到 15 字";
+  }
+  return mode === "index" ? "索引关键词需为 1 到 30 字" : "书名关键词需为 1 到 30 字";
+}
+
+function multiKeywordLengthMessage(mode: SearchMatchMode): string {
+  return mode === "content" ? "普通关键词需为 1 到 15 字，引号短语需为 1 到 50 字" : "普通关键词需为 1 到 30 字，引号短语需为 1 到 50 字";
+}
+
 function getTermLength(term: SearchTermInfo, mode: SearchMatchMode): number {
-  return countSearchChars(mode === "content" && !term.phrase ? term.normalized : term.value);
+  if (mode === "content" && term.phrase) {
+    return countSearchChars(normalizeContentPhraseText(term.value));
+  }
+  return countSearchChars(mode === "title" ? term.value : term.normalized);
 }
 
 function termHasSearchableContent(term: SearchTermInfo, mode: SearchMatchMode): boolean {
-  return mode === "title" || term.phrase ? term.value.length > 0 : term.normalized.length > 0;
+  if (mode === "title") {
+    return term.value.length > 0;
+  }
+  if (term.phrase) {
+    return normalizeContentPhraseText(term.value).replace(/\s/g, "").length > 0;
+  }
+  return term.normalized.length > 0;
 }
 
 function toSearchPattern(term: SearchTermInfo, mode: SearchMatchMode): SearchTermPattern {
+  const isContentPhrase = mode === "content" && term.phrase;
   return {
     value: term.value,
-    normalized: term.normalized,
-    phrase: term.phrase,
-    exact: mode === "title" || term.phrase,
+    normalized: isContentPhrase ? normalizeContentPhraseText(term.value) : term.normalized,
+    phrase: isContentPhrase,
+    exact: mode === "title" || isContentPhrase,
   };
 }
 
@@ -456,7 +535,11 @@ export function parseSearchQuery(value: string | undefined, options: { mode?: Se
   }
 
   if (termInfos.some((term) => !termHasSearchableContent(term, mode))) {
-    return { ok: false, keyword, message: mode === "title" ? "关键词不能为空" : "正文关键词不能只包含标点或符号" };
+    return {
+      ok: false,
+      keyword,
+      message: mode === "title" ? "关键词不能为空" : mode === "index" ? "索引关键词不能只包含标点或符号" : "正文关键词不能只包含标点或符号",
+    };
   }
 
   if (isSingleKeyword) {
@@ -464,18 +547,18 @@ export function parseSearchQuery(value: string | undefined, options: { mode?: Se
       return { ok: false, keyword, message: "搜索运算符只支持多关键词搜索" };
     }
     const length = getTermLength(termInfos[0], mode);
-    if (length < MIN_SINGLE_KEYWORD_CHARS || length > MAX_KEYWORD_CHARS) {
-      return { ok: false, keyword, message: "单关键词需为 2 到 15 字" };
+    if (length < getSingleKeywordMinChars(mode) || length > getKeywordMaxChars(mode)) {
+      return { ok: false, keyword, message: singleKeywordLengthMessage(mode) };
     }
   } else if (totalTermLength > MAX_MULTI_QUERY_CHARS) {
     return { ok: false, keyword, message: "多关键词总长度不能超过 200 字" };
   } else if (
     termInfos.some((term) => {
       const length = getTermLength(term, mode);
-      return length < MIN_MULTI_KEYWORD_CHARS || length > (term.phrase ? MAX_PHRASE_CHARS : MAX_KEYWORD_CHARS);
+      return length < MIN_MULTI_KEYWORD_CHARS || length > (term.phrase ? MAX_PHRASE_CHARS : getKeywordMaxChars(mode));
     })
   ) {
-    return { ok: false, keyword, message: "普通关键词需为 1 到 15 字，引号短语需为 1 到 50 字" };
+    return { ok: false, keyword, message: multiKeywordLengthMessage(mode) };
   }
 
   const requiredTermInfos = uniqueTermInfos([...collectPlusRequiredTerms(expression), ...collectGuaranteedTerms(expression)]);
@@ -484,7 +567,7 @@ export function parseSearchQuery(value: string | undefined, options: { mode?: Se
   const requiredPhraseTerms = new Set(requiredTermInfos.filter((term) => term.phrase).map((term) => term.value));
   const hasLoosePositivePhrase = uniqueValues(collected.positivePhrases).some((term) => !requiredPhraseTerms.has(term));
   if (mode === "content" && hasLoosePositivePhrase) {
-    return { ok: false, keyword, message: "引号短语必须与 AND 必含关键词一起使用，不能放在 OR 分支中" };
+    return { ok: false, keyword, message: "引号短语必须和 AND 必含关键词一起使用，不能放在 OR 分支中" };
   }
 
   if (mode === "content" && !anchorTerm) {
@@ -498,9 +581,7 @@ export function parseSearchQuery(value: string | undefined, options: { mode?: Se
     terms,
     positiveTerms,
     excludedTerms,
-    highlightTerms: termInfos
-      .filter((term) => positiveTerms.includes(term.value))
-      .map((term) => toSearchPattern(term, mode)),
+    highlightTerms: termInfos.filter((term) => positiveTerms.includes(term.value)).map((term) => toSearchPattern(term, mode)),
     requiredTerms,
     anchorTerm,
     isSingleKeyword,
@@ -513,21 +594,20 @@ function findExactIndex(text: string, value: string, fromIndex = 0): number {
   return text.toLowerCase().indexOf(value.toLowerCase(), fromIndex);
 }
 
+function findContentPhraseIndex(text: string, term: SearchTermPattern): number {
+  return createContentPhraseIndex(text).normalized.indexOf(term.normalized.toLowerCase());
+}
+
 function findTermIndex(text: string, term: SearchTermPattern): number {
   if (term.exact) {
-    return findExactIndex(text, term.value);
+    return term.phrase ? findContentPhraseIndex(text, term) : findExactIndex(text, term.value);
   }
 
   return normalizeSearchText(text).indexOf(term.normalized.toLowerCase());
 }
 
 function expressionTermToPattern(expression: Extract<SearchExpression, { type: "term" }>, mode: SearchMatchMode): SearchTermPattern {
-  return {
-    value: expression.value,
-    normalized: expression.normalized,
-    phrase: expression.phrase,
-    exact: mode === "title" || expression.phrase,
-  };
+  return toSearchPattern({ value: expression.value, normalized: expression.normalized, phrase: expression.phrase }, mode);
 }
 
 function findLooseRanges(text: string, term: SearchTermPattern): Array<{ start: number; end: number; term: string }> {
@@ -570,8 +650,30 @@ function findExactRanges(text: string, term: SearchTermPattern): Array<{ start: 
   return ranges;
 }
 
+function findContentPhraseRanges(text: string, term: SearchTermPattern): Array<{ start: number; end: number; term: string }> {
+  const searchIndex = createContentPhraseIndex(text);
+  const ranges: Array<{ start: number; end: number; term: string }> = [];
+  if (!term.normalized) {
+    return ranges;
+  }
+
+  let cursor = searchIndex.normalized.indexOf(term.normalized.toLowerCase());
+  while (cursor >= 0) {
+    const termLength = countSearchChars(term.normalized);
+    const start = searchIndex.positions[cursor];
+    const lastCharStart = searchIndex.positions[cursor + termLength - 1];
+    if (start !== undefined && lastCharStart !== undefined) {
+      const end = lastCharStart + Array.from(text.slice(lastCharStart))[0].length;
+      ranges.push({ start, end, term: term.value });
+    }
+    cursor = searchIndex.normalized.indexOf(term.normalized.toLowerCase(), cursor + termLength);
+  }
+
+  return ranges;
+}
+
 export function findSearchTermRanges(text: string, terms: SearchTermPattern[]): Array<{ start: number; end: number; term: string }> {
-  const ranges = terms.flatMap((term) => (term.exact ? findExactRanges(text, term) : findLooseRanges(text, term)));
+  const ranges = terms.flatMap((term) => (term.phrase ? findContentPhraseRanges(text, term) : term.exact ? findExactRanges(text, term) : findLooseRanges(text, term)));
   const sorted = ranges.sort((left, right) => left.start - right.start || right.end - right.start - (left.end - left.start));
   const selected: Array<{ start: number; end: number; term: string }> = [];
 

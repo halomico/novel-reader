@@ -1,8 +1,9 @@
-import crypto from "node:crypto";
+﻿import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { getLibraryDir } from "./config";
+import { deleteIndexedContentForNovel } from "./content-index";
 import { getDb } from "./db";
 import { isNovelTextFile, parseNovelTitle } from "./filename";
 
@@ -117,6 +118,16 @@ export function findDuplicateNovel(db: DatabaseSync, title: string, contentHash:
 }
 
 export function upsertNovelRecord(db: DatabaseSync, record: NovelFileRecord): number {
+  const existing = db
+    .prepare("SELECT id, content_hash, size_bytes, mtime_ms FROM novels WHERE relative_path = ?")
+    .get(record.relativePath) as { id: number; content_hash: string | null; size_bytes: number; mtime_ms: number } | undefined;
+  if (
+    existing &&
+    (existing.content_hash !== record.contentHash || existing.size_bytes !== record.sizeBytes || existing.mtime_ms !== record.mtimeMs)
+  ) {
+    deleteIndexedContentForNovel(db, existing.id);
+  }
+
   db.prepare(
     `INSERT INTO novels (title, file_name, relative_path, content_hash, size_bytes, mtime_ms, updated_at)
      VALUES (@title, @fileName, @relativePath, @contentHash, @sizeBytes, @mtimeMs, CURRENT_TIMESTAMP)
@@ -142,9 +153,7 @@ export function deleteNovelByRelativePath(db: DatabaseSync, relativePath: string
     return false;
   }
 
-  db.prepare("DELETE FROM novel_segments_fts WHERE novel_id = ?").run(row.id);
-  db.prepare("DELETE FROM novel_segments WHERE novel_id = ?").run(row.id);
-  db.prepare("DELETE FROM search_index_state WHERE novel_id = ?").run(row.id);
+  deleteIndexedContentForNovel(db, row.id);
   db.prepare("DELETE FROM novels WHERE id = ?").run(row.id);
   return true;
 }
@@ -165,9 +174,7 @@ export function deleteNovelById(db: DatabaseSync, id: number): ExistingNovel | n
 
   db.exec("BEGIN");
   try {
-    db.prepare("DELETE FROM novel_segments_fts WHERE novel_id = ?").run(id);
-    db.prepare("DELETE FROM novel_segments WHERE novel_id = ?").run(id);
-    db.prepare("DELETE FROM search_index_state WHERE novel_id = ?").run(id);
+    deleteIndexedContentForNovel(db, id);
     db.prepare("DELETE FROM novels WHERE id = ?").run(id);
     db.exec("COMMIT");
   } catch (error) {

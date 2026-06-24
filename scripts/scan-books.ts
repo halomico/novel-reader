@@ -1,14 +1,11 @@
-import "dotenv/config";
+﻿import "dotenv/config";
 
 import fs from "node:fs";
 import { getLibraryDir } from "../src/lib/config";
+import { deleteIndexedContentForNovel } from "../src/lib/content-index";
 import { getDb } from "../src/lib/db";
 import { isNovelTextFile } from "../src/lib/filename";
-import {
-  buildNovelRecordFromFile,
-  deleteNovelByRelativePath,
-  resolveLibraryFile,
-} from "../src/lib/novel-files";
+import { buildNovelRecordFromFile, deleteNovelByRelativePath, resolveLibraryFile, type NovelFileRecord } from "../src/lib/novel-files";
 
 type ScanStats = {
   scanned: number;
@@ -59,6 +56,13 @@ const upsertByPath = db.prepare(`
     updated_at = CURRENT_TIMESTAMP
 `);
 
+const findExistingByPath = db.prepare(`
+  SELECT id, content_hash, size_bytes, mtime_ms
+  FROM novels
+  WHERE relative_path = ?
+  LIMIT 1
+`);
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) {
     return `${bytes} B`;
@@ -84,6 +88,18 @@ function readPositiveInt(name: string, fallback: number, min: number): number {
     return fallback;
   }
   return Math.max(min, Math.floor(value));
+}
+
+function clearExistingIndexIfChanged(record: NovelFileRecord) {
+  const existing = findExistingByPath.get(record.relativePath) as
+    | { id: number; content_hash: string | null; size_bytes: number; mtime_ms: number }
+    | undefined;
+  if (
+    existing &&
+    (existing.content_hash !== record.contentHash || existing.size_bytes !== record.sizeBytes || existing.mtime_ms !== record.mtimeMs)
+  ) {
+    deleteIndexedContentForNovel(db, existing.id);
+  }
 }
 
 function scan() {
@@ -130,6 +146,7 @@ function scan() {
       if (duplicate) {
         if (!fs.existsSync(resolveLibraryFile(duplicate.relative_path))) {
           deleteNovelByRelativePath(db, duplicate.relative_path);
+          clearExistingIndexIfChanged(record);
           upsertByPath.run(record);
           stats.insertedOrUpdated += 1;
           stats.records.push(`${duplicate.file_name}: 数据库记录指向的文件不存在，已清理旧记录`);
@@ -145,6 +162,7 @@ function scan() {
         continue;
       }
 
+      clearExistingIndexIfChanged(record);
       upsertByPath.run(record);
       stats.insertedOrUpdated += 1;
       finishStep(index);

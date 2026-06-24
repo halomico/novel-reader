@@ -18,7 +18,7 @@ const uiModes: Array<{ value: UiMode; label: string }> = [
   { value: "minimal", label: "极简" },
 ];
 
-function applySettings(theme: ThemeChoice, fontSize: number, pageSize: number, uiMode: UiMode) {
+function applySettings(theme: ThemeChoice, fontSize: number, uiMode: UiMode) {
   if (theme === "system") {
     document.documentElement.removeAttribute("data-theme");
   } else {
@@ -29,53 +29,43 @@ function applySettings(theme: ThemeChoice, fontSize: number, pageSize: number, u
   document.documentElement.style.setProperty("--reader-font-size", `${fontSize}px`);
   localStorage.setItem("novel-theme", theme);
   localStorage.setItem("novel-font-size", String(fontSize));
-  localStorage.setItem("novel-page-size", String(pageSize));
   localStorage.setItem("novel-ui-mode", uiMode);
-  document.cookie = `novel-page-size=${pageSize}; Path=/; Max-Age=31536000; SameSite=Lax`;
 }
 
 export function SettingsPanel({ previewText }: { previewText: string }) {
   const [theme, setTheme] = useState<ThemeChoice>("system");
   const [uiMode, setUiMode] = useState<UiMode>("standard");
   const [fontSize, setFontSize] = useState(19);
-  const [pageSize, setPageSize] = useState(15);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("novel-theme") as ThemeChoice | null;
     const savedUiMode = localStorage.getItem("novel-ui-mode") as UiMode | null;
     const savedFontSize = Number(localStorage.getItem("novel-font-size"));
-    const savedPageSize = Number(localStorage.getItem("novel-page-size"));
     const nextTheme = savedTheme === "light" || savedTheme === "dark" || savedTheme === "system" ? savedTheme : "system";
     const nextUiMode = savedUiMode === "minimal" || savedUiMode === "standard" ? savedUiMode : "standard";
     const nextFontSize = Number.isFinite(savedFontSize) && savedFontSize >= 5 && savedFontSize <= 50 ? savedFontSize : 19;
-    const nextPageSize = Number.isFinite(savedPageSize) && savedPageSize >= 1 && savedPageSize <= 50 ? savedPageSize : 15;
 
     setTheme(nextTheme);
     setUiMode(nextUiMode);
     setFontSize(nextFontSize);
-    setPageSize(nextPageSize);
-    applySettings(nextTheme, nextFontSize, nextPageSize, nextUiMode);
+    localStorage.removeItem("novel-page-size");
+    document.cookie = "novel-page-size=; Path=/; Max-Age=0; SameSite=Lax";
+    applySettings(nextTheme, nextFontSize, nextUiMode);
   }, []);
 
   function changeTheme(value: ThemeChoice) {
     setTheme(value);
-    applySettings(value, fontSize, pageSize, uiMode);
+    applySettings(value, fontSize, uiMode);
   }
 
   function changeUiMode(value: UiMode) {
     setUiMode(value);
-    applySettings(theme, fontSize, pageSize, value);
+    applySettings(theme, fontSize, value);
   }
 
   function changeFontSize(value: number) {
     setFontSize(value);
-    applySettings(theme, value, pageSize, uiMode);
-  }
-
-  function changePageSize(value: number) {
-    const nextPageSize = Math.min(Math.max(Math.floor(value), 1), 50);
-    setPageSize(nextPageSize);
-    applySettings(theme, fontSize, nextPageSize, uiMode);
+    applySettings(theme, value, uiMode);
   }
 
   return (
@@ -143,25 +133,6 @@ export function SettingsPanel({ previewText }: { previewText: string }) {
           </div>
         </div>
 
-        <div className="settingBlock">
-          <div className="settingBlockHeader">
-            <h2>每页数量</h2>
-            <strong>{pageSize} 本</strong>
-          </div>
-          <div className="rangeRow">
-            <span>1</span>
-            <input
-              aria-label="每页显示小说数量"
-              type="range"
-              min="1"
-              max="50"
-              step="1"
-              value={pageSize}
-              onChange={(event) => changePageSize(Number(event.target.value))}
-            />
-            <span>50</span>
-          </div>
-        </div>
       </div>
 
       <div className="previewReader" aria-label="阅读效果预览">

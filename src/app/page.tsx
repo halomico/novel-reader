@@ -1,9 +1,9 @@
 import { BookText } from "lucide-react";
 import Link from "next/link";
-import { headers } from "next/headers";
 import { Pagination } from "@/components/Pagination";
 import { SiteHeader } from "@/components/SiteHeader";
-import { listNovels, normalizePageSize } from "@/lib/books";
+import { listNovels } from "@/lib/books";
+import { getCatalogPageSize } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
@@ -16,16 +16,9 @@ type HomeProps = {
 
 export default async function Home({ searchParams }: HomeProps) {
   const params = await searchParams;
-  const headerStore = await headers();
-  const cookieHeader = headerStore.get("cookie") || "";
-  const pageSizeCookie = cookieHeader
-    .split(";")
-    .map((item) => item.trim())
-    .find((item) => item.startsWith("novel-page-size="))
-    ?.split("=")[1];
   const page = Number(params.page || "1");
   const query = params.q || "";
-  const pageSize = normalizePageSize(pageSizeCookie ? decodeURIComponent(pageSizeCookie) : undefined);
+  const pageSize = getCatalogPageSize();
   const result = listNovels({ page, q: query, pageSize });
   const returnParams = new URLSearchParams();
   returnParams.set("page", String(result.page));
