@@ -45,14 +45,15 @@ const findDuplicateByTitleHash = db.prepare(`
 `);
 
 const upsertByPath = db.prepare(`
-  INSERT INTO novels (title, file_name, relative_path, content_hash, size_bytes, mtime_ms, updated_at)
-  VALUES (@title, @fileName, @relativePath, @contentHash, @sizeBytes, @mtimeMs, CURRENT_TIMESTAMP)
+  INSERT INTO novels (title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, updated_at)
+  VALUES (@title, @fileName, @relativePath, @contentHash, @sizeBytes, @mtimeMs, @wordCount, CURRENT_TIMESTAMP)
   ON CONFLICT(relative_path) DO UPDATE SET
     title = excluded.title,
     file_name = excluded.file_name,
     content_hash = excluded.content_hash,
     size_bytes = excluded.size_bytes,
     mtime_ms = excluded.mtime_ms,
+    word_count = excluded.word_count,
     updated_at = CURRENT_TIMESTAMP
 `);
 

@@ -16,6 +16,7 @@ docs/
 *.sqlite-*
 *.txt
 !public/robots.txt
+public/avatars/
 progress.md
 
 *.log

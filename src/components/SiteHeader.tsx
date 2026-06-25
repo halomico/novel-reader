@@ -1,10 +1,18 @@
 import { BookOpen, Settings } from "lucide-react";
 import Link from "next/link";
-import { getSiteName } from "@/lib/config";
+import {
+  getNoticeDisplaySeconds,
+  getSiteName,
+  isUserLoginEnabled,
+  isUserRegistrationEnabled,
+  shouldNoticeStayVisibleAfterBlur,
+} from "@/lib/config";
+import { getCurrentUser } from "@/lib/user-auth";
 import { HeaderSearch } from "./HeaderSearch";
+import { HeaderUserMenu } from "./HeaderUserMenu";
 import { ThemeToggle } from "./ThemeToggle";
 
-export function SiteHeader({
+export async function SiteHeader({
   query = "",
   defaultSearchMode = "title",
   showCurrentSearch = false,
@@ -14,6 +22,11 @@ export function SiteHeader({
   showCurrentSearch?: boolean;
 }) {
   const siteName = getSiteName();
+  const user = await getCurrentUser();
+  const loginEnabled = isUserLoginEnabled();
+  const registrationEnabled = isUserRegistrationEnabled();
+  const noticeDisplaySeconds = getNoticeDisplaySeconds();
+  const noticeStayVisibleAfterBlur = shouldNoticeStayVisibleAfterBlur();
 
   return (
     <header className="siteHeader">
@@ -22,9 +35,16 @@ export function SiteHeader({
         <span>{siteName}</span>
       </Link>
       <div className="headerTools">
-        <HeaderSearch query={query} defaultMode={defaultSearchMode} showCurrentSearch={showCurrentSearch} />
+        <HeaderSearch
+          query={query}
+          defaultMode={defaultSearchMode}
+          showCurrentSearch={showCurrentSearch}
+          noticeDisplaySeconds={noticeDisplaySeconds}
+          noticeStayVisibleAfterBlur={noticeStayVisibleAfterBlur}
+        />
         <div className="headerActions">
           <ThemeToggle />
+          <HeaderUserMenu user={user ? { displayName: user.displayName, avatarPath: user.avatarPath } : null} loginEnabled={loginEnabled} registrationEnabled={registrationEnabled} />
           <Link className="iconLink" href="/settings" aria-label="阅读设置" title="阅读设置">
             <Settings size={21} aria-hidden="true" />
           </Link>

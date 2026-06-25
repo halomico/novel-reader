@@ -2,14 +2,15 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { DismissibleNotice } from "@/components/DismissibleNotice";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
-import { getSiteName } from "@/lib/config";
+import { getNoticeDisplaySeconds, getSiteName, shouldNoticeStayVisibleAfterBlur } from "@/lib/config";
 import { logoutAdminAction } from "./actions";
 
 type AdminFrameProps = {
-  active: "home" | "books" | "indexes" | "settings";
+  active: "home" | "books" | "indexes" | "settings" | "users";
   notice?: string;
   tone?: "success" | "warning" | "error";
   children: React.ReactNode;
@@ -18,19 +19,9 @@ type AdminFrameProps = {
 const navItems = [
   { href: "/admin/books", label: "小说管理", value: "books", icon: BookOpen },
   { href: "/admin/indexes", label: "搜索索引", value: "indexes", icon: Search },
+  { href: "/admin/users", label: "用户管理", value: "users", icon: Users },
   { href: "/admin/settings", label: "系统设置", value: "settings", icon: Settings },
-  { href: "#", label: "用户管理", value: "users", icon: Users, disabled: true },
 ];
-
-function noticeClass(tone?: string) {
-  if (tone === "error") {
-    return "adminNotice isError";
-  }
-  if (tone === "warning") {
-    return "adminNotice isWarning";
-  }
-  return "adminNotice isSuccess";
-}
 
 function titleFor(active: AdminFrameProps["active"]): string {
   if (active === "home") {
@@ -41,6 +32,9 @@ function titleFor(active: AdminFrameProps["active"]): string {
   }
   if (active === "indexes") {
     return "搜索索引";
+  }
+  if (active === "users") {
+    return "用户管理";
   }
   return "系统设置";
 }
@@ -54,6 +48,8 @@ export async function AdminFrame({ active, notice = "", tone, children }: AdminF
   const headerStore = await headers();
   const access = getAdminAccessState(headerStore);
   const siteName = getSiteName();
+  const noticeDisplaySeconds = getNoticeDisplaySeconds();
+  const noticeStayVisibleAfterBlur = shouldNoticeStayVisibleAfterBlur();
 
   if (!access.allowed) {
     return (
@@ -82,13 +78,8 @@ export async function AdminFrame({ active, notice = "", tone, children }: AdminF
         <nav className="adminSideNav" aria-label="后台导航">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const className = item.value === active ? "isActive" : item.disabled ? "isDisabled" : "";
-            return item.disabled ? (
-              <span className={className} key={item.value}>
-                <Icon size={18} aria-hidden="true" />
-                {item.label}
-              </span>
-            ) : (
+            const className = item.value === active ? "isActive" : "";
+            return (
               <Link className={className} href={item.href} key={item.value}>
                 <Icon size={18} aria-hidden="true" />
                 {item.label}
@@ -112,7 +103,15 @@ export async function AdminFrame({ active, notice = "", tone, children }: AdminF
             </form>
           </div>
         </header>
-        {notice ? <p className={noticeClass(tone)}>{notice}</p> : null}
+        {notice ? (
+          <DismissibleNotice
+            message={notice}
+            tone={tone}
+            variant="admin"
+            displaySeconds={noticeDisplaySeconds}
+            stayVisibleAfterBlur={noticeStayVisibleAfterBlur}
+          />
+        ) : null}
         {children}
       </section>
     </main>

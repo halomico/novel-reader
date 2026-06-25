@@ -1,5 +1,5 @@
 ﻿import type { Metadata } from "next";
-import { BookOpen, Database, Globe2, HardDrive, History, Search, Settings } from "lucide-react";
+import { BookOpen, Database, Globe2, HardDrive, History, Search, Settings, Users } from "lucide-react";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { AdminFrame } from "./AdminFrame";
@@ -101,6 +101,13 @@ export default async function AdminPage() {
             <span>
               <strong>搜索索引</strong>
               <small>查看、添加和删除正文搜索缓存</small>
+            </span>
+          </Link>
+          <Link className="adminHomeLink" href="/admin/users">
+            <Users size={19} aria-hidden="true" />
+            <span>
+              <strong>用户管理</strong>
+              <small>维护前台用户、登录记录和搜索限速</small>
             </span>
           </Link>
         </div>

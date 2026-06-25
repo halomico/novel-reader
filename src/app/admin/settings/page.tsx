@@ -16,9 +16,13 @@ import {
   getFrontendSearchConcurrencyLimit,
   getGlobalSearchMaxResults,
   getManualIndexMaxSegments,
+  getNoticeDisplaySeconds,
   getSearchRateLimitPerMinute,
   getSearchResultsPageSize,
   getSearchShortQueryRateLimitPerMinute,
+  getUserDailyRegistrationLimitPerIp,
+  getUserAvatarMaxBytes,
+  getUserSearchRateLimitPerMinute,
   getSiteName,
   getSiteTitle,
   shouldBlockHeadlessBrowsers,
@@ -55,9 +59,13 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
   const searchResultsPageSize = settings.searchResultsPageSize || getSearchResultsPageSize();
   const adminBookPageSize = settings.adminBookPageSize || getAdminBookPageSize();
   const adminIndexPageSize = settings.adminIndexPageSize || getAdminIndexPageSize();
+  const noticeDisplaySeconds = settings.noticeDisplaySeconds || getNoticeDisplaySeconds();
   const globalSearchMaxResults = settings.globalSearchMaxResults || getGlobalSearchMaxResults();
   const searchRateLimit = settings.searchRateLimitPerMinute || getSearchRateLimitPerMinute();
   const shortSearchRateLimit = settings.searchShortQueryRateLimitPerMinute || getSearchShortQueryRateLimitPerMinute();
+  const userDailyRegistrationLimit = settings.userDailyRegistrationLimitPerIp || getUserDailyRegistrationLimitPerIp();
+  const userSearchRateLimit = settings.userSearchRateLimitPerMinute || getUserSearchRateLimitPerMinute();
+  const userAvatarMaxMb = ((settings.userAvatarMaxBytes || getUserAvatarMaxBytes()) / 1024 ** 2).toFixed(1);
   const frontendSearchConcurrencyLimit = settings.frontendSearchConcurrencyLimit || getFrontendSearchConcurrencyLimit();
   const contentRateLimit = settings.contentRateLimitPerMinute || getContentRateLimitPerMinute();
   const contentRateLimitWindow = settings.contentRateLimitWindowSeconds || getContentRateLimitWindowSeconds();
@@ -183,6 +191,19 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 <input name="adminIndexPageSize" type="number" min="1" max="200" defaultValue={adminIndexPageSize} />
               </label>
             </div>
+            <div className="adminFieldGrid">
+              <label>
+                <span>提示显示秒数</span>
+                <input name="noticeDisplaySeconds" type="number" min="0" max="60" defaultValue={noticeDisplaySeconds} />
+              </label>
+            </div>
+            <label className="adminSwitchLabel">
+              <span>
+                <strong>失去焦点后继续显示提示</strong>
+                <small>关闭时，浏览器窗口失去焦点会立即隐藏提示消息。</small>
+              </span>
+              <input name="noticeStayVisibleAfterBlur" type="checkbox" defaultChecked={settings.noticeStayVisibleAfterBlur} />
+            </label>
           </section>
 
           <section className="adminSettingsSection">
@@ -197,6 +218,36 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 <input name="searchShortQueryRateLimitPerMinute" type="number" min="1" max="120" defaultValue={shortSearchRateLimit} />
               </label>
             </div>
+            <div className="adminFieldGrid">
+              <label>
+                <span>登录用户搜索限速 / 分钟</span>
+                <input name="userSearchRateLimitPerMinute" type="number" min="1" max="600" defaultValue={userSearchRateLimit} />
+              </label>
+              <label>
+                <span>用户头像上限 / MB</span>
+                <input name="userAvatarMaxMb" type="number" min="0.1" max="10" step="0.1" defaultValue={userAvatarMaxMb} />
+              </label>
+            </div>
+            <div className="adminFieldGrid">
+              <label>
+                <span>单 IP 每日注册上限</span>
+                <input name="userDailyRegistrationLimitPerIp" type="number" min="0" max="100" defaultValue={userDailyRegistrationLimit} />
+              </label>
+            </div>
+            <label className="adminSwitchLabel">
+              <span>
+                <strong>开放前台登录</strong>
+                <small>关闭后未登录用户不能登录；已登录用户仍可退出。</small>
+              </span>
+              <input name="userLoginEnabled" type="checkbox" defaultChecked={settings.userLoginEnabled} />
+            </label>
+            <label className="adminSwitchLabel">
+              <span>
+                <strong>开放前台注册</strong>
+                <small>关闭后注册页和右上角注册入口会隐藏或不可用。</small>
+              </span>
+              <input name="userRegistrationEnabled" type="checkbox" defaultChecked={settings.userRegistrationEnabled} />
+            </label>
             <div className="adminFieldGrid">
               <label>
                 <span>正文访问限速 / 窗口</span>

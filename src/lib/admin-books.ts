@@ -3,7 +3,7 @@ import { getDb } from "./db";
 import { matchesParsedSearchQuery, parseSearchQuery } from "./search-query";
 import type { Novel } from "./books";
 
-export type AdminBookSortKey = "title" | "file_name" | "size_bytes" | "updated_at";
+export type AdminBookSortKey = "title" | "file_name" | "size_bytes" | "word_count" | "updated_at" | "visit_count" | "last_accessed_at";
 export type AdminBookSortDir = "asc" | "desc";
 
 export type AdminBookListResult = {
@@ -43,6 +43,9 @@ function toPlainNovel(book: Novel): Novel {
     content_hash: book.content_hash,
     size_bytes: book.size_bytes,
     mtime_ms: book.mtime_ms,
+    word_count: book.word_count,
+    visit_count: book.visit_count,
+    last_accessed_at: book.last_accessed_at,
     created_at: book.created_at,
     updated_at: book.updated_at,
   };
@@ -52,11 +55,22 @@ const sortColumns: Record<AdminBookSortKey, string> = {
   title: "title COLLATE NOCASE",
   file_name: "file_name COLLATE NOCASE",
   size_bytes: "size_bytes",
+  word_count: "word_count",
   updated_at: "updated_at",
+  visit_count: "visit_count",
+  last_accessed_at: "last_accessed_at",
 };
 
 function normalizeSort(value: string | undefined): AdminBookSortKey {
-  return value === "title" || value === "file_name" || value === "size_bytes" || value === "updated_at" ? value : "updated_at";
+  return value === "title" ||
+    value === "file_name" ||
+    value === "size_bytes" ||
+    value === "word_count" ||
+    value === "updated_at" ||
+    value === "visit_count" ||
+    value === "last_accessed_at"
+    ? value
+    : "updated_at";
 }
 
 function normalizeDir(value: string | undefined): AdminBookSortDir {
@@ -71,6 +85,12 @@ function compareAdminBooks(sort: AdminBookSortKey, dir: AdminBookSortDir) {
     let result = 0;
     if (sort === "size_bytes") {
       result = left.size_bytes - right.size_bytes;
+    } else if (sort === "word_count") {
+      result = left.word_count - right.word_count;
+    } else if (sort === "visit_count") {
+      result = left.visit_count - right.visit_count;
+    } else if (sort === "last_accessed_at") {
+      result = new Date(left.last_accessed_at || 0).getTime() - new Date(right.last_accessed_at || 0).getTime();
     } else if (sort === "updated_at") {
       result = new Date(left.updated_at).getTime() - new Date(right.updated_at).getTime();
     } else if (sort === "file_name") {
@@ -108,7 +128,7 @@ export function listAdminBooks(params: { page?: number; q?: string; pageSize?: n
 
     const candidates = db
       .prepare(
-        `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, created_at, updated_at
+        `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, created_at, updated_at
          FROM novels
          ORDER BY ${orderBy}`,
       )
@@ -136,7 +156,7 @@ export function listAdminBooks(params: { page?: number; q?: string; pageSize?: n
   const offset = (page - 1) * pageSize;
   const books = db
     .prepare(
-      `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, created_at, updated_at
+      `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, created_at, updated_at
        FROM novels
        ORDER BY ${orderBy}
        LIMIT ? OFFSET ?`,

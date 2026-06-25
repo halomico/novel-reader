@@ -6,6 +6,7 @@ import { getLibraryDir } from "./config";
 import { deleteIndexedContentForNovel } from "./content-index";
 import { getDb } from "./db";
 import { isNovelTextFile, parseNovelTitle } from "./filename";
+import { decodeNovelBuffer } from "./text";
 
 export type NovelFileRecord = {
   title: string;
@@ -14,6 +15,7 @@ export type NovelFileRecord = {
   contentHash: string;
   sizeBytes: number;
   mtimeMs: number;
+  wordCount: number;
 };
 
 export type SavedNovelResult =
@@ -51,6 +53,10 @@ export function resolveLibraryFile(relativePath: string): string {
 
 export function hashNovelBuffer(buffer: Buffer): string {
   return crypto.createHash("sha256").update(buffer).digest("hex");
+}
+
+export function countNovelWords(buffer: Buffer): number {
+  return Array.from(decodeNovelBuffer(buffer).replace(/\s+/g, "")).length;
 }
 
 export function sanitizeNovelFileName(fileName: string): string | null {
@@ -96,6 +102,7 @@ export function buildNovelRecordFromFile(fileName: string): SkippedNovelResult |
     contentHash: hashNovelBuffer(buffer),
     sizeBytes: fileStat.size,
     mtimeMs: Math.round(fileStat.mtimeMs),
+    wordCount: countNovelWords(buffer),
   };
 }
 
@@ -129,14 +136,15 @@ export function upsertNovelRecord(db: DatabaseSync, record: NovelFileRecord): nu
   }
 
   db.prepare(
-    `INSERT INTO novels (title, file_name, relative_path, content_hash, size_bytes, mtime_ms, updated_at)
-     VALUES (@title, @fileName, @relativePath, @contentHash, @sizeBytes, @mtimeMs, CURRENT_TIMESTAMP)
+    `INSERT INTO novels (title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, updated_at)
+     VALUES (@title, @fileName, @relativePath, @contentHash, @sizeBytes, @mtimeMs, @wordCount, CURRENT_TIMESTAMP)
      ON CONFLICT(relative_path) DO UPDATE SET
        title = excluded.title,
        file_name = excluded.file_name,
        content_hash = excluded.content_hash,
        size_bytes = excluded.size_bytes,
        mtime_ms = excluded.mtime_ms,
+       word_count = excluded.word_count,
        updated_at = CURRENT_TIMESTAMP`,
   ).run(record);
 
@@ -239,6 +247,7 @@ export async function saveUploadedNovels(files: File[]): Promise<SavedNovelResul
       contentHash,
       sizeBytes: fileStat.size,
       mtimeMs: Math.round(fileStat.mtimeMs),
+      wordCount: countNovelWords(buffer),
     });
     results.push({ status: "saved", title, fileName: uniqueFileName, id });
   }

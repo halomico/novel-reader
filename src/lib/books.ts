@@ -14,6 +14,9 @@ export type Novel = {
   content_hash: string | null;
   size_bytes: number;
   mtime_ms: number;
+  word_count: number;
+  visit_count: number;
+  last_accessed_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -68,7 +71,7 @@ export function listNovels(params: { page?: number; q?: string; pageSize?: numbe
 
     const candidates = db
       .prepare(
-        `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, created_at, updated_at
+        `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, created_at, updated_at
          FROM novels
          ORDER BY title COLLATE NOCASE ASC, id ASC`,
       )
@@ -97,7 +100,7 @@ export function listNovels(params: { page?: number; q?: string; pageSize?: numbe
 
   const books = db
     .prepare(
-      `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, created_at, updated_at
+      `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, created_at, updated_at
        FROM novels
        ORDER BY title COLLATE NOCASE ASC, id ASC
        LIMIT ? OFFSET ?`,
@@ -118,7 +121,7 @@ export function getNovelById(id: number): Novel | null {
   const db = getDb();
   const book = db
     .prepare(
-      `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, created_at, updated_at
+      `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, created_at, updated_at
        FROM novels
        WHERE id = ?`,
     )

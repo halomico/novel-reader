@@ -3,12 +3,14 @@ import {
   getFrontendSearchConcurrencyLimit,
   getSearchRateLimitPerMinute,
   getSearchShortQueryRateLimitPerMinute,
+  getUserSearchRateLimitPerMinute,
   shouldShowProgressBars,
 } from "@/lib/config";
 import { cancelContentJob, countActiveContentJobs, getContentJob, startContentSearchJob } from "@/lib/content-jobs";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { validateSearchKeyword } from "@/lib/search";
 import { countSearchChars } from "@/lib/search-query";
+import { getCurrentUserFromRequest } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -34,10 +36,14 @@ export async function POST(request: NextRequest) {
     return jsonError(validation.message, 400);
   }
 
-  const perMinute =
-    countSearchChars(validation.query.anchorTerm) === 2 ? getSearchShortQueryRateLimitPerMinute() : getSearchRateLimitPerMinute();
+  const user = getCurrentUserFromRequest(request);
+  const perMinute = user
+    ? user.searchRateLimitPerMinute || getUserSearchRateLimitPerMinute()
+    : countSearchChars(validation.query.anchorTerm) === 2
+      ? getSearchShortQueryRateLimitPerMinute()
+      : getSearchRateLimitPerMinute();
   const limit = checkRateLimit({
-    key: `search:${getClientKey(request)}`,
+    key: user ? `search:user:${user.id}` : `search:${getClientKey(request)}`,
     limit: perMinute,
     windowMs: 60_000,
   });

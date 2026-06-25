@@ -1,0 +1,338 @@
+import fs from "node:fs";
+import path from "node:path";
+import type { Novel } from "./books";
+import { getDb } from "./db";
+
+export type UserStatus = "active" | "disabled";
+
+export type UserProfile = {
+  id: number;
+  username: string;
+  displayName: string;
+  avatarPath: string | null;
+  status: UserStatus;
+  searchRateLimitPerMinute: number | null;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt: string | null;
+  lastLoginIp: string | null;
+};
+
+export type UserListResult = {
+  users: UserProfile[];
+  page: number;
+  pageSize: number;
+  totalUsers: number;
+  totalPages: number;
+  query: string;
+};
+
+export type ReadingHistoryItem = {
+  id: number;
+  novelId: number;
+  title: string;
+  segmentIndex: number;
+  visitCount: number;
+  lastReadAt: string;
+  novelExists: boolean;
+};
+
+type UserRow = {
+  id: number;
+  username: string;
+  display_name: string;
+  avatar_path: string | null;
+  status: string;
+  search_rate_limit_per_minute: number | null;
+  registration_ip?: string | null;
+  created_at: string;
+  updated_at: string;
+  last_login_at: string | null;
+  last_login_ip: string | null;
+};
+
+function normalizePage(page: number, totalPages: number): number {
+  if (!Number.isFinite(page) || page < 1) {
+    return 1;
+  }
+  return Math.min(Math.floor(page), Math.max(totalPages, 1));
+}
+
+export function normalizeUsername(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+export function validateUsername(value: string): string | null {
+  const username = normalizeUsername(value);
+  if (username.length < 3 || username.length > 32) {
+    return "用户名长度需要在 3-32 个字符之间";
+  }
+  if (!/^[a-z0-9_-]+$/.test(username)) {
+    return "用户名只能包含英文、数字、下划线和短横线";
+  }
+  return null;
+}
+
+export function validatePassword(value: string): string | null {
+  if (value.length < 6 || value.length > 72) {
+    return "密码长度需要在 6-72 个字符之间";
+  }
+  return null;
+}
+
+export function validateDisplayName(value: string): string | null {
+  const displayName = value.trim();
+  if (displayName.length < 1 || displayName.length > 40) {
+    return "显示名称长度需要在 1-40 个字符之间";
+  }
+  return null;
+}
+
+function toUserProfile(row: UserRow): UserProfile {
+  return {
+    id: row.id,
+    username: row.username,
+    displayName: row.display_name,
+    avatarPath: row.avatar_path,
+    status: row.status === "disabled" ? "disabled" : "active",
+    searchRateLimitPerMinute: row.search_rate_limit_per_minute,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    lastLoginAt: row.last_login_at,
+    lastLoginIp: row.last_login_ip,
+  };
+}
+
+export function getUserById(id: number): UserProfile | null {
+  const row = getDb()
+    .prepare(
+      `SELECT id, username, display_name, avatar_path, status, search_rate_limit_per_minute, created_at, updated_at, last_login_at, last_login_ip
+       FROM users
+       WHERE id = ?`,
+    )
+    .get(id) as UserRow | undefined;
+
+  return row ? toUserProfile(row) : null;
+}
+
+export function getUserPasswordRow(username: string): (UserRow & { password_hash: string }) | null {
+  const row = getDb()
+    .prepare(
+      `SELECT id, username, display_name, password_hash, avatar_path, status, search_rate_limit_per_minute, created_at, updated_at, last_login_at, last_login_ip
+       FROM users
+       WHERE username = ?`,
+    )
+    .get(normalizeUsername(username)) as (UserRow & { password_hash: string }) | undefined;
+
+  return row || null;
+}
+
+export function createUserRecord(params: {
+  username: string;
+  displayName: string;
+  passwordHash: string;
+  status?: UserStatus;
+  searchRateLimitPerMinute?: number | null;
+  registrationIp?: string | null;
+}): number {
+  const info = getDb()
+    .prepare(
+      `INSERT INTO users (username, display_name, password_hash, status, search_rate_limit_per_minute, registration_ip, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+    )
+    .run(
+      normalizeUsername(params.username),
+      params.displayName.trim(),
+      params.passwordHash,
+      params.status || "active",
+      params.searchRateLimitPerMinute ?? null,
+      params.registrationIp || null,
+    );
+
+  return Number(info.lastInsertRowid);
+}
+
+export function countTodayRegistrationsForIp(ip: string): number {
+  const row = getDb()
+    .prepare("SELECT COUNT(*) AS count FROM users WHERE registration_ip = ? AND date(created_at) = date('now')")
+    .get(ip) as { count: number } | undefined;
+  return row?.count || 0;
+}
+
+export function listUsers(params: { page?: number; q?: string; pageSize?: number }): UserListResult {
+  const db = getDb();
+  const pageSize = Math.min(Math.max(Math.floor(params.pageSize || 30), 1), 200);
+  const query = (params.q || "").trim();
+  const where = query ? "WHERE username LIKE ? OR display_name LIKE ? OR COALESCE(last_login_ip, '') LIKE ?" : "";
+  const bind = query ? [`%${query}%`, `%${query}%`, `%${query}%`] : [];
+  const total = db.prepare(`SELECT COUNT(*) AS count FROM users ${where}`).get(...bind) as { count: number };
+  const totalPages = Math.max(1, Math.ceil(total.count / pageSize));
+  const page = normalizePage(params.page || 1, totalPages);
+  const offset = (page - 1) * pageSize;
+  const users = db
+    .prepare(
+      `SELECT id, username, display_name, avatar_path, status, search_rate_limit_per_minute, created_at, updated_at, last_login_at, last_login_ip
+       FROM users
+       ${where}
+       ORDER BY updated_at DESC, id DESC
+       LIMIT ? OFFSET ?`,
+    )
+    .all(...bind, pageSize, offset) as UserRow[];
+
+  return {
+    users: users.map(toUserProfile),
+    page,
+    pageSize,
+    totalUsers: total.count,
+    totalPages,
+    query,
+  };
+}
+
+export function updateUserRecord(params: {
+  id: number;
+  displayName: string;
+  status: UserStatus;
+  searchRateLimitPerMinute: number | null;
+  passwordHash?: string;
+}) {
+  if (params.passwordHash) {
+    getDb()
+      .prepare(
+        `UPDATE users
+         SET display_name = ?, status = ?, search_rate_limit_per_minute = ?, password_hash = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+      )
+      .run(params.displayName.trim(), params.status, params.searchRateLimitPerMinute, params.passwordHash, params.id);
+    return;
+  }
+
+  getDb()
+    .prepare(
+      `UPDATE users
+       SET display_name = ?, status = ?, search_rate_limit_per_minute = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+    )
+    .run(params.displayName.trim(), params.status, params.searchRateLimitPerMinute, params.id);
+}
+
+export function updateUserAvatar(userId: number, avatarPath: string | null) {
+  getDb()
+    .prepare("UPDATE users SET avatar_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .run(avatarPath, userId);
+}
+
+export function removeAvatarFile(avatarPath: string | null) {
+  if (!avatarPath?.startsWith("/avatars/")) {
+    return;
+  }
+
+  const avatarRoot = path.resolve(process.cwd(), "public", "avatars");
+  const filePath = path.resolve(process.cwd(), "public", avatarPath.slice(1));
+  if (filePath !== avatarRoot && filePath.startsWith(`${avatarRoot}${path.sep}`) && fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
+}
+
+export function deleteUserIds(ids: number[]): number {
+  const validIds = ids.filter((id) => Number.isInteger(id) && id > 0);
+  if (!validIds.length) {
+    return 0;
+  }
+
+  const db = getDb();
+  const avatars = db
+    .prepare(`SELECT avatar_path AS avatarPath FROM users WHERE id IN (${validIds.map(() => "?").join(",")})`)
+    .all(...validIds) as Array<{ avatarPath: string | null }>;
+  const deleteUser = db.prepare("DELETE FROM users WHERE id = ?");
+  let deleted = 0;
+  db.exec("BEGIN");
+  try {
+    for (const id of validIds) {
+      deleted += Number(deleteUser.run(id).changes);
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+  for (const avatar of avatars) {
+    removeAvatarFile(avatar.avatarPath);
+  }
+  return deleted;
+}
+
+export function recordUserLogin(userId: number, ip: string) {
+  getDb()
+    .prepare("UPDATE users SET last_login_at = CURRENT_TIMESTAMP, last_login_ip = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .run(ip, userId);
+}
+
+export function recordNovelVisit(novelId: number) {
+  getDb()
+    .prepare("UPDATE novels SET visit_count = visit_count + 1, last_accessed_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .run(novelId);
+}
+
+export function updateNovelVisitStats(novelId: number, visitCount: number, lastAccessedAt: string | null): boolean {
+  const info = getDb()
+    .prepare("UPDATE novels SET visit_count = ?, last_accessed_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .run(Math.max(0, Math.floor(visitCount)), lastAccessedAt, novelId);
+  return Number(info.changes) > 0;
+}
+
+export function recordReadingHistory(userId: number, book: Pick<Novel, "id" | "title">, segmentIndex: number) {
+  const normalizedSegment = Number.isInteger(segmentIndex) && segmentIndex >= 0 ? segmentIndex : 0;
+  getDb()
+    .prepare(
+      `INSERT INTO user_reading_history (user_id, novel_id, title, segment_index, visit_count, last_read_at)
+       VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+       ON CONFLICT(user_id, novel_id) DO UPDATE SET
+         title = excluded.title,
+         segment_index = excluded.segment_index,
+         visit_count = user_reading_history.visit_count + 1,
+         last_read_at = CURRENT_TIMESTAMP`,
+    )
+    .run(userId, book.id, book.title, normalizedSegment);
+}
+
+export function listReadingHistory(userId: number): ReadingHistoryItem[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT h.id, h.novel_id, h.title, h.segment_index, h.visit_count, h.last_read_at, n.id AS existing_novel_id
+       FROM user_reading_history h
+       LEFT JOIN novels n ON n.id = h.novel_id
+       WHERE h.user_id = ?
+       ORDER BY h.last_read_at DESC, h.id DESC
+       LIMIT 200`,
+    )
+    .all(userId) as Array<{
+    id: number;
+    novel_id: number;
+    title: string;
+    segment_index: number;
+    visit_count: number;
+    last_read_at: string;
+    existing_novel_id: number | null;
+  }>;
+
+  return rows.map((row) => ({
+    id: row.id,
+    novelId: row.novel_id,
+    title: row.title,
+    segmentIndex: row.segment_index,
+    visitCount: row.visit_count,
+    lastReadAt: row.last_read_at,
+    novelExists: row.existing_novel_id !== null,
+  }));
+}
+
+export function deleteReadingHistoryItem(userId: number, historyId: number): boolean {
+  const info = getDb().prepare("DELETE FROM user_reading_history WHERE id = ? AND user_id = ?").run(historyId, userId);
+  return Number(info.changes) > 0;
+}
+
+export function clearReadingHistory(userId: number): number {
+  const info = getDb().prepare("DELETE FROM user_reading_history WHERE user_id = ?").run(userId);
+  return Number(info.changes);
+}

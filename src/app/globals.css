@@ -325,6 +325,62 @@ input {
   cursor: pointer;
 }
 
+.userIconLink {
+  overflow: hidden;
+}
+
+.userIconLink img {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.userMenu {
+  position: relative;
+}
+
+.userMenuPanel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 80;
+  display: grid;
+  min-width: 128px;
+  gap: 3px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 98%, transparent);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 13%);
+}
+
+.userMenuPanel a,
+.userMenuPanel button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 7px;
+  padding: 7px 9px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.userMenuPanel a:hover,
+.userMenuPanel a:focus-visible,
+.userMenuPanel button:hover,
+.userMenuPanel button:focus-visible {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
 .catalogHero,
 .settingsHero {
   display: flex;
@@ -940,6 +996,271 @@ mark {
 
 .previewReader p {
   margin: 0;
+}
+
+.authPage,
+.userAuthGrid,
+.accountLayout {
+  display: grid;
+  gap: 14px;
+  align-items: start;
+  margin-top: 28px;
+}
+
+.authPage {
+  justify-items: center;
+}
+
+.userAuthGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.accountLayout {
+  grid-template-columns: 170px minmax(0, 1fr);
+}
+
+.userPanel {
+  display: grid;
+  gap: 13px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.authPanel {
+  width: min(420px, 100%);
+}
+
+.userPanelHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--accent);
+}
+
+.userPanelHeader h1,
+.userPanelHeader h2,
+.accountProfile h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+.userPanelHeader p,
+.accountProfile p,
+.emptyAccountText {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.userPanel label,
+.avatarUploadForm label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.userPanel input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 9px 10px;
+  background: var(--bg-soft);
+  color: var(--text);
+}
+
+.userPanel button,
+.authPrimaryButton,
+.secondaryUserButton,
+.iconTextDanger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: var(--accent);
+  color: #fffaf2;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.authPrimaryButton,
+.avatarUploadForm button {
+  justify-self: start;
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.authPrimaryButton:disabled,
+.avatarUploadForm button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.authSwitchText,
+.authHint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.authSwitchText a {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.accountSideNav {
+  position: sticky;
+  top: 68px;
+  display: grid;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.accountSideNav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 7px;
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.accountSideNav a:hover,
+.accountSideNav a:focus-visible {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
+.accountContent {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
+
+.accountProfile {
+  justify-items: start;
+}
+
+.accountProfileHeader {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.accountAvatar {
+  display: inline-flex;
+  width: 74px;
+  height: 74px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: var(--accent);
+}
+
+.accountAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatarUploadForm {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.avatarUploadForm label {
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.avatarUploadForm small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.secondaryUserButton {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
+.historyList {
+  display: grid;
+  gap: 8px;
+}
+
+.historyItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-strong) 24%, transparent);
+}
+
+.historyItem div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.historyItem a,
+.historyItem strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.historyItem span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.iconTextDanger {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: color-mix(in srgb, #b42318 10%, transparent);
+  color: #b42318;
+}
+
+.accountHistoryTable a,
+.accountHistoryTable strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.accountHistoryActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 10px;
 }
 
 .adminShell,
@@ -1676,6 +1997,12 @@ mark {
   font-size: 13px;
 }
 
+.adminTableToolbar span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .adminCheckbox {
   width: 15px;
   height: 15px;
@@ -1705,6 +2032,63 @@ mark {
 .adminDangerButton:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+.adminCreateUserForm {
+  display: grid;
+  grid-template-columns: auto repeat(5, minmax(92px, 1fr)) auto;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-strong) 32%, transparent);
+}
+
+.adminCreateUserTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.adminCreateUserForm input,
+.adminCreateUserForm select,
+.adminInlineEditForm input,
+.adminInlineEditForm select {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 6px 8px;
+  background: var(--bg-soft);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.adminCreateUserForm button,
+.adminInlineEditForm button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: var(--accent);
+  color: #fffaf2;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.adminInlineEditForm {
+  display: grid;
+  grid-template-columns: minmax(110px, 1.2fr) minmax(74px, 0.7fr) minmax(92px, 0.8fr) minmax(96px, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  min-width: 560px;
 }
 
 @media (max-width: 820px) {
@@ -1794,6 +2178,26 @@ mark {
     grid-template-columns: 1fr;
   }
 
+  .authPage,
+  .userAuthGrid,
+  .accountLayout {
+    grid-template-columns: 1fr;
+    margin-top: 18px;
+  }
+
+  .accountSideNav {
+    position: static;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .accountSideNav a {
+    justify-content: center;
+  }
+
+  .accountProfileHeader {
+    align-items: flex-start;
+  }
+
   .adminShell,
   .adminLoginShell {
     width: min(100% - 20px, 720px);
@@ -1863,11 +2267,20 @@ mark {
     max-width: 100%;
   }
 
+  .adminCreateUserForm {
+    grid-template-columns: 1fr;
+  }
+
   .adminTable th:nth-child(3),
   .adminTable td:nth-child(3),
   .adminTable th:nth-child(5),
   .adminTable td:nth-child(5) {
     display: none;
+  }
+
+  .accountHistoryTable th:nth-child(3),
+  .accountHistoryTable td:nth-child(3) {
+    display: table-cell;
   }
 
   .pageJumpPanel {

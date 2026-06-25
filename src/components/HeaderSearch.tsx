@@ -78,10 +78,14 @@ export function HeaderSearch({
   query = "",
   defaultMode = "title",
   showCurrentSearch = false,
+  noticeDisplaySeconds = 5,
+  noticeStayVisibleAfterBlur = false,
 }: {
   query?: string;
   defaultMode?: SearchMode;
   showCurrentSearch?: boolean;
+  noticeDisplaySeconds?: number;
+  noticeStayVisibleAfterBlur?: boolean;
 }) {
   const [mode, setMode] = useState<SearchMode>(defaultMode);
   const [keyword, setKeyword] = useState(query);
@@ -108,12 +112,25 @@ export function HeaderSearch({
       return;
     }
 
-    const timer = window.setTimeout(() => {
-      setIsMessageVisible(false);
-    }, 15_000);
+    const timers: Array<ReturnType<typeof setTimeout>> = [];
+    if (noticeDisplaySeconds > 0) {
+      timers.push(setTimeout(() => setIsMessageVisible(false), noticeDisplaySeconds * 1000));
+    }
 
-    return () => window.clearTimeout(timer);
-  }, [isMessageVisible, message]);
+    function hideOnWindowBlur() {
+      if (!noticeStayVisibleAfterBlur) {
+        setIsMessageVisible(false);
+      }
+    }
+
+    window.addEventListener("blur", hideOnWindowBlur);
+    return () => {
+      for (const timer of timers) {
+        clearTimeout(timer);
+      }
+      window.removeEventListener("blur", hideOnWindowBlur);
+    };
+  }, [isMessageVisible, message, noticeDisplaySeconds, noticeStayVisibleAfterBlur]);
 
   useEffect(() => {
     const highlightedSegment = document.querySelector<HTMLElement>(".readerSegment.isHit");
@@ -252,7 +269,9 @@ export function HeaderSearch({
         if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
           setIsModeMenuOpen(false);
           setIsCurrentPanelOpen(false);
-          setIsMessageVisible(false);
+          if (!noticeStayVisibleAfterBlur) {
+            setIsMessageVisible(false);
+          }
         }
       }}
     >

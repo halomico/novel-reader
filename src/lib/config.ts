@@ -87,12 +87,40 @@ export function getAdminIndexPageSize(): number {
   return readSettingInt(readSiteSettings().adminIndexPageSize, "ADMIN_INDEX_PAGE_SIZE", 30, 1, 200);
 }
 
+export function getNoticeDisplaySeconds(): number {
+  return readSettingInt(readSiteSettings().noticeDisplaySeconds, "NOTICE_DISPLAY_SECONDS", 5, 0, 60);
+}
+
+export function shouldNoticeStayVisibleAfterBlur(): boolean {
+  return readSiteSettings().noticeStayVisibleAfterBlur || readBoolConfig("NOTICE_STAY_VISIBLE_AFTER_BLUR", false);
+}
+
 export function getSearchRateLimitPerMinute(): number {
   return readSettingInt(readSiteSettings().searchRateLimitPerMinute, "SEARCH_RATE_LIMIT_PER_MINUTE", 8, 1, 120);
 }
 
 export function getSearchShortQueryRateLimitPerMinute(): number {
   return readSettingInt(readSiteSettings().searchShortQueryRateLimitPerMinute, "SEARCH_SHORT_QUERY_RATE_LIMIT_PER_MINUTE", 3, 1, 120);
+}
+
+export function getUserSearchRateLimitPerMinute(): number {
+  return readSettingInt(readSiteSettings().userSearchRateLimitPerMinute, "USER_SEARCH_RATE_LIMIT_PER_MINUTE", 30, 1, 600);
+}
+
+export function isUserLoginEnabled(): boolean {
+  return readSiteSettings().userLoginEnabled && readBoolConfig("USER_LOGIN_ENABLED", true);
+}
+
+export function isUserRegistrationEnabled(): boolean {
+  return readSiteSettings().userRegistrationEnabled && readBoolConfig("USER_REGISTRATION_ENABLED", true);
+}
+
+export function getUserDailyRegistrationLimitPerIp(): number {
+  return readSettingInt(readSiteSettings().userDailyRegistrationLimitPerIp, "USER_DAILY_REGISTRATION_LIMIT_PER_IP", 2, 0, 100);
+}
+
+export function getUserAvatarMaxBytes(): number {
+  return readSettingInt(readSiteSettings().userAvatarMaxBytes, "USER_AVATAR_MAX_BYTES", 1048576, 1, 10 * 1024 ** 2);
 }
 
 export function getFrontendSearchConcurrencyLimit(): number {

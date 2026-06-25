@@ -21,6 +21,14 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[unitIndex]}`;
 }
 
+function formatDate(value: string | null): string {
+  if (!value) {
+    return "-";
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN", { hour12: false });
+}
+
 function sortHref(query: string, sort: AdminBookSortKey, dir: AdminBookSortDir, nextSort: AdminBookSortKey) {
   const params = new URLSearchParams();
   params.set("page", "1");
@@ -111,7 +119,16 @@ export function AdminBookTable({
                 <SortHeader label="大小" value="size_bytes" query={query} sort={sort} dir={dir} />
               </th>
               <th>
+                <SortHeader label="字数" value="word_count" query={query} sort={sort} dir={dir} />
+              </th>
+              <th>
                 <SortHeader label="更新时间" value="updated_at" query={query} sort={sort} dir={dir} />
+              </th>
+              <th>
+                <SortHeader label="访问量" value="visit_count" query={query} sort={sort} dir={dir} />
+              </th>
+              <th>
+                <SortHeader label="最后访问" value="last_accessed_at" query={query} sort={sort} dir={dir} />
               </th>
             </tr>
           </thead>
@@ -135,18 +152,20 @@ export function AdminBookTable({
                   </td>
                   <td>{book.file_name}</td>
                   <td>{formatBytes(book.size_bytes)}</td>
-                  <td>{new Date(book.updated_at).toLocaleString("zh-CN")}</td>
+                  <td>{book.word_count.toLocaleString("zh-CN")}</td>
+                  <td>{formatDate(book.updated_at)}</td>
+                  <td>{book.visit_count.toLocaleString("zh-CN")}</td>
+                  <td>{formatDate(book.last_accessed_at)}</td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={5}>未找到匹配内容</td>
+                <td colSpan={8}>未找到匹配内容</td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
-
       <div className="adminTableFooter">
         <button className="adminDangerButton" type="submit" disabled={selectedIds.length === 0}>
           <Trash2 size={17} aria-hidden="true" />

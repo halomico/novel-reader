@@ -22,10 +22,14 @@ import {
   getFrontendSearchConcurrencyLimit,
   getGlobalSearchMaxResults,
   getManualIndexMaxSegments,
+  getNoticeDisplaySeconds,
   getSearchRateLimitPerMinute,
   getSearchResultsPageSize,
   getSearchShortQueryRateLimitPerMinute,
+  getUserDailyRegistrationLimitPerIp,
   isAdminLoginRateLimitEnabled,
+  getUserAvatarMaxBytes,
+  getUserSearchRateLimitPerMinute,
   shouldAdminLoginRateLimitBan,
 } from "@/lib/config";
 import { deleteContentIndexTerm } from "@/lib/content-index";
@@ -34,6 +38,15 @@ import { cancelContentJobs } from "@/lib/content-jobs";
 import { deleteNovelIds } from "@/lib/novel-files";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { readSiteSettings, type SiteSettings, writeSiteSettings } from "@/lib/site-settings";
+import { hashUserPassword } from "@/lib/user-auth";
+import {
+  createUserRecord,
+  deleteUserIds,
+  updateUserRecord,
+  validateDisplayName,
+  validatePassword,
+  validateUsername,
+} from "@/lib/users";
 
 function adminNotice(message: string, tone: "success" | "warning" | "error" = "success", path = "/admin/books") {
   redirect(`${path}?notice=${encodeURIComponent(message)}&tone=${tone}`);
@@ -77,6 +90,18 @@ function numberField(formData: FormData, name: string, fallback: number, min: nu
     return fallback;
   }
   return Math.min(Math.max(value, min), max);
+}
+
+function optionalIntField(formData: FormData, name: string, min: number, max: number): number | null {
+  const raw = String(formData.get(name) || "").trim();
+  if (!raw) {
+    return null;
+  }
+  const value = Number(raw);
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+  return Math.min(Math.max(Math.floor(value), min), max);
 }
 
 function sha256(value: string): string {
@@ -157,6 +182,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
 
   const softLimitGb = numberField(formData, "contentIndexSoftLimitGb", getContentIndexSoftLimitBytes() / 1024 ** 3, 0.1, 10);
   const hardLimitGb = numberField(formData, "contentIndexHardLimitGb", getContentIndexHardLimitBytes() / 1024 ** 3, softLimitGb, 10);
+  const userAvatarMaxMb = numberField(formData, "userAvatarMaxMb", getUserAvatarMaxBytes() / 1024 ** 2, 0.1, 10);
   const next: SiteSettings = {
     ...previous,
     siteName: String(formData.get("siteName") || "").trim(),
@@ -185,6 +211,8 @@ export async function saveAdminSettingsAction(formData: FormData) {
     searchResultsPageSize: intField(formData, "searchResultsPageSize", previous.searchResultsPageSize || getSearchResultsPageSize(), 1, 100),
     adminBookPageSize: intField(formData, "adminBookPageSize", previous.adminBookPageSize || getAdminBookPageSize(), 1, 200),
     adminIndexPageSize: intField(formData, "adminIndexPageSize", previous.adminIndexPageSize || getAdminIndexPageSize(), 1, 200),
+    noticeDisplaySeconds: intField(formData, "noticeDisplaySeconds", previous.noticeDisplaySeconds || getNoticeDisplaySeconds(), 0, 60),
+    noticeStayVisibleAfterBlur: formData.get("noticeStayVisibleAfterBlur") === "on",
     contentIndexMaxSegments: intField(formData, "contentIndexMaxSegments", previous.contentIndexMaxSegments || getContentIndexMaxSegments(), 1, 100000),
     globalSearchMaxResults: intField(formData, "globalSearchMaxResults", previous.globalSearchMaxResults || getGlobalSearchMaxResults(), 1, 1000),
     searchRateLimitPerMinute: intField(
@@ -201,6 +229,23 @@ export async function saveAdminSettingsAction(formData: FormData) {
       1,
       120,
     ),
+    userLoginEnabled: formData.get("userLoginEnabled") === "on",
+    userRegistrationEnabled: formData.get("userRegistrationEnabled") === "on",
+    userDailyRegistrationLimitPerIp: intField(
+      formData,
+      "userDailyRegistrationLimitPerIp",
+      previous.userDailyRegistrationLimitPerIp || getUserDailyRegistrationLimitPerIp(),
+      0,
+      100,
+    ),
+    userSearchRateLimitPerMinute: intField(
+      formData,
+      "userSearchRateLimitPerMinute",
+      previous.userSearchRateLimitPerMinute || getUserSearchRateLimitPerMinute(),
+      1,
+      600,
+    ),
+    userAvatarMaxBytes: Math.floor(userAvatarMaxMb * 1024 ** 2),
     contentRateLimitPerMinute: intField(
       formData,
       "contentRateLimitPerMinute",
@@ -236,12 +281,16 @@ export async function saveAdminSettingsAction(formData: FormData) {
   };
   writeSiteSettings(next);
   revalidatePath("/");
+  revalidatePath("/login");
+  revalidatePath("/register");
+  revalidatePath("/account");
   revalidatePath("/search");
   revalidatePath("/settings");
   revalidatePath("/admin");
   revalidatePath("/admin/books");
   revalidatePath("/admin/settings");
   revalidatePath("/admin/indexes");
+  revalidatePath("/admin/users");
   if (adminUsername) {
     await setAdminSession(adminUsername);
   }
@@ -253,4 +302,88 @@ export async function deleteContentIndexAction(formData: FormData) {
   const term = deleteContentIndexTerm(getContentIndexDb(), String(formData.get("term") || ""));
   revalidatePath("/admin/indexes");
   adminNotice(term ? `索引词“${term}”已删除` : "索引关键词不能为空", term ? "success" : "warning", "/admin/indexes");
+}
+
+export async function createAdminUserAction(formData: FormData) {
+  await requireAdminRequest("/admin/users");
+  const username = String(formData.get("username") || "").trim();
+  const displayName = String(formData.get("displayName") || "").trim() || username;
+  const password = String(formData.get("password") || "");
+  const status = formData.get("status") === "disabled" ? "disabled" : "active";
+  const searchRateLimitPerMinute = optionalIntField(formData, "searchRateLimitPerMinute", 1, 600);
+
+  const usernameError = validateUsername(username);
+  if (usernameError) {
+    adminNotice(usernameError, "warning", "/admin/users");
+  }
+  const displayNameError = validateDisplayName(displayName);
+  if (displayNameError) {
+    adminNotice(displayNameError, "warning", "/admin/users");
+  }
+  const passwordError = validatePassword(password);
+  if (passwordError) {
+    adminNotice(passwordError, "warning", "/admin/users");
+  }
+
+  try {
+    createUserRecord({
+      username,
+      displayName,
+      passwordHash: hashUserPassword(password),
+      status,
+      searchRateLimitPerMinute,
+    });
+  } catch {
+    adminNotice("用户名已存在", "warning", "/admin/users");
+  }
+
+  revalidatePath("/admin/users");
+  adminNotice("用户已创建", "success", "/admin/users");
+}
+
+export async function updateAdminUserAction(formData: FormData) {
+  await requireAdminRequest("/admin/users");
+  const userId = Number(formData.get("userId"));
+  const displayName = String(formData.get("displayName") || "").trim();
+  const status = formData.get("status") === "disabled" ? "disabled" : "active";
+  const newPassword = String(formData.get("newPassword") || "");
+  const searchRateLimitPerMinute = optionalIntField(formData, "searchRateLimitPerMinute", 1, 600);
+
+  if (!Number.isInteger(userId) || userId < 1) {
+    adminNotice("用户不存在", "warning", "/admin/users");
+  }
+  const displayNameError = validateDisplayName(displayName);
+  if (displayNameError) {
+    adminNotice(displayNameError, "warning", "/admin/users");
+  }
+  const passwordError = newPassword ? validatePassword(newPassword) : null;
+  if (passwordError) {
+    adminNotice(passwordError, "warning", "/admin/users");
+  }
+
+  updateUserRecord({
+    id: userId,
+    displayName,
+    status,
+    searchRateLimitPerMinute,
+    passwordHash: newPassword ? hashUserPassword(newPassword) : undefined,
+  });
+  revalidatePath("/admin/users");
+  adminNotice("用户已更新", "success", "/admin/users");
+}
+
+export async function deleteAdminUsersAction(formData: FormData) {
+  await requireAdminRequest("/admin/users");
+  const ids = formData
+    .getAll("userIds")
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0);
+
+  if (!ids.length) {
+    adminNotice("请选择要删除的用户", "warning", "/admin/users");
+  }
+
+  const deleted = deleteUserIds(ids);
+  revalidatePath("/admin/users");
+  adminNotice(`已删除 ${deleted} 个用户`, deleted ? "success" : "warning", "/admin/users");
 }

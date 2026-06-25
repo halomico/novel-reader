@@ -124,7 +124,7 @@ export async function searchNovelContent(
     db
       .prepare(
         `
-        SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, created_at, updated_at
+        SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, created_at, updated_at
         FROM novels
         ORDER BY id ASC
       `,

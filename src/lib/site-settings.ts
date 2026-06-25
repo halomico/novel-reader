@@ -33,12 +33,19 @@ export type SiteSettings = {
   searchResultsPageSize: number;
   adminBookPageSize: number;
   adminIndexPageSize: number;
+  noticeDisplaySeconds: number;
+  noticeStayVisibleAfterBlur: boolean;
   showProgressBars: boolean;
   frontendAutoIndexEnabled: boolean;
   frontendSearchConcurrencyLimit: number;
   globalSearchMaxResults: number;
   searchRateLimitPerMinute: number;
   searchShortQueryRateLimitPerMinute: number;
+  userLoginEnabled: boolean;
+  userRegistrationEnabled: boolean;
+  userDailyRegistrationLimitPerIp: number;
+  userSearchRateLimitPerMinute: number;
+  userAvatarMaxBytes: number;
   contentRateLimitPerMinute: number;
   contentRateLimitWindowSeconds: number;
   contentBlockHeadlessBrowsers: boolean;
@@ -72,12 +79,19 @@ const DEFAULT_SETTINGS: SiteSettings = {
   searchResultsPageSize: 0,
   adminBookPageSize: 0,
   adminIndexPageSize: 0,
+  noticeDisplaySeconds: 0,
+  noticeStayVisibleAfterBlur: false,
   showProgressBars: true,
   frontendAutoIndexEnabled: true,
   frontendSearchConcurrencyLimit: 0,
   globalSearchMaxResults: 0,
   searchRateLimitPerMinute: 0,
   searchShortQueryRateLimitPerMinute: 0,
+  userLoginEnabled: true,
+  userRegistrationEnabled: true,
+  userDailyRegistrationLimitPerIp: 0,
+  userSearchRateLimitPerMinute: 0,
+  userAvatarMaxBytes: 0,
   contentRateLimitPerMinute: 0,
   contentRateLimitWindowSeconds: 0,
   contentBlockHeadlessBrowsers: true,
@@ -171,6 +185,8 @@ export function readSiteSettings(): SiteSettings {
       searchResultsPageSize: cleanInt(parsed.searchResultsPageSize, DEFAULT_SETTINGS.searchResultsPageSize, 0, 100),
       adminBookPageSize: cleanInt(parsed.adminBookPageSize, DEFAULT_SETTINGS.adminBookPageSize, 0, 200),
       adminIndexPageSize: cleanInt(parsed.adminIndexPageSize, DEFAULT_SETTINGS.adminIndexPageSize, 0, 200),
+      noticeDisplaySeconds: cleanInt(parsed.noticeDisplaySeconds, DEFAULT_SETTINGS.noticeDisplaySeconds, 0, 60),
+      noticeStayVisibleAfterBlur: cleanBool(parsed.noticeStayVisibleAfterBlur, DEFAULT_SETTINGS.noticeStayVisibleAfterBlur),
       showProgressBars: cleanBool(parsed.showProgressBars, DEFAULT_SETTINGS.showProgressBars),
       frontendAutoIndexEnabled: cleanBool(parsed.frontendAutoIndexEnabled, DEFAULT_SETTINGS.frontendAutoIndexEnabled),
       frontendSearchConcurrencyLimit: cleanInt(parsed.frontendSearchConcurrencyLimit, DEFAULT_SETTINGS.frontendSearchConcurrencyLimit, 0, 50),
@@ -182,6 +198,21 @@ export function readSiteSettings(): SiteSettings {
         0,
         120,
       ),
+      userLoginEnabled: cleanBool(parsed.userLoginEnabled, DEFAULT_SETTINGS.userLoginEnabled),
+      userRegistrationEnabled: cleanBool(parsed.userRegistrationEnabled, DEFAULT_SETTINGS.userRegistrationEnabled),
+      userDailyRegistrationLimitPerIp: cleanInt(
+        parsed.userDailyRegistrationLimitPerIp,
+        DEFAULT_SETTINGS.userDailyRegistrationLimitPerIp,
+        0,
+        100,
+      ),
+      userSearchRateLimitPerMinute: cleanInt(
+        parsed.userSearchRateLimitPerMinute,
+        DEFAULT_SETTINGS.userSearchRateLimitPerMinute,
+        0,
+        600,
+      ),
+      userAvatarMaxBytes: cleanInt(parsed.userAvatarMaxBytes, DEFAULT_SETTINGS.userAvatarMaxBytes, 0, 10 * 1024 ** 2),
       contentRateLimitPerMinute: cleanInt(parsed.contentRateLimitPerMinute, DEFAULT_SETTINGS.contentRateLimitPerMinute, 0, 600),
       contentRateLimitWindowSeconds: cleanInt(parsed.contentRateLimitWindowSeconds, DEFAULT_SETTINGS.contentRateLimitWindowSeconds, 0, 3600),
       contentBlockHeadlessBrowsers: cleanBool(parsed.contentBlockHeadlessBrowsers, DEFAULT_SETTINGS.contentBlockHeadlessBrowsers),

@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getNovelById, readNovelSegments } from "@/lib/books";
 import { checkContentAccess } from "@/lib/content-access";
+import { getCurrentUser } from "@/lib/user-auth";
+import { recordNovelVisit, recordReadingHistory } from "@/lib/users";
 
 export const dynamic = "force-dynamic";
 
@@ -42,8 +44,14 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
     notFound();
   }
 
-  const segments = await readNovelSegments(book);
   const hitSegment = Number(query.hit);
+  recordNovelVisit(book.id);
+  const user = await getCurrentUser();
+  if (user) {
+    recordReadingHistory(user.id, book, hitSegment);
+  }
+
+  const segments = await readNovelSegments(book);
 
   return (
     <main className="readerShell">

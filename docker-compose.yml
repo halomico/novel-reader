@@ -14,3 +14,4 @@ services:
     volumes:
       - ./library/books:/app/library/books
       - ./data:/app/data
+      - ./public/avatars:/app/public/avatars
