@@ -2,7 +2,7 @@
 
 import { BookText } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pagination } from "@/components/Pagination";
 import type { ContentJobSnapshot } from "@/lib/content-jobs";
 import type { SearchResult } from "@/lib/search";
@@ -25,6 +25,45 @@ type SearchApiResponse = {
   jobId?: string;
   showProgressBars?: boolean;
 };
+
+type CachedContentSearch = {
+  savedAt: number;
+  page: number;
+  showProgressBars: boolean;
+  job: ContentJobSnapshot;
+};
+
+const CONTENT_SEARCH_CACHE_TTL_MS = 30 * 60 * 1000;
+
+function readCachedSearch(key: string): CachedContentSearch | null {
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    if (!raw) {
+      return null;
+    }
+    const cached = JSON.parse(raw) as CachedContentSearch;
+    if (!cached.job || Date.now() - cached.savedAt > CONTENT_SEARCH_CACHE_TTL_MS) {
+      window.sessionStorage.removeItem(key);
+      return null;
+    }
+    return cached;
+  } catch {
+    window.sessionStorage.removeItem(key);
+    return null;
+  }
+}
+
+function writeCachedSearch(key: string, job: ContentJobSnapshot, page: number, showProgressBars: boolean) {
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), page, showProgressBars, job }));
+  } catch {
+    // Session storage can be unavailable or full; search still works without it.
+  }
+}
+
+function cancelSearchJob(jobId: string) {
+  fetch(`/api/search/content?id=${encodeURIComponent(jobId)}`, { method: "DELETE", cache: "no-store", keepalive: true }).catch(() => undefined);
+}
 
 function normalizePage(page: number, totalPages: number): number {
   if (!Number.isFinite(page) || page < 1) {
@@ -59,7 +98,7 @@ function SearchProgress({ job, showProgressBars }: { job: ContentJobSnapshot | n
   const scannedBooks = job?.scannedBooks || 0;
   const totalBooks = job?.totalBooks || 0;
 
-  if (!job || job.status === "done") {
+  if (!job || job.status === "done" || job.status === "cancelled" || job.status === "error") {
     return null;
   }
 
@@ -99,9 +138,31 @@ export function ContentSearchClient({
   const [page, setPage] = useState(initialPage);
   const [displayProgress, setDisplayProgress] = useState(showProgressBars);
   const pageStateKey = useMemo(() => `content-search-page:${keyword}`, [keyword]);
+  const resultCacheKey = useMemo(() => `content-search-results:${keyword}`, [keyword]);
+  const currentPageRef = useRef(initialPage);
+  const activeJobIdRef = useRef("");
+  const activeJobStatusRef = useRef<ContentJobSnapshot["status"] | "">("");
+  const keepJobOnUnmountRef = useRef(false);
+  const pendingCancelRef = useRef<{ keyword: string; jobId: string } | null>(null);
+  const pendingCancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function rememberPage(nextPage: number) {
+    currentPageRef.current = nextPage;
     window.sessionStorage.setItem(pageStateKey, String(nextPage));
+  }
+
+  function rememberSnapshot(nextJob: ContentJobSnapshot, nextPage = currentPageRef.current, nextShowProgressBars = displayProgress) {
+    activeJobIdRef.current = nextJob.id;
+    activeJobStatusRef.current = nextJob.status;
+    writeCachedSearch(resultCacheKey, nextJob, nextPage, nextShowProgressBars);
+  }
+
+  function clearPendingCancel() {
+    if (pendingCancelTimerRef.current) {
+      clearTimeout(pendingCancelTimerRef.current);
+      pendingCancelTimerRef.current = null;
+    }
+    pendingCancelRef.current = null;
   }
 
   function restoreInitialPage() {
@@ -116,6 +177,10 @@ export function ContentSearchClient({
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    keepJobOnUnmountRef.current = false;
+    if (pendingCancelRef.current?.keyword === keyword) {
+      clearPendingCancel();
+    }
 
     async function poll(jobId: string) {
       const response = await fetch(`/api/search/content?id=${encodeURIComponent(jobId)}`, { cache: "no-store" });
@@ -128,6 +193,7 @@ export function ContentSearchClient({
       }
       setJob(data.job);
       setDisplayProgress(data.showProgressBars ?? showProgressBars);
+      rememberSnapshot(data.job, currentPageRef.current, data.showProgressBars ?? showProgressBars);
       if (data.job.status === "running" || data.job.status === "queued") {
         timer = setTimeout(() => {
           poll(jobId).catch((error) => setMessage(error instanceof Error ? error.message : "搜索失败"));
@@ -139,12 +205,31 @@ export function ContentSearchClient({
       setJob(null);
       setMessage("");
       const nextPage = restoreInitialPage();
+      const cached = readCachedSearch(resultCacheKey);
+      currentPageRef.current = nextPage;
       setPage(nextPage);
       if (nextPage !== initialPage) {
         const url = new URL(window.location.href);
         url.searchParams.set("page", String(nextPage));
         window.history.replaceState(null, "", url.toString());
       }
+
+      if (cached?.job.results?.length) {
+        const cachedPage = hasExplicitPage ? nextPage : normalizePage(cached.page || nextPage, Math.ceil(cached.job.results.length / pageSize));
+        currentPageRef.current = cachedPage;
+        setPage(cachedPage);
+        setJob(cached.job);
+        setDisplayProgress(cached.showProgressBars);
+        rememberSnapshot(cached.job, cachedPage, cached.showProgressBars);
+        if (cached.job.status === "done") {
+          return;
+        }
+        if (cached.job.status === "running" || cached.job.status === "queued") {
+          poll(cached.job.id).catch((error) => setMessage(error instanceof Error ? error.message : "搜索失败"));
+          return;
+        }
+      }
+
       const response = await fetch("/api/search/content", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -159,7 +244,37 @@ export function ContentSearchClient({
       }
       setJob(data.job);
       setDisplayProgress(data.showProgressBars ?? showProgressBars);
+      rememberSnapshot(data.job, nextPage, data.showProgressBars ?? showProgressBars);
       poll(data.jobId).catch((error) => setMessage(error instanceof Error ? error.message : "搜索失败"));
+    }
+
+    function cancelActiveJob() {
+      const jobId = activeJobIdRef.current;
+      const status = activeJobStatusRef.current;
+      if (jobId && (status === "running" || status === "queued")) {
+        cancelSearchJob(jobId);
+      }
+    }
+
+    function scheduleCancelActiveJob() {
+      const jobId = activeJobIdRef.current;
+      const status = activeJobStatusRef.current;
+      if (!jobId || (status !== "running" && status !== "queued")) {
+        return;
+      }
+      pendingCancelRef.current = { keyword, jobId };
+      pendingCancelTimerRef.current = setTimeout(() => {
+        if (pendingCancelRef.current?.jobId === jobId) {
+          cancelSearchJob(jobId);
+          clearPendingCancel();
+        }
+      }, 300);
+    }
+
+    function handlePageHide() {
+      if (!keepJobOnUnmountRef.current) {
+        cancelActiveJob();
+      }
     }
 
     startSearch().catch((error) => {
@@ -167,14 +282,19 @@ export function ContentSearchClient({
         setMessage(error instanceof Error ? error.message : "搜索失败");
       }
     });
+    window.addEventListener("pagehide", handlePageHide);
 
     return () => {
       cancelled = true;
       if (timer) {
         clearTimeout(timer);
       }
+      window.removeEventListener("pagehide", handlePageHide);
+      if (!keepJobOnUnmountRef.current) {
+        scheduleCancelActiveJob();
+      }
     };
-  }, [keyword, initialPage, hasExplicitPage, pageStateKey, showProgressBars]);
+  }, [keyword, initialPage, hasExplicitPage, pageStateKey, resultCacheKey, pageSize, showProgressBars]);
 
   const results = job?.results || [];
   const totalPages = Math.max(1, Math.ceil(results.length / pageSize));
@@ -188,6 +308,9 @@ export function ContentSearchClient({
     const normalized = normalizePage(nextPage, totalPages);
     setPage(normalized);
     rememberPage(normalized);
+    if (job) {
+      writeCachedSearch(resultCacheKey, job, normalized, displayProgress);
+    }
     const url = new URL(window.location.href);
     url.searchParams.set("page", String(normalized));
     window.history.replaceState(null, "", url.toString());
@@ -196,17 +319,19 @@ export function ContentSearchClient({
 
   const done = job?.status === "done";
   const failed = job?.status === "error";
+  const cancelled = job?.status === "cancelled";
 
   return (
     <>
       <section className="searchHero">
-        {done && results.length ? (
+        {results.length ? (
           <p>
-            找到 <strong>{results.length}</strong> 条，最多显示前 {maxResults} 条
+            {done ? "找到" : "已找到"} <strong>{results.length}</strong> 条，最多显示前 {maxResults} 条
           </p>
         ) : null}
         {done && !results.length ? <p className="searchMessage">未找到匹配正文</p> : null}
         {failed ? <p className="searchMessage">{job?.error || job?.message || "搜索失败"}</p> : null}
+        {cancelled ? <p className="searchMessage">{job?.message || "全文搜索任务已取消"}</p> : null}
         {message ? <p className="searchMessage">{message}</p> : null}
       </section>
 
@@ -221,7 +346,13 @@ export function ContentSearchClient({
                 className="searchResultCard"
                 href={`/books/${result.novelId}?from=${encodeURIComponent(from)}&hit=${result.segmentIndex}#seg-${result.segmentIndex}`}
                 key={`${result.novelId}-${result.segmentIndex}`}
-                onClick={() => rememberPage(currentPage)}
+                onClick={() => {
+                  keepJobOnUnmountRef.current = true;
+                  rememberPage(currentPage);
+                  if (job) {
+                    writeCachedSearch(resultCacheKey, job, currentPage, displayProgress);
+                  }
+                }}
               >
                 <span className="bookMark" aria-hidden="true">
                   <BookText size={20} />
@@ -236,7 +367,7 @@ export function ContentSearchClient({
         </section>
       ) : null}
 
-      {done && results.length > pageSize ? (
+      {results.length > pageSize ? (
         <Pagination page={currentPage} totalPages={totalPages} query={keyword} basePath="/search" onPageChange={changePage} />
       ) : null}
     </>

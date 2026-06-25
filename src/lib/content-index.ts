@@ -55,6 +55,12 @@ export type ContentIndexStorageSummary = {
   manualTermCount: number;
 };
 
+export type IndexedContentCandidatePlan = {
+  terms: string[];
+  requestedTerms: string[];
+  novelIds: number[];
+};
+
 type ContentIndexLimitOptions = {
   maxSegments?: number | null;
   source?: ContentIndexSource;
@@ -246,6 +252,46 @@ export function getIndexedNovelIds(db: DatabaseSync, term: string): number[] {
       )
       .all(normalizedTerm) as Array<{ novelId: number }>
   ).map((row) => row.novelId);
+}
+
+export function findIndexedContentCandidateNovelIds(db: DatabaseSync, requiredTerms: string[]): IndexedContentCandidatePlan | null {
+  const seenTerms = new Set<string>();
+  const entries: Array<{ requestedTerm: string; term: string; novelIds: number[] }> = [];
+
+  for (const requiredTerm of normalizeContentIndexTerms(requiredTerms)) {
+    const indexedTerm = findBestIndexedContentTerm(db, requiredTerm);
+    if (!indexedTerm || seenTerms.has(indexedTerm.term)) {
+      continue;
+    }
+
+    seenTerms.add(indexedTerm.term);
+    entries.push({
+      requestedTerm: requiredTerm,
+      term: indexedTerm.term,
+      novelIds: getIndexedNovelIds(db, indexedTerm.term),
+    });
+  }
+
+  if (!entries.length) {
+    return null;
+  }
+
+  entries.sort((left, right) => left.novelIds.length - right.novelIds.length);
+  const intersection = new Set(entries[0].novelIds);
+  for (const entry of entries.slice(1)) {
+    const current = new Set(entry.novelIds);
+    for (const novelId of Array.from(intersection)) {
+      if (!current.has(novelId)) {
+        intersection.delete(novelId);
+      }
+    }
+  }
+
+  return {
+    terms: entries.map((entry) => entry.term),
+    requestedTerms: entries.map((entry) => entry.requestedTerm),
+    novelIds: Array.from(intersection).sort((left, right) => left - right),
+  };
 }
 
 export function cleanupInterruptedContentIndexJobs(db = getContentIndexDb()) {

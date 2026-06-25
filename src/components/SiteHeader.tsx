@@ -21,12 +21,14 @@ export function SiteHeader({
         <BookOpen size={24} aria-hidden="true" />
         <span>{siteName}</span>
       </Link>
-      <HeaderSearch query={query} defaultMode={defaultSearchMode} showCurrentSearch={showCurrentSearch} />
-      <div className="headerActions">
-        <ThemeToggle />
-        <Link className="iconLink" href="/settings" aria-label="阅读设置" title="阅读设置">
-          <Settings size={21} aria-hidden="true" />
-        </Link>
+      <div className="headerTools">
+        <HeaderSearch query={query} defaultMode={defaultSearchMode} showCurrentSearch={showCurrentSearch} />
+        <div className="headerActions">
+          <ThemeToggle />
+          <Link className="iconLink" href="/settings" aria-label="阅读设置" title="阅读设置">
+            <Settings size={21} aria-hidden="true" />
+          </Link>
+        </div>
       </div>
     </header>
   );

@@ -24,7 +24,7 @@ import {
   shouldBlockHeadlessBrowsers,
 } from "@/lib/config";
 import { readSiteSettings } from "@/lib/site-settings";
-import { saveAdminSettingsAction } from "../actions";
+import { cancelFrontendSearchJobsAction, saveAdminSettingsAction } from "../actions";
 import { AdminFrame } from "../AdminFrame";
 
 export const dynamic = "force-dynamic";
@@ -241,6 +241,12 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 <span>全文搜索并发上限 / 个</span>
                 <input name="frontendSearchConcurrencyLimit" type="number" min="1" max="50" defaultValue={frontendSearchConcurrencyLimit} />
               </label>
+            </div>
+            <div className="adminActionRow">
+              <button className="adminSecondaryButton" type="submit" formAction={cancelFrontendSearchJobsAction}>
+                停止所有前台搜索任务
+              </button>
+              <small>用于释放正在扫描正文或自动建立索引的前台搜索任务。</small>
             </div>
             <div className="adminFieldGrid">
               <label>

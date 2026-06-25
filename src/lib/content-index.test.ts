@@ -1,7 +1,7 @@
 ﻿import assert from "node:assert/strict";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
-import { normalizeContentIndexTerms, refreshContentIndexTermStats, saveContentIndexTerm } from "./content-index";
+import { findIndexedContentCandidateNovelIds, normalizeContentIndexTerms, refreshContentIndexTermStats, saveContentIndexTerm } from "./content-index";
 
 function createMemoryDb() {
   const db = new DatabaseSync(":memory:");
@@ -83,4 +83,17 @@ test("saves indexed terms and skips oversized terms", () => {
       process.env.CONTENT_INDEX_MAX_SEGMENTS = previous;
     }
   }
+});
+
+test("intersects indexed candidate novels for required content terms", () => {
+  const db = createMemoryDb();
+  saveContentIndexTerm(db, "苹果", [1, 2, 3], 3, { enforceBudget: false });
+  saveContentIndexTerm(db, "香蕉", [2, 3, 4], 3, { enforceBudget: false });
+
+  const plan = findIndexedContentCandidateNovelIds(db, ["苹果", "小香蕉"]);
+  assert.deepEqual(plan, {
+    terms: ["苹果", "香蕉"],
+    requestedTerms: ["苹果", "小香蕉"],
+    novelIds: [2, 3],
+  });
 });

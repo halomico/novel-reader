@@ -1,8 +1,11 @@
 ﻿import type { Metadata } from "next";
-import { BookOpen, Database, HardDrive, Search, Settings } from "lucide-react";
+import { BookOpen, Database, Globe2, HardDrive, History, Search, Settings } from "lucide-react";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { AdminFrame } from "./AdminFrame";
+import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminBookStats } from "@/lib/admin-books";
+import { listAdminLoginRecords } from "@/lib/admin-login-records";
 import { getContentIndexStorageSummary } from "@/lib/content-index";
 
 export const dynamic = "force-dynamic";
@@ -27,9 +30,20 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[unitIndex]}`;
 }
 
-export default function AdminPage() {
+function formatDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString("zh-CN", { hour12: false });
+}
+
+export default async function AdminPage() {
+  const headerStore = await headers();
+  const access = getAdminAccessState(headerStore);
   const stats = getAdminBookStats();
   const indexStats = getContentIndexStorageSummary();
+  const loginRecords = listAdminLoginRecords();
 
   return (
     <AdminFrame active="home">
@@ -59,6 +73,11 @@ export default function AdminPage() {
             <Database size={20} aria-hidden="true" />
             <span>索引词</span>
             <strong>{indexStats.termCount}</strong>
+          </div>
+          <div className="adminStatCard">
+            <Globe2 size={20} aria-hidden="true" />
+            <span>当前登录 IP</span>
+            <strong title={access.clientIp}>{access.clientIp}</strong>
           </div>
         </div>
 
@@ -100,6 +119,44 @@ export default function AdminPage() {
             <span>{stats.adminSettingsPath}</span>
           </p>
         </div>
+
+        <section className="adminLoginAudit">
+          <div className="adminPanelHeader">
+            <div>
+              <h2>登录记录</h2>
+              <p>当前登录 IP：{access.clientIp}</p>
+            </div>
+            <History size={20} aria-hidden="true" />
+          </div>
+          <div className="adminTableWrap">
+            <table className="adminTable">
+              <thead>
+                <tr>
+                  <th>时间</th>
+                  <th>用户</th>
+                  <th>IP</th>
+                  <th>客户端</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loginRecords.length ? (
+                  loginRecords.map((record) => (
+                    <tr key={`${record.loggedAt}-${record.ip}`}>
+                      <td>{formatDate(record.loggedAt)}</td>
+                      <td>{record.username}</td>
+                      <td title={record.ip}>{record.ip}</td>
+                      <td title={record.userAgent}>{record.userAgent || "-"}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4}>暂无登录记录。</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </section>
     </AdminFrame>
   );

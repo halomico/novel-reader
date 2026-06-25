@@ -3,7 +3,7 @@ import { ContentIndexCancelledError, type ContentIndexTermStatus } from "./conte
 import { buildContentIndexTerms } from "./content-index";
 import { getManualIndexMaxSegments, isManualIndexMaxSegmentsEnabled } from "./config";
 import { getDb } from "./db";
-import { searchNovelContent, type SearchResult } from "./search";
+import { ContentSearchCancelledError, searchNovelContent, type SearchResult } from "./search";
 import type { ParsedSearchQuery } from "./search-query";
 
 type JobStatus = "queued" | "running" | "done" | "error" | "cancelled";
@@ -146,10 +146,11 @@ export function startContentSearchJob(query: ParsedSearchQuery): ContentJobSnaps
           scannedBooks: current.searchedBooks,
           resultCount: current.resultCount,
           segmentCount: current.cacheSegmentCount,
+          results: current.results,
           progress: progress(current.searchedBooks, current.totalBooks),
           message: current.indexedTerm ? `正在从索引“${current.indexedTerm}”筛选` : "正在扫描小说正文",
         });
-      });
+      }, { isCancelled: () => Boolean(job.cancelRequested) });
 
       updateJob(job, {
         status: "done",
@@ -159,11 +160,12 @@ export function startContentSearchJob(query: ParsedSearchQuery): ContentJobSnaps
         message: searchResult.results.length ? `找到 ${searchResult.results.length} 条匹配内容` : "未找到匹配正文",
       });
     } catch (error) {
+      const cancelled = error instanceof ContentSearchCancelledError || job.cancelRequested;
       updateJob(job, {
-        status: "error",
+        status: cancelled ? "cancelled" : "error",
         progress: 100,
-        error: error instanceof Error ? error.message : "全文搜索失败",
-        message: "全文搜索失败",
+        error: cancelled ? undefined : error instanceof Error ? error.message : "全文搜索失败",
+        message: cancelled ? "全文搜索任务已取消" : "全文搜索失败",
       });
     }
   });

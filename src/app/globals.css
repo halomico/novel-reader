@@ -106,7 +106,7 @@ input {
   top: 0;
   z-index: 20;
   display: grid;
-  grid-template-columns: auto minmax(180px, 440px) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 16px;
   padding: 12px 0;
@@ -239,29 +239,41 @@ input {
 .headerActions {
   display: flex;
   align-items: center;
-  justify-self: end;
   gap: 8px;
+}
+
+.headerTools {
+  display: grid;
+  grid-template-columns: minmax(180px, 440px) auto;
+  align-items: center;
+  justify-self: end;
+  gap: 16px;
+  width: min(100%, 558px);
+  min-width: 0;
+}
+
+.headerTools .searchForm {
+  width: 100%;
 }
 
 :root[data-ui-mode="minimal"] .siteHeader {
-  grid-template-columns: auto minmax(0, 1fr) 92px;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 8px;
 }
 
-:root[data-ui-mode="minimal"] .headerActions {
-  width: 92px;
-  min-width: 92px;
-  justify-content: flex-end;
+:root[data-ui-mode="minimal"] .headerTools {
+  grid-template-columns: minmax(180px, 440px) auto;
+  gap: 8px;
+  width: min(100%, 558px);
 }
 
 :root[data-ui-mode="minimal"] .searchForm {
   grid-template-columns: 28px minmax(0, 1fr) auto;
   justify-self: end;
-  width: 42px;
-  min-width: 42px;
+  width: 100%;
+  min-width: 0;
   overflow: visible;
   transition:
-    width 160ms ease,
     border-color 140ms ease,
     box-shadow 140ms ease;
 }
@@ -284,23 +296,20 @@ input {
 :root[data-ui-mode="minimal"] .searchForm:hover,
 :root[data-ui-mode="minimal"] .searchForm:focus-within,
 :root[data-ui-mode="minimal"] .searchForm.isPinnedOpen {
-  position: absolute;
-  top: 12px;
-  right: 100px;
+  justify-self: stretch;
   z-index: 60;
-  width: min(440px, calc(100vw - 124px));
+  width: 100%;
   padding: 6px 7px 6px 6px;
 }
 
 :root[data-ui-mode="minimal"] .searchForm:not(:hover):not(:focus-within):not(.isPinnedOpen) {
-  grid-template-columns: 28px;
+  grid-template-columns: minmax(0, 1fr) 28px;
   gap: 0;
-  width: 42px;
   padding: 6px;
 }
 
 :root[data-ui-mode="minimal"] .searchForm:not(:hover):not(:focus-within):not(.isPinnedOpen) .searchIconButton {
-  grid-column: 1;
+  grid-column: 2;
 }
 
 :root[data-ui-mode="minimal"] .searchForm:not(:hover):not(:focus-within):not(.isPinnedOpen) input,
@@ -1129,12 +1138,18 @@ mark {
 
 .adminStats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 10px;
   margin: 14px 0;
 }
 
 .adminStatCard {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "icon label"
+    "icon value";
+  align-items: center;
   gap: 10px;
   min-width: 0;
   padding: 13px;
@@ -1143,17 +1158,23 @@ mark {
   background: var(--surface);
 }
 
+.adminStatCard > svg {
+  grid-area: icon;
+  color: var(--accent);
+}
+
 .adminStatCard span {
+  grid-area: label;
   color: var(--muted);
   font-size: 13px;
 }
 
 .adminStatCard strong {
-  margin-left: auto;
-  overflow: hidden;
+  grid-area: value;
   color: var(--text);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 18px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .adminGrid {
@@ -1483,12 +1504,27 @@ mark {
   accent-color: var(--accent);
 }
 
+.adminActionRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .adminSettingsForm button {
   justify-self: end;
   padding: 7px 16px;
   border-radius: 999px;
   font-size: 14px;
   line-height: 1.25;
+}
+
+.adminSettingsForm .adminSecondaryButton {
+  padding: 6px 12px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
 }
 
 .adminHome {
@@ -1538,6 +1574,24 @@ mark {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
+}
+
+.adminLoginAudit {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.adminLoginAudit h2,
+.adminLoginAudit p {
+  margin: 0;
+}
+
+.adminLoginAudit p {
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .adminTitleSearchForm {
@@ -1661,36 +1715,46 @@ mark {
   }
 
   .siteHeader {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .brand {
     font-size: 22px;
   }
 
-  .searchForm {
+  .headerTools {
     grid-column: 1 / -1;
     grid-row: 2;
+    grid-template-columns: minmax(0, 1fr) auto;
+    width: 100%;
+    gap: 10px;
+  }
+
+  .searchForm {
+    width: 100%;
   }
 
   :root[data-ui-mode="minimal"] .siteHeader {
-    grid-template-columns: minmax(0, 1fr) 42px 92px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  :root[data-ui-mode="minimal"] .headerTools {
+    grid-column: 2;
+    grid-row: 1;
+    grid-template-columns: minmax(0, 1fr) auto;
+    width: min(100vw - 92px, 420px);
     gap: 8px;
   }
 
   :root[data-ui-mode="minimal"] .searchForm {
-    grid-column: 2;
-    grid-row: 1;
-    width: 42px;
+    width: 100%;
   }
 
   :root[data-ui-mode="minimal"] .searchForm:hover,
   :root[data-ui-mode="minimal"] .searchForm:focus-within,
   :root[data-ui-mode="minimal"] .searchForm.isPinnedOpen {
-    grid-column: 2;
-    grid-row: 1;
-    right: 100px;
-    width: min(360px, calc(100vw - 122px));
+    width: 100%;
   }
 
   .catalogHero,
@@ -1758,6 +1822,7 @@ mark {
 
   .adminTopbar,
   .adminPanelHeader,
+  .adminActionRow,
   .adminIndexForm,
   .adminUploadForm,
   .adminTableFooter,

@@ -2,7 +2,7 @@
 import type { Metadata } from "next";
 import { Pagination } from "@/components/Pagination";
 import { AdminIndexBuilder } from "@/components/AdminIndexBuilder";
-import { AdminIndexTable } from "@/components/AdminIndexTable";
+import { AdminIndexTable, type AdminIndexSortDir, type AdminIndexSortKey } from "@/components/AdminIndexTable";
 import {
   getAdminIndexPageSize,
   getContentIndexMaxSegments,
@@ -29,6 +29,8 @@ type AdminIndexesPageProps = {
     page?: string;
     tone?: "success" | "warning" | "error";
     q?: string;
+    sort?: string;
+    dir?: string;
   }>;
 };
 
@@ -51,13 +53,42 @@ function normalizePage(value: string | undefined, totalPages: number): number {
   return Math.min(Math.floor(page), Math.max(totalPages, 1));
 }
 
+function normalizeSort(value: string | undefined): AdminIndexSortKey {
+  const allowed: AdminIndexSortKey[] = ["term", "source", "status", "segmentCount", "novelCount", "hitCount", "lastUsedAt", "updatedAt"];
+  return allowed.includes(value as AdminIndexSortKey) ? (value as AdminIndexSortKey) : "updatedAt";
+}
+
+function normalizeDir(value: string | undefined): AdminIndexSortDir {
+  return value === "asc" ? "asc" : "desc";
+}
+
+function compareNullableDate(left: string | null, right: string | null): number {
+  const leftTime = left ? new Date(left).getTime() : 0;
+  const rightTime = right ? new Date(right).getTime() : 0;
+  return (Number.isFinite(leftTime) ? leftTime : 0) - (Number.isFinite(rightTime) ? rightTime : 0);
+}
+
 export default async function AdminIndexesPage({ searchParams }: AdminIndexesPageProps) {
   const params = await searchParams;
   const indexDb = getContentIndexDb();
   const allIndexes = listContentIndexTerms(indexDb);
   const query = (params.q || "").trim();
   const validation = query ? parseSearchQuery(query, { mode: "index" }) : null;
-  const indexes = validation?.ok ? allIndexes.filter((item) => matchesParsedSearchQuery(item.term, validation.query)) : allIndexes;
+  const sort = normalizeSort(params.sort);
+  const dir = normalizeDir(params.dir);
+  const indexes = (validation?.ok ? allIndexes.filter((item) => matchesParsedSearchQuery(item.term, validation.query)) : allIndexes).sort(
+    (left, right) => {
+      let result = 0;
+      if (sort === "term" || sort === "source" || sort === "status") {
+        result = String(left[sort]).localeCompare(String(right[sort]), "zh-CN");
+      } else if (sort === "lastUsedAt" || sort === "updatedAt") {
+        result = compareNullableDate(left[sort], right[sort]);
+      } else {
+        result = left[sort] - right[sort];
+      }
+      return dir === "asc" ? result : -result;
+    },
+  );
   const pageSize = getAdminIndexPageSize();
   const totalPages = Math.max(1, Math.ceil(indexes.length / pageSize));
   const page = normalizePage(params.page, totalPages);
@@ -108,13 +139,15 @@ export default async function AdminIndexesPage({ searchParams }: AdminIndexesPag
 
         <form className="adminTitleSearchForm adminIndexSearchForm" action="/admin/indexes">
           <Search size={16} aria-hidden="true" />
+          <input name="sort" type="hidden" value={sort} />
+          <input name="dir" type="hidden" value={dir} />
           <input name="q" defaultValue={query} placeholder='查询索引词，支持 AND / OR / NOT / "短语"' />
           <button type="submit">查询</button>
         </form>
         {message ? <p className="adminInlineMessage">{message}</p> : null}
 
-        <AdminIndexTable indexes={message ? [] : pageIndexes} />
-        {!message ? <Pagination page={page} totalPages={totalPages} query={query} basePath="/admin/indexes" /> : null}
+        <AdminIndexTable indexes={message ? [] : pageIndexes} query={query} sort={sort} dir={dir} />
+        {!message ? <Pagination page={page} totalPages={totalPages} query={query} basePath="/admin/indexes" extraParams={{ sort, dir }} /> : null}
       </article>
     </AdminFrame>
   );

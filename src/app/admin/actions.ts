@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { persistBlockedIp } from "@/lib/admin-ban";
 import { clearAdminSession, getAdminSession, setAdminSession, verifyAdminCredentials } from "@/lib/admin-auth";
+import { recordAdminLogin } from "@/lib/admin-login-records";
 import { checkAdminOperationLimit } from "@/lib/admin-operation-limit";
 import {
   getAdminBookPageSize,
@@ -108,13 +109,23 @@ export async function loginAdminAction(formData: FormData) {
   }
 
   await setAdminSession(username);
+  try {
+    recordAdminLogin(username, access.clientIp, headerStore.get("user-agent") || "");
+  } catch {
+    // 登录记录不能影响后台登录本身。
+  }
   redirect("/admin");
 }
 
 export async function logoutAdminAction() {
-  cancelContentJobs("index");
   await clearAdminSession();
   redirect("/admin/login");
+}
+
+export async function cancelFrontendSearchJobsAction() {
+  await requireAdminRequest("/admin/settings");
+  cancelContentJobs("search");
+  adminNotice("已请求停止所有前台全文搜索任务", "success", "/admin/settings");
 }
 
 export async function deleteNovelsAction(formData: FormData) {

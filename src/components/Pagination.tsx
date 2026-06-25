@@ -2,7 +2,7 @@
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 type PageItem = number | "ellipsis";
 
@@ -67,6 +67,20 @@ function PageJump({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [value, setValue] = useState("");
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function clearCloseTimer() {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }
+
+  function isMobileLike() {
+    return window.matchMedia("(max-width: 820px), (pointer: coarse)").matches;
+  }
+
+  useEffect(() => clearCloseTimer, []);
 
   function jump(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -79,17 +93,25 @@ function PageJump({
       onPageChange(nextPage);
       setIsOpen(false);
       setValue("");
+      clearCloseTimer();
       return;
     }
+    clearCloseTimer();
     window.location.assign(pageHrefWithParams(nextPage, query, basePath, extraParams));
   }
 
   return (
     <span
       className="pageJump"
+      onFocus={clearCloseTimer}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-          setIsOpen(false);
+          clearCloseTimer();
+          if (isMobileLike()) {
+            closeTimerRef.current = setTimeout(() => setIsOpen(false), 3000);
+          } else {
+            setIsOpen(false);
+          }
         }
       }}
     >

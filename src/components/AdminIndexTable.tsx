@@ -1,13 +1,63 @@
 ﻿"use client";
 
-import { Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ContentIndexSummary } from "@/lib/content-index";
 
+export type AdminIndexSortKey =
+  | "term"
+  | "source"
+  | "status"
+  | "segmentCount"
+  | "novelCount"
+  | "hitCount"
+  | "lastUsedAt"
+  | "updatedAt";
+export type AdminIndexSortDir = "asc" | "desc";
+
 type AdminIndexTableProps = {
   indexes: ContentIndexSummary[];
+  query: string;
+  sort: AdminIndexSortKey;
+  dir: AdminIndexSortDir;
 };
+
+function sortHref(query: string, sort: AdminIndexSortKey, dir: AdminIndexSortDir, nextSort: AdminIndexSortKey) {
+  const params = new URLSearchParams();
+  params.set("page", "1");
+  if (query) {
+    params.set("q", query);
+  }
+  params.set("sort", nextSort);
+  params.set("dir", sort === nextSort && dir === "asc" ? "desc" : "asc");
+  return `/admin/indexes?${params.toString()}`;
+}
+
+function SortHeader({
+  label,
+  value,
+  query,
+  sort,
+  dir,
+}: {
+  label: string;
+  value: AdminIndexSortKey;
+  query: string;
+  sort: AdminIndexSortKey;
+  dir: AdminIndexSortDir;
+}) {
+  const isActive = sort === value;
+  const Icon = isActive ? (dir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+
+  return (
+    <Link className={isActive ? "adminSortLink isActive" : "adminSortLink"} href={sortHref(query, sort, dir, value)}>
+      <span>{label}</span>
+      <Icon size={13} aria-hidden="true" />
+    </Link>
+  );
+}
 
 function formatDate(value: string | null) {
   if (!value) {
@@ -28,7 +78,7 @@ function sourceLabel(source: string) {
   return source === "manual" ? "手动" : "自动";
 }
 
-export function AdminIndexTable({ indexes }: AdminIndexTableProps) {
+export function AdminIndexTable({ indexes, query, sort, dir }: AdminIndexTableProps) {
   const router = useRouter();
   const [selectedTerms, setSelectedTerms] = useState<string[]>([]);
   const [message, setMessage] = useState("");
@@ -87,14 +137,30 @@ export function AdminIndexTable({ indexes }: AdminIndexTableProps) {
               <th>
                 <input className="adminCheckbox" type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="全选索引词" />
               </th>
-              <th>关键词</th>
-              <th>来源</th>
-              <th>状态</th>
-              <th>命中片段</th>
-              <th>关联小说</th>
-              <th>使用</th>
-              <th>最后使用</th>
-              <th>更新时间</th>
+              <th>
+                <SortHeader label="关键词" value="term" query={query} sort={sort} dir={dir} />
+              </th>
+              <th>
+                <SortHeader label="来源" value="source" query={query} sort={sort} dir={dir} />
+              </th>
+              <th>
+                <SortHeader label="状态" value="status" query={query} sort={sort} dir={dir} />
+              </th>
+              <th>
+                <SortHeader label="命中片段" value="segmentCount" query={query} sort={sort} dir={dir} />
+              </th>
+              <th>
+                <SortHeader label="关联小说" value="novelCount" query={query} sort={sort} dir={dir} />
+              </th>
+              <th>
+                <SortHeader label="使用" value="hitCount" query={query} sort={sort} dir={dir} />
+              </th>
+              <th>
+                <SortHeader label="最后使用" value="lastUsedAt" query={query} sort={sort} dir={dir} />
+              </th>
+              <th>
+                <SortHeader label="更新时间" value="updatedAt" query={query} sort={sort} dir={dir} />
+              </th>
               <th>操作</th>
             </tr>
           </thead>

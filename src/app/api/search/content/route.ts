@@ -1,11 +1,11 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import {
   getFrontendSearchConcurrencyLimit,
   getSearchRateLimitPerMinute,
   getSearchShortQueryRateLimitPerMinute,
   shouldShowProgressBars,
 } from "@/lib/config";
-import { countActiveContentJobs, getContentJob, startContentSearchJob } from "@/lib/content-jobs";
+import { cancelContentJob, countActiveContentJobs, getContentJob, startContentSearchJob } from "@/lib/content-jobs";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { validateSearchKeyword } from "@/lib/search";
 import { countSearchChars } from "@/lib/search-query";
@@ -57,6 +57,16 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const id = request.nextUrl.searchParams.get("id") || "";
   const job = getContentJob(id);
+  if (!job) {
+    return jsonError("搜索任务不存在或已过期", 404);
+  }
+
+  return NextResponse.json({ ok: true, job, showProgressBars: shouldShowProgressBars() });
+}
+
+export async function DELETE(request: NextRequest) {
+  const id = request.nextUrl.searchParams.get("id") || "";
+  const job = cancelContentJob(id);
   if (!job) {
     return jsonError("搜索任务不存在或已过期", 404);
   }

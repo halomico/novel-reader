@@ -3,12 +3,20 @@ import path from "node:path";
 
 export type AdminTheme = "system" | "light" | "dark";
 
+export type AdminLoginRecord = {
+  username: string;
+  ip: string;
+  userAgent: string;
+  loggedAt: string;
+};
+
 export type SiteSettings = {
   siteName: string;
   siteTitle: string;
   settingsPreviewText: string;
   adminUsername: string;
   adminPasswordSha256: string;
+  adminLoginRecords: AdminLoginRecord[];
   adminAllowedIps: string;
   adminBlockedIps: string;
   adminOutboundAllowedIps: string;
@@ -47,6 +55,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   settingsPreviewText: "",
   adminUsername: "",
   adminPasswordSha256: "",
+  adminLoginRecords: [],
   adminAllowedIps: "",
   adminBlockedIps: "",
   adminOutboundAllowedIps: "",
@@ -107,6 +116,25 @@ function cleanBool(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
 
+function cleanLoginRecords(value: unknown): AdminLoginRecord[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((record) => {
+      const item = record as Partial<AdminLoginRecord>;
+      return {
+        username: cleanText(item.username),
+        ip: cleanText(item.ip),
+        userAgent: cleanText(item.userAgent).slice(0, 180),
+        loggedAt: cleanText(item.loggedAt),
+      };
+    })
+    .filter((record) => record.username && record.ip && record.loggedAt)
+    .slice(0, 30);
+}
+
 export function readSiteSettings(): SiteSettings {
   const settingsPath = getSiteSettingsPath();
   if (!fs.existsSync(settingsPath)) {
@@ -121,6 +149,7 @@ export function readSiteSettings(): SiteSettings {
       settingsPreviewText: cleanText(parsed.settingsPreviewText),
       adminUsername: cleanText(parsed.adminUsername),
       adminPasswordSha256: cleanText(parsed.adminPasswordSha256),
+      adminLoginRecords: cleanLoginRecords(parsed.adminLoginRecords),
       adminAllowedIps: cleanText(parsed.adminAllowedIps),
       adminBlockedIps: cleanText(parsed.adminBlockedIps),
       adminOutboundAllowedIps: cleanText(parsed.adminOutboundAllowedIps),
