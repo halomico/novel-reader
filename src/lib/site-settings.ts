@@ -46,6 +46,8 @@ export type SiteSettings = {
   userDailyRegistrationLimitPerIp: number;
   userSearchRateLimitPerMinute: number;
   userAvatarMaxBytes: number;
+  analyticsEnabled: boolean;
+  analyticsRealtimeLimit: number;
   contentRateLimitPerMinute: number;
   contentRateLimitWindowSeconds: number;
   contentBlockHeadlessBrowsers: boolean;
@@ -92,6 +94,8 @@ const DEFAULT_SETTINGS: SiteSettings = {
   userDailyRegistrationLimitPerIp: 0,
   userSearchRateLimitPerMinute: 0,
   userAvatarMaxBytes: 0,
+  analyticsEnabled: false,
+  analyticsRealtimeLimit: 0,
   contentRateLimitPerMinute: 0,
   contentRateLimitWindowSeconds: 0,
   contentBlockHeadlessBrowsers: true,
@@ -213,6 +217,8 @@ export function readSiteSettings(): SiteSettings {
         600,
       ),
       userAvatarMaxBytes: cleanInt(parsed.userAvatarMaxBytes, DEFAULT_SETTINGS.userAvatarMaxBytes, 0, 10 * 1024 ** 2),
+      analyticsEnabled: cleanBool(parsed.analyticsEnabled, DEFAULT_SETTINGS.analyticsEnabled),
+      analyticsRealtimeLimit: cleanInt(parsed.analyticsRealtimeLimit, DEFAULT_SETTINGS.analyticsRealtimeLimit, 0, 2000),
       contentRateLimitPerMinute: cleanInt(parsed.contentRateLimitPerMinute, DEFAULT_SETTINGS.contentRateLimitPerMinute, 0, 600),
       contentRateLimitWindowSeconds: cleanInt(parsed.contentRateLimitWindowSeconds, DEFAULT_SETTINGS.contentRateLimitWindowSeconds, 0, 3600),
       contentBlockHeadlessBrowsers: cleanBool(parsed.contentBlockHeadlessBrowsers, DEFAULT_SETTINGS.contentBlockHeadlessBrowsers),

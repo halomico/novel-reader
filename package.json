@@ -12,7 +12,7 @@
     "compact:index": "tsx scripts/compact-content-index.ts",
     "migrate:index-db": "tsx scripts/migrate-content-index-db.ts",
     "cleanup:legacy-index": "tsx scripts/cleanup-legacy-index.ts",
-    "test": "node --import tsx --test src/lib/filename.test.ts src/lib/search-query.test.ts src/lib/admin-access.test.ts src/lib/content-index.test.ts"
+    "test": "node --import tsx --test src/lib/filename.test.ts src/lib/search-query.test.ts src/lib/admin-access.test.ts src/lib/content-index.test.ts src/lib/date-time.test.ts src/lib/analytics.test.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

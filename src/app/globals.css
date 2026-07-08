@@ -10,7 +10,7 @@
   --accent: #a9362b;
   --accent-strong: #8e2a22;
   --shadow: 0 10px 30px rgb(84 54 31 / 10%);
-  --reader-font-size: 19px;
+  --reader-font-size: 16px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1016,7 +1016,14 @@ mark {
 }
 
 .accountLayout {
-  grid-template-columns: 170px minmax(0, 1fr);
+  position: relative;
+  grid-template-columns: 190px minmax(0, 1fr);
+}
+
+.accountTabInput {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .userPanel {
@@ -1130,19 +1137,22 @@ mark {
   box-shadow: var(--shadow);
 }
 
-.accountSideNav a {
+.accountSideNav label {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   border-radius: 7px;
   padding: 8px 10px;
   color: var(--muted);
+  cursor: pointer;
   font-size: 14px;
   font-weight: 700;
 }
 
-.accountSideNav a:hover,
-.accountSideNav a:focus-visible {
+.accountSideNav label:hover,
+#account-tab-profile:checked ~ .accountSideNav label[for="account-tab-profile"],
+#account-tab-security:checked ~ .accountSideNav label[for="account-tab-security"],
+#account-tab-history:checked ~ .accountSideNav label[for="account-tab-history"] {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent);
 }
@@ -1151,6 +1161,21 @@ mark {
   display: grid;
   min-width: 0;
   gap: 14px;
+}
+
+.accountPanel {
+  display: none;
+}
+
+#account-tab-profile:checked ~ .accountContent .accountProfile,
+#account-tab-security:checked ~ .accountContent .accountSecurity,
+#account-tab-history:checked ~ .accountContent .accountHistory {
+  display: grid;
+}
+
+.accountContent .userPanel {
+  gap: 12px;
+  padding: 14px;
 }
 
 .accountProfile {
@@ -1188,6 +1213,38 @@ mark {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 10px;
+}
+
+.accountProfileForm,
+.accountPasswordForm {
+  display: flex;
+  width: auto;
+  max-width: 100%;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.accountProfileForm label {
+  width: min(260px, 100%);
+}
+
+.accountPasswordForm label {
+  width: min(178px, 100%);
+}
+
+.accountContent .userPanel input:not([type="checkbox"]):not([type="file"]) {
+  min-height: 32px;
+  padding: 6px 9px;
+  font-size: 13px;
+}
+
+.accountContent .userPanel button,
+.accountHistoryActions .secondaryUserButton {
+  min-height: 32px;
+  padding: 6px 11px;
+  font-size: 13px;
+  line-height: 1.2;
 }
 
 .avatarUploadForm label {
@@ -1255,11 +1312,19 @@ mark {
   font-weight: 700;
 }
 
+.accountHistoryTable .adminCheckbox {
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
 .accountHistoryActions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  justify-content: flex-end;
+  justify-content: flex-start;
   margin-top: 10px;
 }
 
@@ -2085,10 +2150,466 @@ mark {
 
 .adminInlineEditForm {
   display: grid;
-  grid-template-columns: minmax(110px, 1.2fr) minmax(74px, 0.7fr) minmax(92px, 0.8fr) minmax(96px, 1fr) auto;
+  grid-template-columns: minmax(104px, 1fr) 68px 76px minmax(88px, 0.9fr) auto;
   gap: 6px;
   align-items: center;
-  min-width: 560px;
+  min-width: 460px;
+}
+
+.adminInlineEditForm input,
+.adminInlineEditForm select {
+  height: 30px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.adminInlineEditForm .adminStatusSelect {
+  padding-right: 20px;
+}
+
+.adminInlineEditForm .adminInlineSaveButton {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 999px;
+}
+
+.adminUserNameLink,
+.adminBackLink {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.adminBackLink {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  font-size: 13px;
+}
+
+.adminUserDetailGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.adminUserDetailGrid p {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-strong) 28%, transparent);
+}
+
+.adminUserDetailGrid strong {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.adminUserDetailGrid span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminBookTableToolbar {
+  position: relative;
+}
+
+.tableColumnControl {
+  position: relative;
+  display: inline-flex;
+  justify-content: flex-end;
+}
+
+.tableColumnPanel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  width: min(320px, calc(100vw - 32px));
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 16px 36px rgb(84 54 31 / 16%);
+}
+
+.tableTextModeControl {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-strong) 40%, transparent);
+}
+
+.tableTextModeControl button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tableTextModeControl button.isActive {
+  background: var(--accent);
+  color: #fffaf2;
+}
+
+.tableColumnPanelDivider {
+  height: 1px;
+  background: color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.tableColumnItem {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 28px 28px;
+  align-items: center;
+  gap: 5px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.tableColumnItem span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tableColumnItem button {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-strong) 34%, transparent);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tableColumnItem button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.adminTable .adminTableWideCell {
+  max-width: 360px;
+}
+
+.adminBookTableForm.isResizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.adminBookPanel .adminBookTableWrap {
+  scrollbar-gutter: stable;
+}
+
+.adminBookPanel .adminBookTable {
+  width: 100%;
+}
+
+.adminBookPanel .adminBookTable th,
+.adminBookPanel .adminBookTable td {
+  max-width: none;
+  white-space: nowrap;
+}
+
+.adminBookPanel .adminBookTable th:first-child,
+.adminBookPanel .adminBookTable td:first-child {
+  width: 42px;
+}
+
+.adminBookTable.isFullText {
+  width: max-content;
+  table-layout: auto;
+}
+
+.adminBookTable.isFullText th,
+.adminBookTable.isFullText td {
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.adminBookTable.isTruncated {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.adminBookTable.isTruncated th,
+.adminBookTable.isTruncated td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.adminResizableTh {
+  position: relative;
+}
+
+.adminResizableHeader {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding-right: 10px;
+}
+
+.adminHeaderContent {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.adminBookTable.isTruncated .adminHeaderContent,
+.adminBookTable.isTruncated .adminSortLink,
+.adminBookTable.isTruncated .adminSortLink span,
+.adminBookTable.isTruncated .adminPlainHeader {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.adminPlainHeader {
+  display: block;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.adminColumnResizeHandle {
+  position: absolute;
+  top: -10px;
+  right: -9px;
+  bottom: -10px;
+  display: inline-flex;
+  width: 14px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--muted) 58%, transparent);
+  cursor: col-resize;
+  opacity: 0.45;
+  padding: 0;
+  touch-action: none;
+}
+
+.adminColumnResizeHandle:hover,
+.adminColumnResizeHandle:focus-visible,
+.adminBookTableForm.isResizing .adminColumnResizeHandle {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.adminBookPanel .adminTable th:nth-child(3),
+.adminBookPanel .adminTable td:nth-child(3),
+.adminBookPanel .adminTable th:nth-child(5),
+.adminBookPanel .adminTable td:nth-child(5) {
+  display: table-cell;
+}
+
+.analyticsHeaderPanel {
+  padding-bottom: 8px;
+}
+
+.analyticsHeaderPanel .adminPanelHeader {
+  align-items: flex-start;
+}
+
+.analyticsControls {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  min-width: min(100%, 430px);
+}
+
+.analyticsRangeTabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: 100%;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-strong) 30%, transparent);
+}
+
+.analyticsRangeTabs a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  border-radius: 999px;
+  padding: 5px 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.analyticsRangeTabs a.isActive {
+  background: var(--accent);
+  color: #fffaf2;
+}
+
+.analyticsCustomRange {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.analyticsDateField {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  color: var(--muted);
+}
+
+.analyticsCustomRange.isActive .analyticsDateField {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+}
+
+.analyticsDateField input {
+  width: 126px;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.analyticsRangeDivider {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.analyticsIconButton {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.analyticsIconButton:hover,
+.analyticsIconButton:focus-visible {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.analyticsMetricPanel {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.analyticsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.analyticsMetricPanel summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.analyticsMetricPanel summary::-webkit-details-marker {
+  display: none;
+}
+
+.analyticsMetricPanel summary span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.analyticsMetricPanel h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.analyticsMetricList {
+  display: grid;
+  gap: 6px;
+  max-height: 188px;
+  margin-top: 10px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.analyticsMetricRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.analyticsMetricRow span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analyticsMetricRow strong {
+  color: var(--text);
+}
+
+.analyticsEmpty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.analyticsRealtime td:last-child {
+  white-space: nowrap;
 }
 
 @media (max-width: 820px) {
@@ -2187,15 +2708,20 @@ mark {
 
   .accountSideNav {
     position: static;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   }
 
-  .accountSideNav a {
+  .accountSideNav label {
     justify-content: center;
   }
 
   .accountProfileHeader {
     align-items: flex-start;
+  }
+
+  .accountProfileForm,
+  .accountPasswordForm {
+    grid-template-columns: 1fr;
   }
 
   .adminShell,
@@ -2269,6 +2795,46 @@ mark {
 
   .adminCreateUserForm {
     grid-template-columns: 1fr;
+  }
+
+  .adminUserDetailGrid,
+  .analyticsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .analyticsControls {
+    width: 100%;
+    justify-items: stretch;
+  }
+
+  .analyticsRangeTabs {
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+
+  .analyticsRangeTabs a {
+    flex: 1 0 auto;
+  }
+
+  .analyticsCustomRange {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) 32px;
+    justify-content: stretch;
+    width: 100%;
+  }
+
+  .analyticsCustomRange.isActive {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) 32px 32px;
+  }
+
+  .analyticsDateField,
+  .analyticsDateField input {
+    width: 100%;
+  }
+
+  .tableColumnPanel {
+    left: auto;
+    right: 0;
   }
 
   .adminTable th:nth-child(3),

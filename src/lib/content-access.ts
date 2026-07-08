@@ -1,3 +1,4 @@
+import { getClientIp } from "./admin-access";
 import { getContentRateLimitPerMinute, getContentRateLimitWindowSeconds, shouldBlockHeadlessBrowsers } from "./config";
 import { checkRateLimit } from "./rate-limit";
 
@@ -12,10 +13,8 @@ export type ContentAccessResult =
   | { allowed: false; message: string; retryAfterSeconds?: number; status: number };
 
 function getClientKey(headers: HeaderReader): string {
-  const forwardedFor = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const realIp = headers.get("x-real-ip")?.trim();
   const userAgent = headers.get("user-agent") || "unknown";
-  return `${forwardedFor || realIp || "unknown"}:${userAgent.slice(0, 96)}`;
+  return `${getClientIp(headers as Headers)}:${userAgent.slice(0, 96)}`;
 }
 
 export function checkContentAccess(headers: HeaderReader): ContentAccessResult {

@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { LocalDateTime } from "@/components/LocalDateTime";
 import type { ContentIndexSummary } from "@/lib/content-index";
 
 export type AdminIndexSortKey =
@@ -57,17 +58,6 @@ function SortHeader({
       <Icon size={13} aria-hidden="true" />
     </Link>
   );
-}
-
-function formatDate(value: string | null) {
-  if (!value) {
-    return "-";
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleString("zh-CN", { hour12: false });
 }
 
 function statusLabel(status: string) {
@@ -187,8 +177,12 @@ export function AdminIndexTable({ indexes, query, sort, dir }: AdminIndexTablePr
                   <td>{item.segmentCount}</td>
                   <td>{item.novelCount}</td>
                   <td>{item.hitCount}</td>
-                  <td>{formatDate(item.lastUsedAt)}</td>
-                  <td>{formatDate(item.updatedAt)}</td>
+                  <td>
+                    <LocalDateTime value={item.lastUsedAt} />
+                  </td>
+                  <td>
+                    <LocalDateTime value={item.updatedAt} />
+                  </td>
                   <td>
                     <button className="adminIconTextButton" type="button" disabled={isDeleting} onClick={() => deleteTerms([item.term])}>
                       <Trash2 size={15} aria-hidden="true" />

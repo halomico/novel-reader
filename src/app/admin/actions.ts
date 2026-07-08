@@ -246,6 +246,8 @@ export async function saveAdminSettingsAction(formData: FormData) {
       600,
     ),
     userAvatarMaxBytes: Math.floor(userAvatarMaxMb * 1024 ** 2),
+    analyticsEnabled: formData.get("analyticsEnabled") === "on",
+    analyticsRealtimeLimit: intField(formData, "analyticsRealtimeLimit", previous.analyticsRealtimeLimit || 300, 30, 2000),
     contentRateLimitPerMinute: intField(
       formData,
       "contentRateLimitPerMinute",
@@ -290,6 +292,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
   revalidatePath("/admin/books");
   revalidatePath("/admin/settings");
   revalidatePath("/admin/indexes");
+  revalidatePath("/admin/analytics");
   revalidatePath("/admin/users");
   if (adminUsername) {
     await setAdminSession(adminUsername);
@@ -369,6 +372,7 @@ export async function updateAdminUserAction(formData: FormData) {
     passwordHash: newPassword ? hashUserPassword(newPassword) : undefined,
   });
   revalidatePath("/admin/users");
+  revalidatePath(`/admin/users/${userId}`);
   adminNotice("用户已更新", "success", "/admin/users");
 }
 

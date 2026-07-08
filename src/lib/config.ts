@@ -123,6 +123,14 @@ export function getUserAvatarMaxBytes(): number {
   return readSettingInt(readSiteSettings().userAvatarMaxBytes, "USER_AVATAR_MAX_BYTES", 1048576, 1, 10 * 1024 ** 2);
 }
 
+export function isAnalyticsEnabled(): boolean {
+  return readSiteSettings().analyticsEnabled && readBoolConfig("ANALYTICS_ENABLED", true);
+}
+
+export function getAnalyticsRealtimeLimit(): number {
+  return readSettingInt(readSiteSettings().analyticsRealtimeLimit, "ANALYTICS_REALTIME_LIMIT", 300, 30, 2000);
+}
+
 export function getFrontendSearchConcurrencyLimit(): number {
   return readSettingInt(readSiteSettings().frontendSearchConcurrencyLimit, "FRONTEND_SEARCH_CONCURRENCY_LIMIT", 10, 1, 50);
 }

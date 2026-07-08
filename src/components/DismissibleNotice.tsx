@@ -40,25 +40,39 @@ export function DismissibleNotice({
       return;
     }
 
-    const timers: Array<ReturnType<typeof setTimeout>> = [];
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    function clearTimer() {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    }
+
+    function hideAfterDelay() {
+      clearTimer();
+      if (displaySeconds > 0) {
+        timer = setTimeout(() => setVisible(false), displaySeconds * 1000);
+      } else {
+        setVisible(false);
+      }
+    }
+
     if (displaySeconds > 0) {
-      timers.push(setTimeout(() => setVisible(false), displaySeconds * 1000));
+      timer = setTimeout(() => setVisible(false), displaySeconds * 1000);
     }
 
     function hideOnBlur() {
       if (!stayVisibleAfterBlur) {
-        setVisible(false);
+        hideAfterDelay();
       }
     }
 
     window.addEventListener("blur", hideOnBlur);
     return () => {
-      for (const timer of timers) {
-        clearTimeout(timer);
-      }
+      clearTimer();
       window.removeEventListener("blur", hideOnBlur);
     };
-  }, [displaySeconds, stayVisibleAfterBlur, visible]);
+  }, [displaySeconds, stayVisibleAfterBlur, visible, message]);
 
   if (!visible || !message) {
     return null;

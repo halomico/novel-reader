@@ -4,9 +4,9 @@ export function ThemeScript({ defaultTheme = "system" }: { defaultTheme?: "syste
       try {
         var theme = localStorage.getItem("novel-theme") || ${JSON.stringify(defaultTheme)};
         var uiMode = localStorage.getItem("novel-ui-mode") || "standard";
-        var fontSize = Number(localStorage.getItem("novel-font-size") || "19");
+        var fontSize = Number(localStorage.getItem("novel-font-size") || "16");
         if (!Number.isFinite(fontSize) || fontSize < 5 || fontSize > 50) {
-          fontSize = 19;
+          fontSize = 16;
         }
         if (theme === "light" || theme === "dark") {
           document.documentElement.dataset.theme = theme;

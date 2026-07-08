@@ -46,6 +46,8 @@ function toPlainNovel(book: Novel): Novel {
     word_count: book.word_count,
     visit_count: book.visit_count,
     last_accessed_at: book.last_accessed_at,
+    last_accessed_ip: book.last_accessed_ip,
+    last_accessed_user_agent: book.last_accessed_user_agent,
     created_at: book.created_at,
     updated_at: book.updated_at,
   };
@@ -128,7 +130,7 @@ export function listAdminBooks(params: { page?: number; q?: string; pageSize?: n
 
     const candidates = db
       .prepare(
-        `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, created_at, updated_at
+        `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
          FROM novels
          ORDER BY ${orderBy}`,
       )
@@ -156,7 +158,7 @@ export function listAdminBooks(params: { page?: number; q?: string; pageSize?: n
   const offset = (page - 1) * pageSize;
   const books = db
     .prepare(
-      `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, created_at, updated_at
+      `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
        FROM novels
        ORDER BY ${orderBy}
        LIMIT ? OFFSET ?`,

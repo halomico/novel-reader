@@ -3,10 +3,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { DismissibleNotice } from "@/components/DismissibleNotice";
 import { loginAdminAction } from "../actions";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession, isAdminSecurityConfigured } from "@/lib/admin-auth";
-import { getSiteName } from "@/lib/config";
+import { getNoticeDisplaySeconds, getSiteName, shouldNoticeStayVisibleAfterBlur } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -34,6 +35,8 @@ export default async function AdminLoginPage({ searchParams }: AdminLoginPagePro
   const siteName = getSiteName();
   const configured = isAdminSecurityConfigured();
   const error = params.error || "";
+  const noticeDisplaySeconds = getNoticeDisplaySeconds();
+  const noticeStayVisibleAfterBlur = shouldNoticeStayVisibleAfterBlur();
 
   return (
     <main className="adminLoginShell">
@@ -48,9 +51,33 @@ export default async function AdminLoginPage({ searchParams }: AdminLoginPagePro
           </div>
         </div>
 
-        {!access.allowed ? <p className="adminNotice isError">{access.reason}</p> : null}
-        {!configured ? <p className="adminNotice isWarning">请先在 .env 配置 ADMIN_PASSWORD 或 ADMIN_PASSWORD_SHA256，以及 ADMIN_SESSION_SECRET。</p> : null}
-        {error ? <p className="adminNotice isError">{error}</p> : null}
+        {!access.allowed ? (
+          <DismissibleNotice
+            message={access.reason || "当前请求不能访问后台"}
+            tone="error"
+            variant="admin"
+            displaySeconds={noticeDisplaySeconds}
+            stayVisibleAfterBlur={noticeStayVisibleAfterBlur}
+          />
+        ) : null}
+        {!configured ? (
+          <DismissibleNotice
+            message="请先在 .env 配置 ADMIN_PASSWORD 或 ADMIN_PASSWORD_SHA256，以及 ADMIN_SESSION_SECRET。"
+            tone="warning"
+            variant="admin"
+            displaySeconds={noticeDisplaySeconds}
+            stayVisibleAfterBlur={noticeStayVisibleAfterBlur}
+          />
+        ) : null}
+        {error ? (
+          <DismissibleNotice
+            message={error}
+            tone="error"
+            variant="admin"
+            displaySeconds={noticeDisplaySeconds}
+            stayVisibleAfterBlur={noticeStayVisibleAfterBlur}
+          />
+        ) : null}
 
         <form className="adminLoginForm" action={loginAdminAction}>
           <label>

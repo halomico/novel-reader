@@ -2,6 +2,8 @@ import { BookOpenText } from "lucide-react";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { SiteHeader } from "@/components/SiteHeader";
+import { getClientIp } from "@/lib/admin-access";
+import { recordAnalyticsEvent } from "@/lib/analytics";
 import { getNovelById, readNovelSegments } from "@/lib/books";
 import { checkContentAccess } from "@/lib/content-access";
 import { getCurrentUser } from "@/lib/user-auth";
@@ -19,7 +21,8 @@ type BookPageProps = {
 };
 
 export default async function BookPage({ params, searchParams }: BookPageProps) {
-  const access = checkContentAccess(await headers());
+  const headerStore = await headers();
+  const access = checkContentAccess(headerStore);
   if (!access.allowed) {
     return (
       <main className="readerShell">
@@ -45,8 +48,16 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
   }
 
   const hitSegment = Number(query.hit);
-  recordNovelVisit(book.id);
+  recordNovelVisit(book.id, getClientIp(headerStore), headerStore.get("user-agent") || "");
   const user = await getCurrentUser();
+  recordAnalyticsEvent({
+    headers: headerStore,
+    userId: user?.id ?? null,
+    eventType: "book_view",
+    path: `/books/${book.id}`,
+    referrer: headerStore.get("referer"),
+    novelId: book.id,
+  });
   if (user) {
     recordReadingHistory(user.id, book, hitSegment);
   }

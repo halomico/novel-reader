@@ -1,17 +1,11 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { Save, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { deleteAdminUsersAction, updateAdminUserAction } from "@/app/admin/actions";
+import { LocalDateTime } from "@/components/LocalDateTime";
 import type { UserProfile } from "@/lib/users";
-
-function formatDate(value: string | null): string {
-  if (!value) {
-    return "-";
-  }
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN", { hour12: false });
-}
 
 export function AdminUserTable({
   users,
@@ -49,6 +43,8 @@ export function AdminUserTable({
               <th>显示名称</th>
               <th>状态</th>
               <th>搜索限速</th>
+              <th>注册时间</th>
+              <th>注册 IP</th>
               <th>最后登录</th>
               <th>登录 IP</th>
               <th>编辑</th>
@@ -68,18 +64,26 @@ export function AdminUserTable({
                     />
                   </td>
                   <td>
-                    <strong>{user.username}</strong>
+                    <Link className="adminUserNameLink" href={`/admin/users/${user.id}`}>
+                      {user.username}
+                    </Link>
                   </td>
                   <td>{user.displayName}</td>
                   <td>{user.status === "active" ? "启用" : "停用"}</td>
                   <td>{user.searchRateLimitPerMinute || "全局"}</td>
-                  <td>{formatDate(user.lastLoginAt)}</td>
+                  <td>
+                    <LocalDateTime value={user.createdAt} />
+                  </td>
+                  <td title={user.registrationIp || ""}>{user.registrationIp || "-"}</td>
+                  <td>
+                    <LocalDateTime value={user.lastLoginAt} />
+                  </td>
                   <td title={user.lastLoginIp || ""}>{user.lastLoginIp || "-"}</td>
                   <td>
                     <form className="adminInlineEditForm" action={updateAdminUserAction}>
                       <input name="userId" type="hidden" value={user.id} />
                       <input name="displayName" defaultValue={user.displayName} aria-label="显示名称" />
-                      <select name="status" defaultValue={user.status} aria-label="状态">
+                      <select className="adminStatusSelect" name="status" defaultValue={user.status} aria-label="状态">
                         <option value="active">启用</option>
                         <option value="disabled">停用</option>
                       </select>
@@ -93,14 +97,16 @@ export function AdminUserTable({
                         aria-label="搜索限速"
                       />
                       <input name="newPassword" type="password" placeholder="新密码" aria-label="新密码" />
-                      <button type="submit">保存</button>
+                      <button className="adminInlineSaveButton" type="submit" aria-label={`保存 ${user.username}`} title="保存">
+                        <Save size={15} aria-hidden="true" />
+                      </button>
                     </form>
                   </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={8}>未找到用户。</td>
+                <td colSpan={10}>未找到用户。</td>
               </tr>
             )}
           </tbody>

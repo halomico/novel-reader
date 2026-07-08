@@ -12,6 +12,7 @@ export type UserProfile = {
   avatarPath: string | null;
   status: UserStatus;
   searchRateLimitPerMinute: number | null;
+  registrationIp: string | null;
   createdAt: string;
   updatedAt: string;
   lastLoginAt: string | null;
@@ -37,6 +38,15 @@ export type ReadingHistoryItem = {
   novelExists: boolean;
 };
 
+export type UserLoginRecord = {
+  id: number;
+  userId: number | null;
+  username: string;
+  ip: string;
+  userAgent: string;
+  loggedAt: string;
+};
+
 type UserRow = {
   id: number;
   username: string;
@@ -44,7 +54,7 @@ type UserRow = {
   avatar_path: string | null;
   status: string;
   search_rate_limit_per_minute: number | null;
-  registration_ip?: string | null;
+  registration_ip: string | null;
   created_at: string;
   updated_at: string;
   last_login_at: string | null;
@@ -96,6 +106,7 @@ function toUserProfile(row: UserRow): UserProfile {
     avatarPath: row.avatar_path,
     status: row.status === "disabled" ? "disabled" : "active",
     searchRateLimitPerMinute: row.search_rate_limit_per_minute,
+    registrationIp: row.registration_ip,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastLoginAt: row.last_login_at,
@@ -106,7 +117,7 @@ function toUserProfile(row: UserRow): UserProfile {
 export function getUserById(id: number): UserProfile | null {
   const row = getDb()
     .prepare(
-      `SELECT id, username, display_name, avatar_path, status, search_rate_limit_per_minute, created_at, updated_at, last_login_at, last_login_ip
+      `SELECT id, username, display_name, avatar_path, status, search_rate_limit_per_minute, registration_ip, created_at, updated_at, last_login_at, last_login_ip
        FROM users
        WHERE id = ?`,
     )
@@ -118,7 +129,7 @@ export function getUserById(id: number): UserProfile | null {
 export function getUserPasswordRow(username: string): (UserRow & { password_hash: string }) | null {
   const row = getDb()
     .prepare(
-      `SELECT id, username, display_name, password_hash, avatar_path, status, search_rate_limit_per_minute, created_at, updated_at, last_login_at, last_login_ip
+      `SELECT id, username, display_name, password_hash, avatar_path, status, search_rate_limit_per_minute, registration_ip, created_at, updated_at, last_login_at, last_login_ip
        FROM users
        WHERE username = ?`,
     )
@@ -163,15 +174,17 @@ export function listUsers(params: { page?: number; q?: string; pageSize?: number
   const db = getDb();
   const pageSize = Math.min(Math.max(Math.floor(params.pageSize || 30), 1), 200);
   const query = (params.q || "").trim();
-  const where = query ? "WHERE username LIKE ? OR display_name LIKE ? OR COALESCE(last_login_ip, '') LIKE ?" : "";
-  const bind = query ? [`%${query}%`, `%${query}%`, `%${query}%`] : [];
+  const where = query
+    ? "WHERE username LIKE ? OR display_name LIKE ? OR COALESCE(last_login_ip, '') LIKE ? OR COALESCE(registration_ip, '') LIKE ?"
+    : "";
+  const bind = query ? [`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`] : [];
   const total = db.prepare(`SELECT COUNT(*) AS count FROM users ${where}`).get(...bind) as { count: number };
   const totalPages = Math.max(1, Math.ceil(total.count / pageSize));
   const page = normalizePage(params.page || 1, totalPages);
   const offset = (page - 1) * pageSize;
   const users = db
     .prepare(
-      `SELECT id, username, display_name, avatar_path, status, search_rate_limit_per_minute, created_at, updated_at, last_login_at, last_login_ip
+      `SELECT id, username, display_name, avatar_path, status, search_rate_limit_per_minute, registration_ip, created_at, updated_at, last_login_at, last_login_ip
        FROM users
        ${where}
        ORDER BY updated_at DESC, id DESC
@@ -222,6 +235,23 @@ export function updateUserAvatar(userId: number, avatarPath: string | null) {
     .run(avatarPath, userId);
 }
 
+export function updateUserDisplayName(userId: number, displayName: string) {
+  getDb()
+    .prepare("UPDATE users SET display_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .run(displayName.trim(), userId);
+}
+
+export function getUserPasswordHashById(userId: number): string | null {
+  const row = getDb().prepare("SELECT password_hash FROM users WHERE id = ?").get(userId) as { password_hash: string } | undefined;
+  return row?.password_hash || null;
+}
+
+export function updateUserPasswordHash(userId: number, passwordHash: string) {
+  getDb()
+    .prepare("UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .run(passwordHash, userId);
+}
+
 export function removeAvatarFile(avatarPath: string | null) {
   if (!avatarPath?.startsWith("/avatars/")) {
     return;
@@ -262,16 +292,38 @@ export function deleteUserIds(ids: number[]): number {
   return deleted;
 }
 
-export function recordUserLogin(userId: number, ip: string) {
-  getDb()
-    .prepare("UPDATE users SET last_login_at = CURRENT_TIMESTAMP, last_login_ip = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-    .run(ip, userId);
+export function recordUserLogin(userId: number, ip: string, userAgent: string) {
+  const db = getDb();
+  const row = db.prepare("SELECT username FROM users WHERE id = ?").get(userId) as { username: string } | undefined;
+  if (!row) {
+    return;
+  }
+
+  db.exec("BEGIN");
+  try {
+    db.prepare("UPDATE users SET last_login_at = CURRENT_TIMESTAMP, last_login_ip = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(ip, userId);
+    db.prepare(
+      `INSERT INTO user_login_records (user_id, username, ip, user_agent)
+       VALUES (?, ?, ?, ?)`,
+    ).run(userId, row.username, ip, userAgent.slice(0, 240));
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 }
 
-export function recordNovelVisit(novelId: number) {
+export function recordNovelVisit(novelId: number, ip = "", userAgent = "") {
   getDb()
-    .prepare("UPDATE novels SET visit_count = visit_count + 1, last_accessed_at = CURRENT_TIMESTAMP WHERE id = ?")
-    .run(novelId);
+    .prepare(
+      `UPDATE novels
+       SET visit_count = visit_count + 1,
+           last_accessed_at = CURRENT_TIMESTAMP,
+           last_accessed_ip = ?,
+           last_accessed_user_agent = ?
+       WHERE id = ?`,
+    )
+    .run(ip.slice(0, 64), userAgent.slice(0, 240), novelId);
 }
 
 export function updateNovelVisitStats(novelId: number, visitCount: number, lastAccessedAt: string | null): boolean {
@@ -324,6 +376,34 @@ export function listReadingHistory(userId: number): ReadingHistoryItem[] {
     visitCount: row.visit_count,
     lastReadAt: row.last_read_at,
     novelExists: row.existing_novel_id !== null,
+  }));
+}
+
+export function listUserLoginRecords(userId: number, limit = 100): UserLoginRecord[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT id, user_id, username, ip, user_agent, logged_at
+       FROM user_login_records
+       WHERE user_id = ?
+       ORDER BY logged_at DESC, id DESC
+       LIMIT ?`,
+    )
+    .all(userId, Math.min(Math.max(Math.floor(limit), 1), 200)) as Array<{
+    id: number;
+    user_id: number | null;
+    username: string;
+    ip: string;
+    user_agent: string;
+    logged_at: string;
+  }>;
+
+  return rows.map((row) => ({
+    id: row.id,
+    userId: row.user_id,
+    username: row.username,
+    ip: row.ip,
+    userAgent: row.user_agent,
+    loggedAt: row.logged_at,
   }));
 }
 

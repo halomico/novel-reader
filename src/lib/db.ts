@@ -74,6 +74,8 @@ function initialize(db: DatabaseSync) {
       word_count INTEGER NOT NULL DEFAULT 0,
       visit_count INTEGER NOT NULL DEFAULT 0,
       last_accessed_at TEXT,
+      last_accessed_ip TEXT,
+      last_accessed_user_agent TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -141,14 +143,63 @@ function initialize(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_user_history_user_time ON user_reading_history(user_id, last_read_at);
     CREATE INDEX IF NOT EXISTS idx_user_history_novel ON user_reading_history(novel_id);
 
+    CREATE TABLE IF NOT EXISTS user_login_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      username TEXT NOT NULL,
+      ip TEXT NOT NULL,
+      user_agent TEXT NOT NULL DEFAULT '',
+      logged_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_user_login_records_user_time ON user_login_records(user_id, logged_at);
+    CREATE INDEX IF NOT EXISTS idx_user_login_records_time ON user_login_records(logged_at);
+
+    CREATE TABLE IF NOT EXISTS admin_login_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL,
+      ip TEXT NOT NULL,
+      user_agent TEXT NOT NULL DEFAULT '',
+      logged_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_admin_login_records_time ON admin_login_records(logged_at);
+
+    CREATE TABLE IF NOT EXISTS analytics_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      event_type TEXT NOT NULL,
+      path TEXT NOT NULL,
+      referrer TEXT,
+      ip TEXT NOT NULL,
+      country TEXT,
+      user_agent TEXT NOT NULL DEFAULT '',
+      device TEXT NOT NULL DEFAULT 'unknown',
+      browser TEXT NOT NULL DEFAULT 'unknown',
+      os TEXT NOT NULL DEFAULT 'unknown',
+      novel_id INTEGER,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL,
+      FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_analytics_events_time ON analytics_events(created_at);
+    CREATE INDEX IF NOT EXISTS idx_analytics_events_type_time ON analytics_events(event_type, created_at);
+    CREATE INDEX IF NOT EXISTS idx_analytics_events_ip_time ON analytics_events(ip, created_at);
+    CREATE INDEX IF NOT EXISTS idx_analytics_events_path_time ON analytics_events(path, created_at);
+
   `);
   migrateNovelsContentHash(db);
   addColumnIfMissing(db, "novels", "word_count", "word_count INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(db, "novels", "visit_count", "visit_count INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(db, "novels", "last_accessed_at", "last_accessed_at TEXT");
+  addColumnIfMissing(db, "novels", "last_accessed_ip", "last_accessed_ip TEXT");
+  addColumnIfMissing(db, "novels", "last_accessed_user_agent", "last_accessed_user_agent TEXT");
   addColumnIfMissing(db, "users", "registration_ip", "registration_ip TEXT");
   db.exec("CREATE INDEX IF NOT EXISTS idx_novels_title_hash ON novels(title, content_hash);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_novels_last_accessed ON novels(last_accessed_at);");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_novels_last_accessed_ip ON novels(last_accessed_ip);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_users_registration_ip_created ON users(registration_ip, created_at);");
 }
 

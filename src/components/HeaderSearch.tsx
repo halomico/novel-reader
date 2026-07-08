@@ -112,22 +112,36 @@ export function HeaderSearch({
       return;
     }
 
-    const timers: Array<ReturnType<typeof setTimeout>> = [];
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    function clearTimer() {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    }
+
+    function hideAfterDelay() {
+      clearTimer();
+      if (noticeDisplaySeconds > 0) {
+        timer = setTimeout(() => setIsMessageVisible(false), noticeDisplaySeconds * 1000);
+      } else {
+        setIsMessageVisible(false);
+      }
+    }
+
     if (noticeDisplaySeconds > 0) {
-      timers.push(setTimeout(() => setIsMessageVisible(false), noticeDisplaySeconds * 1000));
+      timer = setTimeout(() => setIsMessageVisible(false), noticeDisplaySeconds * 1000);
     }
 
     function hideOnWindowBlur() {
       if (!noticeStayVisibleAfterBlur) {
-        setIsMessageVisible(false);
+        hideAfterDelay();
       }
     }
 
     window.addEventListener("blur", hideOnWindowBlur);
     return () => {
-      for (const timer of timers) {
-        clearTimeout(timer);
-      }
+      clearTimer();
       window.removeEventListener("blur", hideOnWindowBlur);
     };
   }, [isMessageVisible, message, noticeDisplaySeconds, noticeStayVisibleAfterBlur]);
@@ -270,7 +284,7 @@ export function HeaderSearch({
           setIsModeMenuOpen(false);
           setIsCurrentPanelOpen(false);
           if (!noticeStayVisibleAfterBlur) {
-            setIsMessageVisible(false);
+            window.setTimeout(() => setIsMessageVisible(false), Math.max(noticeDisplaySeconds, 0) * 1000);
           }
         }
       }}

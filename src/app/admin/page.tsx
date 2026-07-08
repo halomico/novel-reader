@@ -1,7 +1,8 @@
 ﻿import type { Metadata } from "next";
-import { BookOpen, Database, Globe2, HardDrive, History, Search, Settings, Users } from "lucide-react";
+import { BarChart3, BookOpen, Database, Globe2, HardDrive, History, Search, Settings, Users } from "lucide-react";
 import Link from "next/link";
 import { headers } from "next/headers";
+import { LocalDateTime } from "@/components/LocalDateTime";
 import { AdminFrame } from "./AdminFrame";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminBookStats } from "@/lib/admin-books";
@@ -28,14 +29,6 @@ function formatBytes(bytes: number): string {
     unitIndex += 1;
   }
   return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[unitIndex]}`;
-}
-
-function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleString("zh-CN", { hour12: false });
 }
 
 export default async function AdminPage() {
@@ -110,6 +103,13 @@ export default async function AdminPage() {
               <small>维护前台用户、登录记录和搜索限速</small>
             </span>
           </Link>
+          <Link className="adminHomeLink" href="/admin/analytics">
+            <BarChart3 size={19} aria-hidden="true" />
+            <span>
+              <strong>数据分析</strong>
+              <small>查看访问量、来源、设备和实时事件</small>
+            </span>
+          </Link>
         </div>
 
         <div className="adminPaths adminHomePaths">
@@ -149,7 +149,9 @@ export default async function AdminPage() {
                 {loginRecords.length ? (
                   loginRecords.map((record) => (
                     <tr key={`${record.loggedAt}-${record.ip}`}>
-                      <td>{formatDate(record.loggedAt)}</td>
+                      <td>
+                        <LocalDateTime value={record.loggedAt} />
+                      </td>
                       <td>{record.username}</td>
                       <td title={record.ip}>{record.ip}</td>
                       <td title={record.userAgent}>{record.userAgent || "-"}</td>

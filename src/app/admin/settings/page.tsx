@@ -7,6 +7,7 @@ import {
   getAdminLoginRateLimitPerMinute,
   getAdminOperationRateLimitPerMinute,
   getAdminUsername,
+  getAnalyticsRealtimeLimit,
   getCatalogPageSize,
   getContentRateLimitPerMinute,
   getContentRateLimitWindowSeconds,
@@ -66,6 +67,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
   const userDailyRegistrationLimit = settings.userDailyRegistrationLimitPerIp || getUserDailyRegistrationLimitPerIp();
   const userSearchRateLimit = settings.userSearchRateLimitPerMinute || getUserSearchRateLimitPerMinute();
   const userAvatarMaxMb = ((settings.userAvatarMaxBytes || getUserAvatarMaxBytes()) / 1024 ** 2).toFixed(1);
+  const analyticsRealtimeLimit = settings.analyticsRealtimeLimit || getAnalyticsRealtimeLimit();
   const frontendSearchConcurrencyLimit = settings.frontendSearchConcurrencyLimit || getFrontendSearchConcurrencyLimit();
   const contentRateLimit = settings.contentRateLimitPerMinute || getContentRateLimitPerMinute();
   const contentRateLimitWindow = settings.contentRateLimitWindowSeconds || getContentRateLimitWindowSeconds();
@@ -248,6 +250,19 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               </span>
               <input name="userRegistrationEnabled" type="checkbox" defaultChecked={settings.userRegistrationEnabled} />
             </label>
+            <label className="adminSwitchLabel">
+              <span>
+                <strong>启用访问数据统计</strong>
+                <small>开启后只统计小说阅读访问，用于后台分析书籍访问、IP、来源和客户端。</small>
+              </span>
+              <input name="analyticsEnabled" type="checkbox" defaultChecked={settings.analyticsEnabled} />
+            </label>
+            <div className="adminFieldGrid">
+              <label>
+                <span>实时访问最多保留 / 条</span>
+                <input name="analyticsRealtimeLimit" type="number" min="30" max="2000" defaultValue={analyticsRealtimeLimit} />
+              </label>
+            </div>
             <div className="adminFieldGrid">
               <label>
                 <span>正文访问限速 / 窗口</span>

@@ -35,7 +35,7 @@ function applySettings(theme: ThemeChoice, fontSize: number, uiMode: UiMode) {
 export function SettingsPanel({ previewText }: { previewText: string }) {
   const [theme, setTheme] = useState<ThemeChoice>("system");
   const [uiMode, setUiMode] = useState<UiMode>("standard");
-  const [fontSize, setFontSize] = useState(19);
+  const [fontSize, setFontSize] = useState(16);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("novel-theme") as ThemeChoice | null;
@@ -43,7 +43,7 @@ export function SettingsPanel({ previewText }: { previewText: string }) {
     const savedFontSize = Number(localStorage.getItem("novel-font-size"));
     const nextTheme = savedTheme === "light" || savedTheme === "dark" || savedTheme === "system" ? savedTheme : "system";
     const nextUiMode = savedUiMode === "minimal" || savedUiMode === "standard" ? savedUiMode : "standard";
-    const nextFontSize = Number.isFinite(savedFontSize) && savedFontSize >= 5 && savedFontSize <= 50 ? savedFontSize : 19;
+    const nextFontSize = Number.isFinite(savedFontSize) && savedFontSize >= 5 && savedFontSize <= 50 ? savedFontSize : 16;
 
     setTheme(nextTheme);
     setUiMode(nextUiMode);
