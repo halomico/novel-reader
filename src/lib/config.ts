@@ -1,5 +1,5 @@
 ﻿import path from "node:path";
-import { readSiteSettings } from "./site-settings";
+import { readSiteSettings, type IpRateLimitRule, type UserLoginCaptchaMode } from "./site-settings";
 
 function resolveFromProject(value: string): string {
   return path.isAbsolute(value) ? value : path.resolve(process.cwd(), value);
@@ -35,6 +35,10 @@ export function getSettingsPreviewText(): string {
     process.env.SETTINGS_PREVIEW_TEXT ||
     "夜色像一页慢慢翻开的纸，灯下的字迹温润清明。读到安静处，页面不抢戏，只把故事稳稳托住。"
   );
+}
+
+export function getReaderDefaultFontSize(): number {
+  return readSiteSettings().readerDefaultFontSize;
 }
 
 function readIntConfig(name: string, fallback: number, min: number, max: number): number {
@@ -107,8 +111,42 @@ export function getUserSearchRateLimitPerMinute(): number {
   return readSettingInt(readSiteSettings().userSearchRateLimitPerMinute, "USER_SEARCH_RATE_LIMIT_PER_MINUTE", 30, 1, 600);
 }
 
+export function getSearchRateLimitRules(): IpRateLimitRule[] {
+  const settings = readSiteSettings();
+  if (settings.searchRateLimitRules.length > 0) {
+    return settings.searchRateLimitRules;
+  }
+
+  return [
+    {
+      id: "guest-general",
+      enabled: true,
+      scope: "guest",
+      queryType: "all",
+      windowSeconds: 60,
+      maxRequests: getSearchRateLimitPerMinute(),
+      banMode: "none",
+      banSeconds: 3_600,
+    },
+    {
+      id: "guest-short",
+      enabled: true,
+      scope: "guest",
+      queryType: "short",
+      windowSeconds: 60,
+      maxRequests: getSearchShortQueryRateLimitPerMinute(),
+      banMode: "none",
+      banSeconds: 3_600,
+    },
+  ];
+}
+
 export function isUserLoginEnabled(): boolean {
   return readSiteSettings().userLoginEnabled && readBoolConfig("USER_LOGIN_ENABLED", true);
+}
+
+export function getUserLoginCaptchaMode(): UserLoginCaptchaMode {
+  return readSiteSettings().userLoginCaptchaMode;
 }
 
 export function isUserRegistrationEnabled(): boolean {
@@ -141,6 +179,26 @@ export function getContentRateLimitPerMinute(): number {
 
 export function getContentRateLimitWindowSeconds(): number {
   return readSettingInt(readSiteSettings().contentRateLimitWindowSeconds, "CONTENT_RATE_LIMIT_WINDOW_SECONDS", 60, 10, 3600);
+}
+
+export function getContentRateLimitRules(): IpRateLimitRule[] {
+  const settings = readSiteSettings();
+  if (settings.contentRateLimitRules.length > 0) {
+    return settings.contentRateLimitRules;
+  }
+
+  return [
+    {
+      id: "content-general",
+      enabled: true,
+      scope: "all",
+      queryType: "all",
+      windowSeconds: getContentRateLimitWindowSeconds(),
+      maxRequests: getContentRateLimitPerMinute(),
+      banMode: "none",
+      banSeconds: 3_600,
+    },
+  ];
 }
 
 export function shouldBlockHeadlessBrowsers(): boolean {
@@ -195,6 +253,10 @@ export function getAdminPassword(): string {
   return process.env.ADMIN_PASSWORD || "";
 }
 
+export function getAdminPasswordHash(): string {
+  return readSiteSettings().adminPasswordHash;
+}
+
 export function getAdminPasswordSha256(): string {
   return readSiteSettings().adminPasswordSha256 || process.env.ADMIN_PASSWORD_SHA256 || "";
 }
@@ -209,10 +271,6 @@ export function getAdminCookieName(): string {
 
 export function getAdminSessionTtlHours(): number {
   return readIntConfig("ADMIN_SESSION_TTL_HOURS", 12, 1, 168);
-}
-
-export function getAdminRateLimitPerMinute(): number {
-  return readSettingInt(readSiteSettings().adminRateLimitPerMinute, "ADMIN_RATE_LIMIT_PER_MINUTE", 60, 1, 600);
 }
 
 export function getAdminLoginRateLimitPerMinute(): number {
@@ -247,20 +305,6 @@ export function getAdminAllowedIps(): string[] {
 export function getAdminBlockedIps(): string[] {
   const settings = readSiteSettings();
   return splitList(settings.adminBlockedIps || process.env.ADMIN_BLOCKED_IPS || "");
-}
-
-export function getAdminOutboundAllowedIps(): string[] {
-  const settings = readSiteSettings();
-  return splitList(settings.adminOutboundAllowedIps || process.env.ADMIN_OUTBOUND_ALLOWED_IPS || "");
-}
-
-export function getAdminOutboundBlockedIps(): string[] {
-  const settings = readSiteSettings();
-  return splitList(settings.adminOutboundBlockedIps || process.env.ADMIN_OUTBOUND_BLOCKED_IPS || "");
-}
-
-export function getConfiguredPort(): number {
-  return readIntConfig("PORT", 3000, 1, 65535);
 }
 
 export function getConfiguredPaths() {

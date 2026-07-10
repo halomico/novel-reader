@@ -1,8 +1,8 @@
-﻿import { BookOpen, LogOut, Search, Settings, ShieldCheck, Users } from "lucide-react";
+﻿import { BookOpen, LogOut, Search, Settings, Users } from "lucide-react";
 import Link from "next/link";
 import { BarChart3 } from "lucide-react";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { getAdminAccessState } from "@/lib/admin-access";
@@ -45,31 +45,20 @@ function titleFor(active: AdminFrameProps["active"]): string {
 }
 
 export async function AdminFrame({ active, notice = "", tone, children }: AdminFrameProps) {
+  const headerStore = await headers();
+  const access = getAdminAccessState(headerStore);
+  if (!access.allowed) {
+    notFound();
+  }
+
   const session = await getAdminSession();
   if (!session) {
     redirect("/admin/login");
   }
 
-  const headerStore = await headers();
-  const access = getAdminAccessState(headerStore);
   const siteName = getSiteName();
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
   const noticeStayVisibleAfterBlur = shouldNoticeStayVisibleAfterBlur();
-
-  if (!access.allowed) {
-    return (
-      <main className="adminShell">
-        <section className="adminForbidden">
-          <ShieldCheck size={28} aria-hidden="true" />
-          <h1>后台访问受限</h1>
-          <p>{access.reason}</p>
-          <form action={logoutAdminAction}>
-            <button type="submit">退出登录</button>
-          </form>
-        </section>
-      </main>
-    );
-  }
 
   return (
     <main className="adminShell adminLayout">

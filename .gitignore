@@ -21,5 +21,6 @@ progress.md
 
 *.log
 *.tmp
+*.tsbuildinfo
 npm-debug.log*
 dev-server*.log

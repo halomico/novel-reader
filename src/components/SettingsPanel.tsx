@@ -18,6 +18,30 @@ const uiModes: Array<{ value: UiMode; label: string }> = [
   { value: "minimal", label: "极简" },
 ];
 
+function readLocalSetting(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalSetting(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // The visual setting still applies for the current page.
+  }
+}
+
+function removeLocalSetting(key: string) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Legacy cleanup is optional when storage is unavailable.
+  }
+}
+
 function applySettings(theme: ThemeChoice, fontSize: number, uiMode: UiMode) {
   if (theme === "system") {
     document.documentElement.removeAttribute("data-theme");
@@ -27,31 +51,31 @@ function applySettings(theme: ThemeChoice, fontSize: number, uiMode: UiMode) {
 
   document.documentElement.dataset.uiMode = uiMode;
   document.documentElement.style.setProperty("--reader-font-size", `${fontSize}px`);
-  localStorage.setItem("novel-theme", theme);
-  localStorage.setItem("novel-font-size", String(fontSize));
-  localStorage.setItem("novel-ui-mode", uiMode);
+  writeLocalSetting("novel-theme", theme);
+  writeLocalSetting("novel-font-size", String(fontSize));
+  writeLocalSetting("novel-ui-mode", uiMode);
 }
 
-export function SettingsPanel({ previewText }: { previewText: string }) {
+export function SettingsPanel({ previewText, defaultFontSize }: { previewText: string; defaultFontSize: number }) {
   const [theme, setTheme] = useState<ThemeChoice>("system");
   const [uiMode, setUiMode] = useState<UiMode>("standard");
-  const [fontSize, setFontSize] = useState(16);
+  const [fontSize, setFontSize] = useState(defaultFontSize);
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("novel-theme") as ThemeChoice | null;
-    const savedUiMode = localStorage.getItem("novel-ui-mode") as UiMode | null;
-    const savedFontSize = Number(localStorage.getItem("novel-font-size"));
+    const savedTheme = readLocalSetting("novel-theme") as ThemeChoice | null;
+    const savedUiMode = readLocalSetting("novel-ui-mode") as UiMode | null;
+    const savedFontSize = Number(readLocalSetting("novel-font-size"));
     const nextTheme = savedTheme === "light" || savedTheme === "dark" || savedTheme === "system" ? savedTheme : "system";
     const nextUiMode = savedUiMode === "minimal" || savedUiMode === "standard" ? savedUiMode : "standard";
-    const nextFontSize = Number.isFinite(savedFontSize) && savedFontSize >= 5 && savedFontSize <= 50 ? savedFontSize : 16;
+    const nextFontSize = Number.isFinite(savedFontSize) && savedFontSize >= 5 && savedFontSize <= 50 ? savedFontSize : defaultFontSize;
 
     setTheme(nextTheme);
     setUiMode(nextUiMode);
     setFontSize(nextFontSize);
-    localStorage.removeItem("novel-page-size");
+    removeLocalSetting("novel-page-size");
     document.cookie = "novel-page-size=; Path=/; Max-Age=0; SameSite=Lax";
     applySettings(nextTheme, nextFontSize, nextUiMode);
-  }, []);
+  }, [defaultFontSize]);
 
   function changeTheme(value: ThemeChoice) {
     setTheme(value);

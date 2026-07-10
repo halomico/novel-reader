@@ -96,6 +96,7 @@ function scheduleJob(runner: () => Promise<void>) {
 }
 
 export function getContentJob(id: string): ContentJobSnapshot | null {
+  cleanupJobs();
   const job = getJobs().get(id);
   return job ? { ...job, results: job.results ? [...job.results] : undefined } : null;
 }
@@ -108,6 +109,7 @@ export function countActiveContentJobs(kind?: JobKind): number {
 }
 
 export function cancelContentJob(id: string): ContentJobSnapshot | null {
+  cleanupJobs();
   const job = getJobs().get(id);
   if (!job) {
     return null;

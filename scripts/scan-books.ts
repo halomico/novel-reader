@@ -15,6 +15,14 @@ type ScanStats = {
   records: string[];
 };
 
+type PendingDuplicateFile = {
+  fileName: string;
+  keptFileName: string;
+  filePath: string;
+  sizeBytes: number;
+  mtimeMs: number;
+};
+
 const libraryDir = getLibraryDir();
 const db = getDb();
 
@@ -109,11 +117,40 @@ function scan() {
   const batchSize = readPositiveInt("SCAN_BATCH_SIZE", 500, 100);
   let totalBytes = 0;
   let transactionOpen = false;
+  const pendingDuplicateFiles: PendingDuplicateFile[] = [];
+
+  function deleteCommittedDuplicateFiles() {
+    for (const pending of pendingDuplicateFiles) {
+      try {
+        if (!fs.existsSync(pending.filePath)) {
+          stats.deletedDuplicates += 1;
+          stats.records.push(`${pending.fileName}: 与 ${pending.keptFileName} 内容相同，重复文件已不存在`);
+          continue;
+        }
+        const currentStat = fs.statSync(pending.filePath);
+        if (currentStat.size !== pending.sizeBytes || Math.round(currentStat.mtimeMs) !== pending.mtimeMs) {
+          stats.skipped += 1;
+          stats.records.push(`${pending.fileName}: 扫描期间文件发生变化，已保留文件并跳过删除`);
+          continue;
+        }
+        fs.unlinkSync(pending.filePath);
+        stats.deletedDuplicates += 1;
+        stats.records.push(`${pending.fileName}: 与 ${pending.keptFileName} 内容完全相同，已删除重复文件`);
+      } catch (error) {
+        stats.skipped += 1;
+        stats.records.push(
+          `${pending.fileName}: 重复数据库记录已清理，但文件删除失败：${error instanceof Error ? error.message : "未知错误"}`,
+        );
+      }
+    }
+  }
 
   function finishStep(index: number) {
     if ((index + 1) % batchSize === 0) {
       db.exec("COMMIT");
+      transactionOpen = false;
       db.exec("BEGIN");
+      transactionOpen = true;
     }
 
     if ((index + 1) % progressEvery === 0) {
@@ -155,10 +192,14 @@ function scan() {
           continue;
         }
 
-        fs.unlinkSync(resolveLibraryFile(record.relativePath));
         deleteNovelByRelativePath(db, record.relativePath);
-        stats.deletedDuplicates += 1;
-        stats.records.push(`${record.fileName}: 与 ${duplicate.file_name} 内容完全相同，已删除重复文件`);
+        pendingDuplicateFiles.push({
+          fileName: record.fileName,
+          keptFileName: duplicate.file_name,
+          filePath: resolveLibraryFile(record.relativePath),
+          sizeBytes: record.sizeBytes,
+          mtimeMs: record.mtimeMs,
+        });
         finishStep(index);
         continue;
       }
@@ -170,6 +211,7 @@ function scan() {
     }
     db.exec("COMMIT");
     transactionOpen = false;
+    deleteCommittedDuplicateFiles();
     console.log(`扫描完成，耗时 ${elapsedSeconds(startedAt)}，读取约 ${formatBytes(totalBytes)}`);
   } catch (error) {
     if (transactionOpen) {

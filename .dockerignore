@@ -7,6 +7,7 @@ progress.md
 data
 library
 docs
+public/avatars
 *.db
 *.db-*
 *.sqlite
@@ -15,4 +16,5 @@ docs
 !public/robots.txt
 *.log
 *.tmp
+*.tsbuildinfo
 npm-debug.log*

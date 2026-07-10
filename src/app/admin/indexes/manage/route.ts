@@ -16,7 +16,7 @@ function jsonError(message: string, status: number) {
 async function requireAdminJson(request: NextRequest) {
   const access = getAdminAccessState(request.headers);
   if (!access.allowed) {
-    return { ok: false as const, response: jsonError(access.reason || "当前请求不能访问后台", 403) };
+    return { ok: false as const, response: new NextResponse(null, { status: 404 }) };
   }
 
   const session = await getAdminSession();

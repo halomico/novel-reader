@@ -10,7 +10,7 @@ services:
       NOVEL_LIBRARY_DIR: /app/library/books
       DATABASE_PATH: /app/data/novels.db
     ports:
-      - "${PORT:-3000}:3000"
+      - "127.0.0.1:${PORT:-3000}:3000"
     volumes:
       - ./library/books:/app/library/books
       - ./data:/app/data

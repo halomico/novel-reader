@@ -2,7 +2,7 @@ import { LockKeyhole } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
 import { loginAdminAction } from "../actions";
 import { getAdminAccessState } from "@/lib/admin-access";
@@ -24,14 +24,18 @@ type AdminLoginPageProps = {
 };
 
 export default async function AdminLoginPage({ searchParams }: AdminLoginPageProps) {
+  const headerStore = await headers();
+  const access = getAdminAccessState(headerStore);
+  if (!access.allowed) {
+    notFound();
+  }
+
   const session = await getAdminSession();
   if (session) {
     redirect("/admin");
   }
 
   const params = await searchParams;
-  const headerStore = await headers();
-  const access = getAdminAccessState(headerStore);
   const siteName = getSiteName();
   const configured = isAdminSecurityConfigured();
   const error = params.error || "";
@@ -51,15 +55,6 @@ export default async function AdminLoginPage({ searchParams }: AdminLoginPagePro
           </div>
         </div>
 
-        {!access.allowed ? (
-          <DismissibleNotice
-            message={access.reason || "当前请求不能访问后台"}
-            tone="error"
-            variant="admin"
-            displaySeconds={noticeDisplaySeconds}
-            stayVisibleAfterBlur={noticeStayVisibleAfterBlur}
-          />
-        ) : null}
         {!configured ? (
           <DismissibleNotice
             message="请先在 .env 配置 ADMIN_PASSWORD 或 ADMIN_PASSWORD_SHA256，以及 ADMIN_SESSION_SECRET。"
@@ -82,13 +77,13 @@ export default async function AdminLoginPage({ searchParams }: AdminLoginPagePro
         <form className="adminLoginForm" action={loginAdminAction}>
           <label>
             <span>用户名</span>
-            <input name="username" autoComplete="username" disabled={!access.allowed || !configured} />
+            <input name="username" autoComplete="username" disabled={!configured} />
           </label>
           <label>
             <span>密码</span>
-            <input name="password" type="password" autoComplete="current-password" disabled={!access.allowed || !configured} />
+            <input name="password" type="password" autoComplete="current-password" disabled={!configured} />
           </label>
-          <button type="submit" disabled={!access.allowed || !configured}>
+          <button type="submit" disabled={!configured}>
             登录
           </button>
         </form>

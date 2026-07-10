@@ -2,8 +2,16 @@ import { KeyRound } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
+import { LoginCaptcha } from "@/components/LoginCaptcha";
 import { SiteHeader } from "@/components/SiteHeader";
-import { getNoticeDisplaySeconds, isUserLoginEnabled, isUserRegistrationEnabled, shouldNoticeStayVisibleAfterBlur } from "@/lib/config";
+import {
+  getNoticeDisplaySeconds,
+  getUserLoginCaptchaMode,
+  isUserLoginEnabled,
+  isUserRegistrationEnabled,
+  shouldNoticeStayVisibleAfterBlur,
+} from "@/lib/config";
+import { createLoginCaptchaChallenge } from "@/lib/login-captcha";
 import { getCurrentUser } from "@/lib/user-auth";
 import { loginUserAction } from "../account/actions";
 
@@ -25,6 +33,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
   const loginEnabled = isUserLoginEnabled();
   const registrationEnabled = isUserRegistrationEnabled();
+  const captchaMode = getUserLoginCaptchaMode();
+  const captcha = loginEnabled && captchaMode !== "off" ? createLoginCaptchaChallenge(captchaMode, "login") : null;
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
   const noticeStayVisibleAfterBlur = shouldNoticeStayVisibleAfterBlur();
 
@@ -57,6 +67,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             <span>密码</span>
             <input name="password" type="password" autoComplete="current-password" disabled={!loginEnabled} required />
           </label>
+          {captcha ? <LoginCaptcha challenge={captcha} /> : null}
           <button className="authPrimaryButton" type="submit" disabled={!loginEnabled}>
             登录
           </button>

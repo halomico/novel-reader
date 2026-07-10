@@ -3,7 +3,7 @@ import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
 import { checkAdminOperationLimit } from "@/lib/admin-operation-limit";
 import { shouldShowProgressBars } from "@/lib/config";
-import { cancelContentJob, getContentJob, startContentIndexJob } from "@/lib/content-jobs";
+import { cancelContentJob, countActiveContentJobs, getContentJob, startContentIndexJob } from "@/lib/content-jobs";
 import { normalizeContentIndexTerms } from "@/lib/content-index";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ function jsonError(message: string, status: number) {
 async function requireAdminJson(request: NextRequest, scope = "") {
   const access = getAdminAccessState(request.headers);
   if (!access.allowed) {
-    return { ok: false as const, response: jsonError(access.reason || "当前请求不能访问后台", 403) };
+    return { ok: false as const, response: new NextResponse(null, { status: 404 }) };
   }
 
   const session = await getAdminSession();
@@ -57,6 +57,9 @@ export async function POST(request: NextRequest) {
   if (!terms.length) {
     return jsonError("请输入索引关键词", 400);
   }
+  if (countActiveContentJobs("index") > 0) {
+    return jsonError("已有索引任务正在运行，请等待完成或先取消当前任务", 409);
+  }
 
   const job = startContentIndexJob(terms);
   return NextResponse.json({ ok: true, jobId: job.id, job, showProgressBars: shouldShowProgressBars() });
@@ -70,7 +73,7 @@ export async function GET(request: NextRequest) {
 
   const id = request.nextUrl.searchParams.get("id") || "";
   const job = getContentJob(id);
-  if (!job) {
+  if (!job || job.kind !== "index") {
     return jsonError("索引任务不存在或已过期", 404);
   }
 
@@ -85,7 +88,7 @@ export async function DELETE(request: NextRequest) {
 
   const id = request.nextUrl.searchParams.get("id") || "";
   const job = cancelContentJob(id);
-  if (!job) {
+  if (!job || job.kind !== "index") {
     return jsonError("索引任务不存在或已过期", 404);
   }
 

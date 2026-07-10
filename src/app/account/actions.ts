@@ -1,13 +1,29 @@
 "use server";
 
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getClientIp } from "@/lib/admin-access";
-import { getUserAvatarMaxBytes, getUserDailyRegistrationLimitPerIp, isUserLoginEnabled, isUserRegistrationEnabled } from "@/lib/config";
-import { clearCurrentUserSession, getCurrentUser, hashUserPassword, loginUser, verifyUserPassword } from "@/lib/user-auth";
+import {
+  getUserAvatarMaxBytes,
+  getUserDailyRegistrationLimitPerIp,
+  getUserLoginCaptchaMode,
+  isUserLoginEnabled,
+  isUserRegistrationEnabled,
+} from "@/lib/config";
+import { verifyLoginCaptcha } from "@/lib/login-captcha";
+import {
+  clearCurrentUserSession,
+  createUserSession,
+  deleteUserSessions,
+  getCurrentUser,
+  hashUserPassword,
+  loginUser,
+  verifyUserPassword,
+} from "@/lib/user-auth";
 import {
   clearReadingHistory,
   countTodayRegistrationsForIp,
@@ -30,6 +46,10 @@ function authNotice(pathname: string, message: string, tone: "success" | "warnin
 
 function cleanText(formData: FormData, name: string): string {
   return String(formData.get(name) || "").trim();
+}
+
+function isUsernameConflict(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("UNIQUE constraint failed: users.username");
 }
 
 function avatarExtension(file: File): string | null {
@@ -78,6 +98,19 @@ export async function registerUserAction(formData: FormData) {
     authNotice("/register", "注册暂未开放", "warning");
   }
 
+  const captchaMode = getUserLoginCaptchaMode();
+  if (
+    captchaMode !== "off" &&
+    !verifyLoginCaptcha({
+      id: cleanText(formData, "captchaId"),
+      mode: captchaMode,
+      purpose: "register",
+      answer: String(formData.get("captchaAnswer") || ""),
+    })
+  ) {
+    authNotice("/register", "验证码不正确或已过期，请重试", "warning");
+  }
+
   const headerStore = await headers();
   const clientIp = getClientIp(headerStore);
   const dailyLimit = getUserDailyRegistrationLimitPerIp();
@@ -114,8 +147,16 @@ export async function registerUserAction(formData: FormData) {
       status: "active",
       registrationIp: clientIp,
     });
-  } catch {
-    authNotice("/register", "用户名已存在", "warning");
+  } catch (error) {
+    if (isUsernameConflict(error)) {
+      authNotice("/register", "用户名已存在", "warning");
+    }
+    console.error("Failed to create user", error);
+    authNotice("/register", "账号创建失败，请稍后重试", "error");
+  }
+
+  if (!isUserLoginEnabled()) {
+    authNotice("/login", "注册成功，登录暂未开放", "success");
   }
 
   const result = await loginUser(username, password);
@@ -128,6 +169,19 @@ export async function registerUserAction(formData: FormData) {
 export async function loginUserAction(formData: FormData) {
   if (!isUserLoginEnabled()) {
     authNotice("/login", "登录暂未开放", "warning");
+  }
+
+  const captchaMode = getUserLoginCaptchaMode();
+  if (
+    captchaMode !== "off" &&
+    !verifyLoginCaptcha({
+      id: cleanText(formData, "captchaId"),
+      mode: captchaMode,
+      purpose: "login",
+      answer: String(formData.get("captchaAnswer") || ""),
+    })
+  ) {
+    authNotice("/login", "验证码不正确或已过期，请重试", "warning");
   }
 
   const username = cleanText(formData, "username");
@@ -178,10 +232,24 @@ export async function uploadAvatarAction(formData: FormData) {
 
   const avatarDir = path.join(process.cwd(), "public", "avatars");
   fs.mkdirSync(avatarDir, { recursive: true });
-  const fileName = `user-${user.id}-${Date.now()}${extension}`;
+  const fileName = `user-${user.id}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}${extension}`;
   const filePath = path.join(avatarDir, fileName);
-  fs.writeFileSync(filePath, buffer, { flag: "wx" });
-  updateUserAvatar(user.id, `/avatars/${fileName}`);
+  try {
+    fs.writeFileSync(filePath, buffer, { flag: "wx" });
+  } catch {
+    authNotice("/account", "头像文件保存失败，请稍后重试", "error");
+  }
+  try {
+    updateUserAvatar(user.id, `/avatars/${fileName}`);
+  } catch (error) {
+    try {
+      fs.rmSync(filePath, { force: true });
+    } catch {
+      // Keep the original database failure as the user-facing error.
+    }
+    console.error("Failed to update user avatar", error);
+    authNotice("/account", "头像信息保存失败，请稍后重试", "error");
+  }
   removeAvatarFile(user.avatarPath);
   revalidatePath("/account");
   authNotice("/account", "头像已更新");
@@ -227,6 +295,9 @@ export async function updateAccountPasswordAction(formData: FormData) {
   }
 
   updateUserPasswordHash(user.id, hashUserPassword(newPassword));
+  deleteUserSessions(user.id);
+  const headerStore = await headers();
+  await createUserSession(user.id, getClientIp(headerStore), headerStore.get("user-agent") || "");
   revalidatePath("/account");
   authNotice("/account", "密码已更新");
 }
@@ -236,19 +307,24 @@ export async function deleteHistoryItemAction(formData: FormData) {
   if (!user) {
     redirect("/login");
   }
-  const historyIds = formData
-    .getAll("historyIds")
-    .concat(formData.getAll("historyId"))
-    .map((value) => Number(value))
-    .filter((value) => Number.isInteger(value) && value > 0);
+  const historyIds = Array.from(
+    new Set(
+      formData
+        .getAll("historyIds")
+        .concat(formData.getAll("historyId"))
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0),
+    ),
+  );
   if (!historyIds.length) {
     authNotice("/account", "浏览记录不存在", "warning");
   }
-  for (const historyId of historyIds) {
-    deleteReadingHistoryItem(user.id, historyId);
+  const deleted = historyIds.reduce((count, historyId) => count + Number(deleteReadingHistoryItem(user.id, historyId)), 0);
+  if (!deleted) {
+    authNotice("/account", "浏览记录不存在", "warning");
   }
   revalidatePath("/account");
-  authNotice("/account", `已删除 ${historyIds.length} 条浏览记录`);
+  authNotice("/account", `已删除 ${deleted} 条浏览记录`);
 }
 
 export async function clearHistoryAction() {

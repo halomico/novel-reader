@@ -17,9 +17,13 @@ export function persistBlockedIp(ip: string): boolean {
   }
 
   const settings = readSiteSettings();
-  writeSiteSettings({
-    ...settings,
-    adminBlockedIps: [...blockedIps, ip].join("\n"),
-  });
-  return true;
+  try {
+    writeSiteSettings({
+      ...settings,
+      adminBlockedIps: [...blockedIps, ip].join("\n"),
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }

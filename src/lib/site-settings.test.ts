@@ -1,0 +1,27 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import { readSiteSettings, writeSiteSettings } from "./site-settings";
+
+test("atomically replaces an existing settings file", () => {
+  const previousPath = process.env.ADMIN_SETTINGS_PATH;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-settings-"));
+  process.env.ADMIN_SETTINGS_PATH = path.join(tempDir, "admin-settings.json");
+
+  try {
+    const defaults = readSiteSettings();
+    writeSiteSettings({ ...defaults, siteName: "第一次" });
+    writeSiteSettings({ ...readSiteSettings(), siteName: "第二次" });
+    assert.equal(readSiteSettings().siteName, "第二次");
+    assert.deepEqual(fs.readdirSync(tempDir), ["admin-settings.json"]);
+  } finally {
+    if (previousPath === undefined) {
+      delete process.env.ADMIN_SETTINGS_PATH;
+    } else {
+      process.env.ADMIN_SETTINGS_PATH = previousPath;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});

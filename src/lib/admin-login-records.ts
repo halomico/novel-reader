@@ -27,26 +27,50 @@ function migrateSettingsLoginRecords() {
   if (settingsRecordsMigrated) {
     return;
   }
-  settingsRecordsMigrated = true;
 
   const settings = readSiteSettings();
   const records = settings.adminLoginRecords.map(toPlainRecord);
   if (!records.length) {
+    settingsRecordsMigrated = true;
     return;
   }
 
-  const insert = getDb().prepare(
+  const db = getDb();
+  const insert = db.prepare(
     `INSERT INTO admin_login_records (username, ip, user_agent, logged_at)
-     VALUES (?, ?, ?, ?)`,
+     SELECT ?, ?, ?, ?
+     WHERE NOT EXISTS (
+       SELECT 1
+       FROM admin_login_records
+       WHERE username = ? AND ip = ? AND user_agent = ? AND logged_at = ?
+     )`,
   );
-  for (const record of records) {
-    insert.run(record.username, record.ip, record.userAgent.slice(0, 240), record.loggedAt);
+  db.exec("BEGIN");
+  try {
+    for (const record of records) {
+      const userAgent = record.userAgent.slice(0, 240);
+      insert.run(
+        record.username,
+        record.ip,
+        userAgent,
+        record.loggedAt,
+        record.username,
+        record.ip,
+        userAgent,
+        record.loggedAt,
+      );
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
   }
 
   writeSiteSettings({
     ...settings,
     adminLoginRecords: [],
   });
+  settingsRecordsMigrated = true;
 }
 
 export function listAdminLoginRecords(limit = MAX_ADMIN_LOGIN_RECORDS): AdminLoginRecord[] {

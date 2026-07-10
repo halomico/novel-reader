@@ -349,28 +349,6 @@ export function deleteIndexedContentForNovel(db: DatabaseSync, novelId: number) 
   db.prepare("DELETE FROM search_index_state WHERE novel_id = ?").run(novelId);
 }
 
-export function findMatchedContentIndexTerms(content: string, terms = normalizeContentIndexTerms()): string[] {
-  if (!terms.length) {
-    return [];
-  }
-
-  const normalizedContent = normalizeSearchText(content);
-  return terms.filter((term) => normalizedContent.includes(term));
-}
-
-export function insertContentIndexRowsForSegment(
-  insertTerm: ReturnType<DatabaseSync["prepare"]>,
-  novelId: number,
-  content: string,
-  terms = normalizeContentIndexTerms(),
-): string[] {
-  const matchedTerms = findMatchedContentIndexTerms(content, terms);
-  for (const term of matchedTerms) {
-    insertTerm.run({ term, novelId });
-  }
-  return matchedTerms;
-}
-
 export function refreshContentIndexTermStats(
   db: DatabaseSync,
   terms = normalizeContentIndexTerms(),
@@ -379,8 +357,8 @@ export function refreshContentIndexTermStats(
 ): ContentIndexTermStatus[] {
   const countTerm = db.prepare("SELECT COUNT(*) AS count FROM content_search_terms WHERE term = ?");
   const upsertStats = db.prepare(`
-    INSERT INTO content_search_term_stats (term, segment_count, novel_count, status, source, updated_at)
-    VALUES (@term, @segmentCount, @novelCount, @status, @source, CURRENT_TIMESTAMP)
+    INSERT INTO content_search_term_stats (term, segment_count, novel_count, status, source, created_at, updated_at)
+    VALUES (@term, @segmentCount, @novelCount, @status, @source, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     ON CONFLICT(term) DO UPDATE SET
       segment_count = excluded.segment_count,
       novel_count = excluded.novel_count,
@@ -501,8 +479,8 @@ export function saveContentIndexTerm(
     }
     db.prepare(
       `
-      INSERT INTO content_search_term_stats (term, segment_count, novel_count, status, source, updated_at)
-      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      INSERT INTO content_search_term_stats (term, segment_count, novel_count, status, source, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON CONFLICT(term) DO UPDATE SET
         segment_count = excluded.segment_count,
         novel_count = excluded.novel_count,
@@ -676,8 +654,8 @@ export async function buildContentIndexTerms(
         indexDb
           .prepare(
             `
-            INSERT INTO content_search_term_stats (term, segment_count, novel_count, status, source, updated_at)
-            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            INSERT INTO content_search_term_stats (term, segment_count, novel_count, status, source, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT(term) DO UPDATE SET
               segment_count = excluded.segment_count,
               novel_count = excluded.novel_count,

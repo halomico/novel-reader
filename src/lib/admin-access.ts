@@ -2,8 +2,6 @@
 import {
   getAdminAllowedIps,
   getAdminBlockedIps,
-  getAdminOutboundAllowedIps,
-  getAdminOutboundBlockedIps,
   isAdminEnabled,
 } from "./config";
 
@@ -133,13 +131,4 @@ export function getAdminAccessState(headers: Headers): AdminAccessState {
   }
 
   return { allowed: true, clientIp };
-}
-
-export function canUseOutboundIp(ip: string): boolean {
-  const blockedIps = getAdminOutboundBlockedIps();
-  const allowedIps = getAdminOutboundAllowedIps();
-  if (matchesAny(ip, blockedIps)) {
-    return false;
-  }
-  return allowedIps.length === 0 || matchesAny(ip, allowedIps);
 }

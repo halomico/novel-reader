@@ -15,6 +15,7 @@ function addColumnIfMissing(db: DatabaseSync, tableName: string, columnName: str
 }
 
 export function initializeContentIndexDb(db: DatabaseSync) {
+  db.exec("PRAGMA busy_timeout = 5000;");
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec("PRAGMA synchronous = NORMAL;");
   db.exec(`
@@ -39,9 +40,6 @@ export function initializeContentIndexDb(db: DatabaseSync) {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
-
-    CREATE INDEX IF NOT EXISTS idx_content_search_term_stats_source_cold
-      ON content_search_term_stats(source, last_used_at, hit_count, updated_at);
 
     CREATE TABLE IF NOT EXISTS content_index_jobs (
       id TEXT PRIMARY KEY,
@@ -82,8 +80,17 @@ export function initializeContentIndexDb(db: DatabaseSync) {
   addColumnIfMissing(db, "content_search_term_stats", "hit_count", "INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(db, "content_search_term_stats", "last_used_at", "TEXT");
   addColumnIfMissing(db, "content_search_term_stats", "error", "TEXT");
-  addColumnIfMissing(db, "content_search_term_stats", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
-  addColumnIfMissing(db, "content_search_term_stats", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
+  addColumnIfMissing(db, "content_search_term_stats", "created_at", "TEXT");
+  addColumnIfMissing(db, "content_search_term_stats", "updated_at", "TEXT");
+  db.exec(`
+    UPDATE content_search_term_stats
+    SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP),
+        updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)
+    WHERE created_at IS NULL OR updated_at IS NULL;
+
+    CREATE INDEX IF NOT EXISTS idx_content_search_term_stats_source_cold
+      ON content_search_term_stats(source, last_used_at, hit_count, updated_at);
+  `);
 }
 
 export function getContentIndexDb(): DatabaseSync {

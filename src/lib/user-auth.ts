@@ -3,12 +3,11 @@ import type { NextRequest } from "next/server";
 import { cookies, headers } from "next/headers";
 import { getClientIp } from "./admin-access";
 import { getDb } from "./db";
+import { hashPassword, verifyPassword } from "./password";
 import { getUserPasswordRow, recordUserLogin, type UserProfile } from "./users";
 
 export const USER_SESSION_COOKIE = "novel_user_session";
 
-const PASSWORD_ITERATIONS = 210_000;
-const PASSWORD_KEY_LENGTH = 32;
 const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 type SessionUserRow = {
@@ -24,15 +23,6 @@ type SessionUserRow = {
   last_login_at: string | null;
   last_login_ip: string | null;
 };
-
-function timingSafeEqualText(left: string, right: string): boolean {
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
-  if (leftBuffer.length !== rightBuffer.length) {
-    return false;
-  }
-  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
-}
 
 function hashSessionToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
@@ -55,11 +45,11 @@ function toUserProfile(row: SessionUserRow): UserProfile {
 }
 
 function parseSessionValue(value: string): { id: string; token: string } | null {
-  const [id, token] = value.split(".");
-  if (!id || !token) {
+  const parts = value.split(".");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
     return null;
   }
-  return { id, token };
+  return { id: parts[0], token: parts[1] };
 }
 
 function readUserFromSessionValue(value: string | undefined): UserProfile | null {
@@ -86,23 +76,15 @@ function readUserFromSessionValue(value: string | undefined): UserProfile | null
 }
 
 export function hashUserPassword(password: string): string {
-  const salt = crypto.randomBytes(16).toString("base64url");
-  const hash = crypto.pbkdf2Sync(password, salt, PASSWORD_ITERATIONS, PASSWORD_KEY_LENGTH, "sha256").toString("base64url");
-  return `pbkdf2-sha256:${PASSWORD_ITERATIONS}:${salt}:${hash}`;
+  return hashPassword(password);
 }
 
 export function verifyUserPassword(password: string, storedHash: string): boolean {
-  const [scheme, iterationsText, salt, expectedHash] = storedHash.split(":");
-  const iterations = Number(iterationsText);
-  if (scheme !== "pbkdf2-sha256" || !Number.isInteger(iterations) || iterations < 10_000 || !salt || !expectedHash) {
-    return false;
-  }
-
-  const actualHash = crypto.pbkdf2Sync(password, salt, iterations, PASSWORD_KEY_LENGTH, "sha256").toString("base64url");
-  return timingSafeEqualText(actualHash, expectedHash);
+  return verifyPassword(password, storedHash);
 }
 
 export async function createUserSession(userId: number, ip: string, userAgent: string) {
+  deleteExpiredUserSessions();
   const sessionId = crypto.randomBytes(18).toString("base64url");
   const token = crypto.randomBytes(32).toString("base64url");
   const expiresAt = Date.now() + SESSION_TTL_SECONDS * 1000;
@@ -160,6 +142,10 @@ export async function clearCurrentUserSession() {
     path: "/",
     maxAge: 0,
   });
+}
+
+export function deleteUserSessions(userId: number) {
+  getDb().prepare("DELETE FROM user_sessions WHERE user_id = ?").run(userId);
 }
 
 export function deleteExpiredUserSessions() {

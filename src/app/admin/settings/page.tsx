@@ -1,5 +1,8 @@
 ﻿import { Settings } from "lucide-react";
 import type { Metadata } from "next";
+import { Globe2, Trash2, Upload } from "lucide-react";
+import { LocalDateTime } from "@/components/LocalDateTime";
+import { RateLimitRulesEditor } from "@/components/RateLimitRulesEditor";
 import { getAdminBookStats } from "@/lib/admin-books";
 import {
   getAdminBookPageSize,
@@ -9,8 +12,7 @@ import {
   getAdminUsername,
   getAnalyticsRealtimeLimit,
   getCatalogPageSize,
-  getContentRateLimitPerMinute,
-  getContentRateLimitWindowSeconds,
+  getContentRateLimitRules,
   getContentIndexHardLimitBytes,
   getContentIndexMaxSegments,
   getContentIndexSoftLimitBytes,
@@ -18,9 +20,9 @@ import {
   getGlobalSearchMaxResults,
   getManualIndexMaxSegments,
   getNoticeDisplaySeconds,
-  getSearchRateLimitPerMinute,
+  getReaderDefaultFontSize,
+  getSearchRateLimitRules,
   getSearchResultsPageSize,
-  getSearchShortQueryRateLimitPerMinute,
   getUserDailyRegistrationLimitPerIp,
   getUserAvatarMaxBytes,
   getUserSearchRateLimitPerMinute,
@@ -29,7 +31,14 @@ import {
   shouldBlockHeadlessBrowsers,
 } from "@/lib/config";
 import { readSiteSettings } from "@/lib/site-settings";
-import { cancelFrontendSearchJobsAction, saveAdminSettingsAction } from "../actions";
+import { listIpRateLimitBans, type IpRateLimitBan } from "@/lib/ip-rate-limit";
+import {
+  cancelFrontendSearchJobsAction,
+  deleteIpRateLimitBanAction,
+  deleteSiteIconAction,
+  saveAdminSettingsAction,
+  uploadSiteIconAction,
+} from "../actions";
 import { AdminFrame } from "../AdminFrame";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +56,38 @@ type AdminSettingsPageProps = {
   }>;
 };
 
+function RateLimitBanList({ title, bans }: { title: string; bans: IpRateLimitBan[] }) {
+  if (bans.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="searchRateBanList">
+      <strong>{title}</strong>
+      {bans.map((ban) => (
+        <div className="searchRateBanRow" key={`${ban.category}-${ban.ip}`}>
+          <code title={ban.ip}>{ban.ip}</code>
+          <span>
+            {ban.permanent ? "永久" : ban.bannedUntil ? <LocalDateTime value={new Date(ban.bannedUntil).toISOString()} /> : "已到期"}
+          </span>
+          <button
+            className="searchRateRuleIconButton isDanger"
+            type="submit"
+            name="rateLimitBanKey"
+            value={JSON.stringify({ category: ban.category, ip: ban.ip })}
+            formAction={deleteIpRateLimitBanAction}
+            formNoValidate
+            aria-label={`解除 ${ban.ip} 的${title}`}
+            title="解除封禁"
+          >
+            <Trash2 size={15} aria-hidden="true" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default async function AdminSettingsPage({ searchParams }: AdminSettingsPageProps) {
   const params = await searchParams;
   const settings = readSiteSettings();
@@ -61,16 +102,17 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
   const adminBookPageSize = settings.adminBookPageSize || getAdminBookPageSize();
   const adminIndexPageSize = settings.adminIndexPageSize || getAdminIndexPageSize();
   const noticeDisplaySeconds = settings.noticeDisplaySeconds || getNoticeDisplaySeconds();
+  const readerDefaultFontSize = settings.readerDefaultFontSize || getReaderDefaultFontSize();
   const globalSearchMaxResults = settings.globalSearchMaxResults || getGlobalSearchMaxResults();
-  const searchRateLimit = settings.searchRateLimitPerMinute || getSearchRateLimitPerMinute();
-  const shortSearchRateLimit = settings.searchShortQueryRateLimitPerMinute || getSearchShortQueryRateLimitPerMinute();
+  const searchRateLimitRules = getSearchRateLimitRules();
+  const contentRateLimitRules = getContentRateLimitRules();
+  const searchRateLimitBans = listIpRateLimitBans("search");
+  const contentRateLimitBans = listIpRateLimitBans("content");
   const userDailyRegistrationLimit = settings.userDailyRegistrationLimitPerIp || getUserDailyRegistrationLimitPerIp();
   const userSearchRateLimit = settings.userSearchRateLimitPerMinute || getUserSearchRateLimitPerMinute();
   const userAvatarMaxMb = ((settings.userAvatarMaxBytes || getUserAvatarMaxBytes()) / 1024 ** 2).toFixed(1);
   const analyticsRealtimeLimit = settings.analyticsRealtimeLimit || getAnalyticsRealtimeLimit();
   const frontendSearchConcurrencyLimit = settings.frontendSearchConcurrencyLimit || getFrontendSearchConcurrencyLimit();
-  const contentRateLimit = settings.contentRateLimitPerMinute || getContentRateLimitPerMinute();
-  const contentRateLimitWindow = settings.contentRateLimitWindowSeconds || getContentRateLimitWindowSeconds();
   const contentIndexMaxSegments = settings.contentIndexMaxSegments || getContentIndexMaxSegments();
   const manualIndexMaxSegments = settings.manualIndexMaxSegments || getManualIndexMaxSegments();
   const contentBlockHeadlessBrowsers = shouldBlockHeadlessBrowsers();
@@ -88,6 +130,43 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
           <Settings size={20} aria-hidden="true" />
         </div>
 
+        <form className="adminSettingsSection siteIconManager" action={uploadSiteIconAction}>
+          <div className="siteIconPreview" aria-label="当前浏览器标签图标">
+            {settings.siteIconFileName ? (
+              <img
+                src={`/api/site-icon?v=${encodeURIComponent(settings.siteIconUpdatedAt || settings.siteIconFileName)}`}
+                alt="当前站点图标"
+                width="48"
+                height="48"
+              />
+            ) : (
+              <Globe2 size={24} aria-hidden="true" />
+            )}
+          </div>
+          <label className="siteIconFileField">
+            <span>浏览器标签图标</span>
+            <input name="siteIcon" type="file" accept=".png,.jpg,.jpeg,.webp,.ico,image/png,image/jpeg,image/webp,image/x-icon" required />
+            <small>{settings.siteIconFileName ? `${settings.siteIconFileName}，最大 15 MB` : "PNG、JPG、WebP 或 ICO，最大 15 MB"}</small>
+          </label>
+          <div className="siteIconActions">
+            <button className="siteIconUploadButton" type="submit">
+              <Upload size={15} aria-hidden="true" />
+              上传
+            </button>
+            <button
+              className="searchRateRuleIconButton isDanger"
+              type="submit"
+              formAction={deleteSiteIconAction}
+              formNoValidate
+              disabled={!settings.siteIconFileName}
+              aria-label="删除站点图标"
+              title="删除站点图标"
+            >
+              <Trash2 size={15} aria-hidden="true" />
+            </button>
+          </div>
+        </form>
+
         <form className="adminSettingsForm" action={saveAdminSettingsAction}>
           <section className="adminSettingsSection">
             <h3>基础信息</h3>
@@ -104,6 +183,10 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
             <label>
               <span>设置页底部文案</span>
               <textarea name="settingsPreviewText" rows={3} defaultValue={settings.settingsPreviewText} />
+            </label>
+            <label>
+              <span>默认正文字号 / px</span>
+              <input name="readerDefaultFontSize" type="number" min="5" max="50" defaultValue={readerDefaultFontSize} />
             </label>
             <label>
               <span>后台主题默认值</span>
@@ -124,11 +207,11 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
             <div className="adminFieldGrid">
               <label>
                 <span>后台新密码</span>
-                <input name="newAdminPassword" type="password" placeholder="留空则不修改" />
+                <input name="newAdminPassword" type="password" minLength={6} maxLength={72} placeholder="留空则不修改" />
               </label>
               <label>
                 <span>确认后台新密码</span>
-                <input name="confirmAdminPassword" type="password" placeholder="再次输入新密码" />
+                <input name="confirmAdminPassword" type="password" minLength={6} maxLength={72} placeholder="再次输入新密码" />
               </label>
             </div>
             <div className="adminFieldGrid">
@@ -210,15 +293,25 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
 
           <section className="adminSettingsSection">
             <h3>前台访问限制</h3>
-            <div className="adminFieldGrid">
-              <label>
-                <span>全文搜索限速 / 分钟</span>
-                <input name="searchRateLimitPerMinute" type="number" min="1" max="120" defaultValue={searchRateLimit} />
-              </label>
-              <label>
-                <span>短关键词搜索限速 / 分钟</span>
-                <input name="searchShortQueryRateLimitPerMinute" type="number" min="1" max="120" defaultValue={shortSearchRateLimit} />
-              </label>
+            <div className="rateLimitPolicyStack">
+              <RateLimitRulesEditor
+                fieldName="searchRateLimitRules"
+                title="搜索 IP 限速"
+                variant="search"
+                initialRules={searchRateLimitRules}
+                defaultMaxRequests={30}
+              />
+              <RateLimitRulesEditor
+                fieldName="contentRateLimitRules"
+                title="正文 IP 限速"
+                variant="content"
+                initialRules={contentRateLimitRules}
+                defaultMaxRequests={60}
+              />
+            </div>
+            <div className="rateLimitBanGrid">
+              <RateLimitBanList title="搜索封禁" bans={searchRateLimitBans} />
+              <RateLimitBanList title="正文封禁" bans={contentRateLimitBans} />
             </div>
             <div className="adminFieldGrid">
               <label>
@@ -234,6 +327,14 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               <label>
                 <span>单 IP 每日注册上限</span>
                 <input name="userDailyRegistrationLimitPerIp" type="number" min="0" max="100" defaultValue={userDailyRegistrationLimit} />
+              </label>
+              <label>
+                <span>登录/注册验证码</span>
+                <select name="userLoginCaptchaMode" defaultValue={settings.userLoginCaptchaMode}>
+                  <option value="off">关闭</option>
+                  <option value="image">图形验证码</option>
+                  <option value="slider">滑块验证码</option>
+                </select>
               </label>
             </div>
             <label className="adminSwitchLabel">
@@ -261,16 +362,6 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               <label>
                 <span>实时访问最多保留 / 条</span>
                 <input name="analyticsRealtimeLimit" type="number" min="30" max="2000" defaultValue={analyticsRealtimeLimit} />
-              </label>
-            </div>
-            <div className="adminFieldGrid">
-              <label>
-                <span>正文访问限速 / 窗口</span>
-                <input name="contentRateLimitPerMinute" type="number" min="1" max="600" defaultValue={contentRateLimit} />
-              </label>
-              <label>
-                <span>正文限速窗口 / 秒</span>
-                <input name="contentRateLimitWindowSeconds" type="number" min="10" max="3600" defaultValue={contentRateLimitWindow} />
               </label>
             </div>
             <label className="adminSwitchLabel">
@@ -355,16 +446,6 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               <span>入站 IP 黑名单</span>
               <textarea name="adminBlockedIps" rows={3} defaultValue={settings.adminBlockedIps} />
             </label>
-            <div className="adminFieldGrid">
-              <label>
-                <span>出站 IP 白名单</span>
-                <textarea name="adminOutboundAllowedIps" rows={2} defaultValue={settings.adminOutboundAllowedIps} placeholder="当前无外部请求，规则保留给扩展接口" />
-              </label>
-              <label>
-                <span>出站 IP 黑名单</span>
-                <textarea name="adminOutboundBlockedIps" rows={2} defaultValue={settings.adminOutboundBlockedIps} />
-              </label>
-            </div>
           </section>
 
           <button type="submit">保存设置</button>

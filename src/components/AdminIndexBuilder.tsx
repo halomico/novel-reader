@@ -23,6 +23,30 @@ type IndexApiResponse = {
 const ACTIVE_INDEX_JOB_KEY = "novel-admin-active-index-job";
 const INVALID_INDEX_TERM_PATTERN = /[\s\p{P}\p{S}]/u;
 
+function readActiveJobId(): string {
+  try {
+    return window.localStorage.getItem(ACTIVE_INDEX_JOB_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function writeActiveJobId(jobId: string) {
+  try {
+    window.localStorage.setItem(ACTIVE_INDEX_JOB_KEY, jobId);
+  } catch {
+    // The current page can still poll the in-memory job id.
+  }
+}
+
+function removeActiveJobId() {
+  try {
+    window.localStorage.removeItem(ACTIVE_INDEX_JOB_KEY);
+  } catch {
+    // Nothing else is required when storage is unavailable.
+  }
+}
+
 function parseIndexTerms(value: string): { ok: true; terms: string[] } | { ok: false; message: string } {
   const rawTerms = value
     .split(/[\n,]/)
@@ -100,12 +124,12 @@ export function AdminIndexBuilder({ autoMaxSegments, manualLimitEnabled, manualM
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const storedJobId = window.localStorage.getItem(ACTIVE_INDEX_JOB_KEY);
+    const storedJobId = readActiveJobId();
     if (storedJobId) {
       setActiveJobId(storedJobId);
       setIsRunning(true);
       poll(storedJobId).catch((error) => {
-        window.localStorage.removeItem(ACTIVE_INDEX_JOB_KEY);
+        removeActiveJobId();
         setMessage(error instanceof Error ? error.message : "索引任务状态读取失败");
         setIsRunning(false);
       });
@@ -119,7 +143,7 @@ export function AdminIndexBuilder({ autoMaxSegments, manualLimitEnabled, manualM
   }, []);
 
   function clearActiveJob() {
-    window.localStorage.removeItem(ACTIVE_INDEX_JOB_KEY);
+    removeActiveJobId();
     setActiveJobId("");
   }
 
@@ -172,7 +196,7 @@ export function AdminIndexBuilder({ autoMaxSegments, manualLimitEnabled, manualM
       if (!response.ok || !data.ok || !data.jobId || !data.job) {
         throw new Error(data.message || "索引启动失败");
       }
-      window.localStorage.setItem(ACTIVE_INDEX_JOB_KEY, data.jobId);
+      writeActiveJobId(data.jobId);
       setActiveJobId(data.jobId);
       setJob(data.job);
       setDisplayProgress(data.showProgressBars ?? showProgressBars);

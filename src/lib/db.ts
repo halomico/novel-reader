@@ -16,30 +16,33 @@ function migrateNovelsAllowDuplicateTitles(db: DatabaseSync) {
     return;
   }
 
-  db.exec(`
-    BEGIN;
+  db.exec("BEGIN");
+  try {
+    db.exec(`
+      CREATE TABLE novels_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        relative_path TEXT NOT NULL UNIQUE,
+        content_hash TEXT,
+        size_bytes INTEGER NOT NULL,
+        mtime_ms INTEGER NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
 
-    CREATE TABLE novels_new (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL,
-      file_name TEXT NOT NULL,
-      relative_path TEXT NOT NULL UNIQUE,
-      content_hash TEXT,
-      size_bytes INTEGER NOT NULL,
-      mtime_ms INTEGER NOT NULL,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
+      INSERT INTO novels_new (id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, created_at, updated_at)
+      SELECT id, title, file_name, relative_path, NULL, size_bytes, mtime_ms, created_at, updated_at
+      FROM novels;
 
-    INSERT INTO novels_new (id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, created_at, updated_at)
-    SELECT id, title, file_name, relative_path, NULL, size_bytes, mtime_ms, created_at, updated_at
-    FROM novels;
-
-    DROP TABLE novels;
-    ALTER TABLE novels_new RENAME TO novels;
-
-    COMMIT;
-  `);
+      DROP TABLE novels;
+      ALTER TABLE novels_new RENAME TO novels;
+    `);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 }
 
 function migrateNovelsContentHash(db: DatabaseSync) {
@@ -58,8 +61,24 @@ function addColumnIfMissing(db: DatabaseSync, tableName: string, columnName: str
   }
 }
 
+function migrateLegacySearchRateLimitBans(db: DatabaseSync) {
+  const legacy = db
+    .prepare("SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'search_rate_limit_bans'")
+    .get() as { found: number } | undefined;
+  if (!legacy) {
+    return;
+  }
+
+  db.exec(`
+    INSERT OR IGNORE INTO rate_limit_bans (category, ip, rule_id, is_permanent, banned_until, created_at, updated_at)
+    SELECT 'search', ip, rule_id, is_permanent, banned_until, created_at, updated_at
+    FROM search_rate_limit_bans;
+  `);
+}
+
 function initialize(db: DatabaseSync) {
   db.exec("PRAGMA foreign_keys = ON;");
+  db.exec("PRAGMA busy_timeout = 5000;");
   db.exec("PRAGMA journal_mode = WAL;");
   migrateNovelsAllowDuplicateTitles(db);
   db.exec(`
@@ -189,7 +208,21 @@ function initialize(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_analytics_events_ip_time ON analytics_events(ip, created_at);
     CREATE INDEX IF NOT EXISTS idx_analytics_events_path_time ON analytics_events(path, created_at);
 
+    CREATE TABLE IF NOT EXISTS rate_limit_bans (
+      category TEXT NOT NULL,
+      ip TEXT NOT NULL,
+      rule_id TEXT NOT NULL,
+      is_permanent INTEGER NOT NULL DEFAULT 0,
+      banned_until INTEGER,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(category, ip)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_rate_limit_bans_category_until ON rate_limit_bans(category, banned_until);
+
   `);
+  migrateLegacySearchRateLimitBans(db);
   migrateNovelsContentHash(db);
   addColumnIfMissing(db, "novels", "word_count", "word_count INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(db, "novels", "visit_count", "visit_count INTEGER NOT NULL DEFAULT 0");

@@ -259,8 +259,8 @@ function oneCount(sql: string, params: Array<string | number>): number {
   return row?.count || 0;
 }
 
-function topMetrics(sql: string, params: Array<string | number>, limit = 8): AnalyticsMetric[] {
-  const rows = getDb().prepare(sql).all(...params, limit) as Array<{ label: string | null; count: number }>;
+function topMetrics(sql: string, params: Array<string | number>): AnalyticsMetric[] {
+  const rows = getDb().prepare(sql).all(...params) as Array<{ label: string | null; count: number }>;
   return rows.map((row) => ({
     label: normalizeUnknown(row.label),
     count: row.count,
@@ -350,8 +350,7 @@ export function getAnalyticsOverview(
        LEFT JOIN novels n ON n.id = e.novel_id
        WHERE ${novelTimeWhere(filter, "e.created_at", "e.novel_id").sql}
        GROUP BY COALESCE(n.title, e.path)
-       ORDER BY count DESC, label ASC
-       LIMIT ?`,
+       ORDER BY count DESC, label ASC`,
       novelTimeWhere(filter, "e.created_at", "e.novel_id").params,
     ),
     topIps: topMetrics(
@@ -359,8 +358,7 @@ export function getAnalyticsOverview(
        FROM analytics_events
        WHERE ${eventWhere.sql}
        GROUP BY ip
-       ORDER BY count DESC, label ASC
-       LIMIT ?`,
+       ORDER BY count DESC, label ASC`,
       eventWhere.params,
     ),
     topCountries: topMetrics(
@@ -368,8 +366,7 @@ export function getAnalyticsOverview(
        FROM analytics_events
        WHERE ${eventWhere.sql}
        GROUP BY country
-       ORDER BY count DESC, label ASC
-       LIMIT ?`,
+       ORDER BY count DESC, label ASC`,
       eventWhere.params,
     ),
     topReferrers: topMetrics(
@@ -377,8 +374,7 @@ export function getAnalyticsOverview(
        FROM analytics_events
        WHERE ${eventWhere.sql}
        GROUP BY referrer
-       ORDER BY count DESC, label ASC
-       LIMIT ?`,
+       ORDER BY count DESC, label ASC`,
       eventWhere.params,
     ),
     devices: topMetrics(
@@ -386,8 +382,7 @@ export function getAnalyticsOverview(
        FROM analytics_events
        WHERE ${eventWhere.sql}
        GROUP BY device
-       ORDER BY count DESC, label ASC
-       LIMIT ?`,
+       ORDER BY count DESC, label ASC`,
       eventWhere.params,
     ),
     browsers: topMetrics(
@@ -395,8 +390,7 @@ export function getAnalyticsOverview(
        FROM analytics_events
        WHERE ${eventWhere.sql}
        GROUP BY browser
-       ORDER BY count DESC, label ASC
-       LIMIT ?`,
+       ORDER BY count DESC, label ASC`,
       eventWhere.params,
     ),
     operatingSystems: topMetrics(
@@ -404,8 +398,7 @@ export function getAnalyticsOverview(
        FROM analytics_events
        WHERE ${eventWhere.sql}
        GROUP BY os
-       ORDER BY count DESC, label ASC
-       LIMIT ?`,
+       ORDER BY count DESC, label ASC`,
       eventWhere.params,
     ),
     realtime: realtimeRows.map((row) => ({

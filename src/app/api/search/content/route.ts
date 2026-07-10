@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   getFrontendSearchConcurrencyLimit,
-  getSearchRateLimitPerMinute,
-  getSearchShortQueryRateLimitPerMinute,
+  getSearchRateLimitRules,
   getUserSearchRateLimitPerMinute,
   shouldShowProgressBars,
 } from "@/lib/config";
+import { getClientIp } from "@/lib/admin-access";
 import { cancelContentJob, countActiveContentJobs, getContentJob, startContentSearchJob } from "@/lib/content-jobs";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { validateSearchKeyword } from "@/lib/search";
 import { countSearchChars } from "@/lib/search-query";
+import { checkIpRateLimit } from "@/lib/ip-rate-limit";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
@@ -17,10 +18,6 @@ export const runtime = "nodejs";
 
 function jsonError(message: string, status: number) {
   return NextResponse.json({ ok: false, message }, { status });
-}
-
-function getClientKey(request: NextRequest): string {
-  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("cookie") || "anonymous";
 }
 
 export async function POST(request: NextRequest) {
@@ -37,18 +34,26 @@ export async function POST(request: NextRequest) {
   }
 
   const user = getCurrentUserFromRequest(request);
-  const perMinute = user
-    ? user.searchRateLimitPerMinute || getUserSearchRateLimitPerMinute()
-    : countSearchChars(validation.query.anchorTerm) === 2
-      ? getSearchShortQueryRateLimitPerMinute()
-      : getSearchRateLimitPerMinute();
-  const limit = checkRateLimit({
-    key: user ? `search:user:${user.id}` : `search:${getClientKey(request)}`,
-    limit: perMinute,
-    windowMs: 60_000,
+  const ipLimit = checkIpRateLimit({
+    category: "search",
+    ip: getClientIp(request.headers),
+    authenticated: Boolean(user),
+    shortQuery: countSearchChars(validation.query.anchorTerm) === 2,
+    rules: getSearchRateLimitRules(),
   });
-  if (!limit.allowed) {
-    return jsonError(`搜索太频繁，请 ${limit.retryAfterSeconds} 秒后再试`, 429);
+  if (!ipLimit.allowed) {
+    return jsonError(ipLimit.permanent ? "当前 IP 已被永久禁止搜索" : `搜索太频繁，请 ${ipLimit.retryAfterSeconds} 秒后再试`, 429);
+  }
+
+  if (user) {
+    const accountLimit = checkRateLimit({
+      key: `search:user:${user.id}`,
+      limit: user.searchRateLimitPerMinute || getUserSearchRateLimitPerMinute(),
+      windowMs: 60_000,
+    });
+    if (!accountLimit.allowed) {
+      return jsonError(`搜索太频繁，请 ${accountLimit.retryAfterSeconds} 秒后再试`, 429);
+    }
   }
 
   const concurrencyLimit = getFrontendSearchConcurrencyLimit();
@@ -63,7 +68,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const id = request.nextUrl.searchParams.get("id") || "";
   const job = getContentJob(id);
-  if (!job) {
+  if (!job || job.kind !== "search") {
     return jsonError("搜索任务不存在或已过期", 404);
   }
 
@@ -73,7 +78,7 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const id = request.nextUrl.searchParams.get("id") || "";
   const job = cancelContentJob(id);
-  if (!job) {
+  if (!job || job.kind !== "search") {
     return jsonError("搜索任务不存在或已过期", 404);
   }
 

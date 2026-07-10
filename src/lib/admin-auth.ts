@@ -3,11 +3,13 @@ import { cookies } from "next/headers";
 import {
   getAdminCookieName,
   getAdminPassword,
+  getAdminPasswordHash,
   getAdminPasswordSha256,
   getAdminSessionSecret,
   getAdminSessionTtlHours,
   getAdminUsername,
 } from "./config";
+import { verifyPassword } from "./password";
 
 export type AdminSession = {
   username: string;
@@ -28,25 +30,38 @@ function safeEqual(left: string, right: string): boolean {
 }
 
 function signSession(username: string, expiresAt: number): string {
-  return crypto.createHmac("sha256", getAdminSessionSecret()).update(`${username}.${expiresAt}`).digest("hex");
+  const credentialFingerprint = getAdminPasswordHash() || getAdminPasswordSha256() || sha256(getAdminPassword());
+  return crypto
+    .createHmac("sha256", getAdminSessionSecret())
+    .update(`${username}.${expiresAt}.${credentialFingerprint}`)
+    .digest("hex");
 }
 
 function createSessionToken(username: string, expiresAt: number): string {
   const signature = signSession(username, expiresAt);
-  return `${encodeURIComponent(username)}.${expiresAt}.${signature}`;
+  return `${Buffer.from(username, "utf8").toString("base64url")}.${expiresAt}.${signature}`;
 }
 
 function parseSessionToken(token: string): AdminSession | null {
-  const [encodedUsername, expiresText, signature] = token.split(".");
-  let username = "";
-  try {
-    username = decodeURIComponent(encodedUsername || "");
-  } catch {
+  const parts = token.split(".");
+  if (parts.length !== 3) {
     return null;
   }
+  const [encodedUsername, expiresText, signature] = parts;
+  if (!encodedUsername || !/^[a-zA-Z0-9_-]+$/.test(encodedUsername)) {
+    return null;
+  }
+  const username = Buffer.from(encodedUsername, "base64url").toString("utf8");
   const expiresAt = Number(expiresText);
 
-  if (!username || !Number.isFinite(expiresAt) || expiresAt <= Date.now() || !signature) {
+  if (
+    !username ||
+    Buffer.from(username, "utf8").toString("base64url") !== encodedUsername ||
+    !Number.isFinite(expiresAt) ||
+    expiresAt <= Date.now() ||
+    !signature ||
+    !safeEqual(username, getAdminUsername())
+  ) {
     return null;
   }
 
@@ -58,12 +73,17 @@ function parseSessionToken(token: string): AdminSession | null {
 }
 
 export function isAdminSecurityConfigured(): boolean {
-  return Boolean(getAdminSessionSecret() && (getAdminPassword() || getAdminPasswordSha256()));
+  return Boolean(getAdminSessionSecret() && (getAdminPassword() || getAdminPasswordHash() || getAdminPasswordSha256()));
 }
 
 export function verifyAdminCredentials(username: string, password: string): boolean {
   if (!isAdminSecurityConfigured() || !safeEqual(username, getAdminUsername())) {
     return false;
+  }
+
+  const strongPasswordHash = getAdminPasswordHash();
+  if (strongPasswordHash) {
+    return verifyPassword(password, strongPasswordHash);
   }
 
   const passwordHash = getAdminPasswordSha256();

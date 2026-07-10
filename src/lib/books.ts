@@ -35,7 +35,7 @@ export type NovelListResult = {
 
 const DEFAULT_PAGE_SIZE = 15;
 const MIN_PAGE_SIZE = 1;
-const MAX_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 100;
 
 export function normalizePageSize(value: number | string | undefined): number {
   const pageSize = Number(value || DEFAULT_PAGE_SIZE);

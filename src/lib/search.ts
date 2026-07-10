@@ -51,14 +51,6 @@ export function validateSearchKeyword(value: string | undefined): SearchValidati
   return parseSearchQuery(value);
 }
 
-export function normalizeSearchPage(value: string | number | undefined, totalPages: number): number {
-  const page = Number(value || 1);
-  if (!Number.isFinite(page) || page < 1) {
-    return 1;
-  }
-  return Math.min(Math.floor(page), Math.max(totalPages, 1));
-}
-
 export async function searchNovelContent(
   query: ParsedSearchQuery,
   onProgress?: (progress: SearchNovelContentProgress) => void,

@@ -33,6 +33,15 @@ type ExistingNovel = {
   content_hash: string | null;
 };
 
+type DeletedNovel = ExistingNovel & {
+  fileDeleteFailed: boolean;
+};
+
+export type DeleteNovelSummary = {
+  deleted: number;
+  fileDeleteFailures: string[];
+};
+
 function getLibraryRoot(): string {
   return path.resolve(getLibraryDir());
 }
@@ -166,7 +175,7 @@ export function deleteNovelByRelativePath(db: DatabaseSync, relativePath: string
   return true;
 }
 
-export function deleteNovelById(db: DatabaseSync, id: number): ExistingNovel | null {
+export function deleteNovelById(db: DatabaseSync, id: number): DeletedNovel | null {
   const novel = db
     .prepare("SELECT id, title, file_name, relative_path, content_hash FROM novels WHERE id = ?")
     .get(id) as ExistingNovel | undefined;
@@ -176,10 +185,6 @@ export function deleteNovelById(db: DatabaseSync, id: number): ExistingNovel | n
   }
 
   const filePath = resolveLibraryFile(novel.relative_path);
-  if (fs.existsSync(filePath)) {
-    fs.unlinkSync(filePath);
-  }
-
   db.exec("BEGIN");
   try {
     deleteIndexedContentForNovel(db, id);
@@ -190,20 +195,34 @@ export function deleteNovelById(db: DatabaseSync, id: number): ExistingNovel | n
     throw error;
   }
 
-  return novel;
-}
-
-export function deleteNovelIds(ids: number[]): number {
-  const db = getDb();
-  let deleted = 0;
-
-  for (const id of ids) {
-    if (Number.isInteger(id) && id > 0 && deleteNovelById(db, id)) {
-      deleted += 1;
+  let fileDeleteFailed = false;
+  if (fs.existsSync(filePath)) {
+    try {
+      fs.unlinkSync(filePath);
+    } catch {
+      fileDeleteFailed = true;
     }
   }
 
-  return deleted;
+  return { ...novel, fileDeleteFailed };
+}
+
+export function deleteNovelIds(ids: number[]): DeleteNovelSummary {
+  const db = getDb();
+  let deleted = 0;
+  const fileDeleteFailures: string[] = [];
+
+  for (const id of new Set(ids)) {
+    const novel = Number.isInteger(id) && id > 0 ? deleteNovelById(db, id) : null;
+    if (novel) {
+      deleted += 1;
+      if (novel.fileDeleteFailed) {
+        fileDeleteFailures.push(novel.file_name);
+      }
+    }
+  }
+
+  return { deleted, fileDeleteFailures };
 }
 
 export async function saveUploadedNovels(files: File[]): Promise<SavedNovelResult[]> {
@@ -239,16 +258,26 @@ export async function saveUploadedNovels(files: File[]): Promise<SavedNovelResul
     const uniqueFileName = createUniqueFileName(fileName);
     const filePath = resolveLibraryFile(uniqueFileName);
     fs.writeFileSync(filePath, buffer, { flag: "wx" });
-    const fileStat = fs.statSync(filePath);
-    const id = upsertNovelRecord(db, {
-      title,
-      fileName: uniqueFileName,
-      relativePath: uniqueFileName,
-      contentHash,
-      sizeBytes: fileStat.size,
-      mtimeMs: Math.round(fileStat.mtimeMs),
-      wordCount: countNovelWords(buffer),
-    });
+    let id: number;
+    try {
+      const fileStat = fs.statSync(filePath);
+      id = upsertNovelRecord(db, {
+        title,
+        fileName: uniqueFileName,
+        relativePath: uniqueFileName,
+        contentHash,
+        sizeBytes: fileStat.size,
+        mtimeMs: Math.round(fileStat.mtimeMs),
+        wordCount: countNovelWords(buffer),
+      });
+    } catch (error) {
+      try {
+        fs.rmSync(filePath, { force: true });
+      } catch {
+        // Preserve the database error; a leftover file can be reconciled by the scanner.
+      }
+      throw error;
+    }
     results.push({ status: "saved", title, fileName: uniqueFileName, id });
   }
 

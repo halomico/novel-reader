@@ -47,10 +47,6 @@ export function countSearchChars(value: string): number {
   return Array.from(value).length;
 }
 
-export function escapeLikePattern(value: string): string {
-  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
-}
-
 function normalizeSearchInput(value: string | undefined): string {
   return (value || "").replace(/\s+/g, " ").trim();
 }

@@ -195,6 +195,10 @@ export function AdminBookTable({
     BOOK_SELECT_COLUMN_WIDTH + visibleColumns.reduce((total, column) => total + (columnWidths[column.key] || DEFAULT_BOOK_COLUMN_WIDTHS[column.key]), 0);
 
   useEffect(() => {
+    setSelectedIds([]);
+  }, [books]);
+
+  useEffect(() => {
     try {
       setColumns(mergeStoredColumns(localStorage.getItem(BOOK_COLUMN_STORAGE_KEY)));
       setColumnWidths(mergeStoredColumnWidths(localStorage.getItem(BOOK_COLUMN_WIDTH_STORAGE_KEY)));

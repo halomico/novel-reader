@@ -2,7 +2,7 @@
 
 import { ArrowDown, ArrowUp, ArrowUpDown, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LocalDateTime } from "@/components/LocalDateTime";
 import type { ContentIndexSummary } from "@/lib/content-index";
@@ -73,8 +73,12 @@ export function AdminIndexTable({ indexes, query, sort, dir }: AdminIndexTablePr
   const [selectedTerms, setSelectedTerms] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
-  const allSelected = indexes.length > 0 && selectedTerms.length === indexes.length;
+  const allSelected = indexes.length > 0 && indexes.every((item) => selectedTerms.includes(item.term));
   const selectedSet = useMemo(() => new Set(selectedTerms), [selectedTerms]);
+
+  useEffect(() => {
+    setSelectedTerms([]);
+  }, [indexes]);
 
   function toggleAll() {
     setSelectedTerms(allSelected ? [] : indexes.map((item) => item.term));

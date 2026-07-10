@@ -64,13 +64,14 @@ function main() {
 
     if (hasLegacyStats) {
       db.exec(`
-        INSERT INTO content_index.content_search_term_stats (term, segment_count, novel_count, status, source, updated_at)
+        INSERT INTO content_index.content_search_term_stats (term, segment_count, novel_count, status, source, created_at, updated_at)
         SELECT
           s.term,
           s.segment_count,
           COALESCE(c.novel_count, 0) AS novel_count,
           s.status,
           CASE WHEN m.term IS NULL THEN 'auto' ELSE 'manual' END AS source,
+          CURRENT_TIMESTAMP,
           CURRENT_TIMESTAMP
         FROM main.content_search_term_stats s
         LEFT JOIN (
@@ -88,13 +89,14 @@ function main() {
       `);
     } else if (hasLegacyTerms) {
       db.exec(`
-        INSERT INTO content_index.content_search_term_stats (term, segment_count, novel_count, status, source, updated_at)
+        INSERT INTO content_index.content_search_term_stats (term, segment_count, novel_count, status, source, created_at, updated_at)
         SELECT
           t.term,
           COUNT(*) AS segment_count,
           COUNT(*) AS novel_count,
           'indexed' AS status,
           CASE WHEN m.term IS NULL THEN 'auto' ELSE 'manual' END AS source,
+          CURRENT_TIMESTAMP,
           CURRENT_TIMESTAMP
         FROM content_index.content_search_terms t
         LEFT JOIN temp.migration_manual_terms m ON m.term = t.term

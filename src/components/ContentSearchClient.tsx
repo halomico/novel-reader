@@ -35,30 +35,50 @@ type CachedContentSearch = {
 
 const CONTENT_SEARCH_CACHE_TTL_MS = 30 * 60 * 1000;
 
+function removeSessionValue(key: string) {
+  try {
+    window.sessionStorage.removeItem(key);
+  } catch {
+    // Search remains usable when browser storage is unavailable.
+  }
+}
+
+function readSessionValue(key: string): string | null {
+  try {
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionValue(key: string, value: string) {
+  try {
+    window.sessionStorage.setItem(key, value);
+  } catch {
+    // Search remains usable when browser storage is unavailable.
+  }
+}
+
 function readCachedSearch(key: string): CachedContentSearch | null {
   try {
-    const raw = window.sessionStorage.getItem(key);
+    const raw = readSessionValue(key);
     if (!raw) {
       return null;
     }
     const cached = JSON.parse(raw) as CachedContentSearch;
     if (!cached.job || Date.now() - cached.savedAt > CONTENT_SEARCH_CACHE_TTL_MS) {
-      window.sessionStorage.removeItem(key);
+      removeSessionValue(key);
       return null;
     }
     return cached;
   } catch {
-    window.sessionStorage.removeItem(key);
+    removeSessionValue(key);
     return null;
   }
 }
 
 function writeCachedSearch(key: string, job: ContentJobSnapshot, page: number, showProgressBars: boolean) {
-  try {
-    window.sessionStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), page, showProgressBars, job }));
-  } catch {
-    // Session storage can be unavailable or full; search still works without it.
-  }
+  writeSessionValue(key, JSON.stringify({ savedAt: Date.now(), page, showProgressBars, job }));
 }
 
 function cancelSearchJob(jobId: string) {
@@ -148,7 +168,7 @@ export function ContentSearchClient({
 
   function rememberPage(nextPage: number) {
     currentPageRef.current = nextPage;
-    window.sessionStorage.setItem(pageStateKey, String(nextPage));
+    writeSessionValue(pageStateKey, String(nextPage));
   }
 
   function rememberSnapshot(nextJob: ContentJobSnapshot, nextPage = currentPageRef.current, nextShowProgressBars = displayProgress) {
@@ -170,7 +190,7 @@ export function ContentSearchClient({
       return initialPage;
     }
 
-    const storedPage = Number(window.sessionStorage.getItem(pageStateKey));
+    const storedPage = Number(readSessionValue(pageStateKey));
     return Number.isFinite(storedPage) && storedPage > 0 ? Math.floor(storedPage) : initialPage;
   }
 
@@ -214,8 +234,11 @@ export function ContentSearchClient({
         window.history.replaceState(null, "", url.toString());
       }
 
-      if (cached?.job.results?.length) {
-        const cachedPage = hasExplicitPage ? nextPage : normalizePage(cached.page || nextPage, Math.ceil(cached.job.results.length / pageSize));
+      if (cached?.job) {
+        const cachedResultCount = cached.job.results?.length || 0;
+        const cachedPage = hasExplicitPage
+          ? nextPage
+          : normalizePage(cached.page || nextPage, Math.max(1, Math.ceil(cachedResultCount / pageSize)));
         currentPageRef.current = cachedPage;
         setPage(cachedPage);
         setJob(cached.job);

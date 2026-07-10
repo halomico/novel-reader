@@ -9,14 +9,23 @@ function prefersDark() {
 
 function applyTheme(theme: "light" | "dark") {
   document.documentElement.dataset.theme = theme;
-  localStorage.setItem("novel-theme", theme);
+  try {
+    localStorage.setItem("novel-theme", theme);
+  } catch {
+    // The selected theme still applies for the current page.
+  }
 }
 
 export function ThemeToggle() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("novel-theme");
+    let savedTheme: string | null = null;
+    try {
+      savedTheme = localStorage.getItem("novel-theme");
+    } catch {
+      savedTheme = null;
+    }
     const initialTheme = savedTheme === "dark" || (savedTheme !== "light" && prefersDark()) ? "dark" : "light";
     setTheme(initialTheme);
   }, []);

@@ -208,25 +208,26 @@ export function updateUserRecord(params: {
   status: UserStatus;
   searchRateLimitPerMinute: number | null;
   passwordHash?: string;
-}) {
+}): boolean {
   if (params.passwordHash) {
-    getDb()
+    const info = getDb()
       .prepare(
         `UPDATE users
          SET display_name = ?, status = ?, search_rate_limit_per_minute = ?, password_hash = ?, updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`,
       )
       .run(params.displayName.trim(), params.status, params.searchRateLimitPerMinute, params.passwordHash, params.id);
-    return;
+    return Number(info.changes) > 0;
   }
 
-  getDb()
+  const info = getDb()
     .prepare(
       `UPDATE users
        SET display_name = ?, status = ?, search_rate_limit_per_minute = ?, updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
     )
     .run(params.displayName.trim(), params.status, params.searchRateLimitPerMinute, params.id);
+  return Number(info.changes) > 0;
 }
 
 export function updateUserAvatar(userId: number, avatarPath: string | null) {
@@ -252,16 +253,22 @@ export function updateUserPasswordHash(userId: number, passwordHash: string) {
     .run(passwordHash, userId);
 }
 
-export function removeAvatarFile(avatarPath: string | null) {
+export function removeAvatarFile(avatarPath: string | null): boolean {
   if (!avatarPath?.startsWith("/avatars/")) {
-    return;
+    return false;
   }
 
   const avatarRoot = path.resolve(process.cwd(), "public", "avatars");
   const filePath = path.resolve(process.cwd(), "public", avatarPath.slice(1));
   if (filePath !== avatarRoot && filePath.startsWith(`${avatarRoot}${path.sep}`) && fs.existsSync(filePath)) {
-    fs.unlinkSync(filePath);
+    try {
+      fs.unlinkSync(filePath);
+      return true;
+    } catch {
+      return false;
+    }
   }
+  return false;
 }
 
 export function deleteUserIds(ids: number[]): number {
@@ -324,13 +331,6 @@ export function recordNovelVisit(novelId: number, ip = "", userAgent = "") {
        WHERE id = ?`,
     )
     .run(ip.slice(0, 64), userAgent.slice(0, 240), novelId);
-}
-
-export function updateNovelVisitStats(novelId: number, visitCount: number, lastAccessedAt: string | null): boolean {
-  const info = getDb()
-    .prepare("UPDATE novels SET visit_count = ?, last_accessed_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-    .run(Math.max(0, Math.floor(visitCount)), lastAccessedAt, novelId);
-  return Number(info.changes) > 0;
 }
 
 export function recordReadingHistory(userId: number, book: Pick<Novel, "id" | "title">, segmentIndex: number) {

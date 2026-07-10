@@ -1,4 +1,5 @@
 import { getConfiguredPaths } from "./config";
+import { getContentIndexDb } from "./content-index-db";
 import { getDb } from "./db";
 import { matchesParsedSearchQuery, parseSearchQuery } from "./search-query";
 import type { Novel } from "./books";
@@ -100,13 +101,13 @@ function compareAdminBooks(sort: AdminBookSortKey, dir: AdminBookSortDir) {
     } else {
       result = collator.compare(left.title, right.title);
     }
-    return result === 0 ? left.id - right.id : result * direction;
+    return result === 0 ? (left.id - right.id) * direction : result * direction;
   };
 }
 
 export function listAdminBooks(params: { page?: number; q?: string; pageSize?: number; sort?: string; dir?: string }): AdminBookListResult {
   const db = getDb();
-  const pageSize = Math.min(Math.max(Math.floor(params.pageSize || 20), 1), 100);
+  const pageSize = Math.min(Math.max(Math.floor(params.pageSize || 20), 1), 200);
   const query = (params.q || "").trim();
   const sort = normalizeSort(params.sort);
   const dir = normalizeDir(params.dir);
@@ -184,7 +185,9 @@ export function getAdminBookStats(): AdminBookStats {
     count: number;
     size: number;
   };
-  const indexed = db.prepare("SELECT COUNT(*) AS count FROM search_index_state WHERE status = 'indexed'").get() as { count: number };
+  const indexed = getContentIndexDb()
+    .prepare("SELECT COUNT(DISTINCT novel_id) AS count FROM content_search_terms")
+    .get() as { count: number };
 
   return {
     totalBooks: total.count,

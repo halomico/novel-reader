@@ -2,7 +2,7 @@
 
 import { Save, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { deleteAdminUsersAction, updateAdminUserAction } from "@/app/admin/actions";
 import { LocalDateTime } from "@/components/LocalDateTime";
 import type { UserProfile } from "@/lib/users";
@@ -21,6 +21,10 @@ export function AdminUserTable({
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const visibleIds = users.map((user) => user.id);
   const isAllSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [users]);
 
   function toggleAll() {
     setSelectedIds(isAllSelected ? [] : visibleIds);
@@ -82,7 +86,7 @@ export function AdminUserTable({
                   <td>
                     <form className="adminInlineEditForm" action={updateAdminUserAction}>
                       <input name="userId" type="hidden" value={user.id} />
-                      <input name="displayName" defaultValue={user.displayName} aria-label="显示名称" />
+                      <input name="displayName" defaultValue={user.displayName} maxLength={40} required aria-label="显示名称" />
                       <select className="adminStatusSelect" name="status" defaultValue={user.status} aria-label="状态">
                         <option value="active">启用</option>
                         <option value="disabled">停用</option>
@@ -96,7 +100,7 @@ export function AdminUserTable({
                         placeholder="全局限速"
                         aria-label="搜索限速"
                       />
-                      <input name="newPassword" type="password" placeholder="新密码" aria-label="新密码" />
+                      <input name="newPassword" type="password" minLength={6} maxLength={72} placeholder="新密码" aria-label="新密码" />
                       <button className="adminInlineSaveButton" type="submit" aria-label={`保存 ${user.username}`} title="保存">
                         <Save size={15} aria-hidden="true" />
                       </button>

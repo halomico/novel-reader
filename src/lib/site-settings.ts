@@ -1,7 +1,23 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
 export type AdminTheme = "system" | "light" | "dark";
+export type UserLoginCaptchaMode = "off" | "image" | "slider";
+export type SiteIconMimeType = "" | "image/png" | "image/jpeg" | "image/webp" | "image/x-icon";
+
+export type IpRateLimitRule = {
+  id: string;
+  enabled: boolean;
+  scope: "all" | "guest" | "user";
+  queryType: "all" | "short";
+  windowSeconds: number;
+  maxRequests: number;
+  banMode: "none" | "temporary" | "permanent";
+  banSeconds: number;
+};
+
+export type SearchRateLimitRule = IpRateLimitRule;
 
 export type AdminLoginRecord = {
   username: string;
@@ -14,14 +30,16 @@ export type SiteSettings = {
   siteName: string;
   siteTitle: string;
   settingsPreviewText: string;
+  siteIconFileName: string;
+  siteIconMimeType: SiteIconMimeType;
+  siteIconUpdatedAt: string;
+  readerDefaultFontSize: number;
   adminUsername: string;
+  adminPasswordHash: string;
   adminPasswordSha256: string;
   adminLoginRecords: AdminLoginRecord[];
   adminAllowedIps: string;
   adminBlockedIps: string;
-  adminOutboundAllowedIps: string;
-  adminOutboundBlockedIps: string;
-  adminRateLimitPerMinute: number;
   adminLoginRateLimitPerMinute: number;
   adminLoginRateLimitEnabled: boolean;
   adminLoginRateLimitBanEnabled: boolean;
@@ -41,7 +59,9 @@ export type SiteSettings = {
   globalSearchMaxResults: number;
   searchRateLimitPerMinute: number;
   searchShortQueryRateLimitPerMinute: number;
+  searchRateLimitRules: SearchRateLimitRule[];
   userLoginEnabled: boolean;
+  userLoginCaptchaMode: UserLoginCaptchaMode;
   userRegistrationEnabled: boolean;
   userDailyRegistrationLimitPerIp: number;
   userSearchRateLimitPerMinute: number;
@@ -50,6 +70,7 @@ export type SiteSettings = {
   analyticsRealtimeLimit: number;
   contentRateLimitPerMinute: number;
   contentRateLimitWindowSeconds: number;
+  contentRateLimitRules: IpRateLimitRule[];
   contentBlockHeadlessBrowsers: boolean;
   contentIndexMaxSegments: number;
   contentIndexSoftLimitBytes: number;
@@ -62,14 +83,16 @@ const DEFAULT_SETTINGS: SiteSettings = {
   siteName: "",
   siteTitle: "",
   settingsPreviewText: "",
+  siteIconFileName: "",
+  siteIconMimeType: "",
+  siteIconUpdatedAt: "",
+  readerDefaultFontSize: 17,
   adminUsername: "",
+  adminPasswordHash: "",
   adminPasswordSha256: "",
   adminLoginRecords: [],
   adminAllowedIps: "",
   adminBlockedIps: "",
-  adminOutboundAllowedIps: "",
-  adminOutboundBlockedIps: "",
-  adminRateLimitPerMinute: 0,
   adminLoginRateLimitPerMinute: 0,
   adminLoginRateLimitEnabled: true,
   adminLoginRateLimitBanEnabled: true,
@@ -89,7 +112,9 @@ const DEFAULT_SETTINGS: SiteSettings = {
   globalSearchMaxResults: 0,
   searchRateLimitPerMinute: 0,
   searchShortQueryRateLimitPerMinute: 0,
+  searchRateLimitRules: [],
   userLoginEnabled: true,
+  userLoginCaptchaMode: "off",
   userRegistrationEnabled: true,
   userDailyRegistrationLimitPerIp: 0,
   userSearchRateLimitPerMinute: 0,
@@ -98,6 +123,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   analyticsRealtimeLimit: 0,
   contentRateLimitPerMinute: 0,
   contentRateLimitWindowSeconds: 0,
+  contentRateLimitRules: [],
   contentBlockHeadlessBrowsers: true,
   contentIndexMaxSegments: 0,
   contentIndexSoftLimitBytes: 0,
@@ -130,8 +156,53 @@ function cleanTheme(value: unknown): AdminTheme {
   return value === "light" || value === "dark" || value === "system" ? value : "system";
 }
 
+function cleanCaptchaMode(value: unknown): UserLoginCaptchaMode {
+  return value === "image" || value === "slider" ? value : "off";
+}
+
+function cleanSiteIconMimeType(value: unknown): SiteIconMimeType {
+  return value === "image/png" || value === "image/jpeg" || value === "image/webp" || value === "image/x-icon" ? value : "";
+}
+
 function cleanBool(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
+}
+
+export function normalizeIpRateLimitRules(value: unknown): IpRateLimitRule[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const usedIds = new Set<string>();
+  const rules: IpRateLimitRule[] = [];
+  for (const [index, rawRule] of value.slice(0, 20).entries()) {
+    if (!rawRule || typeof rawRule !== "object") {
+      continue;
+    }
+
+    const item = rawRule as Partial<IpRateLimitRule>;
+    const baseId = cleanText(item.id).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 48) || `rule-${index + 1}`;
+    let id = baseId;
+    let suffix = 2;
+    while (usedIds.has(id)) {
+      id = `${baseId}-${suffix}`.slice(0, 48);
+      suffix += 1;
+    }
+    usedIds.add(id);
+
+    rules.push({
+      id,
+      enabled: cleanBool(item.enabled, true),
+      scope: item.scope === "guest" || item.scope === "user" ? item.scope : "all",
+      queryType: item.queryType === "short" ? "short" : "all",
+      windowSeconds: cleanInt(item.windowSeconds, 60, 1, 86_400),
+      maxRequests: cleanInt(item.maxRequests, 30, 1, 100_000),
+      banMode: item.banMode === "temporary" || item.banMode === "permanent" ? item.banMode : "none",
+      banSeconds: cleanInt(item.banSeconds, 3_600, 60, 31_536_000),
+    });
+  }
+
+  return rules;
 }
 
 function cleanLoginRecords(value: unknown): AdminLoginRecord[] {
@@ -165,14 +236,16 @@ export function readSiteSettings(): SiteSettings {
       siteName: cleanText(parsed.siteName),
       siteTitle: cleanText(parsed.siteTitle),
       settingsPreviewText: cleanText(parsed.settingsPreviewText),
+      siteIconFileName: path.basename(cleanText(parsed.siteIconFileName)),
+      siteIconMimeType: cleanSiteIconMimeType(parsed.siteIconMimeType),
+      siteIconUpdatedAt: cleanText(parsed.siteIconUpdatedAt),
+      readerDefaultFontSize: cleanInt(parsed.readerDefaultFontSize, DEFAULT_SETTINGS.readerDefaultFontSize, 5, 50),
       adminUsername: cleanText(parsed.adminUsername),
+      adminPasswordHash: cleanText(parsed.adminPasswordHash),
       adminPasswordSha256: cleanText(parsed.adminPasswordSha256),
       adminLoginRecords: cleanLoginRecords(parsed.adminLoginRecords),
       adminAllowedIps: cleanText(parsed.adminAllowedIps),
       adminBlockedIps: cleanText(parsed.adminBlockedIps),
-      adminOutboundAllowedIps: cleanText(parsed.adminOutboundAllowedIps),
-      adminOutboundBlockedIps: cleanText(parsed.adminOutboundBlockedIps),
-      adminRateLimitPerMinute: cleanInt(parsed.adminRateLimitPerMinute, DEFAULT_SETTINGS.adminRateLimitPerMinute, 0, 600),
       adminLoginRateLimitPerMinute: cleanInt(parsed.adminLoginRateLimitPerMinute, DEFAULT_SETTINGS.adminLoginRateLimitPerMinute, 0, 120),
       adminLoginRateLimitEnabled: cleanBool(parsed.adminLoginRateLimitEnabled, DEFAULT_SETTINGS.adminLoginRateLimitEnabled),
       adminLoginRateLimitBanEnabled: cleanBool(parsed.adminLoginRateLimitBanEnabled, DEFAULT_SETTINGS.adminLoginRateLimitBanEnabled),
@@ -202,7 +275,9 @@ export function readSiteSettings(): SiteSettings {
         0,
         120,
       ),
+      searchRateLimitRules: normalizeIpRateLimitRules(parsed.searchRateLimitRules),
       userLoginEnabled: cleanBool(parsed.userLoginEnabled, DEFAULT_SETTINGS.userLoginEnabled),
+      userLoginCaptchaMode: cleanCaptchaMode(parsed.userLoginCaptchaMode),
       userRegistrationEnabled: cleanBool(parsed.userRegistrationEnabled, DEFAULT_SETTINGS.userRegistrationEnabled),
       userDailyRegistrationLimitPerIp: cleanInt(
         parsed.userDailyRegistrationLimitPerIp,
@@ -221,6 +296,7 @@ export function readSiteSettings(): SiteSettings {
       analyticsRealtimeLimit: cleanInt(parsed.analyticsRealtimeLimit, DEFAULT_SETTINGS.analyticsRealtimeLimit, 0, 2000),
       contentRateLimitPerMinute: cleanInt(parsed.contentRateLimitPerMinute, DEFAULT_SETTINGS.contentRateLimitPerMinute, 0, 600),
       contentRateLimitWindowSeconds: cleanInt(parsed.contentRateLimitWindowSeconds, DEFAULT_SETTINGS.contentRateLimitWindowSeconds, 0, 3600),
+      contentRateLimitRules: normalizeIpRateLimitRules(parsed.contentRateLimitRules),
       contentBlockHeadlessBrowsers: cleanBool(parsed.contentBlockHeadlessBrowsers, DEFAULT_SETTINGS.contentBlockHeadlessBrowsers),
       contentIndexMaxSegments: cleanInt(parsed.contentIndexMaxSegments, DEFAULT_SETTINGS.contentIndexMaxSegments, 0, 100000),
       contentIndexSoftLimitBytes: cleanInt(parsed.contentIndexSoftLimitBytes, DEFAULT_SETTINGS.contentIndexSoftLimitBytes, 0, 10 * 1024 ** 3),
@@ -236,5 +312,12 @@ export function readSiteSettings(): SiteSettings {
 export function writeSiteSettings(settings: SiteSettings) {
   const settingsPath = getSiteSettingsPath();
   fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
-  fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+  const tempPath = `${settingsPath}.${process.pid}-${crypto.randomBytes(5).toString("hex")}.tmp`;
+  try {
+    fs.writeFileSync(tempPath, `${JSON.stringify(settings, null, 2)}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });
+    fs.renameSync(tempPath, settingsPath);
+  } catch (error) {
+    fs.rmSync(tempPath, { force: true });
+    throw error;
+  }
 }
