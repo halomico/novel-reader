@@ -12,6 +12,9 @@ test("atomically replaces an existing settings file", () => {
 
   try {
     const defaults = readSiteSettings();
+    assert.equal(defaults.videoLibraryEnabled, true);
+    assert.equal(defaults.audioLibraryEnabled, true);
+    assert.equal(defaults.fileLibraryEnabled, true);
     writeSiteSettings({ ...defaults, siteName: "第一次" });
     writeSiteSettings({ ...readSiteSettings(), siteName: "第二次" });
     assert.equal(readSiteSettings().siteName, "第二次");

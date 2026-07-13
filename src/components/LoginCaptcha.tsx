@@ -1,29 +1,32 @@
 "use client";
 
 import { ChevronsRight, RefreshCw } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import type { LoginCaptchaChallenge } from "@/lib/login-captcha";
 
-export function LoginCaptcha({ challenge }: { challenge: LoginCaptchaChallenge }) {
-  const router = useRouter();
-  const [isRefreshing, startRefresh] = useTransition();
+export function LoginCaptcha({
+  challenge,
+  answer,
+  onAnswerChange,
+  onRefresh,
+}: {
+  challenge: LoginCaptchaChallenge;
+  answer: string;
+  onAnswerChange: (answer: string) => void;
+  onRefresh: () => void | Promise<void>;
+}) {
   const [sliderPosition, setSliderPosition] = useState(0);
 
   useEffect(() => {
     setSliderPosition(0);
-  }, [challenge.id]);
-
-  function refresh() {
-    startRefresh(() => router.refresh());
-  }
+    onAnswerChange("");
+  }, [challenge.id, onAnswerChange]);
 
   const refreshButton = (
     <button
       className="loginCaptchaRefresh"
       type="button"
-      onClick={refresh}
-      disabled={isRefreshing}
+      onClick={onRefresh}
       aria-label="更换验证码"
       title="更换验证码"
     >
@@ -50,6 +53,9 @@ export function LoginCaptcha({ challenge }: { challenge: LoginCaptchaChallenge }
             maxLength={4}
             required
             aria-label="输入图形验证码"
+            placeholder="输入验证码"
+            value={answer}
+            onChange={(event) => onAnswerChange(event.target.value.toUpperCase())}
           />
         </div>
       </div>
@@ -115,7 +121,11 @@ export function LoginCaptcha({ challenge }: { challenge: LoginCaptchaChallenge }
           max={maxPosition}
           step="1"
           value={sliderPosition}
-          onChange={(event) => setSliderPosition(Number(event.target.value))}
+          onChange={(event) => {
+            const value = Number(event.target.value);
+            setSliderPosition(value);
+            onAnswerChange(String(value));
+          }}
           aria-label="拖动滑块对齐拼图缺口"
           aria-valuetext={`已拖动 ${Math.round(progress)}%`}
         />

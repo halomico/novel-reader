@@ -1,20 +1,14 @@
 "use client";
 
-import { Search } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
-import {
-  createSearchSnippet,
-  findSearchTermRanges,
-  matchesParsedSearchQuery,
-  parseSearchQuery,
-  type SearchTermPattern,
-} from "@/lib/search-query";
+import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 type SearchMode = "title" | "content" | "current";
 type MessageTone = "success" | "warning" | "error";
-type HeaderSearchResult = {
-  segmentIndex: string;
-  snippet: string;
+type CurrentMatch = {
+  segment: HTMLElement;
+  start: number;
+  end: number;
 };
 
 const options: Array<{ value: SearchMode; label: string; action: string; placeholder: string }> = [
@@ -29,6 +23,17 @@ function getReaderSegments(): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>(".readerSegment"));
 }
 
+function getOriginalSegmentText(segment: HTMLElement): string {
+  const originalText = originalTextBySegment.get(segment);
+  if (originalText !== undefined) {
+    return originalText;
+  }
+
+  const text = segment.textContent || "";
+  originalTextBySegment.set(segment, text);
+  return text;
+}
+
 function restoreSegment(segment: HTMLElement) {
   const originalText = originalTextBySegment.get(segment);
   if (originalText === undefined) {
@@ -38,40 +43,28 @@ function restoreSegment(segment: HTMLElement) {
   segment.replaceChildren(document.createTextNode(originalText));
 }
 
-function clearHighlights(segments: HTMLElement[]) {
+function findLiteralMatches(segments: HTMLElement[], keyword: string): CurrentMatch[] {
+  const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(escapedKeyword, "giu");
+  const matches: CurrentMatch[] = [];
+
   for (const segment of segments) {
+    const text = getOriginalSegmentText(segment);
     restoreSegment(segment);
     segment.classList.remove("isClientHit");
-  }
-}
-
-function highlightSegment(segment: HTMLElement, terms: SearchTermPattern[]) {
-  const text = originalTextBySegment.get(segment) || segment.textContent || "";
-  if (!originalTextBySegment.has(segment)) {
-    originalTextBySegment.set(segment, text);
-  }
-
-  const ranges = findSearchTermRanges(text, terms);
-  const fragment = document.createDocumentFragment();
-  let cursor = 0;
-
-  for (const range of ranges) {
-    if (range.start > cursor) {
-      fragment.append(document.createTextNode(text.slice(cursor, range.start)));
+    for (const match of text.matchAll(pattern)) {
+      if (match.index === undefined) {
+        continue;
+      }
+      matches.push({
+        segment,
+        start: match.index,
+        end: match.index + match[0].length,
+      });
     }
-
-    const mark = document.createElement("mark");
-    mark.className = "readerSearchMark";
-    mark.textContent = text.slice(range.start, range.end);
-    fragment.append(mark);
-    cursor = range.end;
   }
 
-  if (cursor < text.length) {
-    fragment.append(document.createTextNode(text.slice(cursor)));
-  }
-
-  segment.replaceChildren(fragment);
+  return matches;
 }
 
 export function HeaderSearch({
@@ -94,10 +87,20 @@ export function HeaderSearch({
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<MessageTone>("success");
   const [isMessageVisible, setIsMessageVisible] = useState(false);
-  const [results, setResults] = useState<HeaderSearchResult[]>([]);
-  const [isCurrentPanelOpen, setIsCurrentPanelOpen] = useState(false);
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(-1);
+  const [currentMatchCount, setCurrentMatchCount] = useState(0);
+  const currentMatchesRef = useRef<CurrentMatch[]>([]);
+  const activeSegmentRef = useRef<HTMLElement | null>(null);
   const visibleOptions = showCurrentSearch ? options : options.filter((option) => option.value !== "current");
   const activeOption = visibleOptions.find((option) => option.value === mode) || visibleOptions[0];
+  const formClassName = [
+    "searchForm",
+    showCurrentSearch ? "readerSearchForm" : "",
+    isPinnedOpen ? "isPinnedOpen" : "",
+    isModeMenuOpen ? "isModeMenuOpen" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   useEffect(() => {
     setMode(defaultMode === "current" && !showCurrentSearch ? "title" : defaultMode);
@@ -189,11 +192,63 @@ export function HeaderSearch({
     };
   }, []);
 
-  function chooseMode(value: SearchMode) {
-    setMode(value);
-    if (value !== "current") {
-      setIsCurrentPanelOpen(false);
+  useEffect(() => {
+    return () => {
+      if (activeSegmentRef.current) {
+        restoreSegment(activeSegmentRef.current);
+      }
+    };
+  }, []);
+
+  function restoreActiveMatch() {
+    if (!activeSegmentRef.current) {
+      return;
     }
+
+    restoreSegment(activeSegmentRef.current);
+    activeSegmentRef.current = null;
+  }
+
+  function resetCurrentMatches() {
+    restoreActiveMatch();
+    currentMatchesRef.current = [];
+    setCurrentMatchIndex(-1);
+    setCurrentMatchCount(0);
+  }
+
+  function showCurrentMatch(nextIndex: number) {
+    const matches = currentMatchesRef.current;
+    if (!matches.length) {
+      return;
+    }
+
+    const normalizedIndex = (nextIndex + matches.length) % matches.length;
+    const match = matches[normalizedIndex];
+    const text = getOriginalSegmentText(match.segment);
+    const fragment = document.createDocumentFragment();
+    const mark = document.createElement("mark");
+
+    restoreActiveMatch();
+    fragment.append(document.createTextNode(text.slice(0, match.start)));
+    mark.className = "readerSearchMark isActive";
+    mark.textContent = text.slice(match.start, match.end);
+    fragment.append(mark);
+    fragment.append(document.createTextNode(text.slice(match.end)));
+    match.segment.replaceChildren(fragment);
+    activeSegmentRef.current = match.segment;
+    setCurrentMatchIndex(normalizedIndex);
+
+    window.requestAnimationFrame(() => {
+      mark.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+
+  function chooseMode(value: SearchMode) {
+    if (mode === "current" && value !== "current") {
+      resetCurrentMatches();
+    }
+    setMode(value);
+    setIsMessageVisible(false);
   }
 
   function showMessage(nextMessage: string, tone: MessageTone) {
@@ -205,44 +260,30 @@ export function HeaderSearch({
   function searchCurrentBook(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextKeyword = keyword.trim();
-    const validation = parseSearchQuery(nextKeyword);
     const segments = getReaderSegments();
-    clearHighlights(segments);
+    resetCurrentMatches();
 
     if (!segments.length) {
       showMessage("请先打开小说正文页再搜索本文", "error");
-      setResults([]);
-      setIsCurrentPanelOpen(false);
       return;
     }
 
-    if (!validation.ok) {
-      showMessage(validation.message, "warning");
-      setResults([]);
-      setIsCurrentPanelOpen(false);
+    if (!nextKeyword) {
+      showMessage("请输入要查找的文字", "warning");
       return;
     }
 
-    const nextResults: HeaderSearchResult[] = [];
-
-    for (const segment of segments) {
-      const text = segment.textContent || "";
-      if (matchesParsedSearchQuery(text, validation.query)) {
-        highlightSegment(segment, validation.query.highlightTerms);
-        nextResults.push({
-          segmentIndex: segment.dataset.segmentIndex || "0",
-          snippet: createSearchSnippet(text, validation.query.highlightTerms, 44, 68),
-        });
-      }
-
-      if (nextResults.length >= 50) {
-        break;
-      }
+    const nextMatches = findLiteralMatches(segments, nextKeyword);
+    currentMatchesRef.current = nextMatches;
+    setCurrentMatchCount(nextMatches.length);
+    setIsModeMenuOpen(false);
+    if (nextMatches.length) {
+      setMessage("");
+      setIsMessageVisible(false);
+      showCurrentMatch(0);
+    } else {
+      showMessage("当前小说没有匹配内容", "warning");
     }
-
-    setResults(nextResults);
-    showMessage(nextResults.length ? `找到 ${nextResults.length} 处` : "当前小说没有匹配内容", nextResults.length ? "success" : "warning");
-    setIsCurrentPanelOpen(nextResults.length > 0);
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -251,29 +292,31 @@ export function HeaderSearch({
     }
   }
 
-  function jumpToSegment(segmentIndex: string) {
-    const target = document.getElementById(`seg-${segmentIndex}`);
-    target?.scrollIntoView({ behavior: "smooth", block: "start" });
-    target?.classList.add("isClientHit");
-    window.setTimeout(() => target?.classList.remove("isClientHit"), 1800);
+  function togglePinnedSearch(form: HTMLFormElement | null) {
+    const input = form?.querySelector<HTMLInputElement>('input[name="q"]') || null;
+    const nextPinnedOpen = !isPinnedOpen;
+    setIsPinnedOpen(nextPinnedOpen);
+    setIsModeMenuOpen(false);
+    if (nextPinnedOpen) {
+      window.requestAnimationFrame(() => input?.focus());
+    } else {
+      input?.blur();
+    }
   }
 
-  function togglePinnedSearch(form: HTMLFormElement | null) {
-    setIsModeMenuOpen(true);
-    setIsPinnedOpen((current) => {
-      const nextPinnedOpen = !current;
-      if (nextPinnedOpen) {
-        window.requestAnimationFrame(() => {
-          form?.querySelector<HTMLInputElement>('input[name="q"]')?.focus();
-        });
-      }
-      return nextPinnedOpen;
-    });
+  function closeCurrentFind(form: HTMLFormElement | null) {
+    resetCurrentMatches();
+    setKeyword("");
+    setMessage("");
+    setIsMessageVisible(false);
+    setIsModeMenuOpen(false);
+    setIsPinnedOpen(false);
+    form?.querySelector<HTMLInputElement>('input[name="q"]')?.blur();
   }
 
   return (
     <form
-      className={isPinnedOpen ? "searchForm isPinnedOpen" : "searchForm"}
+      className={formClassName}
       action={activeOption.action}
       method="get"
       role="search"
@@ -282,7 +325,6 @@ export function HeaderSearch({
         const nextTarget = event.relatedTarget as Node | null;
         if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
           setIsModeMenuOpen(false);
-          setIsCurrentPanelOpen(false);
           if (!noticeStayVisibleAfterBlur) {
             window.setTimeout(() => setIsMessageVisible(false), Math.max(noticeDisplaySeconds, 0) * 1000);
           }
@@ -294,15 +336,7 @@ export function HeaderSearch({
         type="button"
         aria-label={isPinnedOpen ? "收起搜索框" : "展开搜索框"}
         title={isPinnedOpen ? "收起搜索框" : "展开搜索框"}
-        onPointerDown={(event) => {
-          event.preventDefault();
-          togglePinnedSearch(event.currentTarget.form);
-        }}
-        onClick={(event) => {
-          if (event.detail === 0) {
-            togglePinnedSearch(event.currentTarget.form);
-          }
-        }}
+        onClick={(event) => togglePinnedSearch(event.currentTarget.form)}
       >
         <Search size={18} aria-hidden="true" />
       </button>
@@ -312,11 +346,11 @@ export function HeaderSearch({
         value={keyword}
         placeholder={activeOption.placeholder}
         aria-label={activeOption.placeholder}
-        onChange={(event) => setKeyword(event.target.value)}
-        onFocus={() => {
-          setIsModeMenuOpen(true);
-          if (mode === "current" && (message || results.length > 0)) {
-            setIsCurrentPanelOpen(true);
+        onChange={(event) => {
+          setKeyword(event.target.value);
+          if (mode === "current" && currentMatchesRef.current.length) {
+            resetCurrentMatches();
+            setIsMessageVisible(false);
           }
         }}
         onClick={() => setIsModeMenuOpen(true)}
@@ -324,6 +358,40 @@ export function HeaderSearch({
       <button className="searchSubmit" type="submit" aria-label={`按${activeOption.label}搜索`} title={`按${activeOption.label}搜索`}>
         搜索
       </button>
+      {mode === "current" && currentMatchCount > 0 ? (
+        <div className="currentFindControls" role="group" aria-label="本文查找结果">
+          <output aria-live="polite">
+            {currentMatchIndex + 1} / {currentMatchCount}
+          </output>
+          <button
+            type="button"
+            aria-label="上一个匹配项"
+            title="上一个匹配项"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => showCurrentMatch(currentMatchIndex - 1)}
+          >
+            <ChevronUp size={16} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            aria-label="下一个匹配项"
+            title="下一个匹配项"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => showCurrentMatch(currentMatchIndex + 1)}
+          >
+            <ChevronDown size={16} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            aria-label="关闭本文查找"
+            title="关闭本文查找"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={(event) => closeCurrentFind(event.currentTarget.form)}
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
       {isModeMenuOpen ? (
         <div className="searchModeMenu" role="group" aria-label="搜索范围">
           {visibleOptions.map((option) => (
@@ -344,22 +412,6 @@ export function HeaderSearch({
         <p className={`searchNotice is${messageTone[0].toUpperCase()}${messageTone.slice(1)}`} role="status">
           {message}
         </p>
-      ) : null}
-      {mode === "current" && isCurrentPanelOpen && results.length > 0 ? (
-        <div className="currentSearchPanel">
-          <div className="currentSearchResults">
-            {results.map((result) => (
-              <button
-                key={result.segmentIndex}
-                type="button"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => jumpToSegment(result.segmentIndex)}
-              >
-                {result.snippet}
-              </button>
-            ))}
-          </div>
-        </div>
       ) : null}
     </form>
   );

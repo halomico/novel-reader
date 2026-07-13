@@ -198,9 +198,11 @@ function initialize(db: DatabaseSync) {
       browser TEXT NOT NULL DEFAULT 'unknown',
       os TEXT NOT NULL DEFAULT 'unknown',
       novel_id INTEGER,
+      media_id INTEGER,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL,
-      FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE SET NULL
+      FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE SET NULL,
+      FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE SET NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_analytics_events_time ON analytics_events(created_at);
@@ -221,6 +223,43 @@ function initialize(db: DatabaseSync) {
 
     CREATE INDEX IF NOT EXISTS idx_rate_limit_bans_category_until ON rate_limit_bans(category, banned_until);
 
+    CREATE TABLE IF NOT EXISTS media_assets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL CHECK(kind IN ('video', 'audio', 'file')),
+      title TEXT NOT NULL,
+      artist TEXT NOT NULL DEFAULT '',
+      description TEXT NOT NULL DEFAULT '',
+      file_name TEXT NOT NULL,
+      stored_name TEXT NOT NULL UNIQUE,
+      mime_type TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      mtime_ms INTEGER NOT NULL DEFAULT 0,
+      play_count INTEGER NOT NULL DEFAULT 0,
+      download_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_media_assets_kind_created ON media_assets(kind, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_media_assets_title ON media_assets(title);
+
+    CREATE TABLE IF NOT EXISTS user_media_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      media_id INTEGER NOT NULL,
+      kind TEXT NOT NULL CHECK(kind IN ('video', 'audio', 'file')),
+      title TEXT NOT NULL,
+      visit_count INTEGER NOT NULL DEFAULT 0,
+      last_accessed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, media_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_user_media_history_user_time ON user_media_history(user_id, last_accessed_at);
+    CREATE INDEX IF NOT EXISTS idx_user_media_history_media ON user_media_history(media_id);
+
   `);
   migrateLegacySearchRateLimitBans(db);
   migrateNovelsContentHash(db);
@@ -230,10 +269,14 @@ function initialize(db: DatabaseSync) {
   addColumnIfMissing(db, "novels", "last_accessed_ip", "last_accessed_ip TEXT");
   addColumnIfMissing(db, "novels", "last_accessed_user_agent", "last_accessed_user_agent TEXT");
   addColumnIfMissing(db, "users", "registration_ip", "registration_ip TEXT");
+  addColumnIfMissing(db, "media_assets", "artist", "artist TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, "media_assets", "mtime_ms", "mtime_ms INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(db, "analytics_events", "media_id", "media_id INTEGER REFERENCES media_assets(id) ON DELETE SET NULL");
   db.exec("CREATE INDEX IF NOT EXISTS idx_novels_title_hash ON novels(title, content_hash);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_novels_last_accessed ON novels(last_accessed_at);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_novels_last_accessed_ip ON novels(last_accessed_ip);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_users_registration_ip_created ON users(registration_ip, created_at);");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_analytics_events_media_time ON analytics_events(media_id, created_at);");
 }
 
 export function getDb(): DatabaseSync {

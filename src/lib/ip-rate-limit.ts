@@ -1,6 +1,6 @@
 import { isIP } from "node:net";
 import { getDb } from "./db";
-import { checkRateLimit } from "./rate-limit";
+import { checkRateLimit, clearRateLimitBucketsByPrefix } from "./rate-limit";
 import type { IpRateLimitRule } from "./site-settings";
 
 export type RateLimitCategory = "search" | "content";
@@ -25,6 +25,8 @@ export type IpRateLimitBan = {
   updatedAt: string;
 };
 
+export type IpRateLimitBanKey = Pick<IpRateLimitBan, "category" | "ip">;
+
 export type IpRateLimitResult = {
   allowed: boolean;
   retryAfterSeconds: number;
@@ -42,6 +44,21 @@ function toBan(row: IpRateLimitBanRow): IpRateLimitBan {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+export function parseIpRateLimitBanKey(value: unknown): IpRateLimitBanKey | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as { category?: unknown; ip?: unknown };
+    const category = parsed.category === "search" || parsed.category === "content" ? parsed.category : null;
+    const ip = typeof parsed.ip === "string" ? parsed.ip.trim() : "";
+    return category && isIP(ip) ? { category, ip } : null;
+  } catch {
+    return null;
+  }
 }
 
 export function ipRateLimitRuleApplies(
@@ -207,5 +224,28 @@ export function listIpRateLimitBans(category: RateLimitCategory, limit = 100, no
 }
 
 export function deleteIpRateLimitBan(category: RateLimitCategory, ip: string): boolean {
-  return getDb().prepare("DELETE FROM rate_limit_bans WHERE category = ? AND ip = ?").run(category, ip).changes > 0;
+  if (!isIP(ip)) {
+    return false;
+  }
+
+  const deleted = getDb().prepare("DELETE FROM rate_limit_bans WHERE category = ? AND ip = ?").run(category, ip).changes > 0;
+  if (deleted) {
+    clearRateLimitBucketsByPrefix(`${category}:ip:${ip}:rule:`);
+  }
+  return deleted;
+}
+
+export function deleteIpRateLimitBans(bans: IpRateLimitBanKey[]): number {
+  const uniqueBans = new Map<string, IpRateLimitBanKey>();
+  for (const ban of bans) {
+    if ((ban.category === "search" || ban.category === "content") && isIP(ban.ip)) {
+      uniqueBans.set(`${ban.category}\0${ban.ip}`, ban);
+    }
+  }
+
+  let deleted = 0;
+  for (const ban of uniqueBans.values()) {
+    deleted += deleteIpRateLimitBan(ban.category, ban.ip) ? 1 : 0;
+  }
+  return deleted;
 }

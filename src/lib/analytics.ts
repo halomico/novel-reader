@@ -18,7 +18,8 @@ export type AnalyticsMetric = {
 
 export type AnalyticsRealtimeEvent = {
   id: number;
-  bookTitle: string;
+  contentTitle: string;
+  contentType: "novel" | "video" | "audio" | "file" | "unknown";
   referrer: string;
   ip: string;
   country: string;
@@ -35,7 +36,7 @@ export type AnalyticsOverview = {
   totalViews: number;
   uniqueIps: number;
   activeNow: number;
-  topBooks: AnalyticsMetric[];
+  topContent: AnalyticsMetric[];
   topIps: AnalyticsMetric[];
   topCountries: AnalyticsMetric[];
   topReferrers: AnalyticsMetric[];
@@ -140,10 +141,10 @@ function timeCondition(filter: AnalyticsTimeFilter, column: string): { sql: stri
   };
 }
 
-function novelTimeWhere(filter: AnalyticsTimeFilter, createdAtColumn = "created_at", novelIdColumn = "novel_id") {
+function contentTimeWhere(filter: AnalyticsTimeFilter, createdAtColumn = "created_at", novelIdColumn = "novel_id", mediaIdColumn = "media_id") {
   const time = timeCondition(filter, createdAtColumn);
   return {
-    sql: `${novelIdColumn} IS NOT NULL AND ${time.sql}`,
+    sql: `(${novelIdColumn} IS NOT NULL OR ${mediaIdColumn} IS NOT NULL) AND ${time.sql}`,
     params: time.params,
   };
 }
@@ -227,6 +228,7 @@ export function recordAnalyticsEvent(params: {
   path: string;
   referrer?: string | null;
   novelId?: number | null;
+  mediaId?: number | null;
 }) {
   if (!isAnalyticsEnabled()) {
     return;
@@ -236,8 +238,8 @@ export function recordAnalyticsEvent(params: {
   const parsed = parseUserAgent(userAgent);
   getDb()
     .prepare(
-      `INSERT INTO analytics_events (user_id, event_type, path, referrer, ip, country, user_agent, device, browser, os, novel_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO analytics_events (user_id, event_type, path, referrer, ip, country, user_agent, device, browser, os, novel_id, media_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       params.userId ?? null,
@@ -251,6 +253,7 @@ export function recordAnalyticsEvent(params: {
       parsed.browser,
       parsed.os,
       params.novelId ?? null,
+      params.mediaId ?? null,
     );
 }
 
@@ -280,7 +283,7 @@ export function getAnalyticsOverview(
   options: { realtimeLimit?: number; realtimePage?: number | string; realtimePageSize?: number; customFrom?: string; customTo?: string } = {},
 ): AnalyticsOverview {
   const filter = resolveAnalyticsTimeFilter(rangeValue, options.customFrom, options.customTo);
-  const eventWhere = novelTimeWhere(filter);
+  const eventWhere = contentTimeWhere(filter);
   const realtimeLimit = Math.min(Math.max(Math.floor(options.realtimeLimit || 300), 30), 2000);
   const realtimePageSize = Math.min(Math.max(Math.floor(options.realtimePageSize || 30), 1), 100);
   const totalViews = oneCount(
@@ -292,7 +295,7 @@ export function getAnalyticsOverview(
     eventWhere.params,
   );
   const activeRow = getDb()
-    .prepare("SELECT COUNT(DISTINCT ip) AS count FROM analytics_events WHERE created_at >= datetime('now', '-5 minutes') AND novel_id IS NOT NULL")
+    .prepare("SELECT COUNT(DISTINCT ip) AS count FROM analytics_events WHERE created_at >= datetime('now', '-5 minutes') AND (novel_id IS NOT NULL OR media_id IS NOT NULL)")
     .get() as { count: number } | undefined;
   const realtimeTotalRow = getDb()
     .prepare(
@@ -313,7 +316,10 @@ export function getAnalyticsOverview(
 
   const realtimeRows = getDb()
     .prepare(
-      `SELECT e.id, COALESCE(n.title, e.path) AS book_title, e.referrer, e.ip, e.country, e.browser, e.os, e.device, e.created_at
+      `SELECT e.id,
+              COALESCE(n.title, m.title, e.path) AS content_title,
+              CASE WHEN e.novel_id IS NOT NULL THEN 'novel' ELSE COALESCE(m.kind, 'unknown') END AS content_type,
+              e.referrer, e.ip, e.country, e.browser, e.os, e.device, e.created_at
        FROM (
          SELECT *
          FROM analytics_events
@@ -322,12 +328,14 @@ export function getAnalyticsOverview(
          LIMIT ?
        ) e
        LEFT JOIN novels n ON n.id = e.novel_id
+       LEFT JOIN media_assets m ON m.id = e.media_id
        ORDER BY e.created_at DESC, e.id DESC
        LIMIT ? OFFSET ?`,
     )
     .all(...eventWhere.params, realtimeLimit, realtimePageSize, realtimeOffset) as Array<{
     id: number;
-    book_title: string;
+    content_title: string;
+    content_type: "novel" | "video" | "audio" | "file" | "unknown";
     referrer: string | null;
     ip: string;
     country: string | null;
@@ -344,14 +352,15 @@ export function getAnalyticsOverview(
     totalViews,
     uniqueIps,
     activeNow: activeRow?.count || 0,
-    topBooks: topMetrics(
-      `SELECT COALESCE(n.title, e.path) AS label, COUNT(*) AS count
+    topContent: topMetrics(
+      `SELECT COALESCE(n.title, m.title, e.path) AS label, COUNT(*) AS count
        FROM analytics_events e
        LEFT JOIN novels n ON n.id = e.novel_id
-       WHERE ${novelTimeWhere(filter, "e.created_at", "e.novel_id").sql}
-       GROUP BY COALESCE(n.title, e.path)
+       LEFT JOIN media_assets m ON m.id = e.media_id
+       WHERE ${contentTimeWhere(filter, "e.created_at", "e.novel_id", "e.media_id").sql}
+       GROUP BY COALESCE(n.title, m.title, e.path)
        ORDER BY count DESC, label ASC`,
-      novelTimeWhere(filter, "e.created_at", "e.novel_id").params,
+      contentTimeWhere(filter, "e.created_at", "e.novel_id", "e.media_id").params,
     ),
     topIps: topMetrics(
       `SELECT ip AS label, COUNT(*) AS count
@@ -403,7 +412,8 @@ export function getAnalyticsOverview(
     ),
     realtime: realtimeRows.map((row) => ({
       id: row.id,
-      bookTitle: row.book_title,
+      contentTitle: row.content_title,
+      contentType: row.content_type,
       referrer: row.referrer || "direct",
       ip: row.ip,
       country: row.country || "unknown",

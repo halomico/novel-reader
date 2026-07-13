@@ -54,6 +54,10 @@ const labelText: Record<string, string> = {
   android: "Android",
   linux: "Linux",
   book_view: "书籍访问",
+  novel: "小说",
+  video: "视频",
+  audio: "音频",
+  file: "文件",
 };
 
 function prettyLabel(value: string): string {
@@ -111,7 +115,7 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
           <div className="adminPanelHeader">
             <div>
               <h2>数据分析</h2>
-              <p>{enabled ? "正在统计小说阅读访问、来源、设备和客户端。" : "统计功能已关闭，页面仅展示历史数据。"}</p>
+              <p>{enabled ? "正在统计小说与资源访问、来源、地区和客户端。" : "统计功能已关闭，页面仅展示历史数据。"}</p>
             </div>
             <div className="analyticsControls">
               <div className="analyticsRangeTabs" aria-label="统计时间范围">
@@ -147,7 +151,7 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
         <div className="adminStats" aria-label="访问概览">
           <div className="adminStatCard">
             <MousePointerClick size={20} aria-hidden="true" />
-            <span>书籍访问</span>
+            <span>内容访问</span>
             <strong>{formatCount(overview.totalViews)}</strong>
           </div>
           <div className="adminStatCard">
@@ -163,7 +167,7 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
         </div>
 
         <div className="analyticsGrid">
-          <MetricTable title="书籍访问" items={overview.topBooks} />
+          <MetricTable title="内容访问" items={overview.topContent} />
           <MetricTable title="IP 地址" items={overview.topIps} />
           <MetricTable title="国家/地区" items={overview.topCountries} />
           <MetricTable title="来源网站" items={overview.topReferrers} />
@@ -177,17 +181,18 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
             <div>
               <h2>实时访问</h2>
               <p>
-                当前范围 {overview.realtimeTotal} / {realtimeLimit} 条书籍访问记录，每页 {overview.realtimePageSize} 条。
+                当前范围 {overview.realtimeTotal} / {realtimeLimit} 条内容访问记录，每页 {overview.realtimePageSize} 条。
               </p>
             </div>
             <MonitorSmartphone size={20} aria-hidden="true" />
           </div>
           <div className="adminTableWrap">
-            <table className="adminTable">
+            <table className="adminTable analyticsRealtimeTable">
               <thead>
                 <tr>
                   <th>时间</th>
-                  <th>书名</th>
+                  <th>类型</th>
+                  <th>内容</th>
                   <th>来源</th>
                   <th>IP</th>
                   <th>地区</th>
@@ -201,7 +206,8 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
                       <td>
                         <LocalDateTime value={event.createdAt} />
                       </td>
-                      <td title={event.bookTitle}>{event.bookTitle}</td>
+                      <td>{prettyLabel(event.contentType)}</td>
+                      <td title={event.contentTitle}>{event.contentTitle}</td>
                       <td title={event.referrer}>{prettyLabel(event.referrer)}</td>
                       <td title={event.ip}>{event.ip}</td>
                       <td>{prettyLabel(event.country)}</td>
@@ -212,7 +218,7 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6}>暂无书籍访问记录。</td>
+                    <td colSpan={7}>暂无内容访问记录。</td>
                   </tr>
                 )}
               </tbody>

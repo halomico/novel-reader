@@ -1,7 +1,7 @@
 ﻿import { Settings } from "lucide-react";
 import type { Metadata } from "next";
 import { Globe2, Trash2, Upload } from "lucide-react";
-import { LocalDateTime } from "@/components/LocalDateTime";
+import { RateLimitBanTable } from "@/components/RateLimitBanTable";
 import { RateLimitRulesEditor } from "@/components/RateLimitRulesEditor";
 import { getAdminBookStats } from "@/lib/admin-books";
 import {
@@ -31,10 +31,9 @@ import {
   shouldBlockHeadlessBrowsers,
 } from "@/lib/config";
 import { readSiteSettings } from "@/lib/site-settings";
-import { listIpRateLimitBans, type IpRateLimitBan } from "@/lib/ip-rate-limit";
+import { listIpRateLimitBans } from "@/lib/ip-rate-limit";
 import {
   cancelFrontendSearchJobsAction,
-  deleteIpRateLimitBanAction,
   deleteSiteIconAction,
   saveAdminSettingsAction,
   uploadSiteIconAction,
@@ -56,38 +55,6 @@ type AdminSettingsPageProps = {
   }>;
 };
 
-function RateLimitBanList({ title, bans }: { title: string; bans: IpRateLimitBan[] }) {
-  if (bans.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="searchRateBanList">
-      <strong>{title}</strong>
-      {bans.map((ban) => (
-        <div className="searchRateBanRow" key={`${ban.category}-${ban.ip}`}>
-          <code title={ban.ip}>{ban.ip}</code>
-          <span>
-            {ban.permanent ? "永久" : ban.bannedUntil ? <LocalDateTime value={new Date(ban.bannedUntil).toISOString()} /> : "已到期"}
-          </span>
-          <button
-            className="searchRateRuleIconButton isDanger"
-            type="submit"
-            name="rateLimitBanKey"
-            value={JSON.stringify({ category: ban.category, ip: ban.ip })}
-            formAction={deleteIpRateLimitBanAction}
-            formNoValidate
-            aria-label={`解除 ${ban.ip} 的${title}`}
-            title="解除封禁"
-          >
-            <Trash2 size={15} aria-hidden="true" />
-          </button>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export default async function AdminSettingsPage({ searchParams }: AdminSettingsPageProps) {
   const params = await searchParams;
   const settings = readSiteSettings();
@@ -106,8 +73,8 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
   const globalSearchMaxResults = settings.globalSearchMaxResults || getGlobalSearchMaxResults();
   const searchRateLimitRules = getSearchRateLimitRules();
   const contentRateLimitRules = getContentRateLimitRules();
-  const searchRateLimitBans = listIpRateLimitBans("search");
-  const contentRateLimitBans = listIpRateLimitBans("content");
+  const searchRateLimitBans = listIpRateLimitBans("search", 500);
+  const contentRateLimitBans = listIpRateLimitBans("content", 500);
   const userDailyRegistrationLimit = settings.userDailyRegistrationLimitPerIp || getUserDailyRegistrationLimitPerIp();
   const userSearchRateLimit = settings.userSearchRateLimitPerMinute || getUserSearchRateLimitPerMinute();
   const userAvatarMaxMb = ((settings.userAvatarMaxBytes || getUserAvatarMaxBytes()) / 1024 ** 2).toFixed(1);
@@ -309,10 +276,6 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 defaultMaxRequests={60}
               />
             </div>
-            <div className="rateLimitBanGrid">
-              <RateLimitBanList title="搜索封禁" bans={searchRateLimitBans} />
-              <RateLimitBanList title="正文封禁" bans={contentRateLimitBans} />
-            </div>
             <div className="adminFieldGrid">
               <label>
                 <span>登录用户搜索限速 / 分钟</span>
@@ -358,6 +321,29 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               </span>
               <input name="analyticsEnabled" type="checkbox" defaultChecked={settings.analyticsEnabled} />
             </label>
+            <div className="adminResourceSwitches">
+              <label className="adminSwitchLabel">
+                <span>
+                  <strong>开放视频</strong>
+                  <small>登录用户可浏览并在线播放后台发布的视频。</small>
+                </span>
+                <input name="videoLibraryEnabled" type="checkbox" defaultChecked={settings.videoLibraryEnabled} />
+              </label>
+              <label className="adminSwitchLabel">
+                <span>
+                  <strong>开放音频</strong>
+                  <small>登录用户可浏览并在线播放后台发布的音频。</small>
+                </span>
+                <input name="audioLibraryEnabled" type="checkbox" defaultChecked={settings.audioLibraryEnabled} />
+              </label>
+              <label className="adminSwitchLabel">
+                <span>
+                  <strong>开放文件</strong>
+                  <small>登录用户可浏览并下载后台发布的文件。</small>
+                </span>
+                <input name="fileLibraryEnabled" type="checkbox" defaultChecked={settings.fileLibraryEnabled} />
+              </label>
+            </div>
             <div className="adminFieldGrid">
               <label>
                 <span>实时访问最多保留 / 条</span>
@@ -450,6 +436,14 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
 
           <button type="submit">保存设置</button>
         </form>
+
+        <section className="adminSettingsSection rateLimitBanSection">
+          <h3>IP 封禁记录</h3>
+          <div className="rateLimitBanTables">
+            <RateLimitBanTable title="搜索封禁" bans={searchRateLimitBans} />
+            <RateLimitBanTable title="正文封禁" bans={contentRateLimitBans} />
+          </div>
+        </section>
 
         <div className="adminPaths">
           <p>

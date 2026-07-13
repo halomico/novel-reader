@@ -30,7 +30,19 @@ import {
 import { deleteContentIndexTerm } from "@/lib/content-index";
 import { getContentIndexDb } from "@/lib/content-index-db";
 import { cancelContentJobs } from "@/lib/content-jobs";
-import { deleteIpRateLimitBan, type RateLimitCategory } from "@/lib/ip-rate-limit";
+import { deleteIpRateLimitBans, parseIpRateLimitBanKey, type IpRateLimitBanKey } from "@/lib/ip-rate-limit";
+import {
+  createMediaFolder,
+  deleteMediaAssets,
+  deleteMediaFolder,
+  getMediaAsset,
+  isMediaKind,
+  MediaFolderError,
+  moveMediaAsset,
+  renameMediaFolder,
+  syncMediaLibrary,
+  updateMediaAsset,
+} from "@/lib/media";
 import { deleteNovelIds } from "@/lib/novel-files";
 import { hashPassword } from "@/lib/password";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -47,7 +59,17 @@ import {
 } from "@/lib/users";
 
 function adminNotice(message: string, tone: "success" | "warning" | "error" = "success", path = "/admin/books"): never {
-  redirect(`${path}?notice=${encodeURIComponent(message)}&tone=${tone}`);
+  const separator = path.includes("?") ? "&" : "?";
+  redirect(`${path}${separator}notice=${encodeURIComponent(message)}&tone=${tone}`);
+}
+
+function mediaReturnPath(formData: FormData): string {
+  const requested = String(formData.get("returnPath") || "");
+  return requested === "/admin/media" || (requested.startsWith("/admin/media?") && !/[\r\n#]/.test(requested)) ? requested : "/admin/media";
+}
+
+function mediaFolderMessage(error: unknown): string {
+  return error instanceof MediaFolderError ? error.message : "文件夹操作失败，请检查媒体目录权限";
 }
 
 function loginNotice(message: string): never {
@@ -338,6 +360,9 @@ export async function saveAdminSettingsAction(formData: FormData) {
     userAvatarMaxBytes: Math.floor(userAvatarMaxMb * 1024 ** 2),
     analyticsEnabled: formData.get("analyticsEnabled") === "on",
     analyticsRealtimeLimit: intField(formData, "analyticsRealtimeLimit", previous.analyticsRealtimeLimit || 300, 30, 2000),
+    videoLibraryEnabled: formData.get("videoLibraryEnabled") === "on",
+    audioLibraryEnabled: formData.get("audioLibraryEnabled") === "on",
+    fileLibraryEnabled: formData.get("fileLibraryEnabled") === "on",
     contentBlockHeadlessBrowsers: formData.get("contentBlockHeadlessBrowsers") === "on",
     frontendAutoIndexEnabled: formData.get("frontendAutoIndexEnabled") === "on",
     frontendSearchConcurrencyLimit: intField(
@@ -367,6 +392,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
   revalidatePath("/login");
   revalidatePath("/register");
   revalidatePath("/account");
+  revalidatePath("/media");
   revalidatePath("/search");
   revalidatePath("/settings");
   revalidatePath("/admin");
@@ -381,20 +407,140 @@ export async function saveAdminSettingsAction(formData: FormData) {
   adminNotice("后台设置已保存", "success", "/admin/settings");
 }
 
+export async function updateAdminMediaAction(formData: FormData) {
+  await requireAdminRequest("/admin/media");
+  const returnPath = mediaReturnPath(formData);
+  const id = Number(formData.get("mediaId"));
+  const title = String(formData.get("title") || "").trim();
+  const artist = String(formData.get("artist") || "").trim();
+  const description = String(formData.get("description") || "").trim();
+  const asset = Number.isInteger(id) && id > 0 ? getMediaAsset(id) : null;
+  if (!asset) {
+    adminNotice("资源不存在", "warning", returnPath);
+  }
+  if (!title || title.length > 120) {
+    adminNotice("标题应为 1 到 120 个字符", "warning", returnPath);
+  }
+  if (description.length > 1000) {
+    adminNotice("简介不能超过 1000 个字符", "warning", returnPath);
+  }
+  if (artist.length > 80) {
+    adminNotice("作者不能超过 80 个字符", "warning", returnPath);
+  }
+  try {
+    moveMediaAsset(id, String(formData.get("targetFolder") || ""));
+  } catch (error) {
+    adminNotice(mediaFolderMessage(error), "warning", returnPath);
+  }
+  updateMediaAsset(id, title, asset.kind === "audio" ? artist : "", description);
+  revalidatePath("/media");
+  revalidatePath(`/media/${id}`);
+  revalidatePath("/admin/media");
+  adminNotice("资源信息已更新", "success", returnPath);
+}
+
+export async function deleteAdminMediaAction(formData: FormData) {
+  await requireAdminRequest("/admin/media");
+  const returnPath = mediaReturnPath(formData);
+  const ids = Array.from(
+    new Set(
+      formData
+        .getAll("mediaIds")
+        .map(Number)
+        .filter((id) => Number.isInteger(id) && id > 0),
+    ),
+  );
+  if (!ids.length) {
+    adminNotice("请选择要删除的资源", "warning", returnPath);
+  }
+  const result = deleteMediaAssets(ids);
+  revalidatePath("/media");
+  revalidatePath("/admin");
+  revalidatePath("/admin/media");
+  if (result.fileDeleteFailures) {
+    adminNotice(`已删除 ${result.deleted} 条记录，但有 ${result.fileDeleteFailures} 个文件未能删除`, "warning", returnPath);
+  }
+  adminNotice(`已删除 ${result.deleted} 个资源`, result.deleted ? "success" : "warning", returnPath);
+}
+
+export async function syncAdminMediaAction(formData: FormData) {
+  await requireAdminRequest("/admin/media");
+  const returnPath = mediaReturnPath(formData);
+  let result: ReturnType<typeof syncMediaLibrary>;
+  try {
+    result = syncMediaLibrary({ force: true });
+  } catch {
+    adminNotice("媒体目录同步失败，请检查目录权限和文件状态", "error", returnPath);
+  }
+  revalidatePath("/media");
+  revalidatePath("/admin/media");
+  adminNotice(`同步完成：新增 ${result.added}，更新 ${result.updated}，移除 ${result.removed}`, "success", returnPath);
+}
+
+export async function createAdminMediaFolderAction(formData: FormData) {
+  await requireAdminRequest("/admin/media");
+  const kindValue = formData.get("kind");
+  if (!isMediaKind(kindValue)) {
+    adminNotice("资源类型无效", "warning", mediaReturnPath(formData));
+  }
+  let folder: string;
+  try {
+    folder = createMediaFolder(kindValue, String(formData.get("parentFolder") || ""), String(formData.get("folderName") || ""));
+  } catch (error) {
+    adminNotice(mediaFolderMessage(error), "warning", mediaReturnPath(formData));
+  }
+  revalidatePath("/media");
+  revalidatePath("/admin/media");
+  adminNotice("文件夹已创建", "success", `/admin/media?kind=${kindValue}&folder=${encodeURIComponent(folder)}`);
+}
+
+export async function renameAdminMediaFolderAction(formData: FormData) {
+  await requireAdminRequest("/admin/media");
+  const kindValue = formData.get("kind");
+  if (!isMediaKind(kindValue)) {
+    adminNotice("资源类型无效", "warning", mediaReturnPath(formData));
+  }
+  let folder: string;
+  try {
+    folder = renameMediaFolder(kindValue, String(formData.get("folder") || ""), String(formData.get("folderName") || ""));
+  } catch (error) {
+    adminNotice(mediaFolderMessage(error), "warning", mediaReturnPath(formData));
+  }
+  revalidatePath("/media");
+  revalidatePath("/admin/media");
+  adminNotice("文件夹已重命名", "success", `/admin/media?kind=${kindValue}&folder=${encodeURIComponent(folder)}`);
+}
+
+export async function deleteAdminMediaFolderAction(formData: FormData) {
+  await requireAdminRequest("/admin/media");
+  const kindValue = formData.get("kind");
+  if (!isMediaKind(kindValue)) {
+    adminNotice("资源类型无效", "warning", mediaReturnPath(formData));
+  }
+  const folder = String(formData.get("folder") || "");
+  const parent = folder.replace(/\\/g, "/").split("/").slice(0, -1).join("/");
+  let deleted: boolean;
+  try {
+    deleted = deleteMediaFolder(kindValue, folder);
+  } catch (error) {
+    adminNotice(mediaFolderMessage(error), "warning", mediaReturnPath(formData));
+  }
+  revalidatePath("/media");
+  revalidatePath("/admin/media");
+  adminNotice(deleted ? "空文件夹已删除" : "文件夹不存在", deleted ? "success" : "warning", `/admin/media?kind=${kindValue}&folder=${encodeURIComponent(parent)}`);
+}
+
 export async function deleteIpRateLimitBanAction(formData: FormData) {
   await requireAdminRequest("/admin/settings");
-  let payload: { category?: unknown; ip?: unknown } = {};
-  try {
-    payload = JSON.parse(String(formData.get("rateLimitBanKey") || "{}")) as { category?: unknown; ip?: unknown };
-  } catch {
-    adminNotice("封禁记录格式无效", "warning", "/admin/settings");
+  const requestedValues = [...formData.getAll("rateLimitBanKeys"), ...formData.getAll("rateLimitBanKey")];
+  const bans = requestedValues.map(parseIpRateLimitBanKey).filter((ban): ban is IpRateLimitBanKey => ban !== null);
+  if (bans.length === 0) {
+    adminNotice("请选择要解除的封禁记录", "warning", "/admin/settings");
   }
-  const category: RateLimitCategory | null = payload.category === "search" || payload.category === "content" ? payload.category : null;
-  const ip = typeof payload.ip === "string" ? payload.ip.trim() : "";
-  const deleted = category && ip ? deleteIpRateLimitBan(category, ip) : false;
-  const label = category === "content" ? "正文" : "搜索";
+
+  const deleted = deleteIpRateLimitBans(bans);
   revalidatePath("/admin/settings");
-  adminNotice(deleted ? `已解除${label}封禁：${ip}` : "封禁记录不存在", deleted ? "success" : "warning", "/admin/settings");
+  adminNotice(deleted ? `已解除 ${deleted} 条封禁记录` : "所选封禁记录已不存在", deleted ? "success" : "warning", "/admin/settings");
 }
 
 export async function deleteContentIndexAction(formData: FormData) {

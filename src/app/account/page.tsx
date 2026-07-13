@@ -1,12 +1,13 @@
-import { Clock, KeyRound, Trash2, Upload, UserRound } from "lucide-react";
+import { BookOpen, Clock, KeyRound, LibraryBig, Settings, Trash2, Upload, UserRound } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
 import { LocalDateTime } from "@/components/LocalDateTime";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getNoticeDisplaySeconds, getUserAvatarMaxBytes, shouldNoticeStayVisibleAfterBlur } from "@/lib/config";
+import { getEnabledMediaKinds } from "@/lib/media";
 import { getCurrentUser } from "@/lib/user-auth";
-import { listReadingHistory } from "@/lib/users";
+import { listBrowseHistory } from "@/lib/users";
 import { clearHistoryAction, deleteHistoryItemAction, updateAccountDisplayNameAction, updateAccountPasswordAction, uploadAvatarAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -25,10 +26,11 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
   }
 
   const params = await searchParams;
-  const history = listReadingHistory(user.id);
+  const history = listBrowseHistory(user.id);
   const maxAvatarMb = (getUserAvatarMaxBytes() / 1024 / 1024).toFixed(1);
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
   const noticeStayVisibleAfterBlur = shouldNoticeStayVisibleAfterBlur();
+  const mediaEnabled = getEnabledMediaKinds().length > 0;
 
   return (
     <main className="appShell">
@@ -60,6 +62,21 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
             <Clock size={16} aria-hidden="true" />
             浏览记录
           </label>
+          <span className="accountSideNavDivider" aria-hidden="true" />
+          <Link href="/">
+            <BookOpen size={16} aria-hidden="true" />
+            小说书库
+          </Link>
+          {mediaEnabled ? (
+            <Link href="/media">
+              <LibraryBig size={16} aria-hidden="true" />
+              资源中心
+            </Link>
+          ) : null}
+          <Link href="/settings">
+            <Settings size={16} aria-hidden="true" />
+            阅读设置
+          </Link>
         </aside>
 
         <div className="accountContent">
@@ -123,7 +140,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
               <Clock size={20} aria-hidden="true" />
               <div>
                 <h2>浏览记录</h2>
-                <p>最多显示最近 200 条，可多选删除或清空。</p>
+                <p>小说与资源访问，最多显示最近 200 条。</p>
               </div>
             </div>
 
@@ -135,30 +152,38 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
                       <thead>
                         <tr>
                           <th>选择</th>
-                          <th>书名</th>
-                          <th>最近阅读</th>
+                          <th>类型</th>
+                          <th>内容</th>
+                          <th>最近访问</th>
                           <th>次数</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {history.map((item) => (
-                          <tr key={item.id}>
+                        {history.map((item) => {
+                          const href = item.source === "novel"
+                            ? `/books/${item.itemId}?hit=${item.segmentIndex}#seg-${item.segmentIndex}`
+                            : `/media/${item.itemId}`;
+                          const typeLabel = item.source === "novel" ? "小说" : item.source === "video" ? "视频" : item.source === "audio" ? "音频" : "文件";
+                          return (
+                          <tr key={item.key}>
                             <td>
-                              <input className="adminCheckbox" name="historyIds" type="checkbox" value={item.id} aria-label={`选择 ${item.title}`} />
+                              <input className="adminCheckbox" name="historyIds" type="checkbox" value={item.key} aria-label={`选择 ${item.title}`} />
                             </td>
+                            <td><span className={`accountHistoryKind is-${item.source}`}>{typeLabel}</span></td>
                             <td>
-                              {item.novelExists ? (
-                                <Link href={`/books/${item.novelId}?hit=${item.segmentIndex}#seg-${item.segmentIndex}`}>{item.title}</Link>
+                              {item.itemExists ? (
+                                <Link href={href}>{item.title}</Link>
                               ) : (
                                 <strong>{item.title}</strong>
                               )}
                             </td>
                             <td>
-                              <LocalDateTime value={item.lastReadAt} />
+                              <LocalDateTime value={item.lastAccessedAt} />
                             </td>
                             <td>{item.visitCount}</td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

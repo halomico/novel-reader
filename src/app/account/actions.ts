@@ -25,10 +25,10 @@ import {
   verifyUserPassword,
 } from "@/lib/user-auth";
 import {
-  clearReadingHistory,
+  clearBrowseHistory,
   countTodayRegistrationsForIp,
   createUserRecord,
-  deleteReadingHistoryItem,
+  deleteBrowseHistoryItem,
   getUserPasswordHashById,
   removeAvatarFile,
   normalizeUsername,
@@ -307,19 +307,19 @@ export async function deleteHistoryItemAction(formData: FormData) {
   if (!user) {
     redirect("/login");
   }
-  const historyIds = Array.from(
+  const historyKeys = Array.from(
     new Set(
       formData
         .getAll("historyIds")
         .concat(formData.getAll("historyId"))
-        .map((value) => Number(value))
-        .filter((value) => Number.isInteger(value) && value > 0),
+        .map(String)
+        .filter((value) => /^(novel|media):\d+$/.test(value)),
     ),
   );
-  if (!historyIds.length) {
+  if (!historyKeys.length) {
     authNotice("/account", "浏览记录不存在", "warning");
   }
-  const deleted = historyIds.reduce((count, historyId) => count + Number(deleteReadingHistoryItem(user.id, historyId)), 0);
+  const deleted = historyKeys.reduce((count, historyKey) => count + Number(deleteBrowseHistoryItem(user.id, historyKey)), 0);
   if (!deleted) {
     authNotice("/account", "浏览记录不存在", "warning");
   }
@@ -332,7 +332,7 @@ export async function clearHistoryAction() {
   if (!user) {
     redirect("/login");
   }
-  clearReadingHistory(user.id);
+  clearBrowseHistory(user.id);
   revalidatePath("/account");
   authNotice("/account", "浏览记录已清空");
 }

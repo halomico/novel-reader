@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Novel } from "./books";
 import { getDb } from "./db";
+import type { MediaAsset, MediaKind } from "./media";
 
 export type UserStatus = "active" | "disabled";
 
@@ -36,6 +37,17 @@ export type ReadingHistoryItem = {
   visitCount: number;
   lastReadAt: string;
   novelExists: boolean;
+};
+
+export type BrowseHistoryItem = {
+  key: string;
+  source: "novel" | MediaKind;
+  itemId: number;
+  title: string;
+  segmentIndex: number;
+  visitCount: number;
+  lastAccessedAt: string;
+  itemExists: boolean;
 };
 
 export type UserLoginRecord = {
@@ -348,6 +360,75 @@ export function recordReadingHistory(userId: number, book: Pick<Novel, "id" | "t
     .run(userId, book.id, book.title, normalizedSegment);
 }
 
+export function recordMediaHistory(userId: number, asset: Pick<MediaAsset, "id" | "kind" | "title">) {
+  getDb()
+    .prepare(
+      `INSERT INTO user_media_history (user_id, media_id, kind, title, visit_count, last_accessed_at)
+       VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+       ON CONFLICT(user_id, media_id) DO UPDATE SET
+         kind = excluded.kind,
+         title = excluded.title,
+         visit_count = user_media_history.visit_count + 1,
+         last_accessed_at = CURRENT_TIMESTAMP`,
+    )
+    .run(userId, asset.id, asset.kind, asset.title);
+}
+
+export function listBrowseHistory(userId: number): BrowseHistoryItem[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT source, history_id, item_id, title, segment_index, visit_count, last_accessed_at, item_exists
+       FROM (
+         SELECT 'novel' AS source,
+                h.id AS history_id,
+                h.novel_id AS item_id,
+                h.title,
+                h.segment_index,
+                h.visit_count,
+                h.last_read_at AS last_accessed_at,
+                CASE WHEN n.id IS NULL THEN 0 ELSE 1 END AS item_exists
+         FROM user_reading_history h
+         LEFT JOIN novels n ON n.id = h.novel_id
+         WHERE h.user_id = ?
+         UNION ALL
+         SELECT h.kind AS source,
+                h.id AS history_id,
+                h.media_id AS item_id,
+                h.title,
+                0 AS segment_index,
+                h.visit_count,
+                h.last_accessed_at,
+                CASE WHEN m.id IS NULL THEN 0 ELSE 1 END AS item_exists
+         FROM user_media_history h
+         LEFT JOIN media_assets m ON m.id = h.media_id
+         WHERE h.user_id = ?
+       )
+       ORDER BY last_accessed_at DESC, history_id DESC
+       LIMIT 200`,
+    )
+    .all(userId, userId) as Array<{
+    source: "novel" | MediaKind;
+    history_id: number;
+    item_id: number;
+    title: string;
+    segment_index: number;
+    visit_count: number;
+    last_accessed_at: string;
+    item_exists: number;
+  }>;
+
+  return rows.map((row) => ({
+    key: `${row.source === "novel" ? "novel" : "media"}:${row.history_id}`,
+    source: row.source,
+    itemId: row.item_id,
+    title: row.title,
+    segmentIndex: row.segment_index,
+    visitCount: row.visit_count,
+    lastAccessedAt: row.last_accessed_at,
+    itemExists: row.item_exists === 1,
+  }));
+}
+
 export function listReadingHistory(userId: number): ReadingHistoryItem[] {
   const rows = getDb()
     .prepare(
@@ -415,4 +496,28 @@ export function deleteReadingHistoryItem(userId: number, historyId: number): boo
 export function clearReadingHistory(userId: number): number {
   const info = getDb().prepare("DELETE FROM user_reading_history WHERE user_id = ?").run(userId);
   return Number(info.changes);
+}
+
+export function deleteBrowseHistoryItem(userId: number, key: string): boolean {
+  const match = /^(novel|media):(\d+)$/.exec(key);
+  if (!match) {
+    return false;
+  }
+  const table = match[1] === "novel" ? "user_reading_history" : "user_media_history";
+  const info = getDb().prepare(`DELETE FROM ${table} WHERE id = ? AND user_id = ?`).run(Number(match[2]), userId);
+  return Number(info.changes) > 0;
+}
+
+export function clearBrowseHistory(userId: number): number {
+  const db = getDb();
+  db.exec("BEGIN");
+  try {
+    const novels = Number(db.prepare("DELETE FROM user_reading_history WHERE user_id = ?").run(userId).changes);
+    const media = Number(db.prepare("DELETE FROM user_media_history WHERE user_id = ?").run(userId).changes);
+    db.exec("COMMIT");
+    return novels + media;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 }

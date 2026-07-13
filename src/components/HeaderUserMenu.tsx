@@ -1,6 +1,6 @@
 "use client";
 
-import { KeyRound, LogOut, UserPlus, UserRound } from "lucide-react";
+import { KeyRound, LogOut, Menu, Settings, UserPlus, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { logoutUserAction } from "@/app/account/actions";
@@ -19,36 +19,46 @@ type HeaderUserMenuProps = {
 export function HeaderUserMenu({ user, loginEnabled, registrationEnabled }: HeaderUserMenuProps) {
   const [open, setOpen] = useState(false);
 
-  if (!user && !loginEnabled && !registrationEnabled) {
-    return null;
-  }
-
   return (
     <div
       className="userMenu"
       onBlur={(event) => {
         const nextTarget = event.relatedTarget instanceof Node ? event.relatedTarget : null;
         if (!event.currentTarget.contains(nextTarget)) {
-        setOpen(false);
-      }
+          setOpen(false);
+        }
       }}
     >
       <button
-        className="iconLink userIconLink"
+        className="iconLink userMenuButton"
         type="button"
-        aria-label={user ? "用户菜单" : "登录菜单"}
+        aria-label="打开导航菜单"
         aria-expanded={open}
+        title="导航菜单"
         onClick={() => setOpen((value) => !value)}
       >
-        {user?.avatarPath ? <img src={user.avatarPath} alt="" /> : <UserRound size={21} aria-hidden="true" />}
+        <Menu size={21} aria-hidden="true" />
       </button>
       {open ? (
         <div className="userMenuPanel">
           {user ? (
             <>
+              <div className="userMenuIdentity">
+                <span className="userMenuAvatar" aria-hidden="true">
+                  {user.avatarPath ? <img src={user.avatarPath} alt="" /> : <UserRound size={17} />}
+                </span>
+                <span>
+                  <small>当前账户</small>
+                  <strong>{user.displayName}</strong>
+                </span>
+              </div>
               <Link href="/account" onClick={() => setOpen(false)}>
                 <UserRound size={16} aria-hidden="true" />
                 用户中心
+              </Link>
+              <Link href="/settings" onClick={() => setOpen(false)}>
+                <Settings size={16} aria-hidden="true" />
+                阅读设置
               </Link>
               <form action={logoutUserAction}>
                 <button type="submit">
@@ -62,15 +72,19 @@ export function HeaderUserMenu({ user, loginEnabled, registrationEnabled }: Head
               {loginEnabled ? (
                 <Link href="/login" onClick={() => setOpen(false)}>
                   <KeyRound size={16} aria-hidden="true" />
-                  登录
+                  登录账号
                 </Link>
               ) : null}
               {registrationEnabled ? (
                 <Link href="/register" onClick={() => setOpen(false)}>
                   <UserPlus size={16} aria-hidden="true" />
-                  注册
+                  创建账号
                 </Link>
               ) : null}
+              <Link href="/settings" onClick={() => setOpen(false)}>
+                <Settings size={16} aria-hidden="true" />
+                阅读设置
+              </Link>
             </>
           )}
         </div>

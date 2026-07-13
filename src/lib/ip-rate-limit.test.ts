@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ipRateLimitRuleApplies } from "./ip-rate-limit";
+import { ipRateLimitRuleApplies, parseIpRateLimitBanKey } from "./ip-rate-limit";
 import { normalizeIpRateLimitRules, type IpRateLimitRule } from "./site-settings";
 
 const baseRule: IpRateLimitRule = {
@@ -39,4 +39,18 @@ test("applies enabled IP rules by login and query type", () => {
 test("content-style rules apply without search context", () => {
   assert.equal(ipRateLimitRuleApplies(baseRule, {}), true);
   assert.equal(ipRateLimitRuleApplies({ ...baseRule, queryType: "short" }, {}), false);
+});
+
+test("parses only valid search and content ban keys", () => {
+  assert.deepEqual(parseIpRateLimitBanKey('{"category":"content","ip":"203.0.113.8"}'), {
+    category: "content",
+    ip: "203.0.113.8",
+  });
+  assert.deepEqual(parseIpRateLimitBanKey('{"category":"search","ip":"2001:db8::8"}'), {
+    category: "search",
+    ip: "2001:db8::8",
+  });
+  assert.equal(parseIpRateLimitBanKey('{"category":"admin","ip":"203.0.113.8"}'), null);
+  assert.equal(parseIpRateLimitBanKey('{"category":"content","ip":"not-an-ip"}'), null);
+  assert.equal(parseIpRateLimitBanKey("invalid-json"), null);
 });

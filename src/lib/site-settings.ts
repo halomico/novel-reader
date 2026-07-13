@@ -68,6 +68,9 @@ export type SiteSettings = {
   userAvatarMaxBytes: number;
   analyticsEnabled: boolean;
   analyticsRealtimeLimit: number;
+  videoLibraryEnabled: boolean;
+  audioLibraryEnabled: boolean;
+  fileLibraryEnabled: boolean;
   contentRateLimitPerMinute: number;
   contentRateLimitWindowSeconds: number;
   contentRateLimitRules: IpRateLimitRule[];
@@ -121,6 +124,9 @@ const DEFAULT_SETTINGS: SiteSettings = {
   userAvatarMaxBytes: 0,
   analyticsEnabled: false,
   analyticsRealtimeLimit: 0,
+  videoLibraryEnabled: true,
+  audioLibraryEnabled: true,
+  fileLibraryEnabled: true,
   contentRateLimitPerMinute: 0,
   contentRateLimitWindowSeconds: 0,
   contentRateLimitRules: [],
@@ -294,6 +300,9 @@ export function readSiteSettings(): SiteSettings {
       userAvatarMaxBytes: cleanInt(parsed.userAvatarMaxBytes, DEFAULT_SETTINGS.userAvatarMaxBytes, 0, 10 * 1024 ** 2),
       analyticsEnabled: cleanBool(parsed.analyticsEnabled, DEFAULT_SETTINGS.analyticsEnabled),
       analyticsRealtimeLimit: cleanInt(parsed.analyticsRealtimeLimit, DEFAULT_SETTINGS.analyticsRealtimeLimit, 0, 2000),
+      videoLibraryEnabled: cleanBool(parsed.videoLibraryEnabled, DEFAULT_SETTINGS.videoLibraryEnabled),
+      audioLibraryEnabled: cleanBool(parsed.audioLibraryEnabled, DEFAULT_SETTINGS.audioLibraryEnabled),
+      fileLibraryEnabled: cleanBool(parsed.fileLibraryEnabled, DEFAULT_SETTINGS.fileLibraryEnabled),
       contentRateLimitPerMinute: cleanInt(parsed.contentRateLimitPerMinute, DEFAULT_SETTINGS.contentRateLimitPerMinute, 0, 600),
       contentRateLimitWindowSeconds: cleanInt(parsed.contentRateLimitWindowSeconds, DEFAULT_SETTINGS.contentRateLimitWindowSeconds, 0, 3600),
       contentRateLimitRules: normalizeIpRateLimitRules(parsed.contentRateLimitRules),

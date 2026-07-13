@@ -3,7 +3,7 @@ import { ArrowLeft, Clock, KeyRound, UserRound } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LocalDateTime } from "@/components/LocalDateTime";
-import { getUserById, listReadingHistory, listUserLoginRecords } from "@/lib/users";
+import { getUserById, listBrowseHistory, listUserLoginRecords } from "@/lib/users";
 import { AdminFrame } from "../../AdminFrame";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +32,7 @@ export default async function AdminUserDetailPage({ params }: AdminUserDetailPag
     notFound();
   }
 
-  const history = listReadingHistory(user.id);
+  const history = listBrowseHistory(user.id);
   const loginRecords = listUserLoginRecords(user.id);
 
   return (
@@ -125,7 +125,7 @@ export default async function AdminUserDetailPage({ params }: AdminUserDetailPag
           <div className="adminPanelHeader">
             <div>
               <h2>浏览记录</h2>
-              <p>来自前台阅读历史，最多显示最近 200 条。</p>
+              <p>小说与资源访问，最多显示最近 200 条。</p>
             </div>
             <Clock size={20} aria-hidden="true" />
           </div>
@@ -133,31 +133,39 @@ export default async function AdminUserDetailPage({ params }: AdminUserDetailPag
             <table className="adminTable">
               <thead>
                 <tr>
-                  <th>书名</th>
-                  <th>最近阅读</th>
+                  <th>类型</th>
+                  <th>内容</th>
+                  <th>最近访问</th>
                   <th>次数</th>
                 </tr>
               </thead>
               <tbody>
                 {history.length ? (
-                  history.map((item) => (
-                    <tr key={item.id}>
+                  history.map((item) => {
+                    const href = item.source === "novel"
+                      ? `/books/${item.itemId}?hit=${item.segmentIndex}#seg-${item.segmentIndex}`
+                      : `/media/${item.itemId}`;
+                    const typeLabel = item.source === "novel" ? "小说" : item.source === "video" ? "视频" : item.source === "audio" ? "音频" : "文件";
+                    return (
+                    <tr key={item.key}>
+                      <td><span className={`accountHistoryKind is-${item.source}`}>{typeLabel}</span></td>
                       <td>
-                        {item.novelExists ? (
-                          <Link href={`/books/${item.novelId}?hit=${item.segmentIndex}#seg-${item.segmentIndex}`}>{item.title}</Link>
+                        {item.itemExists ? (
+                          <Link href={href}>{item.title}</Link>
                         ) : (
                           <strong>{item.title}</strong>
                         )}
                       </td>
                       <td>
-                        <LocalDateTime value={item.lastReadAt} />
+                        <LocalDateTime value={item.lastAccessedAt} />
                       </td>
                       <td>{item.visitCount}</td>
                     </tr>
-                  ))
+                    );
+                  })
                 ) : (
                   <tr>
-                    <td colSpan={3}>暂无浏览记录。</td>
+                    <td colSpan={4}>暂无浏览记录。</td>
                   </tr>
                 )}
               </tbody>

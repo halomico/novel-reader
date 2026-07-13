@@ -16,6 +16,11 @@ ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 ENV NOVEL_LIBRARY_DIR=/app/library/books
 ENV DATABASE_PATH=/app/data/novels.db
+ENV MEDIA_DIR=/app/data/media
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ffmpeg \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
@@ -25,6 +30,6 @@ COPY tsconfig.json ./
 COPY scripts ./scripts
 COPY src ./src
 
-RUN mkdir -p /app/library/books /app/data
+RUN mkdir -p /app/library/books /app/data/media
 EXPOSE 3000
 CMD ["npm", "run", "start"]

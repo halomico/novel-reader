@@ -1,6 +1,7 @@
 ﻿import type { Metadata } from "next";
 import { BarChart3, BookOpen, Database, Globe2, HardDrive, History, Search, Settings, Users } from "lucide-react";
 import Link from "next/link";
+import { LibraryBig } from "lucide-react";
 import { headers } from "next/headers";
 import { LocalDateTime } from "@/components/LocalDateTime";
 import { AdminFrame } from "./AdminFrame";
@@ -87,6 +88,13 @@ export default async function AdminPage() {
             <span>
               <strong>系统设置</strong>
               <small>站点名称、访问规则和后台偏好</small>
+            </span>
+          </Link>
+          <Link className="adminHomeLink" href="/admin/media">
+            <LibraryBig size={19} aria-hidden="true" />
+            <span>
+              <strong>资源管理</strong>
+              <small>上传和维护视频、音频与文件</small>
             </span>
           </Link>
           <Link className="adminHomeLink" href="/admin/indexes">

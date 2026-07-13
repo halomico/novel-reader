@@ -1,6 +1,6 @@
 ﻿import { BookOpen, LogOut, Search, Settings, Users } from "lucide-react";
 import Link from "next/link";
-import { BarChart3 } from "lucide-react";
+import { BarChart3, LibraryBig } from "lucide-react";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
@@ -11,7 +11,7 @@ import { getNoticeDisplaySeconds, getSiteName, shouldNoticeStayVisibleAfterBlur 
 import { logoutAdminAction } from "./actions";
 
 type AdminFrameProps = {
-  active: "home" | "books" | "indexes" | "settings" | "users" | "analytics";
+  active: "home" | "books" | "indexes" | "settings" | "users" | "analytics" | "media";
   notice?: string;
   tone?: "success" | "warning" | "error";
   children: React.ReactNode;
@@ -19,6 +19,7 @@ type AdminFrameProps = {
 
 const navItems = [
   { href: "/admin/books", label: "小说管理", value: "books", icon: BookOpen },
+  { href: "/admin/media", label: "资源管理", value: "media", icon: LibraryBig },
   { href: "/admin/indexes", label: "搜索索引", value: "indexes", icon: Search },
   { href: "/admin/users", label: "用户管理", value: "users", icon: Users },
   { href: "/admin/analytics", label: "数据分析", value: "analytics", icon: BarChart3 },
@@ -40,6 +41,9 @@ function titleFor(active: AdminFrameProps["active"]): string {
   }
   if (active === "analytics") {
     return "数据分析";
+  }
+  if (active === "media") {
+    return "资源管理";
   }
   return "系统设置";
 }

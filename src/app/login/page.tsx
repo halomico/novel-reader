@@ -1,8 +1,8 @@
 import { KeyRound } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AuthCaptchaForm } from "@/components/AuthCaptchaForm";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
-import { LoginCaptcha } from "@/components/LoginCaptcha";
 import { SiteHeader } from "@/components/SiteHeader";
 import {
   getNoticeDisplaySeconds,
@@ -11,7 +11,6 @@ import {
   isUserRegistrationEnabled,
   shouldNoticeStayVisibleAfterBlur,
 } from "@/lib/config";
-import { createLoginCaptchaChallenge } from "@/lib/login-captcha";
 import { getCurrentUser } from "@/lib/user-auth";
 import { loginUserAction } from "../account/actions";
 
@@ -34,7 +33,6 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const loginEnabled = isUserLoginEnabled();
   const registrationEnabled = isUserRegistrationEnabled();
   const captchaMode = getUserLoginCaptchaMode();
-  const captcha = loginEnabled && captchaMode !== "off" ? createLoginCaptchaChallenge(captchaMode, "login") : null;
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
   const noticeStayVisibleAfterBlur = shouldNoticeStayVisibleAfterBlur();
 
@@ -51,12 +49,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         />
       ) : null}
       <section className="authPage">
-        <form className="userPanel authPanel" action={loginUserAction}>
+        <AuthCaptchaForm action={loginUserAction} captchaMode={captchaMode} purpose="login">
           <div className="userPanelHeader">
             <KeyRound size={20} aria-hidden="true" />
             <div>
               <h1>用户登录</h1>
-              <p>登录后可保留浏览记录，并使用独立搜索限速。</p>
             </div>
           </div>
           <label>
@@ -67,7 +64,6 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             <span>密码</span>
             <input name="password" type="password" autoComplete="current-password" disabled={!loginEnabled} required />
           </label>
-          {captcha ? <LoginCaptcha challenge={captcha} /> : null}
           <button className="authPrimaryButton" type="submit" disabled={!loginEnabled}>
             登录
           </button>
@@ -77,7 +73,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
               还没有账号？<Link href="/register">去注册</Link>
             </p>
           ) : null}
-        </form>
+        </AuthCaptchaForm>
       </section>
     </main>
   );

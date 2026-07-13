@@ -1,0 +1,370 @@
+"use client";
+
+import { Clapperboard, File, Headphones, Pencil, Save, Trash2, Upload, X } from "lucide-react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { deleteAdminMediaAction, updateAdminMediaAction } from "@/app/admin/actions";
+import { LocalDateTime } from "@/components/LocalDateTime";
+import type { MediaAsset, MediaFolder, MediaKind } from "@/lib/media";
+
+const KIND_LABELS: Record<MediaKind, string> = { video: "视频", audio: "音频", file: "文件" };
+const KIND_ICONS = { video: Clapperboard, audio: Headphones, file: File };
+const ACCEPT_TYPES: Record<MediaKind, string> = {
+  video: ".mp4,.m4v,.mov,.ogv,.webm,video/*",
+  audio: ".aac,.flac,.m4a,.mp3,.oga,.ogg,.wav,.webm,audio/*",
+  file: "*/*",
+};
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[unit]}`;
+}
+
+async function responseJson(response: Response): Promise<{ ok?: boolean; message?: string; uploadId?: string; chunkBytes?: number }> {
+  try {
+    return (await response.json()) as { ok?: boolean; message?: string; uploadId?: string; chunkBytes?: number };
+  } catch {
+    return { message: "上传接口返回异常" };
+  }
+}
+
+export function AdminMediaManager({
+  assets,
+  totalAssets,
+  folders,
+  initialKind = "video",
+  initialFolder = "",
+  returnPath,
+}: {
+  assets: MediaAsset[];
+  totalAssets: number;
+  folders: Record<MediaKind, MediaFolder[]>;
+  initialKind?: MediaKind;
+  initialFolder?: string;
+  returnPath: string;
+}) {
+  const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [kind, setKind] = useState<MediaKind>(initialKind);
+  const [folder, setFolder] = useState(initialFolder);
+  const [files, setFiles] = useState<File[]>([]);
+  const [title, setTitle] = useState("");
+  const [artist, setArtist] = useState("");
+  const [description, setDescription] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [message, setMessage] = useState("");
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [editingAsset, setEditingAsset] = useState<MediaAsset | null>(null);
+  const visibleIds = assets.map((asset) => asset.id);
+  const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+
+  useEffect(() => {
+    setSelectedIds([]);
+    setEditingAsset(null);
+  }, [assets]);
+
+  useEffect(() => {
+    setKind(initialKind);
+    setFolder(initialFolder);
+    setFiles([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }, [initialFolder, initialKind]);
+
+  function changeKind(nextKind: MediaKind) {
+    if (isUploading) {
+      return;
+    }
+    setKind(nextKind);
+    setFiles([]);
+    setTitle("");
+    setArtist("");
+    setFolder("");
+    setMessage("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  function chooseFiles(event: ChangeEvent<HTMLInputElement>) {
+    const nextFiles = Array.from(event.target.files || []);
+    setFiles(nextFiles);
+    if (!nextFiles.length) {
+      setMessage("");
+      return;
+    }
+    const totalBytes = nextFiles.reduce((sum, item) => sum + item.size, 0);
+    setMessage(`已选择 ${nextFiles.length} 个文件（${formatBytes(totalBytes)}）`);
+    if (nextFiles.length === 1) {
+      if (!title.trim()) {
+        setTitle(nextFiles[0].name.replace(/\.[^.]+$/, ""));
+      }
+    } else {
+      setTitle("");
+    }
+  }
+
+  async function upload(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!files.length || isUploading) {
+      return;
+    }
+    const uploadFiles = [...files];
+    const totalBytes = Math.max(uploadFiles.reduce((sum, item) => sum + item.size, 0), 1);
+    let uploadedBytes = 0;
+    let completedFiles = 0;
+    setIsUploading(true);
+    setProgress(0);
+    setMessage(`准备上传 ${uploadFiles.length} 个文件`);
+    try {
+      for (const [fileIndex, file] of uploadFiles.entries()) {
+        let uploadId = "";
+        try {
+          setMessage(`正在创建任务 ${fileIndex + 1}/${uploadFiles.length} · ${file.name}`);
+          const startResponse = await fetch("/admin/media/upload?action=start", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              kind,
+              title: uploadFiles.length === 1 ? title : "",
+              artist,
+              description,
+              folder,
+              fileName: file.name,
+              mimeType: file.type,
+              sizeBytes: file.size,
+            }),
+          });
+          const startData = await responseJson(startResponse);
+          if (!startResponse.ok || !startData.uploadId || !startData.chunkBytes) {
+            throw new Error(startData.message || "无法创建上传任务");
+          }
+          uploadId = startData.uploadId;
+
+          for (let offset = 0; offset < file.size; offset += startData.chunkBytes) {
+            const chunk = file.slice(offset, Math.min(offset + startData.chunkBytes, file.size));
+            const chunkResponse = await fetch(`/admin/media/upload?action=chunk&uploadId=${uploadId}`, {
+              method: "POST",
+              headers: { "content-type": "application/octet-stream", "x-upload-offset": String(offset) },
+              body: chunk,
+            });
+            const chunkData = await responseJson(chunkResponse);
+            if (!chunkResponse.ok) {
+              throw new Error(chunkData.message || "文件分片上传失败");
+            }
+            const nextOffset = Math.min(offset + chunk.size, file.size);
+            setProgress(Math.round(((uploadedBytes + nextOffset) / totalBytes) * 100));
+            setMessage(`正在上传 ${fileIndex + 1}/${uploadFiles.length} · ${file.name}`);
+          }
+
+          const finishResponse = await fetch(`/admin/media/upload?action=finish&uploadId=${uploadId}`, { method: "POST" });
+          const finishData = await responseJson(finishResponse);
+          if (!finishResponse.ok) {
+            throw new Error(finishData.message || "资源保存失败");
+          }
+          uploadedBytes += file.size;
+          completedFiles += 1;
+          setProgress(Math.round((uploadedBytes / totalBytes) * 100));
+        } catch (error) {
+          if (uploadId) {
+            void fetch(`/admin/media/upload?uploadId=${uploadId}`, { method: "DELETE" });
+          }
+          const reason = error instanceof Error ? error.message : "上传失败";
+          throw new Error(completedFiles ? `已完成 ${completedFiles} 个，${file.name} 上传失败：${reason}` : `${file.name} 上传失败：${reason}`);
+        }
+      }
+
+      setMessage(`已上传 ${completedFiles} 个资源`);
+      setFiles([]);
+      setTitle("");
+      setArtist("");
+      setDescription("");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "上传失败");
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  function toggleAll() {
+    setSelectedIds(allSelected ? [] : visibleIds);
+  }
+
+  function toggleOne(id: number) {
+    setSelectedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+  }
+
+  return (
+    <>
+      <form className="adminMediaUpload" onSubmit={upload}>
+        <div className="adminMediaKindPicker" aria-label="上传资源类型">
+          {(Object.keys(KIND_LABELS) as MediaKind[]).map((item) => {
+            const Icon = KIND_ICONS[item];
+            return (
+              <button className={item === kind ? "isActive" : ""} type="button" onClick={() => changeKind(item)} disabled={isUploading} key={item}>
+                <Icon size={16} aria-hidden="true" />
+                {KIND_LABELS[item]}
+              </button>
+            );
+          })}
+        </div>
+        <div className={kind === "audio" ? "adminMediaUploadFields hasArtist" : "adminMediaUploadFields"}>
+          <label>
+            <span>标题</span>
+            <input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              maxLength={120}
+              placeholder={files.length > 1 ? "批量上传使用各自文件名" : "留空时使用文件名"}
+              disabled={isUploading || files.length > 1}
+            />
+          </label>
+          {kind === "audio" ? (
+            <label>
+              <span>作者</span>
+              <input value={artist} onChange={(event) => setArtist(event.target.value)} maxLength={80} placeholder="可选，本批次共用" disabled={isUploading} />
+            </label>
+          ) : null}
+          <label>
+            <span>选择{KIND_LABELS[kind]}</span>
+            <input ref={fileInputRef} type="file" accept={ACCEPT_TYPES[kind]} onChange={chooseFiles} disabled={isUploading} multiple required />
+          </label>
+          <label>
+            <span>上传到</span>
+            <select value={folder} onChange={(event) => setFolder(event.target.value)} disabled={isUploading}>
+              <option value="">根目录</option>
+              {folders[kind].map((item) => <option value={item.path} key={item.path}>{item.path}</option>)}
+            </select>
+          </label>
+          <label className="adminMediaDescriptionField">
+            <span>简介</span>
+            <textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={1000} rows={2} placeholder="可选，本批次共用" disabled={isUploading} />
+          </label>
+          <button className="adminMediaUploadButton" type="submit" disabled={!files.length || isUploading}>
+            <Upload size={17} aria-hidden="true" />
+            {isUploading ? "上传中" : files.length > 1 ? `上传 ${files.length} 个` : "上传"}
+          </button>
+        </div>
+        {message ? (
+          <div className="adminMediaUploadStatus" aria-live="polite">
+            <span>{message}</span>
+            {isUploading ? <progress max="100" value={progress}>{progress}%</progress> : null}
+          </div>
+        ) : null}
+      </form>
+
+      {assets.length ? (
+        <>
+          <div className="adminTableWrap adminMediaTableWrap">
+            <table className="adminTable adminMediaTable">
+              <thead>
+                <tr>
+                  <th aria-label="选择资源"><input className="adminCheckbox" type="checkbox" checked={allSelected} onChange={toggleAll} /></th>
+                  <th>类型</th>
+                  <th>标题</th>
+                  <th>作者</th>
+                  <th>文件</th>
+                  <th>目录</th>
+                  <th>大小</th>
+                  <th>播放/下载</th>
+                  <th>更新时间</th>
+                  <th aria-label="编辑">编辑</th>
+                </tr>
+              </thead>
+              <tbody>
+                {assets.map((asset) => {
+                  const Icon = KIND_ICONS[asset.kind];
+                  return (
+                    <tr key={asset.id}>
+                      <td><input className="adminCheckbox" type="checkbox" checked={selectedIds.includes(asset.id)} onChange={() => toggleOne(asset.id)} aria-label={`选择 ${asset.title}`} /></td>
+                      <td><span className={`adminMediaKind is-${asset.kind}`}><Icon size={14} aria-hidden="true" />{KIND_LABELS[asset.kind]}</span></td>
+                      <td title={asset.title}><strong>{asset.title}</strong></td>
+                      <td title={asset.artist}>{asset.kind === "audio" ? asset.artist || "-" : "-"}</td>
+                      <td title={asset.fileName}>{asset.fileName}</td>
+                      <td title={asset.folder || "根目录"}>{asset.folder || "根目录"}</td>
+                      <td>{formatBytes(asset.sizeBytes)}</td>
+                      <td>{asset.kind === "file" ? `${asset.downloadCount} 次下载` : `${asset.playCount} 次播放`}</td>
+                      <td><LocalDateTime value={asset.updatedAt} /></td>
+                      <td>
+                        <button className="adminTableIconButton" type="button" onClick={() => setEditingAsset(asset)} aria-label={`编辑 ${asset.title}`} title="编辑">
+                          <Pencil size={15} aria-hidden="true" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="adminTableFooter adminMediaFooter">
+            <form action={deleteAdminMediaAction}>
+              <input name="returnPath" type="hidden" value={returnPath} />
+              {selectedIds.map((id) => <input name="mediaIds" type="hidden" value={id} key={id} />)}
+              <button className="adminDangerButton" type="submit" disabled={!selectedIds.length}>
+                <Trash2 size={16} aria-hidden="true" />
+                删除所选
+              </button>
+            </form>
+            <span>当前显示 {assets.length} 个，共 {totalAssets} 个资源</span>
+          </div>
+        </>
+      ) : null}
+
+      {editingAsset ? (
+        <div className="adminMediaEditBackdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setEditingAsset(null)}>
+          <form className="adminMediaEditDialog" action={updateAdminMediaAction} role="dialog" aria-modal="true" aria-labelledby="admin-media-edit-title">
+            <header>
+              <div>
+                <h3 id="admin-media-edit-title">编辑资源</h3>
+                <p>{editingAsset.fileName}</p>
+              </div>
+              <button type="button" onClick={() => setEditingAsset(null)} aria-label="关闭编辑" title="关闭"><X size={18} aria-hidden="true" /></button>
+            </header>
+            <input name="mediaId" type="hidden" value={editingAsset.id} />
+            <input name="returnPath" type="hidden" value={returnPath} />
+            <label>
+              <span>标题</span>
+              <input name="title" defaultValue={editingAsset.title} maxLength={120} required autoFocus />
+            </label>
+            {editingAsset.kind === "audio" ? (
+              <label>
+                <span>作者</span>
+                <input name="artist" defaultValue={editingAsset.artist} maxLength={80} placeholder="可选" />
+              </label>
+            ) : null}
+            <label>
+              <span>所在目录</span>
+              <select name="targetFolder" defaultValue={editingAsset.folder}>
+                <option value="">根目录</option>
+                {folders[editingAsset.kind].map((item) => <option value={item.path} key={item.path}>{item.path}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>简介</span>
+              <textarea name="description" defaultValue={editingAsset.description} maxLength={1000} rows={5} />
+            </label>
+            <footer>
+              <button className="adminSecondaryButton" type="button" onClick={() => setEditingAsset(null)}>取消</button>
+              <button type="submit"><Save size={16} aria-hidden="true" />保存</button>
+            </footer>
+          </form>
+        </div>
+      ) : null}
+    </>
+  );
+}

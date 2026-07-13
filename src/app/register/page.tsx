@@ -1,8 +1,8 @@
 import { UserPlus } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AuthCaptchaForm } from "@/components/AuthCaptchaForm";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
-import { LoginCaptcha } from "@/components/LoginCaptcha";
 import { SiteHeader } from "@/components/SiteHeader";
 import {
   getNoticeDisplaySeconds,
@@ -11,7 +11,6 @@ import {
   isUserRegistrationEnabled,
   shouldNoticeStayVisibleAfterBlur,
 } from "@/lib/config";
-import { createLoginCaptchaChallenge } from "@/lib/login-captcha";
 import { getCurrentUser } from "@/lib/user-auth";
 import { registerUserAction } from "../account/actions";
 
@@ -34,7 +33,6 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
   const loginEnabled = isUserLoginEnabled();
   const registrationEnabled = isUserRegistrationEnabled();
   const captchaMode = getUserLoginCaptchaMode();
-  const captcha = registrationEnabled && captchaMode !== "off" ? createLoginCaptchaChallenge(captchaMode, "register") : null;
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
   const noticeStayVisibleAfterBlur = shouldNoticeStayVisibleAfterBlur();
 
@@ -51,7 +49,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
         />
       ) : null}
       <section className="authPage">
-        <form className="userPanel authPanel" action={registerUserAction}>
+        <AuthCaptchaForm action={registerUserAction} captchaMode={captchaMode} purpose="register">
           <div className="userPanelHeader">
             <UserPlus size={20} aria-hidden="true" />
             <div>
@@ -83,7 +81,6 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
               required
             />
           </label>
-          {captcha ? <LoginCaptcha challenge={captcha} /> : null}
           <button className="authPrimaryButton" type="submit" disabled={!registrationEnabled}>
             {loginEnabled ? "注册并登录" : "注册账号"}
           </button>
@@ -93,7 +90,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
               已有账号？<Link href="/login">去登录</Link>
             </p>
           ) : null}
-        </form>
+        </AuthCaptchaForm>
       </section>
     </main>
   );

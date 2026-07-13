@@ -27,6 +27,21 @@ function cleanupBuckets(now: number) {
   nextCleanupAt = now + BUCKET_CLEANUP_INTERVAL_MS;
 }
 
+export function clearRateLimitBucketsByPrefix(prefix: string): number {
+  if (!prefix) {
+    return 0;
+  }
+
+  let cleared = 0;
+  for (const key of buckets.keys()) {
+    if (key.startsWith(prefix)) {
+      buckets.delete(key);
+      cleared += 1;
+    }
+  }
+  return cleared;
+}
+
 export function checkRateLimit(params: {
   key: string;
   limit: number;

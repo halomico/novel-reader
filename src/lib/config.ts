@@ -17,6 +17,10 @@ export function getContentIndexDatabasePath(): string {
   return resolveFromProject(process.env.CONTENT_INDEX_DB_PATH || "./data/content-index.db");
 }
 
+export function getMediaDir(): string {
+  return resolveFromProject(process.env.MEDIA_DIR || "./data/media");
+}
+
 export function getSiteName(): string {
   return readSiteSettings().siteName || process.env.SITE_NAME || "墨卷";
 }
@@ -167,6 +171,18 @@ export function isAnalyticsEnabled(): boolean {
 
 export function getAnalyticsRealtimeLimit(): number {
   return readSettingInt(readSiteSettings().analyticsRealtimeLimit, "ANALYTICS_REALTIME_LIMIT", 300, 30, 2000);
+}
+
+export function isVideoLibraryEnabled(): boolean {
+  return readSiteSettings().videoLibraryEnabled;
+}
+
+export function isAudioLibraryEnabled(): boolean {
+  return readSiteSettings().audioLibraryEnabled;
+}
+
+export function isFileLibraryEnabled(): boolean {
+  return readSiteSettings().fileLibraryEnabled;
 }
 
 export function getFrontendSearchConcurrencyLimit(): number {
