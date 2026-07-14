@@ -1,14 +1,20 @@
-import { BookOpen, Clock, KeyRound, LibraryBig, Settings, Trash2, Upload, UserRound } from "lucide-react";
+import { Clock, KeyRound, Settings, Trash2, Upload, UserRound } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
 import { LocalDateTime } from "@/components/LocalDateTime";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getNoticeDisplaySeconds, getUserAvatarMaxBytes, shouldNoticeStayVisibleAfterBlur } from "@/lib/config";
-import { getEnabledMediaKinds } from "@/lib/media";
 import { getCurrentUser } from "@/lib/user-auth";
 import { listBrowseHistory } from "@/lib/users";
-import { clearHistoryAction, deleteHistoryItemAction, updateAccountDisplayNameAction, updateAccountPasswordAction, uploadAvatarAction } from "./actions";
+import {
+  clearHistoryAction,
+  deleteHistoryItemAction,
+  updateAccountDisplayNameAction,
+  updateAccountPasswordAction,
+  updateHistoryVisibilityAction,
+  uploadAvatarAction,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -26,11 +32,10 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
   }
 
   const params = await searchParams;
-  const history = listBrowseHistory(user.id);
+  const history = user.historyVisible ? listBrowseHistory(user.id, { includeHidden: false }) : [];
   const maxAvatarMb = (getUserAvatarMaxBytes() / 1024 / 1024).toFixed(1);
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
   const noticeStayVisibleAfterBlur = shouldNoticeStayVisibleAfterBlur();
-  const mediaEnabled = getEnabledMediaKinds().length > 0;
 
   return (
     <main className="appShell">
@@ -62,17 +67,6 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
             <Clock size={16} aria-hidden="true" />
             浏览记录
           </label>
-          <span className="accountSideNavDivider" aria-hidden="true" />
-          <Link href="/">
-            <BookOpen size={16} aria-hidden="true" />
-            小说书库
-          </Link>
-          {mediaEnabled ? (
-            <Link href="/media">
-              <LibraryBig size={16} aria-hidden="true" />
-              资源中心
-            </Link>
-          ) : null}
           <Link href="/settings">
             <Settings size={16} aria-hidden="true" />
             阅读设置
@@ -136,15 +130,23 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
           </article>
 
           <article className="userPanel accountPanel accountHistory" id="history">
-            <div className="userPanelHeader">
-              <Clock size={20} aria-hidden="true" />
-              <div>
-                <h2>浏览记录</h2>
-                <p>小说与资源访问，最多显示最近 200 条。</p>
+            <div className="userPanelHeader accountHistoryHeader">
+              <div className="accountHistoryHeading">
+                <Clock size={20} aria-hidden="true" />
+                <div>
+                  <h2>浏览记录</h2>
+                  <p>小说与资源访问，最多显示最近 200 条。</p>
+                </div>
               </div>
+              <form className="accountHistoryVisibility" action={updateHistoryVisibilityAction} aria-label="浏览记录显示设置">
+                <button className={user.historyVisible ? "isActive" : ""} name="historyVisible" value="on" type="submit">显示</button>
+                <button className={!user.historyVisible ? "isActive" : ""} name="historyVisible" value="off" type="submit">隐藏</button>
+              </form>
             </div>
 
-            {history.length ? (
+            {!user.historyVisible ? (
+              <p className="emptyAccountText">浏览记录已隐藏，重新开启后可继续查看；历史数据仍会保留。</p>
+            ) : history.length ? (
               <>
                 <form action={deleteHistoryItemAction}>
                   <div className="adminTableWrap">
@@ -155,7 +157,6 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
                           <th>类型</th>
                           <th>内容</th>
                           <th>最近访问</th>
-                          <th>次数</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -180,7 +181,6 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
                             <td>
                               <LocalDateTime value={item.lastAccessedAt} />
                             </td>
-                            <td>{item.visitCount}</td>
                           </tr>
                           );
                         })}
@@ -190,11 +190,11 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
                   <div className="accountHistoryActions">
                     <button className="secondaryUserButton" type="submit">
                       <Trash2 size={16} aria-hidden="true" />
-                      删除所选
+                      隐藏所选
                     </button>
                     <button className="secondaryUserButton" type="submit" formAction={clearHistoryAction}>
                       <Trash2 size={16} aria-hidden="true" />
-                      清空全部
+                      隐藏全部
                     </button>
                   </div>
                 </form>

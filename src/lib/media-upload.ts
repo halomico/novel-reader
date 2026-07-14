@@ -3,14 +3,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { getMediaDir } from "./config";
 import {
+  availableMediaStoredName,
   createMediaAsset,
-  createStoredMediaName,
   isMediaKind,
   mediaFolderExists,
+  mediaFolderFromStoredName,
   mediaFilePath,
   mediaStoredName,
   normalizeMediaFolder,
   normalizeMediaFile,
+  normalizeMediaTitle,
   type MediaAsset,
   type MediaKind,
 } from "./media";
@@ -24,7 +26,6 @@ type UploadSession = {
   title: string;
   artist: string;
   description: string;
-  fileName: string;
   storedName: string;
   mimeType: string;
   sizeBytes: number;
@@ -54,8 +55,9 @@ function partialPath(uploadId: string): string {
 }
 
 function cleanTitle(value: string, fileName: string): string {
-  const title = value.trim() || path.basename(fileName, path.extname(fileName));
-  if (!title || title.length > 120) {
+  const extension = path.extname(fileName);
+  const title = normalizeMediaTitle(value.trim() || path.basename(fileName, extension), extension);
+  if (!title) {
     throw new MediaUploadError("标题应为 1 到 120 个字符");
   }
   return title;
@@ -145,14 +147,15 @@ export function startMediaUpload(params: {
   fs.mkdirSync(uploadTempDir(), { recursive: true });
   pruneStaleUploads();
   const uploadId = crypto.randomBytes(16).toString("hex");
+  const title = cleanTitle(params.title, normalizedFile.fileName);
+  const fileName = `${title}${normalizedFile.extension}`;
   const session: UploadSession = {
     id: uploadId,
     kind: params.kind,
-    title: cleanTitle(params.title, normalizedFile.fileName),
+    title,
     artist: cleanArtist(params.artist || "", params.kind),
     description: cleanDescription(params.description),
-    fileName: normalizedFile.fileName,
-    storedName: mediaStoredName(params.kind, folder, createStoredMediaName(normalizedFile.extension)),
+    storedName: mediaStoredName(params.kind, folder, fileName),
     mimeType: normalizedFile.mimeType,
     sizeBytes: params.sizeBytes,
     createdAt: Date.now(),
@@ -185,9 +188,14 @@ export function finishMediaUpload(uploadId: string): MediaAsset {
     throw new MediaUploadError("文件尚未上传完成", 409);
   }
   fs.mkdirSync(getMediaDir(), { recursive: true });
-  const storedName = session.storedName.replace(/\\/g, "/").startsWith(`${session.kind}/`)
+  const requestedStoredName = session.storedName.replace(/\\/g, "/").startsWith(`${session.kind}/`)
     ? session.storedName
     : mediaStoredName(session.kind, "", session.storedName);
+  const storedName = availableMediaStoredName(
+    session.kind,
+    mediaFolderFromStoredName(requestedStoredName, session.kind),
+    path.basename(requestedStoredName),
+  );
   const finalPath = mediaFilePath(storedName);
   fs.mkdirSync(path.dirname(finalPath), { recursive: true });
   fs.renameSync(sourcePath, finalPath);
@@ -195,10 +203,10 @@ export function finishMediaUpload(uploadId: string): MediaAsset {
   try {
     asset = createMediaAsset({
       kind: session.kind,
-      title: session.title,
+      title: path.basename(storedName, path.extname(storedName)) || session.title,
       artist: session.artist,
       description: session.description,
-      fileName: session.fileName,
+      fileName: path.basename(storedName),
       storedName,
       mimeType: session.mimeType,
       sizeBytes: session.sizeBytes,

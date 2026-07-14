@@ -1,11 +1,13 @@
-import { ChevronRight, Clapperboard, Disc3, File, Headphones, LibraryBig, Play, Search, X } from "lucide-react";
+import { ChevronRight, Clapperboard, Disc3, File, Headphones, Search, X } from "lucide-react";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { MediaFolderRow } from "@/components/MediaFolderRow";
-import { MediaVideoPreview } from "@/components/MediaVideoPreview";
+import { MediaVideoCard } from "@/components/MediaVideoCard";
 import { Pagination } from "@/components/Pagination";
 import { SiteHeader } from "@/components/SiteHeader";
-import { getEnabledMediaKinds, isMediaKind, listMediaAssets, listMediaFolders, type MediaAsset, type MediaKind } from "@/lib/media";
+import { getVideoThumbnailSettings } from "@/lib/config";
+import { getAccessibleMediaKinds, isMediaKind, listMediaAssets, listMediaFolders, type MediaAsset, type MediaKind } from "@/lib/media";
+import { formatMediaDuration, loadMediaDurations } from "@/lib/media-metadata";
 import { getCurrentUser } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
@@ -56,19 +58,19 @@ function MediaResourceRow({ asset, showFolder }: { asset: MediaAsset; showFolder
         <strong title={title}>{title}</strong>
         <small title={metadata}>{metadata}</small>
       </span>
-      <span className="mediaCardSize">{formatBytes(asset.sizeBytes)}</span>
+      <span className="mediaCardSize">{asset.kind === "audio" ? formatMediaDuration(asset.durationSeconds) : formatBytes(asset.sizeBytes)}</span>
       <ChevronRight size={17} aria-hidden="true" />
     </Link>
   );
 }
 
 export default async function MediaPage({ searchParams }: MediaPageProps) {
-  if (!(await getCurrentUser())) redirect("/login");
-  const enabledKinds = getEnabledMediaKinds();
-  if (!enabledKinds.length) notFound();
-
+  const accessibleKinds = getAccessibleMediaKinds(Boolean(await getCurrentUser()));
+  if (!accessibleKinds.length) notFound();
   const params = await searchParams;
-  const kind = isMediaKind(params.kind) && enabledKinds.includes(params.kind) ? params.kind : enabledKinds[0];
+  const requestedKind = isMediaKind(params.kind) ? params.kind : null;
+  if (requestedKind && !accessibleKinds.includes(requestedKind)) notFound();
+  const kind = requestedKind || accessibleKinds[0];
   const result = listMediaAssets({
     kind,
     folder: kind === "video" ? "" : params.folder,
@@ -77,6 +79,8 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
     page: Number(params.page || 1),
     pageSize: 18,
   });
+  result.assets = await loadMediaDurations(result.assets);
+  const thumbnailSettings = getVideoThumbnailSettings();
   const folders = kind === "video" ? [] : listMediaFolders(kind);
   const EmptyIcon = KIND_ICONS[kind];
   const segments = result.folder ? result.folder.split("/") : [];
@@ -88,25 +92,14 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
       <SiteHeader />
       <section className="mediaLibrary">
         <header className="mediaLibraryHeader">
-          <span className="mediaLibraryTitleIcon" aria-hidden="true"><LibraryBig size={23} /></span>
+          <span className="mediaLibraryTitleIcon" aria-hidden="true"><EmptyIcon size={23} /></span>
           <div>
-            <h1>资源中心</h1>
-            <p>{KIND_LABELS[kind]} · {visibleItems.toLocaleString("zh-CN")} 项</p>
+            <h1>{KIND_LABELS[kind]}</h1>
+            <p>共 {visibleItems.toLocaleString("zh-CN")} 项</p>
           </div>
         </header>
 
-        <div className="mediaLibraryToolbar">
-          <nav className="mediaKindTabs" aria-label="资源类型">
-            {enabledKinds.map((item) => {
-              const Icon = KIND_ICONS[item];
-              return (
-                <Link className={item === kind ? "isActive" : ""} href={mediaHref(item)} key={item}>
-                  <Icon size={16} aria-hidden="true" />
-                  {KIND_LABELS[item]}
-                </Link>
-              );
-            })}
-          </nav>
+        <div className="mediaLibraryToolbar isSearchOnly">
           <form className="mediaSearchForm" action="/media">
             <Search size={16} aria-hidden="true" />
             <input
@@ -151,22 +144,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
             {result.assets.length || childFolders.length ? (
               kind === "video" ? (
                 <div className="mediaAssetGrid is-video">
-                  {result.assets.map((asset) => {
-                    const title = displayTitle(asset.title, asset.fileName);
-                    return (
-                      <Link className="mediaVideoCard" href={`/media/${asset.id}`} key={asset.id}>
-                        <span className="mediaVideoPreview">
-                          <MediaVideoPreview id={asset.id} />
-                          <span className="mediaVideoPlay" aria-hidden="true"><Play size={20} fill="currentColor" /></span>
-                          <span className="mediaVideoMeta">{formatBytes(asset.sizeBytes)}</span>
-                        </span>
-                        <span className="mediaCardCopy">
-                          <strong title={title}>{title}</strong>
-                          <small>{asset.description || "视频"}</small>
-                        </span>
-                      </Link>
-                    );
-                  })}
+                  {result.assets.map((asset) => <MediaVideoCard asset={asset} thumbnail={thumbnailSettings} key={asset.id} />)}
                 </div>
               ) : (
                 <div className="mediaResourceList">

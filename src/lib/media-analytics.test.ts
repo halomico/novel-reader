@@ -60,6 +60,12 @@ test("records media analytics and unified user browse history", async () => {
     assert.equal(history.length, 1);
     assert.equal(history[0].source, "audio");
     assert.equal(history[0].visitCount, 2);
+    assert.equal(users.getUserById(userId)?.historyVisible, true);
+    assert.equal(users.updateUserHistoryVisibility(userId, false), true);
+    assert.equal(users.listBrowseHistory(userId).length, 1);
+    assert.equal(users.hideBrowseHistoryItem(userId, history[0].key), true);
+    assert.equal(users.listBrowseHistory(userId, { includeHidden: false }).length, 0);
+    assert.equal(users.listBrowseHistory(userId).length, 1);
     assert.equal(users.deleteBrowseHistoryItem(userId, history[0].key), true);
     assert.equal(users.listBrowseHistory(userId).length, 0);
   } finally {

@@ -3,6 +3,10 @@ import Link from "next/link";
 import {
   getNoticeDisplaySeconds,
   getSiteName,
+  isGuestAudioNavEnabled,
+  isGuestFileNavEnabled,
+  isGuestLibraryNavEnabled,
+  isGuestVideoNavEnabled,
   isAudioLibraryEnabled,
   isFileLibraryEnabled,
   isUserLoginEnabled,
@@ -29,21 +33,28 @@ export async function SiteHeader({
   const user = await getCurrentUser();
   const loginEnabled = isUserLoginEnabled();
   const registrationEnabled = isUserRegistrationEnabled();
-  const mediaKinds = [
+  const enabledMediaKinds = [
     isVideoLibraryEnabled() ? "video" : null,
     isAudioLibraryEnabled() ? "audio" : null,
     isFileLibraryEnabled() ? "file" : null,
   ].filter((kind): kind is "video" | "audio" | "file" => kind !== null);
+  const showLibraryNav = Boolean(user) || isGuestLibraryNavEnabled();
+  const mediaKinds = user
+    ? enabledMediaKinds
+    : enabledMediaKinds.filter((kind) => (
+      kind === "video" ? isGuestVideoNavEnabled() : kind === "audio" ? isGuestAudioNavEnabled() : isGuestFileNavEnabled()
+    ));
+  const showPrimaryNav = showLibraryNav || mediaKinds.length > 0;
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
   const noticeStayVisibleAfterBlur = shouldNoticeStayVisibleAfterBlur();
 
   return (
-    <header className={user ? "siteHeader hasPrimaryNav" : "siteHeader"}>
+    <header className={showPrimaryNav ? "siteHeader hasPrimaryNav" : "siteHeader"}>
       <Link className="brand" href="/" aria-label="返回首页">
         <BookOpen size={24} aria-hidden="true" />
         <span>{siteName}</span>
       </Link>
-      {user ? <HeaderPrimaryNav mediaKinds={mediaKinds} /> : null}
+      {showPrimaryNav ? <HeaderPrimaryNav mediaKinds={mediaKinds} showLibrary={showLibraryNav} /> : null}
       <div className="headerTools">
         <HeaderSearch
           query={query}

@@ -1,13 +1,15 @@
-import { File, FolderPen, FolderPlus, LibraryBig, RefreshCw, Search, Trash2 } from "lucide-react";
+import { File, FolderPen, FolderPlus, ImageIcon, LibraryBig, RefreshCw, Save, Search, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { AdminMediaManager } from "@/components/AdminMediaManager";
 import { MediaFolderTree } from "@/components/MediaFolderTree";
 import { Pagination } from "@/components/Pagination";
 import { isMediaKind, listMediaAssets, listMediaFolders, type MediaKind } from "@/lib/media";
+import { readSiteSettings } from "@/lib/site-settings";
 import {
   createAdminMediaFolderAction,
   deleteAdminMediaFolderAction,
   renameAdminMediaFolderAction,
+  saveAdminMediaDisplaySettingsAction,
   syncAdminMediaAction,
 } from "../actions";
 import { AdminFrame } from "../AdminFrame";
@@ -56,6 +58,7 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
   };
   const returnPath = currentPath(kind, result.folder, result.query);
   const currentFolderName = result.folder.split("/").at(-1) || "";
+  const settings = readSiteSettings();
 
   return (
     <AdminFrame active="media" notice={params.notice} tone={params.tone}>
@@ -82,6 +85,48 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
             </Link>
           ))}
         </nav>
+
+        {!kind || kind === "video" ? (
+          <details className="adminMediaDisplaySettings">
+            <summary><ImageIcon size={16} aria-hidden="true" />视频封面与推荐</summary>
+            <form action={saveAdminMediaDisplaySettingsAction}>
+              <input name="returnPath" type="hidden" value={returnPath} />
+              <label>
+                <span>封面模式</span>
+                <select name="videoThumbnailMode" defaultValue={settings.videoThumbnailMode}>
+                  <option value="single">单图</option>
+                  <option value="carousel">轮播图</option>
+                </select>
+              </label>
+              <label>
+                <span>单图截图位置 / %</span>
+                <input name="videoThumbnailSinglePercent" type="number" min="1" max="99" defaultValue={settings.videoThumbnailSinglePercent} />
+              </label>
+              <label>
+                <span>轮播张数</span>
+                <input name="videoThumbnailCarouselFrames" type="number" min="2" max="8" defaultValue={settings.videoThumbnailCarouselFrames} />
+              </label>
+              <label>
+                <span>每张停留 / 秒</span>
+                <input name="videoThumbnailCarouselIntervalSeconds" type="number" min="1" max="15" defaultValue={settings.videoThumbnailCarouselIntervalSeconds} />
+              </label>
+              <label>
+                <span>详情页推荐数量</span>
+                <input name="relatedVideoCount" type="number" min="0" max="20" defaultValue={settings.relatedVideoCount} />
+              </label>
+              <label>
+                <span>推荐方式</span>
+                <select name="relatedVideoMode" defaultValue={settings.relatedVideoMode}>
+                  <option value="next">接下来的视频</option>
+                  <option value="random">随机视频</option>
+                </select>
+              </label>
+              <button className="adminMediaSettingsSaveButton" type="submit" aria-label="保存视频封面与推荐设置" title="保存设置">
+                <Save size={15} aria-hidden="true" />
+              </button>
+            </form>
+          </details>
+        ) : null}
 
         <div className={kind ? "adminMediaWorkspace" : "adminMediaWorkspace withoutFolders"}>
           {kind ? (

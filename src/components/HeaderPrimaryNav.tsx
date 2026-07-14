@@ -11,7 +11,7 @@ const MEDIA_LINKS: Record<MediaKind, { label: string; icon: typeof Clapperboard 
   file: { label: "文件", icon: File },
 };
 
-export function HeaderPrimaryNav({ mediaKinds }: { mediaKinds: MediaKind[] }) {
+export function HeaderPrimaryNav({ mediaKinds, showLibrary = true }: { mediaKinds: MediaKind[]; showLibrary?: boolean }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const requestedKind = searchParams.get("kind");
@@ -19,10 +19,12 @@ export function HeaderPrimaryNav({ mediaKinds }: { mediaKinds: MediaKind[] }) {
 
   return (
     <nav className="headerPrimaryNav" aria-label="前台主导航">
-      <Link href="/" aria-current={pathname === "/" ? "page" : undefined}>
-        <BookOpen size={15} aria-hidden="true" />
-        书库
-      </Link>
+      {showLibrary ? (
+        <Link href="/" aria-current={pathname === "/" ? "page" : undefined}>
+          <BookOpen size={15} aria-hidden="true" />
+          书库
+        </Link>
+      ) : null}
       {mediaKinds.map((kind) => {
         const item = MEDIA_LINKS[kind];
         const Icon = item.icon;

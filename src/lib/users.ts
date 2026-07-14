@@ -13,6 +13,7 @@ export type UserProfile = {
   avatarPath: string | null;
   status: UserStatus;
   searchRateLimitPerMinute: number | null;
+  historyVisible: boolean;
   registrationIp: string | null;
   createdAt: string;
   updatedAt: string;
@@ -66,6 +67,7 @@ type UserRow = {
   avatar_path: string | null;
   status: string;
   search_rate_limit_per_minute: number | null;
+  history_visible: number;
   registration_ip: string | null;
   created_at: string;
   updated_at: string;
@@ -118,6 +120,7 @@ function toUserProfile(row: UserRow): UserProfile {
     avatarPath: row.avatar_path,
     status: row.status === "disabled" ? "disabled" : "active",
     searchRateLimitPerMinute: row.search_rate_limit_per_minute,
+    historyVisible: row.history_visible === 1,
     registrationIp: row.registration_ip,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -129,7 +132,7 @@ function toUserProfile(row: UserRow): UserProfile {
 export function getUserById(id: number): UserProfile | null {
   const row = getDb()
     .prepare(
-      `SELECT id, username, display_name, avatar_path, status, search_rate_limit_per_minute, registration_ip, created_at, updated_at, last_login_at, last_login_ip
+      `SELECT id, username, display_name, avatar_path, status, search_rate_limit_per_minute, history_visible, registration_ip, created_at, updated_at, last_login_at, last_login_ip
        FROM users
        WHERE id = ?`,
     )
@@ -141,7 +144,7 @@ export function getUserById(id: number): UserProfile | null {
 export function getUserPasswordRow(username: string): (UserRow & { password_hash: string }) | null {
   const row = getDb()
     .prepare(
-      `SELECT id, username, display_name, password_hash, avatar_path, status, search_rate_limit_per_minute, registration_ip, created_at, updated_at, last_login_at, last_login_ip
+      `SELECT id, username, display_name, password_hash, avatar_path, status, search_rate_limit_per_minute, history_visible, registration_ip, created_at, updated_at, last_login_at, last_login_ip
        FROM users
        WHERE username = ?`,
     )
@@ -196,7 +199,7 @@ export function listUsers(params: { page?: number; q?: string; pageSize?: number
   const offset = (page - 1) * pageSize;
   const users = db
     .prepare(
-      `SELECT id, username, display_name, avatar_path, status, search_rate_limit_per_minute, registration_ip, created_at, updated_at, last_login_at, last_login_ip
+      `SELECT id, username, display_name, avatar_path, status, search_rate_limit_per_minute, history_visible, registration_ip, created_at, updated_at, last_login_at, last_login_ip
        FROM users
        ${where}
        ORDER BY updated_at DESC, id DESC
@@ -242,6 +245,13 @@ export function updateUserRecord(params: {
   return Number(info.changes) > 0;
 }
 
+export function updateUserStatus(userId: number, status: UserStatus): boolean {
+  const info = getDb()
+    .prepare("UPDATE users SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .run(status, userId);
+  return Number(info.changes) > 0;
+}
+
 export function updateUserAvatar(userId: number, avatarPath: string | null) {
   getDb()
     .prepare("UPDATE users SET avatar_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
@@ -252,6 +262,13 @@ export function updateUserDisplayName(userId: number, displayName: string) {
   getDb()
     .prepare("UPDATE users SET display_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
     .run(displayName.trim(), userId);
+}
+
+export function updateUserHistoryVisibility(userId: number, visible: boolean): boolean {
+  const info = getDb()
+    .prepare("UPDATE users SET history_visible = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .run(visible ? 1 : 0, userId);
+  return Number(info.changes) > 0;
 }
 
 export function getUserPasswordHashById(userId: number): string | null {
@@ -374,7 +391,8 @@ export function recordMediaHistory(userId: number, asset: Pick<MediaAsset, "id" 
     .run(userId, asset.id, asset.kind, asset.title);
 }
 
-export function listBrowseHistory(userId: number): BrowseHistoryItem[] {
+export function listBrowseHistory(userId: number, options: { includeHidden?: boolean } = {}): BrowseHistoryItem[] {
+  const visibleOnly = options.includeHidden === false ? 1 : 0;
   const rows = getDb()
     .prepare(
       `SELECT source, history_id, item_id, title, segment_index, visit_count, last_accessed_at, item_exists
@@ -389,7 +407,7 @@ export function listBrowseHistory(userId: number): BrowseHistoryItem[] {
                 CASE WHEN n.id IS NULL THEN 0 ELSE 1 END AS item_exists
          FROM user_reading_history h
          LEFT JOIN novels n ON n.id = h.novel_id
-         WHERE h.user_id = ?
+         WHERE h.user_id = ? AND (? = 0 OR h.hidden_by_user = 0)
          UNION ALL
          SELECT h.kind AS source,
                 h.id AS history_id,
@@ -401,12 +419,12 @@ export function listBrowseHistory(userId: number): BrowseHistoryItem[] {
                 CASE WHEN m.id IS NULL THEN 0 ELSE 1 END AS item_exists
          FROM user_media_history h
          LEFT JOIN media_assets m ON m.id = h.media_id
-         WHERE h.user_id = ?
+         WHERE h.user_id = ? AND (? = 0 OR h.hidden_by_user = 0)
        )
        ORDER BY last_accessed_at DESC, history_id DESC
        LIMIT 200`,
     )
-    .all(userId, userId) as Array<{
+    .all(userId, visibleOnly, userId, visibleOnly) as Array<{
     source: "novel" | MediaKind;
     history_id: number;
     item_id: number;
@@ -506,6 +524,30 @@ export function deleteBrowseHistoryItem(userId: number, key: string): boolean {
   const table = match[1] === "novel" ? "user_reading_history" : "user_media_history";
   const info = getDb().prepare(`DELETE FROM ${table} WHERE id = ? AND user_id = ?`).run(Number(match[2]), userId);
   return Number(info.changes) > 0;
+}
+
+export function hideBrowseHistoryItem(userId: number, key: string): boolean {
+  const match = /^(novel|media):(\d+)$/.exec(key);
+  if (!match) {
+    return false;
+  }
+  const table = match[1] === "novel" ? "user_reading_history" : "user_media_history";
+  const info = getDb().prepare(`UPDATE ${table} SET hidden_by_user = 1 WHERE id = ? AND user_id = ?`).run(Number(match[2]), userId);
+  return Number(info.changes) > 0;
+}
+
+export function hideBrowseHistory(userId: number): number {
+  const db = getDb();
+  db.exec("BEGIN");
+  try {
+    const novels = Number(db.prepare("UPDATE user_reading_history SET hidden_by_user = 1 WHERE user_id = ? AND hidden_by_user = 0").run(userId).changes);
+    const media = Number(db.prepare("UPDATE user_media_history SET hidden_by_user = 1 WHERE user_id = ? AND hidden_by_user = 0").run(userId).changes);
+    db.exec("COMMIT");
+    return novels + media;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 }
 
 export function clearBrowseHistory(userId: number): number {

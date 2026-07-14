@@ -1,6 +1,37 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
-import { normalizeMediaFile, parseMediaByteRange } from "./media";
+import { isMediaKindAccessible, normalizeMediaFile, parseMediaByteRange } from "./media";
+import { readSiteSettings, writeSiteSettings } from "./site-settings";
+
+test("applies public, signed-in, and disabled media access modes", (t) => {
+  const originalSettingsPath = process.env.ADMIN_SETTINGS_PATH;
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-media-access-"));
+  process.env.ADMIN_SETTINGS_PATH = path.join(directory, "settings.json");
+  t.after(() => {
+    if (originalSettingsPath === undefined) delete process.env.ADMIN_SETTINGS_PATH;
+    else process.env.ADMIN_SETTINGS_PATH = originalSettingsPath;
+    fs.rmSync(directory, { recursive: true, force: true });
+  });
+
+  writeSiteSettings({
+    ...readSiteSettings(),
+    videoLibraryEnabled: true,
+    audioLibraryEnabled: true,
+    fileLibraryEnabled: false,
+    guestVideoNavEnabled: true,
+    guestAudioNavEnabled: false,
+    guestFileNavEnabled: true,
+  });
+
+  assert.equal(isMediaKindAccessible("video", false), true);
+  assert.equal(isMediaKindAccessible("audio", false), false);
+  assert.equal(isMediaKindAccessible("audio", true), true);
+  assert.equal(isMediaKindAccessible("file", true), false);
+  assert.equal(isMediaKindAccessible("file", false), false);
+});
 
 test("normalizes supported native media files", () => {
   assert.deepEqual(normalizeMediaFile({ kind: "video", fileName: "demo.MP4", mimeType: "" }), {

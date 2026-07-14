@@ -1,6 +1,6 @@
 ﻿import { Settings } from "lucide-react";
 import type { Metadata } from "next";
-import { Globe2, Trash2, Upload } from "lucide-react";
+import { BookOpen, Clapperboard, File, Globe2, Headphones, Trash2, Upload } from "lucide-react";
 import { RateLimitBanTable } from "@/components/RateLimitBanTable";
 import { RateLimitRulesEditor } from "@/components/RateLimitRulesEditor";
 import { getAdminBookStats } from "@/lib/admin-books";
@@ -54,6 +54,11 @@ type AdminSettingsPageProps = {
     tone?: "success" | "warning" | "error";
   }>;
 };
+
+function mediaAccessMode(enabled: boolean, guestEnabled: boolean): "off" | "user" | "public" {
+  if (!enabled) return "off";
+  return guestEnabled ? "public" : "user";
+}
 
 export default async function AdminSettingsPage({ searchParams }: AdminSettingsPageProps) {
   const params = await searchParams;
@@ -259,7 +264,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
           </section>
 
           <section className="adminSettingsSection">
-            <h3>前台访问限制</h3>
+            <h3>应用级访问保护</h3>
             <div className="rateLimitPolicyStack">
               <RateLimitRulesEditor
                 fieldName="searchRateLimitRules"
@@ -278,7 +283,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
             </div>
             <div className="adminFieldGrid">
               <label>
-                <span>登录用户搜索限速 / 分钟</span>
+                <span>登录账号搜索兜底限速 / 分钟</span>
                 <input name="userSearchRateLimitPerMinute" type="number" min="1" max="600" defaultValue={userSearchRateLimit} />
               </label>
               <label>
@@ -317,32 +322,45 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
             <label className="adminSwitchLabel">
               <span>
                 <strong>启用访问数据统计</strong>
-                <small>开启后只统计小说阅读访问，用于后台分析书籍访问、IP、来源和客户端。</small>
+                <small>统计小说与资源访问，用于分析内容、IP、来源和客户端。</small>
               </span>
               <input name="analyticsEnabled" type="checkbox" defaultChecked={settings.analyticsEnabled} />
             </label>
-            <div className="adminResourceSwitches">
-              <label className="adminSwitchLabel">
-                <span>
-                  <strong>开放视频</strong>
-                  <small>登录用户可浏览并在线播放后台发布的视频。</small>
-                </span>
-                <input name="videoLibraryEnabled" type="checkbox" defaultChecked={settings.videoLibraryEnabled} />
-              </label>
-              <label className="adminSwitchLabel">
-                <span>
-                  <strong>开放音频</strong>
-                  <small>登录用户可浏览并在线播放后台发布的音频。</small>
-                </span>
-                <input name="audioLibraryEnabled" type="checkbox" defaultChecked={settings.audioLibraryEnabled} />
-              </label>
-              <label className="adminSwitchLabel">
-                <span>
-                  <strong>开放文件</strong>
-                  <small>登录用户可浏览并下载后台发布的文件。</small>
-                </span>
-                <input name="fileLibraryEnabled" type="checkbox" defaultChecked={settings.fileLibraryEnabled} />
-              </label>
+            <div className="adminAccessSettings">
+              <h4>前台资源访问</h4>
+              <div className="adminAccessModeGrid">
+                <label className="adminAccessModeRow">
+                  <span><BookOpen size={16} aria-hidden="true" /><strong>书库</strong></span>
+                  <select name="libraryGuestAccess" defaultValue={settings.guestLibraryNavEnabled ? "public" : "hidden"}>
+                    <option value="hidden">游客隐藏</option>
+                    <option value="public">游客显示</option>
+                  </select>
+                </label>
+                <label className="adminAccessModeRow">
+                  <span><Clapperboard size={16} aria-hidden="true" /><strong>视频</strong></span>
+                  <select name="videoAccessMode" defaultValue={mediaAccessMode(settings.videoLibraryEnabled, settings.guestVideoNavEnabled)}>
+                    <option value="off">关闭</option>
+                    <option value="user">登录可用</option>
+                    <option value="public">公开访问</option>
+                  </select>
+                </label>
+                <label className="adminAccessModeRow">
+                  <span><Headphones size={16} aria-hidden="true" /><strong>音频</strong></span>
+                  <select name="audioAccessMode" defaultValue={mediaAccessMode(settings.audioLibraryEnabled, settings.guestAudioNavEnabled)}>
+                    <option value="off">关闭</option>
+                    <option value="user">登录可用</option>
+                    <option value="public">公开访问</option>
+                  </select>
+                </label>
+                <label className="adminAccessModeRow">
+                  <span><File size={16} aria-hidden="true" /><strong>文件</strong></span>
+                  <select name="fileAccessMode" defaultValue={mediaAccessMode(settings.fileLibraryEnabled, settings.guestFileNavEnabled)}>
+                    <option value="off">关闭</option>
+                    <option value="user">登录可用</option>
+                    <option value="public">公开访问</option>
+                  </select>
+                </label>
+              </div>
             </div>
             <div className="adminFieldGrid">
               <label>

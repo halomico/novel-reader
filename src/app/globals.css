@@ -1541,30 +1541,8 @@ mark {
   border-block: 1px solid var(--border);
 }
 
-.mediaKindTabs {
-  display: inline-flex;
-  gap: 3px;
-  padding: 3px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-}
-
-.mediaKindTabs a {
-  display: inline-flex;
-  min-height: 30px;
-  align-items: center;
-  gap: 6px;
-  border-radius: 999px;
-  padding: 5px 11px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.mediaKindTabs a.isActive {
-  background: var(--accent);
-  color: #fffaf2;
+.mediaLibraryToolbar.isSearchOnly {
+  justify-content: flex-end;
 }
 
 .mediaSearchForm {
@@ -1654,6 +1632,38 @@ mark {
   color: var(--muted);
   font-size: 11px;
   font-weight: 600;
+}
+
+.mediaFolderNode > summary {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  align-items: center;
+  list-style: none;
+}
+
+.mediaFolderNode > summary::-webkit-details-marker {
+  display: none;
+}
+
+.mediaFolderNode > summary > svg {
+  color: var(--muted);
+  transition: transform 160ms ease;
+}
+
+.mediaFolderNode[open] > summary > svg {
+  transform: rotate(90deg);
+}
+
+.mediaFolderNode > summary > a {
+  padding-left: 4px;
+}
+
+.mediaFolderChildren {
+  display: grid;
+  gap: 2px;
+  margin-left: 7px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
 }
 
 .mediaExplorer {
@@ -2136,6 +2146,19 @@ mark {
   white-space: pre-wrap;
 }
 
+.mediaRelatedVideos {
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.mediaRelatedVideos h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
+}
+
 .accountSideNav {
   position: sticky;
   top: 68px;
@@ -2169,12 +2192,6 @@ mark {
 #account-tab-history:checked ~ .accountSideNav label[for="account-tab-history"] {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent);
-}
-
-.accountSideNavDivider {
-  height: 1px;
-  margin: 4px 6px;
-  background: var(--border);
 }
 
 .accountContent {
@@ -2372,6 +2389,42 @@ mark {
   gap: 8px;
   justify-content: flex-start;
   margin-top: 10px;
+}
+
+.accountHistoryHeader {
+  justify-content: space-between;
+}
+
+.accountHistoryHeading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.accountHistoryVisibility {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-soft);
+}
+
+.accountHistoryVisibility button {
+  min-height: 26px;
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.accountHistoryVisibility button.isActive {
+  background: var(--accent);
+  color: #fffaf2;
 }
 
 .adminShell,
@@ -3454,47 +3507,81 @@ mark {
   opacity: 0.5;
 }
 
-.adminCreateUserForm {
-  display: grid;
-  grid-template-columns: auto repeat(5, minmax(92px, 1fr)) auto;
-  align-items: center;
-  gap: 8px;
+.adminCreateUserPanel {
   margin-bottom: 12px;
-  padding: 10px;
-  border: 1px dashed var(--border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface-strong) 32%, transparent);
+  border-block: 1px solid var(--border);
 }
 
-.adminCreateUserTitle {
+.adminCreateUserPanel summary {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 750;
+  list-style: none;
+}
+
+.adminCreateUserPanel summary::-webkit-details-marker {
+  display: none;
+}
+
+.adminCreateUserPanel summary span {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  color: var(--accent);
-  white-space: nowrap;
+}
+
+.adminCreateUserPanel summary > svg {
+  color: var(--muted);
+  transition: transform 160ms ease;
+}
+
+.adminCreateUserPanel[open] summary > svg {
+  transform: rotate(180deg);
+}
+
+.adminCreateUserForm {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(130px, 1fr));
+  align-items: end;
+  gap: 9px;
+  padding: 10px 0 12px;
+  border-top: 1px solid var(--border);
+}
+
+.adminCreateUserForm label {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .adminCreateUserForm input,
-.adminCreateUserForm select,
-.adminInlineEditForm input,
-.adminInlineEditForm select {
+.adminCreateUserForm select {
   min-width: 0;
+  height: 32px;
   border: 1px solid var(--border);
   border-radius: 7px;
-  padding: 6px 8px;
+  padding: 5px 8px;
   background: var(--bg-soft);
   color: var(--text);
   font-size: 13px;
 }
 
-.adminCreateUserForm button,
-.adminInlineEditForm button {
+.adminCreateUserForm button {
   display: inline-flex;
+  min-height: 32px;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   border: 0;
   border-radius: 999px;
-  padding: 7px 12px;
+  padding: 6px 12px;
   background: var(--accent);
   color: #fffaf2;
   cursor: pointer;
@@ -3503,30 +3590,66 @@ mark {
   white-space: nowrap;
 }
 
-.adminInlineEditForm {
+.adminUserTable {
+  min-width: 760px;
+}
+
+.adminUserTable th:first-child,
+.adminUserTable td:first-child,
+.adminUserTable th:nth-last-child(2),
+.adminUserTable td:nth-last-child(2) {
+  width: 46px;
+  text-align: center;
+}
+
+.adminUserTable th:last-child,
+.adminUserTable td:last-child {
+  width: 84px;
+  text-align: center;
+}
+
+.adminUserIdentity,
+.adminUserMeta {
   display: grid;
-  grid-template-columns: minmax(104px, 1fr) 68px 76px minmax(88px, 0.9fr) auto;
-  gap: 6px;
-  align-items: center;
-  min-width: 460px;
+  min-width: 0;
+  gap: 3px;
 }
 
-.adminInlineEditForm input,
-.adminInlineEditForm select {
-  height: 30px;
-  padding: 4px 8px;
-  font-size: 12px;
+.adminUserIdentity small,
+.adminUserMeta small {
+  max-width: 190px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.adminInlineEditForm .adminStatusSelect {
-  padding-right: 20px;
-}
-
-.adminInlineEditForm .adminInlineSaveButton {
-  width: 30px;
-  height: 30px;
-  padding: 0;
+.adminUserStatusSelect {
+  width: 72px;
+  height: 28px;
+  border: 1px solid color-mix(in srgb, #2e7d52 32%, var(--border));
   border-radius: 999px;
+  padding: 3px 22px 3px 9px;
+  background: color-mix(in srgb, #2e7d52 9%, var(--surface));
+  color: #2e7d52;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.adminUserStatusSelect.is-disabled {
+  border-color: color-mix(in srgb, #8b5d50 30%, var(--border));
+  background: color-mix(in srgb, #8b5d50 8%, var(--surface));
+  color: #8b5d50;
+}
+
+.adminUserTableFooter {
+  justify-content: flex-start;
+}
+
+.adminUserEditDialog {
+  width: min(410px, 100%);
 }
 
 .adminUserNameLink,
@@ -3985,10 +4108,69 @@ mark {
   min-width: 880px;
 }
 
-.adminResourceSwitches {
+.adminAccessSettings {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 7px;
+}
+
+.adminAccessSettings h4 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.adminAccessModeGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.adminAccessModeRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 108px;
+  min-width: 0;
+  min-height: 45px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px;
+  background: color-mix(in srgb, var(--surface-strong) 26%, transparent);
+}
+
+.adminAccessModeRow:nth-child(odd) {
+  border-right: 1px solid var(--border);
+}
+
+.adminAccessModeRow:nth-child(n + 3) {
+  border-top: 1px solid var(--border);
+}
+
+.adminAccessModeRow > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.adminAccessModeRow > span svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.adminAccessModeRow select {
+  min-width: 0;
+  width: 100%;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 4px 7px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
 }
 
 .adminMediaPanel {
@@ -4069,8 +4251,7 @@ mark {
   color: #b42318;
 }
 
-.adminMediaFilters,
-.adminMediaKindPicker {
+.adminMediaFilters {
   display: inline-flex;
   gap: 3px;
   padding: 3px;
@@ -4083,8 +4264,70 @@ mark {
   margin-bottom: 12px;
 }
 
-.adminMediaFilters a,
-.adminMediaKindPicker button {
+.adminMediaDisplaySettings {
+  margin: 0 0 14px;
+  padding-block: 9px;
+  border-block: 1px solid var(--border);
+}
+
+.adminMediaDisplaySettings summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.adminMediaDisplaySettings form {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(105px, 1fr)) auto;
+  align-items: end;
+  gap: 9px;
+  padding-top: 10px;
+}
+
+.adminMediaDisplaySettings label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.adminMediaDisplaySettings input,
+.adminMediaDisplaySettings select {
+  min-width: 0;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding-inline: 9px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.adminMediaDisplaySettings button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+}
+
+.adminMediaDisplaySettings .adminMediaSettingsSaveButton {
+  width: 32px;
+  min-height: 32px;
+  justify-content: center;
+  align-self: end;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: var(--accent);
+  color: #fffaf2;
+  cursor: pointer;
+}
+
+.adminMediaFilters a {
   display: inline-flex;
   min-height: 30px;
   align-items: center;
@@ -4100,15 +4343,9 @@ mark {
   font-weight: 700;
 }
 
-.adminMediaFilters a.isActive,
-.adminMediaKindPicker button.isActive {
+.adminMediaFilters a.isActive {
   background: var(--accent);
   color: #fffaf2;
-}
-
-.adminMediaKindPicker button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
 }
 
 .adminMediaUpload {
@@ -4119,10 +4356,6 @@ mark {
   border: 1px dashed var(--border);
   border-radius: 8px;
   background: color-mix(in srgb, var(--surface-strong) 26%, transparent);
-}
-
-.adminMediaKindPicker {
-  justify-self: start;
 }
 
 .adminMediaUploadFields {
@@ -4528,6 +4761,10 @@ mark {
     gap: 8px;
   }
 
+  .readerTitle .backLink {
+    display: none;
+  }
+
   .readerTitle h1 {
     font-size: 24px;
   }
@@ -4638,12 +4875,6 @@ mark {
     flex-direction: column;
   }
 
-  .mediaKindTabs {
-    align-self: flex-start;
-    max-width: 100%;
-    overflow-x: auto;
-  }
-
   .mediaSearchForm {
     width: 100%;
   }
@@ -4698,10 +4929,6 @@ mark {
   .accountSideNav label,
   .accountSideNav a {
     justify-content: center;
-  }
-
-  .accountSideNavDivider {
-    display: none;
   }
 
   .accountProfileHeader {
@@ -4838,10 +5065,26 @@ mark {
     display: none;
   }
 
-  .adminResourceSwitches,
+  .adminUserTable th:nth-child(3),
+  .adminUserTable td:nth-child(3),
+  .adminUserTable th:nth-child(5),
+  .adminUserTable td:nth-child(5) {
+    display: table-cell;
+  }
+
+  .adminAccessModeGrid,
+  .adminMediaDisplaySettings form,
   .adminMediaUploadFields,
   .adminMediaUploadFields.hasArtist {
     grid-template-columns: 1fr;
+  }
+
+  .adminAccessModeRow:nth-child(odd) {
+    border-right: 0;
+  }
+
+  .adminAccessModeRow:nth-child(n + 2) {
+    border-top: 1px solid var(--border);
   }
 
   .adminMediaDescriptionField,

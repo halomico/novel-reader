@@ -1,5 +1,11 @@
 ﻿import path from "node:path";
-import { readSiteSettings, type IpRateLimitRule, type UserLoginCaptchaMode } from "./site-settings";
+import {
+  readSiteSettings,
+  type IpRateLimitRule,
+  type RelatedVideoMode,
+  type UserLoginCaptchaMode,
+  type VideoThumbnailMode,
+} from "./site-settings";
 
 function resolveFromProject(value: string): string {
   return path.isAbsolute(value) ? value : path.resolve(process.cwd(), value);
@@ -183,6 +189,42 @@ export function isAudioLibraryEnabled(): boolean {
 
 export function isFileLibraryEnabled(): boolean {
   return readSiteSettings().fileLibraryEnabled;
+}
+
+export function isGuestLibraryNavEnabled(): boolean {
+  return readSiteSettings().guestLibraryNavEnabled;
+}
+
+export function isGuestVideoNavEnabled(): boolean {
+  return readSiteSettings().guestVideoNavEnabled;
+}
+
+export function isGuestAudioNavEnabled(): boolean {
+  return readSiteSettings().guestAudioNavEnabled;
+}
+
+export function isGuestFileNavEnabled(): boolean {
+  return readSiteSettings().guestFileNavEnabled;
+}
+
+export function getVideoThumbnailSettings(): {
+  mode: VideoThumbnailMode;
+  singlePercent: number;
+  carouselFrames: number;
+  carouselIntervalSeconds: number;
+} {
+  const settings = readSiteSettings();
+  return {
+    mode: settings.videoThumbnailMode,
+    singlePercent: settings.videoThumbnailSinglePercent,
+    carouselFrames: settings.videoThumbnailCarouselFrames,
+    carouselIntervalSeconds: settings.videoThumbnailCarouselIntervalSeconds,
+  };
+}
+
+export function getRelatedVideoSettings(): { count: number; mode: RelatedVideoMode } {
+  const settings = readSiteSettings();
+  return { count: settings.relatedVideoCount, mode: settings.relatedVideoMode };
 }
 
 export function getFrontendSearchConcurrencyLimit(): number {

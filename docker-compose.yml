@@ -1,12 +1,16 @@
 services:
   app:
-    build: .
+    image: ${NOVEL_READER_IMAGE:-ghcr.io/halomico/novel-reader}:${NOVEL_READER_IMAGE_TAG:-latest}
+    build:
+      context: .
+      target: runner
     container_name: novel-reader
     restart: unless-stopped
     env_file:
       - .env
     environment:
       NODE_ENV: production
+      PORT: 3000
       NOVEL_LIBRARY_DIR: /app/library/books
       DATABASE_PATH: /app/data/novels.db
     ports:

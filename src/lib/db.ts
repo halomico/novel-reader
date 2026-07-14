@@ -120,6 +120,7 @@ function initialize(db: DatabaseSync) {
       avatar_path TEXT,
       status TEXT NOT NULL DEFAULT 'active',
       search_rate_limit_per_minute INTEGER,
+      history_visible INTEGER NOT NULL DEFAULT 1,
       registration_ip TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -152,6 +153,7 @@ function initialize(db: DatabaseSync) {
       title TEXT NOT NULL,
       segment_index INTEGER NOT NULL DEFAULT 0,
       visit_count INTEGER NOT NULL DEFAULT 0,
+      hidden_by_user INTEGER NOT NULL DEFAULT 0,
       last_read_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(user_id, novel_id),
@@ -234,6 +236,7 @@ function initialize(db: DatabaseSync) {
       mime_type TEXT NOT NULL,
       size_bytes INTEGER NOT NULL,
       mtime_ms INTEGER NOT NULL DEFAULT 0,
+      duration_seconds REAL,
       play_count INTEGER NOT NULL DEFAULT 0,
       download_count INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -250,6 +253,7 @@ function initialize(db: DatabaseSync) {
       kind TEXT NOT NULL CHECK(kind IN ('video', 'audio', 'file')),
       title TEXT NOT NULL,
       visit_count INTEGER NOT NULL DEFAULT 0,
+      hidden_by_user INTEGER NOT NULL DEFAULT 0,
       last_accessed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(user_id, media_id),
@@ -269,8 +273,12 @@ function initialize(db: DatabaseSync) {
   addColumnIfMissing(db, "novels", "last_accessed_ip", "last_accessed_ip TEXT");
   addColumnIfMissing(db, "novels", "last_accessed_user_agent", "last_accessed_user_agent TEXT");
   addColumnIfMissing(db, "users", "registration_ip", "registration_ip TEXT");
+  addColumnIfMissing(db, "users", "history_visible", "history_visible INTEGER NOT NULL DEFAULT 1");
+  addColumnIfMissing(db, "user_reading_history", "hidden_by_user", "hidden_by_user INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(db, "user_media_history", "hidden_by_user", "hidden_by_user INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(db, "media_assets", "artist", "artist TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(db, "media_assets", "mtime_ms", "mtime_ms INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(db, "media_assets", "duration_seconds", "duration_seconds REAL");
   addColumnIfMissing(db, "analytics_events", "media_id", "media_id INTEGER REFERENCES media_assets(id) ON DELETE SET NULL");
   db.exec("CREATE INDEX IF NOT EXISTS idx_novels_title_hash ON novels(title, content_hash);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_novels_last_accessed ON novels(last_accessed_at);");

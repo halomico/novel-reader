@@ -1,7 +1,15 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { getMediaDir, isAudioLibraryEnabled, isFileLibraryEnabled, isVideoLibraryEnabled } from "./config";
+import {
+  getMediaDir,
+  isAudioLibraryEnabled,
+  isFileLibraryEnabled,
+  isGuestAudioNavEnabled,
+  isGuestFileNavEnabled,
+  isGuestVideoNavEnabled,
+  isVideoLibraryEnabled,
+} from "./config";
 import { getDb } from "./db";
 
 export type MediaKind = "video" | "audio" | "file";
@@ -18,6 +26,7 @@ export type MediaAsset = {
   mimeType: string;
   sizeBytes: number;
   mtimeMs: number;
+  durationSeconds: number | null;
   playCount: number;
   downloadCount: number;
   createdAt: string;
@@ -48,6 +57,7 @@ type MediaRow = {
   mime_type: string;
   size_bytes: number;
   mtime_ms: number;
+  duration_seconds: number | null;
   play_count: number;
   download_count: number;
   created_at: string;
@@ -176,6 +186,7 @@ function toAsset(row: MediaRow): MediaAsset {
     mimeType: row.mime_type,
     sizeBytes: row.size_bytes,
     mtimeMs: row.mtime_ms,
+    durationSeconds: row.duration_seconds,
     playCount: row.play_count,
     downloadCount: row.download_count,
     createdAt: row.created_at,
@@ -201,6 +212,21 @@ export function getEnabledMediaKinds(): MediaKind[] {
   return MEDIA_KINDS.filter(isMediaKindEnabled);
 }
 
+export function isMediaKindPublic(kind: MediaKind): boolean {
+  if (!isMediaKindEnabled(kind)) return false;
+  if (kind === "video") return isGuestVideoNavEnabled();
+  if (kind === "audio") return isGuestAudioNavEnabled();
+  return isGuestFileNavEnabled();
+}
+
+export function isMediaKindAccessible(kind: MediaKind, authenticated: boolean): boolean {
+  return authenticated ? isMediaKindEnabled(kind) : isMediaKindPublic(kind);
+}
+
+export function getAccessibleMediaKinds(authenticated: boolean): MediaKind[] {
+  return MEDIA_KINDS.filter((kind) => isMediaKindAccessible(kind, authenticated));
+}
+
 export function normalizeMediaFile(params: { kind: MediaKind; fileName: string; mimeType: string }): {
   fileName: string;
   extension: string;
@@ -219,6 +245,23 @@ export function normalizeMediaFile(params: { kind: MediaKind; fileName: string; 
   return { fileName, extension, mimeType };
 }
 
+export function normalizeMediaTitle(value: string, extension = ""): string | null {
+  let title = value.trim();
+  if (extension && title.toLowerCase().endsWith(extension.toLowerCase())) {
+    title = title.slice(0, -extension.length).trim();
+  }
+  if (
+    !title ||
+    title.length > 120 ||
+    /[<>:"/\\|?*\u0000-\u001f]/.test(title) ||
+    /[. ]$/.test(title) ||
+    /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(title)
+  ) {
+    return null;
+  }
+  return title;
+}
+
 export function createStoredMediaName(extension: string): string {
   return `${Date.now()}-${crypto.randomBytes(12).toString("hex")}${extension}`;
 }
@@ -234,6 +277,19 @@ function ensureMediaDirectories() {
   for (const kind of MEDIA_KINDS) {
     fs.mkdirSync(path.join(getMediaDir(), kind), { recursive: true });
   }
+}
+
+export function availableMediaStoredName(kind: MediaKind, folder: string, fileName: string, excludeStoredName = ""): string {
+  const extension = path.extname(fileName);
+  const baseName = path.basename(fileName, extension);
+  for (let suffix = 1; suffix < 10_000; suffix += 1) {
+    const candidateFileName = suffix === 1 ? fileName : `${baseName} (${suffix})${extension}`;
+    const candidate = mediaStoredName(kind, folder, candidateFileName);
+    if (candidate === excludeStoredName || !fs.existsSync(mediaFilePath(candidate))) {
+      return candidate;
+    }
+  }
+  throw new MediaFolderError("同名资源过多，请修改名称");
 }
 
 function migrateFlatMediaAssets() {
@@ -260,6 +316,43 @@ function migrateFlatMediaAssets() {
       update.run(destinationStoredName, row.id);
     } else if (fs.existsSync(destinationPath)) {
       update.run(destinationStoredName, row.id);
+    }
+  }
+}
+
+function migrateGeneratedMediaFileNames() {
+  const rows = getDb().prepare("SELECT * FROM media_assets").all() as MediaRow[];
+  for (const row of rows) {
+    const currentFileName = path.basename(row.stored_name);
+    if (!/^\d{10,}-[a-f0-9]{24}\.[^.]+$/i.test(currentFileName)) {
+      continue;
+    }
+    const extension = path.extname(currentFileName);
+    const title = normalizeMediaTitle(row.title, extension);
+    const sourcePath = mediaFilePath(row.stored_name);
+    if (!title || !fs.existsSync(sourcePath)) {
+      continue;
+    }
+    const folder = mediaFolderFromStoredName(row.stored_name, row.kind);
+    const nextStoredName = availableMediaStoredName(row.kind, folder, `${title}${extension}`, row.stored_name);
+    if (nextStoredName === row.stored_name) {
+      continue;
+    }
+    const nextFileName = path.basename(nextStoredName);
+    const nextTitle = path.basename(nextFileName, path.extname(nextFileName));
+    const targetPath = mediaFilePath(nextStoredName);
+    fs.renameSync(sourcePath, targetPath);
+    try {
+      getDb().exec("BEGIN");
+      getDb()
+        .prepare("UPDATE media_assets SET title = ?, file_name = ?, stored_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+        .run(nextTitle, nextFileName, nextStoredName, row.id);
+      getDb().prepare("UPDATE user_media_history SET title = ? WHERE media_id = ?").run(nextTitle, row.id);
+      getDb().exec("COMMIT");
+    } catch (error) {
+      getDb().exec("ROLLBACK");
+      fs.renameSync(targetPath, sourcePath);
+      throw error;
     }
   }
 }
@@ -303,7 +396,15 @@ function scanMediaFiles(): Map<string, ScannedMediaFile> {
 }
 
 function removeThumbnailFile(id: number) {
-  fs.rmSync(path.join(getMediaDir(), ".thumbnails", `${id}.jpg`), { force: true });
+  const directory = path.join(getMediaDir(), ".thumbnails");
+  if (!fs.existsSync(directory)) {
+    return;
+  }
+  for (const fileName of fs.readdirSync(directory)) {
+    if (fileName === `${id}.jpg` || fileName.startsWith(`${id}-`)) {
+      fs.rmSync(path.join(directory, fileName), { force: true });
+    }
+  }
 }
 
 export function syncMediaLibrary(options: { force?: boolean } = {}): MediaSyncResult {
@@ -316,11 +417,39 @@ export function syncMediaLibrary(options: { force?: boolean } = {}): MediaSyncRe
 
   ensureMediaDirectories();
   migrateFlatMediaAssets();
+  migrateGeneratedMediaFileNames();
   const scanned = scanMediaFiles();
   const db = getDb();
   const rows = db.prepare("SELECT * FROM media_assets").all() as MediaRow[];
   const existing = new Map(rows.map((row) => [row.stored_name, row]));
-  const removedRows = rows.filter((row) => !scanned.has(row.stored_name));
+  const missingRows = rows.filter((row) => !scanned.has(row.stored_name));
+  const newFiles = Array.from(scanned.values()).filter((file) => !existing.has(file.storedName));
+  const identity = (item: { kind: MediaKind; sizeBytes?: number; size_bytes?: number; mtimeMs?: number; mtime_ms?: number; fileName?: string; file_name?: string }) => {
+    const size = item.sizeBytes ?? item.size_bytes ?? -1;
+    const mtime = item.mtimeMs ?? item.mtime_ms ?? -1;
+    const fileName = item.fileName ?? item.file_name ?? "";
+    return `${item.kind}:${size}:${mtime}:${path.extname(fileName).toLowerCase()}`;
+  };
+  const missingByIdentity = new Map<string, MediaRow[]>();
+  const newByIdentity = new Map<string, ScannedMediaFile[]>();
+  for (const row of missingRows) {
+    const key = identity(row);
+    missingByIdentity.set(key, [...(missingByIdentity.get(key) || []), row]);
+  }
+  for (const file of newFiles) {
+    const key = identity(file);
+    newByIdentity.set(key, [...(newByIdentity.get(key) || []), file]);
+  }
+  const renamedPairs: Array<{ row: MediaRow; file: ScannedMediaFile }> = [];
+  for (const [key, oldRows] of missingByIdentity) {
+    const nextFiles = newByIdentity.get(key) || [];
+    if (oldRows.length === 1 && nextFiles.length === 1 && oldRows[0].mtime_ms > 0) {
+      renamedPairs.push({ row: oldRows[0], file: nextFiles[0] });
+    }
+  }
+  const renamedIds = new Set(renamedPairs.map((pair) => pair.row.id));
+  const renamedStoredNames = new Set(renamedPairs.map((pair) => pair.file.storedName));
+  const removedRows = missingRows.filter((row) => !renamedIds.has(row.id));
   let added = 0;
   let updated = 0;
 
@@ -332,12 +461,26 @@ export function syncMediaLibrary(options: { force?: boolean } = {}): MediaSyncRe
     );
     const update = db.prepare(
       `UPDATE media_assets
-       SET file_name = ?, mime_type = ?, size_bytes = ?, mtime_ms = ?, updated_at = CURRENT_TIMESTAMP
+       SET title = ?, file_name = ?, mime_type = ?, size_bytes = ?, mtime_ms = ?,
+           duration_seconds = CASE WHEN size_bytes <> ? OR mtime_ms <> ? THEN NULL ELSE duration_seconds END,
+           updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
     );
+    const updateRename = db.prepare(
+      `UPDATE media_assets
+       SET title = ?, file_name = ?, stored_name = ?, mime_type = ?, size_bytes = ?, mtime_ms = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+    );
+    const updateHistoryTitle = db.prepare("UPDATE user_media_history SET title = ? WHERE media_id = ?");
+    for (const { row, file } of renamedPairs) {
+      const title = path.basename(file.fileName, path.extname(file.fileName));
+      updateRename.run(title, file.fileName, file.storedName, file.mimeType, file.sizeBytes, file.mtimeMs, row.id);
+      updateHistoryTitle.run(title, row.id);
+      updated += 1;
+    }
     for (const file of scanned.values()) {
       const row = existing.get(file.storedName);
-      if (!row) {
+      if (!row && !renamedStoredNames.has(file.storedName)) {
         insert.run(
           file.kind,
           path.basename(file.fileName, path.extname(file.fileName)),
@@ -348,13 +491,17 @@ export function syncMediaLibrary(options: { force?: boolean } = {}): MediaSyncRe
           file.mtimeMs,
         );
         added += 1;
-      } else if (
+      } else if (row && (
         row.file_name !== file.fileName ||
         row.mime_type !== file.mimeType ||
         row.size_bytes !== file.sizeBytes ||
         row.mtime_ms !== file.mtimeMs
-      ) {
-        update.run(file.fileName, file.mimeType, file.sizeBytes, file.mtimeMs, row.id);
+      )) {
+        const title = row.file_name === file.fileName ? row.title : path.basename(file.fileName, path.extname(file.fileName));
+        update.run(title, file.fileName, file.mimeType, file.sizeBytes, file.mtimeMs, file.sizeBytes, file.mtimeMs, row.id);
+        if (title !== row.title) {
+          updateHistoryTitle.run(title, row.id);
+        }
         updated += 1;
       }
     }
@@ -503,6 +650,35 @@ export function listMediaFolderAssets(kind: MediaKind, folder: string, limit = 1
   return rows.map(toAsset);
 }
 
+export function listRelatedVideoAssets(currentId: number, count: number, mode: "next" | "random"): MediaAsset[] {
+  syncMediaLibrary();
+  const limit = Math.min(Math.max(Math.floor(count), 0), 20);
+  if (!limit) {
+    return [];
+  }
+  const rows = mode === "random"
+    ? getDb().prepare("SELECT * FROM media_assets WHERE kind = 'video' AND id <> ? ORDER BY RANDOM() LIMIT ?").all(currentId, limit) as MediaRow[]
+    : getDb()
+      .prepare(
+        `SELECT * FROM media_assets
+         WHERE kind = 'video' AND id <> ?
+         ORDER BY CASE WHEN id > ? THEN 0 ELSE 1 END, id ASC
+         LIMIT ?`,
+      )
+      .all(currentId, currentId, limit) as MediaRow[];
+  return rows.map(toAsset);
+}
+
+export function saveMediaDuration(id: number, durationSeconds: number): boolean {
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    return false;
+  }
+  const info = getDb()
+    .prepare("UPDATE media_assets SET duration_seconds = ? WHERE id = ?")
+    .run(durationSeconds, id);
+  return Number(info.changes) > 0;
+}
+
 function mediaFolderAbsolutePath(kind: MediaKind, folder: string): string {
   const normalizedFolder = normalizeMediaFolder(folder);
   if (normalizedFolder === null) {
@@ -634,11 +810,69 @@ export function moveMediaAsset(id: number, folderValue: string): boolean {
   return true;
 }
 
-export function updateMediaAsset(id: number, title: string, artist: string, description: string): boolean {
-  const result = getDb()
-    .prepare("UPDATE media_assets SET title = ?, artist = CASE WHEN kind = 'audio' THEN ? ELSE '' END, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-    .run(title, artist, description, id);
-  return result.changes > 0;
+export function updateMediaAsset(id: number, titleValue: string, artist: string, description: string, folderValue?: string): boolean {
+  const asset = getMediaAsset(id);
+  if (!asset) {
+    return false;
+  }
+  const extension = path.extname(asset.fileName);
+  const title = normalizeMediaTitle(titleValue, extension);
+  const folder = normalizeMediaFolder(folderValue ?? asset.folder);
+  if (!title) {
+    throw new MediaFolderError("名称无效，不能包含文件路径字符");
+  }
+  if (folder === null || !mediaFolderExists(asset.kind, folder)) {
+    throw new MediaFolderError("目标文件夹不存在");
+  }
+
+  const nextFileName = `${title}${extension}`;
+  const nextStoredName = mediaStoredName(asset.kind, folder, nextFileName);
+  const sourcePath = mediaFilePath(asset.storedName);
+  const targetPath = mediaFilePath(nextStoredName);
+  const samePathIgnoringCase = sourcePath.toLowerCase() === targetPath.toLowerCase();
+  if (nextStoredName !== asset.storedName && fs.existsSync(targetPath) && !samePathIgnoringCase) {
+    throw new MediaFolderError("目标文件夹存在同名文件");
+  }
+
+  let moved = false;
+  if (nextStoredName !== asset.storedName) {
+    if (samePathIgnoringCase) {
+      const temporaryPath = `${sourcePath}.${crypto.randomBytes(6).toString("hex")}.rename`;
+      fs.renameSync(sourcePath, temporaryPath);
+      try {
+        fs.renameSync(temporaryPath, targetPath);
+      } catch (error) {
+        fs.renameSync(temporaryPath, sourcePath);
+        throw error;
+      }
+    } else {
+      fs.renameSync(sourcePath, targetPath);
+    }
+    moved = true;
+  }
+
+  const db = getDb();
+  db.exec("BEGIN");
+  try {
+    const result = db
+      .prepare(
+        `UPDATE media_assets
+         SET title = ?, artist = CASE WHEN kind = 'audio' THEN ? ELSE '' END, description = ?,
+             file_name = ?, stored_name = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+      )
+      .run(title, artist, description, nextFileName, nextStoredName, id);
+    db.prepare("UPDATE user_media_history SET title = ? WHERE media_id = ?").run(title, id);
+    db.exec("COMMIT");
+    markMediaLibraryDirty();
+    return Number(result.changes) > 0;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    if (moved) {
+      fs.renameSync(targetPath, sourcePath);
+    }
+    throw error;
+  }
 }
 
 export function incrementMediaPlayCount(id: number): boolean {

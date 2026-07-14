@@ -38,11 +38,11 @@ import {
   getMediaAsset,
   isMediaKind,
   MediaFolderError,
-  moveMediaAsset,
   renameMediaFolder,
   syncMediaLibrary,
   updateMediaAsset,
 } from "@/lib/media";
+import { clearMediaThumbnails } from "@/lib/media-thumbnail";
 import { deleteNovelIds } from "@/lib/novel-files";
 import { hashPassword } from "@/lib/password";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -50,9 +50,12 @@ import { detectSiteIconFormat, MAX_SITE_ICON_BYTES, removeSiteIconFile, writeSit
 import { normalizeIpRateLimitRules, readSiteSettings, type SiteSettings, writeSiteSettings } from "@/lib/site-settings";
 import { deleteUserSessions, hashUserPassword } from "@/lib/user-auth";
 import {
+  clearBrowseHistory,
   createUserRecord,
+  deleteBrowseHistoryItem,
   deleteUserIds,
   updateUserRecord,
+  updateUserStatus,
   validateDisplayName,
   validatePassword,
   validateUsername,
@@ -122,6 +125,11 @@ function optionalIntField(formData: FormData, name: string, min: number, max: nu
     return null;
   }
   return Math.min(Math.max(Math.floor(value), min), max);
+}
+
+function mediaAccessModeField(formData: FormData, name: string): "off" | "user" | "public" {
+  const value = formData.get(name);
+  return value === "user" || value === "public" ? value : "off";
 }
 
 function rateLimitRulesField(formData: FormData, name: string, label: string): SiteSettings["searchRateLimitRules"] {
@@ -304,6 +312,9 @@ export async function saveAdminSettingsAction(formData: FormData) {
     scope: "all" as const,
     queryType: "all" as const,
   }));
+  const videoAccessMode = mediaAccessModeField(formData, "videoAccessMode");
+  const audioAccessMode = mediaAccessModeField(formData, "audioAccessMode");
+  const fileAccessMode = mediaAccessModeField(formData, "fileAccessMode");
   const next: SiteSettings = {
     ...previous,
     siteName: String(formData.get("siteName") || "").trim(),
@@ -360,9 +371,13 @@ export async function saveAdminSettingsAction(formData: FormData) {
     userAvatarMaxBytes: Math.floor(userAvatarMaxMb * 1024 ** 2),
     analyticsEnabled: formData.get("analyticsEnabled") === "on",
     analyticsRealtimeLimit: intField(formData, "analyticsRealtimeLimit", previous.analyticsRealtimeLimit || 300, 30, 2000),
-    videoLibraryEnabled: formData.get("videoLibraryEnabled") === "on",
-    audioLibraryEnabled: formData.get("audioLibraryEnabled") === "on",
-    fileLibraryEnabled: formData.get("fileLibraryEnabled") === "on",
+    videoLibraryEnabled: videoAccessMode !== "off",
+    audioLibraryEnabled: audioAccessMode !== "off",
+    fileLibraryEnabled: fileAccessMode !== "off",
+    guestLibraryNavEnabled: formData.get("libraryGuestAccess") === "public",
+    guestVideoNavEnabled: videoAccessMode === "public",
+    guestAudioNavEnabled: audioAccessMode === "public",
+    guestFileNavEnabled: fileAccessMode === "public",
     contentBlockHeadlessBrowsers: formData.get("contentBlockHeadlessBrowsers") === "on",
     frontendAutoIndexEnabled: formData.get("frontendAutoIndexEnabled") === "on",
     frontendSearchConcurrencyLimit: intField(
@@ -428,15 +443,51 @@ export async function updateAdminMediaAction(formData: FormData) {
     adminNotice("作者不能超过 80 个字符", "warning", returnPath);
   }
   try {
-    moveMediaAsset(id, String(formData.get("targetFolder") || ""));
+    updateMediaAsset(id, title, asset.kind === "audio" ? artist : "", description, String(formData.get("targetFolder") || ""));
   } catch (error) {
     adminNotice(mediaFolderMessage(error), "warning", returnPath);
   }
-  updateMediaAsset(id, title, asset.kind === "audio" ? artist : "", description);
   revalidatePath("/media");
   revalidatePath(`/media/${id}`);
   revalidatePath("/admin/media");
   adminNotice("资源信息已更新", "success", returnPath);
+}
+
+export async function saveAdminMediaDisplaySettingsAction(formData: FormData) {
+  await requireAdminRequest("/admin/media");
+  const returnPath = mediaReturnPath(formData);
+  const previous = readSiteSettings();
+  const next: SiteSettings = {
+    ...previous,
+    videoThumbnailMode: formData.get("videoThumbnailMode") === "carousel" ? "carousel" : "single",
+    videoThumbnailSinglePercent: intField(formData, "videoThumbnailSinglePercent", previous.videoThumbnailSinglePercent, 1, 99),
+    videoThumbnailCarouselFrames: intField(formData, "videoThumbnailCarouselFrames", previous.videoThumbnailCarouselFrames, 2, 8),
+    videoThumbnailCarouselIntervalSeconds: intField(
+      formData,
+      "videoThumbnailCarouselIntervalSeconds",
+      previous.videoThumbnailCarouselIntervalSeconds,
+      1,
+      15,
+    ),
+    relatedVideoCount: intField(formData, "relatedVideoCount", previous.relatedVideoCount, 0, 20),
+    relatedVideoMode: formData.get("relatedVideoMode") === "random" ? "random" : "next",
+  };
+  try {
+    writeSiteSettings(next);
+    if (
+      previous.videoThumbnailMode !== next.videoThumbnailMode ||
+      previous.videoThumbnailSinglePercent !== next.videoThumbnailSinglePercent ||
+      previous.videoThumbnailCarouselFrames !== next.videoThumbnailCarouselFrames
+    ) {
+      clearMediaThumbnails();
+    }
+  } catch (error) {
+    console.error("Failed to save media display settings", error);
+    adminNotice("视频展示设置保存失败", "error", returnPath);
+  }
+  revalidatePath("/media");
+  revalidatePath("/admin/media");
+  adminNotice("视频展示设置已保存", "success", returnPath);
 }
 
 export async function deleteAdminMediaAction(formData: FormData) {
@@ -629,6 +680,22 @@ export async function updateAdminUserAction(formData: FormData) {
   adminNotice("用户已更新", "success", "/admin/users");
 }
 
+export async function updateAdminUserStatusAction(formData: FormData) {
+  await requireAdminRequest("/admin/users");
+  const userId = Number(formData.get("userId"));
+  const status = formData.get("status") === "disabled" ? "disabled" : "active";
+
+  if (!Number.isInteger(userId) || userId < 1 || !updateUserStatus(userId, status)) {
+    adminNotice("用户不存在", "warning", "/admin/users");
+  }
+  if (status === "disabled") {
+    deleteUserSessions(userId);
+  }
+  revalidatePath("/admin/users");
+  revalidatePath(`/admin/users/${userId}`);
+  adminNotice(status === "active" ? "用户已启用" : "用户已停用", "success", "/admin/users");
+}
+
 export async function deleteAdminUsersAction(formData: FormData) {
   await requireAdminRequest("/admin/users");
   const ids = formData
@@ -643,4 +710,36 @@ export async function deleteAdminUsersAction(formData: FormData) {
   const deleted = deleteUserIds(ids);
   revalidatePath("/admin/users");
   adminNotice(`已删除 ${deleted} 个用户`, deleted ? "success" : "warning", "/admin/users");
+}
+
+export async function deleteAdminUserHistoryAction(formData: FormData) {
+  await requireAdminRequest("/admin/users");
+  const userId = Number(formData.get("userId"));
+  const returnPath = Number.isInteger(userId) && userId > 0 ? `/admin/users/${userId}` : "/admin/users";
+  const historyKeys = Array.from(
+    new Set(
+      formData
+        .getAll("historyIds")
+        .map(String)
+        .filter((value) => /^(novel|media):\d+$/.test(value)),
+    ),
+  );
+  if (!historyKeys.length) {
+    adminNotice("请选择要删除的浏览记录", "warning", returnPath);
+  }
+  const deleted = historyKeys.reduce((count, key) => count + Number(deleteBrowseHistoryItem(userId, key)), 0);
+  revalidatePath(returnPath);
+  adminNotice(`已删除 ${deleted} 条浏览记录`, deleted ? "success" : "warning", returnPath);
+}
+
+export async function clearAdminUserHistoryAction(formData: FormData) {
+  await requireAdminRequest("/admin/users");
+  const userId = Number(formData.get("userId"));
+  const returnPath = Number.isInteger(userId) && userId > 0 ? `/admin/users/${userId}` : "/admin/users";
+  if (!Number.isInteger(userId) || userId < 1) {
+    adminNotice("用户不存在", "warning", "/admin/users");
+  }
+  const deleted = clearBrowseHistory(userId);
+  revalidatePath(returnPath);
+  adminNotice(`已删除 ${deleted} 条浏览记录`, deleted ? "success" : "warning", returnPath);
 }

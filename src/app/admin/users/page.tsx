@@ -1,4 +1,4 @@
-import { Search, UserPlus, Users } from "lucide-react";
+import { ChevronDown, Search, UserPlus, Users } from "lucide-react";
 import type { Metadata } from "next";
 import { Pagination } from "@/components/Pagination";
 import { AdminUserTable } from "@/components/AdminUserTable";
@@ -46,21 +46,38 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
           </form>
         </div>
 
-        <form className="adminCreateUserForm" action={createAdminUserAction}>
-          <div className="adminCreateUserTitle">
-            <UserPlus size={18} aria-hidden="true" />
-            <strong>新增用户</strong>
-          </div>
-          <input name="username" placeholder="用户名" minLength={3} maxLength={32} required />
-          <input name="displayName" placeholder="显示名称" maxLength={40} />
-          <input name="password" type="password" placeholder="初始密码" minLength={6} maxLength={72} required />
-          <select name="status" defaultValue="active" aria-label="状态">
-            <option value="active">启用</option>
-            <option value="disabled">停用</option>
-          </select>
-          <input name="searchRateLimitPerMinute" type="number" min="1" max="600" placeholder="用户搜索限速" />
-          <button type="submit">创建</button>
-        </form>
+        <details className="adminCreateUserPanel">
+          <summary>
+            <span><UserPlus size={17} aria-hidden="true" />新增用户</span>
+            <ChevronDown size={16} aria-hidden="true" />
+          </summary>
+          <form className="adminCreateUserForm" action={createAdminUserAction}>
+            <label>
+              <span>用户名</span>
+              <input name="username" minLength={3} maxLength={32} required />
+            </label>
+            <label>
+              <span>显示名称</span>
+              <input name="displayName" maxLength={40} />
+            </label>
+            <label>
+              <span>初始密码</span>
+              <input name="password" type="password" minLength={6} maxLength={72} required />
+            </label>
+            <label>
+              <span>初始状态</span>
+              <select name="status" defaultValue="active">
+                <option value="active">启用</option>
+                <option value="disabled">停用</option>
+              </select>
+            </label>
+            <label>
+              <span>搜索限速（次/分钟）</span>
+              <input name="searchRateLimitPerMinute" type="number" min="1" max="600" placeholder="跟随全局" />
+            </label>
+            <button type="submit"><UserPlus size={15} aria-hidden="true" />创建用户</button>
+          </form>
+        </details>
 
         <div className="adminTableToolbar">
           <span>
@@ -69,7 +86,7 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
           </span>
         </div>
 
-        <AdminUserTable users={userList.users} page={userList.page} totalPages={userList.totalPages} totalUsers={userList.totalUsers} />
+        <AdminUserTable users={userList.users} />
         <Pagination page={userList.page} totalPages={userList.totalPages} query={userList.query} basePath="/admin/users" />
       </article>
     </AdminFrame>

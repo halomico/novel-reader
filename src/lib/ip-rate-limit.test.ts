@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
-import { ipRateLimitRuleApplies, parseIpRateLimitBanKey } from "./ip-rate-limit";
+import {
+  checkIpRateLimit,
+  deleteIpRateLimitBan,
+  ipRateLimitRuleApplies,
+  listIpRateLimitBans,
+  parseIpRateLimitBanKey,
+} from "./ip-rate-limit";
 import { normalizeIpRateLimitRules, type IpRateLimitRule } from "./site-settings";
 
 const baseRule: IpRateLimitRule = {
@@ -53,4 +62,24 @@ test("parses only valid search and content ban keys", () => {
   assert.equal(parseIpRateLimitBanKey('{"category":"admin","ip":"203.0.113.8"}'), null);
   assert.equal(parseIpRateLimitBanKey('{"category":"content","ip":"not-an-ip"}'), null);
   assert.equal(parseIpRateLimitBanKey("invalid-json"), null);
+});
+
+test("persists and removes an IP ban with the same category and address key", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-rate-limit-"));
+  const previousDatabasePath = process.env.DATABASE_PATH;
+  process.env.DATABASE_PATH = path.join(tempDir, "novels.db");
+  const { getDb } = await import("./db");
+  const rule: IpRateLimitRule = { ...baseRule, id: "content-test", maxRequests: 1, banMode: "permanent" };
+  try {
+    assert.equal(checkIpRateLimit({ category: "content", ip: "203.0.113.9", rules: [rule], now: 1_000 }).allowed, true);
+    assert.equal(checkIpRateLimit({ category: "content", ip: "203.0.113.9", rules: [rule], now: 1_001 }).permanent, true);
+    assert.equal(listIpRateLimitBans("content", 10, 1_002).length, 1);
+    assert.equal(deleteIpRateLimitBan("content", "203.0.113.9"), true);
+    assert.equal(listIpRateLimitBans("content", 10, 1_003).length, 0);
+  } finally {
+    getDb().close();
+    if (previousDatabasePath === undefined) delete process.env.DATABASE_PATH;
+    else process.env.DATABASE_PATH = previousDatabasePath;
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 });

@@ -7,7 +7,21 @@ FROM node:24-bookworm-slim AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN npm test
 RUN npm run build
+RUN ./node_modules/.bin/esbuild scripts/*.ts \
+  --bundle \
+  --platform=node \
+  --format=cjs \
+  --target=node24 \
+  --outdir=maintenance
+RUN npm pkg set \
+  scripts.start="node server.js" \
+  scripts.scan:books="node maintenance/scan-books.js" \
+  scripts.index:content="node maintenance/index-content.js" \
+  scripts.compact:index="node maintenance/compact-content-index.js" \
+  scripts.migrate:index-db="node maintenance/migrate-content-index-db.js" \
+  scripts.cleanup:legacy-index="node maintenance/cleanup-legacy-index.js"
 
 FROM node:24-bookworm-slim AS runner
 WORKDIR /app
@@ -22,14 +36,12 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
-COPY package.json ./
-COPY tsconfig.json ./
-COPY scripts ./scripts
-COPY src ./src
+COPY --from=builder /app/maintenance ./maintenance
+COPY --from=builder /app/package.json ./package.json
 
-RUN mkdir -p /app/library/books /app/data/media
+RUN mkdir -p /app/library/books /app/data/media /app/public/avatars
 EXPOSE 3000
-CMD ["npm", "run", "start"]
+CMD ["node", "server.js"]

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { Readable } from "node:stream";
 import { NextRequest } from "next/server";
-import { getMediaAsset, incrementMediaDownloadCount, isMediaKindEnabled, mediaFilePath } from "@/lib/media";
+import { getMediaAsset, incrementMediaDownloadCount, isMediaKindAccessible, mediaFilePath } from "@/lib/media";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
@@ -13,11 +13,9 @@ function disposition(fileName: string): string {
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!getCurrentUserFromRequest(request)) {
-    return new Response(null, { status: 401 });
-  }
+  const user = getCurrentUserFromRequest(request);
   const asset = getMediaAsset(Number((await params).id));
-  if (!asset || asset.kind !== "file" || !isMediaKindEnabled(asset.kind)) {
+  if (!asset || asset.kind !== "file" || !isMediaKindAccessible(asset.kind, Boolean(user))) {
     return new Response(null, { status: 404 });
   }
   const filePath = mediaFilePath(asset.storedName);

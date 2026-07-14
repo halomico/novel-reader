@@ -53,9 +53,12 @@ test("uploads media in chunks, records it, and removes the stored file", async (
     assert.equal(asset.kind, "audio");
     assert.equal(asset.artist, "测试作者");
     assert.equal(asset.folder, "测试专辑");
+    assert.equal(asset.fileName, "测试音频.mp3");
     assert.equal(fs.readFileSync(storedPath).toString(), source.toString());
     assert.equal(media.updateMediaAsset(asset.id, "新标题", "新作者", "新简介"), true);
     assert.equal(media.getMediaAsset(asset.id)?.artist, "新作者");
+    assert.equal(media.getMediaAsset(asset.id)?.fileName, "新标题.mp3");
+    assert.equal(fs.existsSync(storedPath), false);
     const secondSource = Buffer.from("ID3-second-media-test");
     const secondStarted = upload.startMediaUpload({
       kind: "audio",
@@ -85,7 +88,12 @@ test("uploads media in chunks, records it, and removes the stored file", async (
     assert.equal(media.syncMediaLibrary({ force: true }).added, 1);
     const externalAsset = media.listMediaAssets({ kind: "audio", folder: "外部目录" }).assets[0];
     assert.equal(externalAsset.fileName, "external.mp3");
-    fs.rmSync(externalPath);
+    const renamedExternalPath = path.join(externalFolder, "renamed.mp3");
+    fs.renameSync(externalPath, renamedExternalPath);
+    assert.equal(media.syncMediaLibrary({ force: true }).updated, 1);
+    assert.equal(media.getMediaAsset(externalAsset.id)?.fileName, "renamed.mp3");
+    assert.equal(media.getMediaAsset(externalAsset.id)?.title, "renamed");
+    fs.rmSync(renamedExternalPath);
     assert.equal(media.syncMediaLibrary({ force: true }).removed, 1);
     assert.equal(media.getMediaAsset(externalAsset.id), null);
 

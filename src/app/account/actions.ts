@@ -25,14 +25,15 @@ import {
   verifyUserPassword,
 } from "@/lib/user-auth";
 import {
-  clearBrowseHistory,
   countTodayRegistrationsForIp,
   createUserRecord,
-  deleteBrowseHistoryItem,
   getUserPasswordHashById,
+  hideBrowseHistory,
+  hideBrowseHistoryItem,
   removeAvatarFile,
   normalizeUsername,
   updateUserDisplayName,
+  updateUserHistoryVisibility,
   updateUserPasswordHash,
   updateUserAvatar,
   validateDisplayName,
@@ -319,12 +320,12 @@ export async function deleteHistoryItemAction(formData: FormData) {
   if (!historyKeys.length) {
     authNotice("/account", "浏览记录不存在", "warning");
   }
-  const deleted = historyKeys.reduce((count, historyKey) => count + Number(deleteBrowseHistoryItem(user.id, historyKey)), 0);
-  if (!deleted) {
+  const hidden = historyKeys.reduce((count, historyKey) => count + Number(hideBrowseHistoryItem(user.id, historyKey)), 0);
+  if (!hidden) {
     authNotice("/account", "浏览记录不存在", "warning");
   }
   revalidatePath("/account");
-  authNotice("/account", `已删除 ${deleted} 条浏览记录`);
+  authNotice("/account", `已隐藏 ${hidden} 条浏览记录`);
 }
 
 export async function clearHistoryAction() {
@@ -332,7 +333,18 @@ export async function clearHistoryAction() {
   if (!user) {
     redirect("/login");
   }
-  clearBrowseHistory(user.id);
+  hideBrowseHistory(user.id);
   revalidatePath("/account");
-  authNotice("/account", "浏览记录已清空");
+  authNotice("/account", "浏览记录已隐藏");
+}
+
+export async function updateHistoryVisibilityAction(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+  const visible = formData.get("historyVisible") === "on";
+  updateUserHistoryVisibility(user.id, visible);
+  revalidatePath("/account");
+  authNotice("/account", visible ? "浏览记录显示已开启" : "浏览记录显示已关闭");
 }

@@ -1,12 +1,15 @@
 import { ArrowLeft, Clapperboard, Download, File, Headphones } from "lucide-react";
 import Link from "next/link";
 import { headers } from "next/headers";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { MediaAudioPlayer, type AudioQueueTrack } from "@/components/MediaAudioPlayer";
 import { MediaPlayer } from "@/components/MediaPlayer";
+import { MediaVideoCard } from "@/components/MediaVideoCard";
 import { SiteHeader } from "@/components/SiteHeader";
 import { recordAnalyticsEvent } from "@/lib/analytics";
-import { getMediaAsset, isMediaKindEnabled, listMediaFolderAssets, type MediaKind } from "@/lib/media";
+import { getRelatedVideoSettings, getVideoThumbnailSettings } from "@/lib/config";
+import { getMediaAsset, isMediaKindAccessible, listMediaFolderAssets, listRelatedVideoAssets, type MediaKind } from "@/lib/media";
+import { loadMediaDurations } from "@/lib/media-metadata";
 import { getCurrentUser } from "@/lib/user-auth";
 import { recordMediaHistory } from "@/lib/users";
 
@@ -40,20 +43,20 @@ function listHref(kind: MediaKind, folder: string): string {
 
 export default async function MediaDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  const asset = getMediaAsset(Number((await params).id));
-  if (!asset || !isMediaKindEnabled(asset.kind)) notFound();
+  const foundAsset = getMediaAsset(Number((await params).id));
+  if (!foundAsset || !isMediaKindAccessible(foundAsset.kind, Boolean(user))) notFound();
+  const [asset] = await loadMediaDurations([foundAsset]);
 
   const headerStore = await headers();
   recordAnalyticsEvent({
     headers: headerStore,
-    userId: user.id,
+    userId: user?.id ?? null,
     eventType: `${asset.kind}_view`,
     path: `/media/${asset.id}`,
     referrer: headerStore.get("referer"),
     mediaId: asset.id,
   });
-  recordMediaHistory(user.id, asset);
+  if (user) recordMediaHistory(user.id, asset);
 
   const Icon = KIND_ICONS[asset.kind];
   const title = displayTitle(asset.title, asset.fileName);
@@ -68,6 +71,11 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
         title: displayTitle(item.title, item.fileName),
         artist: item.artist,
       }));
+  const relatedSettings = getRelatedVideoSettings();
+  const thumbnailSettings = getVideoThumbnailSettings();
+  const relatedVideos = asset.kind === "video"
+    ? await loadMediaDurations(listRelatedVideoAssets(asset.id, relatedSettings.count, relatedSettings.mode))
+    : [];
 
   return (
     <main className="appShell">
@@ -83,7 +91,7 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
           <div>
             <span>{KIND_LABELS[asset.kind]}{asset.kind !== "video" && asset.folder ? ` · ${asset.folder}` : ""}</span>
             <h1>{title}</h1>
-            <p>{asset.kind === "audio" ? `${asset.artist || "未知作者"} · ${formatBytes(asset.sizeBytes)}` : formatBytes(asset.sizeBytes)}</p>
+            {asset.kind === "audio" ? <p>{asset.artist || "未知作者"}</p> : asset.kind === "file" ? <p>{formatBytes(asset.sizeBytes)}</p> : null}
           </div>
         </header>
 
@@ -101,6 +109,14 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
         )}
 
         {asset.description ? <p className="mediaDescription">{asset.description}</p> : null}
+        {relatedVideos.length ? (
+          <section className="mediaRelatedVideos">
+            <h2>更多视频</h2>
+            <div className="mediaAssetGrid is-video">
+              {relatedVideos.map((item) => <MediaVideoCard asset={item} thumbnail={thumbnailSettings} key={item.id} />)}
+            </div>
+          </section>
+        ) : null}
       </article>
     </main>
   );

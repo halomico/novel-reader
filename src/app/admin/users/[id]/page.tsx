@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { ArrowLeft, Clock, KeyRound, UserRound } from "lucide-react";
+import { ArrowLeft, Clock, KeyRound, Trash2, UserRound } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LocalDateTime } from "@/components/LocalDateTime";
 import { getUserById, listBrowseHistory, listUserLoginRecords } from "@/lib/users";
+import { clearAdminUserHistoryAction, deleteAdminUserHistoryAction } from "../../actions";
 import { AdminFrame } from "../../AdminFrame";
 
 export const dynamic = "force-dynamic";
@@ -129,48 +130,59 @@ export default async function AdminUserDetailPage({ params }: AdminUserDetailPag
             </div>
             <Clock size={20} aria-hidden="true" />
           </div>
-          <div className="adminTableWrap">
-            <table className="adminTable">
-              <thead>
-                <tr>
-                  <th>类型</th>
-                  <th>内容</th>
-                  <th>最近访问</th>
-                  <th>次数</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.length ? (
-                  history.map((item) => {
-                    const href = item.source === "novel"
-                      ? `/books/${item.itemId}?hit=${item.segmentIndex}#seg-${item.segmentIndex}`
-                      : `/media/${item.itemId}`;
-                    const typeLabel = item.source === "novel" ? "小说" : item.source === "video" ? "视频" : item.source === "audio" ? "音频" : "文件";
-                    return (
-                    <tr key={item.key}>
-                      <td><span className={`accountHistoryKind is-${item.source}`}>{typeLabel}</span></td>
-                      <td>
-                        {item.itemExists ? (
-                          <Link href={href}>{item.title}</Link>
-                        ) : (
-                          <strong>{item.title}</strong>
-                        )}
-                      </td>
-                      <td>
-                        <LocalDateTime value={item.lastAccessedAt} />
-                      </td>
-                      <td>{item.visitCount}</td>
-                    </tr>
-                    );
-                  })
-                ) : (
+          <form action={deleteAdminUserHistoryAction}>
+            <input name="userId" type="hidden" value={user.id} />
+            <div className="adminTableWrap">
+              <table className="adminTable">
+                <thead>
                   <tr>
-                    <td colSpan={4}>暂无浏览记录。</td>
+                    <th aria-label="选择记录">选择</th>
+                    <th>类型</th>
+                    <th>内容</th>
+                    <th>最近访问</th>
+                    <th>次数</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {history.length ? (
+                    history.map((item) => {
+                      const href = item.source === "novel"
+                        ? `/books/${item.itemId}?hit=${item.segmentIndex}#seg-${item.segmentIndex}`
+                        : `/media/${item.itemId}`;
+                      const typeLabel = item.source === "novel" ? "小说" : item.source === "video" ? "视频" : item.source === "audio" ? "音频" : "文件";
+                      return (
+                      <tr key={item.key}>
+                        <td><input className="adminCheckbox" name="historyIds" type="checkbox" value={item.key} aria-label={`选择 ${item.title}`} /></td>
+                        <td><span className={`accountHistoryKind is-${item.source}`}>{typeLabel}</span></td>
+                        <td>
+                          {item.itemExists ? (
+                            <Link href={href}>{item.title}</Link>
+                          ) : (
+                            <strong>{item.title}</strong>
+                          )}
+                        </td>
+                        <td>
+                          <LocalDateTime value={item.lastAccessedAt} />
+                        </td>
+                        <td>{item.visitCount}</td>
+                      </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={5}>暂无浏览记录。</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {history.length ? (
+              <div className="adminTableFooter">
+                <button className="adminDangerButton" type="submit"><Trash2 size={16} aria-hidden="true" />删除所选</button>
+                <button className="adminDangerButton" type="submit" formAction={clearAdminUserHistoryAction}><Trash2 size={16} aria-hidden="true" />清空全部</button>
+              </div>
+            ) : null}
+          </form>
         </section>
       </section>
     </AdminFrame>

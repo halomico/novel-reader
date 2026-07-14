@@ -1,6 +1,9 @@
 node_modules
 .next
 out
+.git
+.github
+.agents
 .env
 .env*.local
 progress.md

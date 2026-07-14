@@ -41,7 +41,7 @@ export function AdminMediaManager({
   assets,
   totalAssets,
   folders,
-  initialKind = "video",
+  initialKind,
   initialFolder = "",
   returnPath,
 }: {
@@ -54,7 +54,7 @@ export function AdminMediaManager({
 }) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [kind, setKind] = useState<MediaKind>(initialKind);
+  const kind = initialKind;
   const [folder, setFolder] = useState(initialFolder);
   const [files, setFiles] = useState<File[]>([]);
   const [title, setTitle] = useState("");
@@ -74,28 +74,12 @@ export function AdminMediaManager({
   }, [assets]);
 
   useEffect(() => {
-    setKind(initialKind);
     setFolder(initialFolder);
     setFiles([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
   }, [initialFolder, initialKind]);
-
-  function changeKind(nextKind: MediaKind) {
-    if (isUploading) {
-      return;
-    }
-    setKind(nextKind);
-    setFiles([]);
-    setTitle("");
-    setArtist("");
-    setFolder("");
-    setMessage("");
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  }
 
   function chooseFiles(event: ChangeEvent<HTMLInputElement>) {
     const nextFiles = Array.from(event.target.files || []);
@@ -117,7 +101,7 @@ export function AdminMediaManager({
 
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!files.length || isUploading) {
+    if (!kind || !files.length || isUploading) {
       return;
     }
     const uploadFiles = [...files];
@@ -211,21 +195,10 @@ export function AdminMediaManager({
 
   return (
     <>
-      <form className="adminMediaUpload" onSubmit={upload}>
-        <div className="adminMediaKindPicker" aria-label="上传资源类型">
-          {(Object.keys(KIND_LABELS) as MediaKind[]).map((item) => {
-            const Icon = KIND_ICONS[item];
-            return (
-              <button className={item === kind ? "isActive" : ""} type="button" onClick={() => changeKind(item)} disabled={isUploading} key={item}>
-                <Icon size={16} aria-hidden="true" />
-                {KIND_LABELS[item]}
-              </button>
-            );
-          })}
-        </div>
+      {kind ? <form className="adminMediaUpload" onSubmit={upload}>
         <div className={kind === "audio" ? "adminMediaUploadFields hasArtist" : "adminMediaUploadFields"}>
           <label>
-            <span>标题</span>
+            <span>名称</span>
             <input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
@@ -266,7 +239,7 @@ export function AdminMediaManager({
             {isUploading ? <progress max="100" value={progress}>{progress}%</progress> : null}
           </div>
         ) : null}
-      </form>
+      </form> : null}
 
       {assets.length ? (
         <>
@@ -276,9 +249,9 @@ export function AdminMediaManager({
                 <tr>
                   <th aria-label="选择资源"><input className="adminCheckbox" type="checkbox" checked={allSelected} onChange={toggleAll} /></th>
                   <th>类型</th>
-                  <th>标题</th>
+                  <th>名称</th>
                   <th>作者</th>
-                  <th>文件</th>
+                  <th>文件名</th>
                   <th>目录</th>
                   <th>大小</th>
                   <th>播放/下载</th>
@@ -338,7 +311,7 @@ export function AdminMediaManager({
             <input name="mediaId" type="hidden" value={editingAsset.id} />
             <input name="returnPath" type="hidden" value={returnPath} />
             <label>
-              <span>标题</span>
+              <span>名称</span>
               <input name="title" defaultValue={editingAsset.title} maxLength={120} required autoFocus />
             </label>
             {editingAsset.kind === "audio" ? (

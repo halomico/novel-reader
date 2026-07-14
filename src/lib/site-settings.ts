@@ -5,6 +5,8 @@ import path from "node:path";
 export type AdminTheme = "system" | "light" | "dark";
 export type UserLoginCaptchaMode = "off" | "image" | "slider";
 export type SiteIconMimeType = "" | "image/png" | "image/jpeg" | "image/webp" | "image/x-icon";
+export type VideoThumbnailMode = "single" | "carousel";
+export type RelatedVideoMode = "next" | "random";
 
 export type IpRateLimitRule = {
   id: string;
@@ -71,6 +73,16 @@ export type SiteSettings = {
   videoLibraryEnabled: boolean;
   audioLibraryEnabled: boolean;
   fileLibraryEnabled: boolean;
+  guestLibraryNavEnabled: boolean;
+  guestVideoNavEnabled: boolean;
+  guestAudioNavEnabled: boolean;
+  guestFileNavEnabled: boolean;
+  videoThumbnailMode: VideoThumbnailMode;
+  videoThumbnailSinglePercent: number;
+  videoThumbnailCarouselFrames: number;
+  videoThumbnailCarouselIntervalSeconds: number;
+  relatedVideoCount: number;
+  relatedVideoMode: RelatedVideoMode;
   contentRateLimitPerMinute: number;
   contentRateLimitWindowSeconds: number;
   contentRateLimitRules: IpRateLimitRule[];
@@ -127,6 +139,16 @@ const DEFAULT_SETTINGS: SiteSettings = {
   videoLibraryEnabled: true,
   audioLibraryEnabled: true,
   fileLibraryEnabled: true,
+  guestLibraryNavEnabled: false,
+  guestVideoNavEnabled: false,
+  guestAudioNavEnabled: false,
+  guestFileNavEnabled: false,
+  videoThumbnailMode: "single",
+  videoThumbnailSinglePercent: 33,
+  videoThumbnailCarouselFrames: 3,
+  videoThumbnailCarouselIntervalSeconds: 3,
+  relatedVideoCount: 5,
+  relatedVideoMode: "next",
   contentRateLimitPerMinute: 0,
   contentRateLimitWindowSeconds: 0,
   contentRateLimitRules: [],
@@ -168,6 +190,14 @@ function cleanCaptchaMode(value: unknown): UserLoginCaptchaMode {
 
 function cleanSiteIconMimeType(value: unknown): SiteIconMimeType {
   return value === "image/png" || value === "image/jpeg" || value === "image/webp" || value === "image/x-icon" ? value : "";
+}
+
+function cleanVideoThumbnailMode(value: unknown): VideoThumbnailMode {
+  return value === "carousel" ? "carousel" : "single";
+}
+
+function cleanRelatedVideoMode(value: unknown): RelatedVideoMode {
+  return value === "random" ? "random" : "next";
 }
 
 function cleanBool(value: unknown, fallback: boolean): boolean {
@@ -303,6 +333,21 @@ export function readSiteSettings(): SiteSettings {
       videoLibraryEnabled: cleanBool(parsed.videoLibraryEnabled, DEFAULT_SETTINGS.videoLibraryEnabled),
       audioLibraryEnabled: cleanBool(parsed.audioLibraryEnabled, DEFAULT_SETTINGS.audioLibraryEnabled),
       fileLibraryEnabled: cleanBool(parsed.fileLibraryEnabled, DEFAULT_SETTINGS.fileLibraryEnabled),
+      guestLibraryNavEnabled: cleanBool(parsed.guestLibraryNavEnabled, DEFAULT_SETTINGS.guestLibraryNavEnabled),
+      guestVideoNavEnabled: cleanBool(parsed.guestVideoNavEnabled, DEFAULT_SETTINGS.guestVideoNavEnabled),
+      guestAudioNavEnabled: cleanBool(parsed.guestAudioNavEnabled, DEFAULT_SETTINGS.guestAudioNavEnabled),
+      guestFileNavEnabled: cleanBool(parsed.guestFileNavEnabled, DEFAULT_SETTINGS.guestFileNavEnabled),
+      videoThumbnailMode: cleanVideoThumbnailMode(parsed.videoThumbnailMode),
+      videoThumbnailSinglePercent: cleanInt(parsed.videoThumbnailSinglePercent, DEFAULT_SETTINGS.videoThumbnailSinglePercent, 1, 99),
+      videoThumbnailCarouselFrames: cleanInt(parsed.videoThumbnailCarouselFrames, DEFAULT_SETTINGS.videoThumbnailCarouselFrames, 2, 8),
+      videoThumbnailCarouselIntervalSeconds: cleanInt(
+        parsed.videoThumbnailCarouselIntervalSeconds,
+        DEFAULT_SETTINGS.videoThumbnailCarouselIntervalSeconds,
+        1,
+        15,
+      ),
+      relatedVideoCount: cleanInt(parsed.relatedVideoCount, DEFAULT_SETTINGS.relatedVideoCount, 0, 20),
+      relatedVideoMode: cleanRelatedVideoMode(parsed.relatedVideoMode),
       contentRateLimitPerMinute: cleanInt(parsed.contentRateLimitPerMinute, DEFAULT_SETTINGS.contentRateLimitPerMinute, 0, 600),
       contentRateLimitWindowSeconds: cleanInt(parsed.contentRateLimitWindowSeconds, DEFAULT_SETTINGS.contentRateLimitWindowSeconds, 0, 3600),
       contentRateLimitRules: normalizeIpRateLimitRules(parsed.contentRateLimitRules),
