@@ -9,7 +9,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { recordAnalyticsEvent } from "@/lib/analytics";
 import { getRelatedVideoSettings, getVideoThumbnailSettings } from "@/lib/config";
 import { getMediaAsset, isMediaKindAccessible, listMediaFolderAssets, listRelatedVideoAssets, type MediaKind } from "@/lib/media";
-import { loadMediaDurations } from "@/lib/media-metadata";
+import { scheduleMediaPreparation } from "@/lib/media-maintenance";
 import { getCurrentUser } from "@/lib/user-auth";
 import { recordMediaHistory } from "@/lib/users";
 
@@ -43,9 +43,8 @@ function listHref(kind: MediaKind, folder: string): string {
 
 export default async function MediaDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
-  const foundAsset = getMediaAsset(Number((await params).id));
-  if (!foundAsset || !isMediaKindAccessible(foundAsset.kind, Boolean(user))) notFound();
-  const [asset] = await loadMediaDurations([foundAsset]);
+  const asset = getMediaAsset(Number((await params).id));
+  if (!asset || !isMediaKindAccessible(asset.kind, Boolean(user))) notFound();
 
   const headerStore = await headers();
   recordAnalyticsEvent({
@@ -70,12 +69,13 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
         id: item.id,
         title: displayTitle(item.title, item.fileName),
         artist: item.artist,
+        version: item.mtimeMs,
       }));
   const relatedSettings = getRelatedVideoSettings();
   const thumbnailSettings = getVideoThumbnailSettings();
-  const relatedVideos = asset.kind === "video"
-    ? await loadMediaDurations(listRelatedVideoAssets(asset.id, relatedSettings.count, relatedSettings.mode))
-    : [];
+  const posterVersion = `${asset.mtimeMs}-${thumbnailSettings.mode}-${thumbnailSettings.singlePercent}-${thumbnailSettings.carouselFrames}`;
+  const relatedVideos = asset.kind === "video" ? listRelatedVideoAssets(asset.id, relatedSettings.count, relatedSettings.mode) : [];
+  scheduleMediaPreparation([asset, ...relatedVideos]);
 
   return (
     <main className="appShell">
@@ -97,7 +97,7 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
 
         {asset.kind === "video" ? (
           <div className="mediaVideoStage">
-            <MediaPlayer id={asset.id} />
+            <MediaPlayer id={asset.id} posterVersion={posterVersion} sourceVersion={asset.mtimeMs} />
           </div>
         ) : asset.kind === "audio" ? (
           <MediaAudioPlayer initialId={asset.id} tracks={audioQueue} />

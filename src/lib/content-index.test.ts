@@ -1,7 +1,13 @@
 ﻿import assert from "node:assert/strict";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
-import { findIndexedContentCandidateNovelIds, normalizeContentIndexTerms, refreshContentIndexTermStats, saveContentIndexTerm } from "./content-index";
+import {
+  findIndexedContentCandidateNovelIds,
+  markContentIndexTermUsed,
+  normalizeContentIndexTerms,
+  refreshContentIndexTermStats,
+  saveContentIndexTerm,
+} from "./content-index";
 
 function createMemoryDb() {
   const db = new DatabaseSync(":memory:");
@@ -89,11 +95,38 @@ test("intersects indexed candidate novels for required content terms", () => {
   const db = createMemoryDb();
   saveContentIndexTerm(db, "苹果", [1, 2, 3], 3, { enforceBudget: false });
   saveContentIndexTerm(db, "香蕉", [2, 3, 4], 3, { enforceBudget: false });
+  db.prepare("UPDATE content_search_term_stats SET updated_at = '2026-07-16 12:00:00' WHERE term = '苹果'").run();
+  db.prepare("UPDATE content_search_term_stats SET updated_at = '2026-07-16 13:00:00' WHERE term = '香蕉'").run();
 
   const plan = findIndexedContentCandidateNovelIds(db, ["苹果", "小香蕉"]);
   assert.deepEqual(plan, {
     terms: ["苹果", "香蕉"],
     requestedTerms: ["苹果", "小香蕉"],
     novelIds: [2, 3],
+    indexedAt: "2026-07-16 12:00:00",
   });
+});
+
+test("uses a completed zero-match index instead of scanning the library again", () => {
+  const db = createMemoryDb();
+  saveContentIndexTerm(db, "不存在", [], 0, { enforceBudget: false });
+
+  const plan = findIndexedContentCandidateNovelIds(db, ["不存在"]);
+  assert.ok(plan);
+  assert.deepEqual(plan.novelIds, []);
+});
+
+test("records index usage without changing the index build timestamp", () => {
+  const db = createMemoryDb();
+  saveContentIndexTerm(db, "苹果", [1], 1, { enforceBudget: false });
+  db.prepare("UPDATE content_search_term_stats SET updated_at = '2026-07-15 12:00:00'").run();
+
+  markContentIndexTermUsed(db, "苹果");
+
+  const row = db
+    .prepare("SELECT hit_count AS hitCount, last_used_at AS lastUsedAt, updated_at AS updatedAt FROM content_search_term_stats WHERE term = '苹果'")
+    .get() as { hitCount: number; lastUsedAt: string | null; updatedAt: string };
+  assert.equal(row.hitCount, 1);
+  assert.ok(row.lastUsedAt);
+  assert.equal(row.updatedAt, "2026-07-15 12:00:00");
 });

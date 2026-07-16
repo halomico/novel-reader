@@ -7,6 +7,7 @@ export type AudioQueueTrack = {
   id: number;
   title: string;
   artist: string;
+  version: number;
 };
 
 type PlaybackMode = "stop" | "next" | "repeat-one";
@@ -17,14 +18,23 @@ const MODE_LABELS: Record<PlaybackMode, string> = {
   "repeat-one": "单曲循环",
 };
 
+const QUEUE_ROW_HEIGHT = 36;
+const QUEUE_VIEWPORT_HEIGHT = 260;
+const QUEUE_OVERSCAN = 5;
+
 export function MediaAudioPlayer({ initialId, tracks }: { initialId: number; tracks: AudioQueueTrack[] }) {
   const initialTrack = tracks.find((track) => track.id === initialId) || tracks[0];
   const [activeTrack, setActiveTrack] = useState(initialTrack);
   const [mode, setMode] = useState<PlaybackMode>("stop");
   const audioRef = useRef<HTMLAudioElement>(null);
+  const queueRef = useRef<HTMLDivElement>(null);
   const autoPlayRef = useRef(false);
   const countedIdsRef = useRef(new Set<number>());
+  const [queueScrollTop, setQueueScrollTop] = useState(0);
   const activeIndex = tracks.findIndex((track) => track.id === activeTrack.id);
+  const visibleStart = Math.max(0, Math.floor(queueScrollTop / QUEUE_ROW_HEIGHT) - QUEUE_OVERSCAN);
+  const visibleEnd = Math.min(tracks.length, Math.ceil((queueScrollTop + QUEUE_VIEWPORT_HEIGHT) / QUEUE_ROW_HEIGHT) + QUEUE_OVERSCAN);
+  const visibleTracks = tracks.slice(visibleStart, visibleEnd);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("media-audio-playback-mode");
@@ -40,6 +50,18 @@ export function MediaAudioPlayer({ initialId, tracks }: { initialId: number; tra
       void audio.play().catch(() => undefined);
     }
   }, [activeTrack.id]);
+
+  useEffect(() => {
+    const queue = queueRef.current;
+    if (!queue || activeIndex < 0) return;
+    const itemTop = activeIndex * QUEUE_ROW_HEIGHT;
+    const itemBottom = itemTop + QUEUE_ROW_HEIGHT;
+    if (itemTop < queue.scrollTop || itemBottom > queue.scrollTop + QUEUE_VIEWPORT_HEIGHT) {
+      const nextTop = Math.max(0, itemTop - (QUEUE_VIEWPORT_HEIGHT - QUEUE_ROW_HEIGHT) / 2);
+      queue.scrollTop = nextTop;
+      setQueueScrollTop(nextTop);
+    }
+  }, [activeIndex]);
 
   function chooseMode(nextMode: PlaybackMode) {
     setMode(nextMode);
@@ -85,7 +107,7 @@ export function MediaAudioPlayer({ initialId, tracks }: { initialId: number; tra
       </div>
       <div className="mediaAudioPlayerPanel">
         <audio ref={audioRef} className="mediaAudioPlayer" controls preload="metadata" onPlay={recordPlay} onEnded={handleEnded} aria-label={`播放 ${activeTrack.title}`}>
-          <source src={`/media/${activeTrack.id}/stream`} />
+          <source src={`/media/${activeTrack.id}/stream?v=${Math.floor(activeTrack.version)}`} />
           当前浏览器无法播放这个音频。
         </audio>
         <div className="mediaAudioControls">
@@ -114,14 +136,18 @@ export function MediaAudioPlayer({ initialId, tracks }: { initialId: number; tra
             <strong>同目录音频</strong>
             <span>{tracks.length} 首</span>
           </header>
-          <div>
-            {tracks.map((track) => (
+          <div className="mediaAudioQueueViewport" ref={queueRef} onScroll={(event) => setQueueScrollTop(event.currentTarget.scrollTop)}>
+            {visibleStart ? <div className="mediaAudioQueueSpacer" style={{ height: visibleStart * QUEUE_ROW_HEIGHT }} aria-hidden="true" /> : null}
+            {visibleTracks.map((track) => (
               <button className={track.id === activeTrack.id ? "isActive" : ""} type="button" onClick={() => chooseTrack(track)} key={track.id}>
                 <span aria-hidden="true">{track.id === activeTrack.id ? <Play size={13} fill="currentColor" /> : null}</span>
                 <strong title={track.title}>{track.title}</strong>
                 <small title={track.artist}>{track.artist || "未知作者"}</small>
               </button>
             ))}
+            {visibleEnd < tracks.length ? (
+              <div className="mediaAudioQueueSpacer" style={{ height: (tracks.length - visibleEnd) * QUEUE_ROW_HEIGHT }} aria-hidden="true" />
+            ) : null}
           </div>
         </div>
       </div>

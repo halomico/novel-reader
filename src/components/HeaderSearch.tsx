@@ -13,7 +13,7 @@ type CurrentMatch = {
 
 const options: Array<{ value: SearchMode; label: string; action: string; placeholder: string }> = [
   { value: "title", label: "书名", action: "/", placeholder: "搜索小说名" },
-  { value: "content", label: "正文", action: "/search", placeholder: "搜索全部小说正文" },
+  { value: "content", label: "正文", action: "/search", placeholder: "搜索全部小说正文，多关键词用空格分隔" },
   { value: "current", label: "本文", action: "/search", placeholder: "搜索本文" },
 ];
 
@@ -43,15 +43,22 @@ function restoreSegment(segment: HTMLElement) {
   segment.replaceChildren(document.createTextNode(originalText));
 }
 
-function findLiteralMatches(segments: HTMLElement[], keyword: string): CurrentMatch[] {
+function yieldToMainThread(): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, 0));
+}
+
+async function findLiteralMatches(segments: HTMLElement[], keyword: string, isCurrent: () => boolean): Promise<CurrentMatch[]> {
   const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(escapedKeyword, "giu");
   const matches: CurrentMatch[] = [];
 
-  for (const segment of segments) {
+  for (let index = 0; index < segments.length; index += 1) {
+    if (!isCurrent()) {
+      return [];
+    }
+    const segment = segments[index];
     const text = getOriginalSegmentText(segment);
-    restoreSegment(segment);
-    segment.classList.remove("isClientHit");
+    pattern.lastIndex = 0;
     for (const match of text.matchAll(pattern)) {
       if (match.index === undefined) {
         continue;
@@ -61,6 +68,9 @@ function findLiteralMatches(segments: HTMLElement[], keyword: string): CurrentMa
         start: match.index,
         end: match.index + match[0].length,
       });
+    }
+    if (index > 0 && index % 40 === 0) {
+      await yieldToMainThread();
     }
   }
 
@@ -89,12 +99,15 @@ export function HeaderSearch({
   const [isMessageVisible, setIsMessageVisible] = useState(false);
   const [currentMatchIndex, setCurrentMatchIndex] = useState(-1);
   const [currentMatchCount, setCurrentMatchCount] = useState(0);
+  const [isCurrentSearching, setIsCurrentSearching] = useState(false);
   const currentMatchesRef = useRef<CurrentMatch[]>([]);
   const activeSegmentRef = useRef<HTMLElement | null>(null);
+  const currentSearchRequestRef = useRef(0);
   const visibleOptions = showCurrentSearch ? options : options.filter((option) => option.value !== "current");
   const activeOption = visibleOptions.find((option) => option.value === mode) || visibleOptions[0];
   const formClassName = [
     "searchForm",
+    mode === "content" ? "isContentSearch" : "",
     showCurrentSearch ? "readerSearchForm" : "",
     isPinnedOpen ? "isPinnedOpen" : "",
     isModeMenuOpen ? "isModeMenuOpen" : "",
@@ -210,10 +223,12 @@ export function HeaderSearch({
   }
 
   function resetCurrentMatches() {
+    currentSearchRequestRef.current += 1;
     restoreActiveMatch();
     currentMatchesRef.current = [];
     setCurrentMatchIndex(-1);
     setCurrentMatchCount(0);
+    setIsCurrentSearching(false);
   }
 
   function showCurrentMatch(nextIndex: number) {
@@ -257,7 +272,7 @@ export function HeaderSearch({
     setIsMessageVisible(true);
   }
 
-  function searchCurrentBook(event: FormEvent<HTMLFormElement>) {
+  async function searchCurrentBook(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextKeyword = keyword.trim();
     const segments = getReaderSegments();
@@ -273,7 +288,13 @@ export function HeaderSearch({
       return;
     }
 
-    const nextMatches = findLiteralMatches(segments, nextKeyword);
+    const requestId = ++currentSearchRequestRef.current;
+    setIsCurrentSearching(true);
+    const nextMatches = await findLiteralMatches(segments, nextKeyword, () => currentSearchRequestRef.current === requestId);
+    if (currentSearchRequestRef.current !== requestId) {
+      return;
+    }
+    setIsCurrentSearching(false);
     currentMatchesRef.current = nextMatches;
     setCurrentMatchCount(nextMatches.length);
     setIsModeMenuOpen(false);
@@ -288,7 +309,7 @@ export function HeaderSearch({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     if (mode === "current") {
-      searchCurrentBook(event);
+      void searchCurrentBook(event);
     }
   }
 
@@ -338,7 +359,7 @@ export function HeaderSearch({
         title={isPinnedOpen ? "收起搜索框" : "展开搜索框"}
         onClick={(event) => togglePinnedSearch(event.currentTarget.form)}
       >
-        <Search size={18} aria-hidden="true" />
+        {isPinnedOpen ? <X size={18} aria-hidden="true" /> : <Search size={18} aria-hidden="true" />}
       </button>
       <input
         name="q"
@@ -355,8 +376,9 @@ export function HeaderSearch({
         }}
         onClick={() => setIsModeMenuOpen(true)}
       />
-      <button className="searchSubmit" type="submit" aria-label={`按${activeOption.label}搜索`} title={`按${activeOption.label}搜索`}>
-        搜索
+      <button className="searchSubmit" type="submit" aria-label={`按${activeOption.label}搜索`} title={`按${activeOption.label}搜索`} disabled={isCurrentSearching}>
+        <Search className="searchSubmitIcon" size={16} aria-hidden="true" />
+        <span>搜索</span>
       </button>
       {mode === "current" && currentMatchCount > 0 ? (
         <div className="currentFindControls" role="group" aria-label="本文查找结果">

@@ -158,7 +158,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
             </label>
             <label>
               <span>默认正文字号 / px</span>
-              <input name="readerDefaultFontSize" type="number" min="5" max="50" defaultValue={readerDefaultFontSize} />
+              <input name="readerDefaultFontSize" type="number" min="8" max="25" defaultValue={readerDefaultFontSize} />
             </label>
             <label>
               <span>后台主题默认值</span>

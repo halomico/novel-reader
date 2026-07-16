@@ -60,10 +60,7 @@ function isIgnoredPhrasePunctuation(char: string): boolean {
 }
 
 export function normalizeSearchText(value: string): string {
-  return Array.from(value)
-    .filter((char) => !isIgnoredSearchChar(char))
-    .join("")
-    .toLowerCase();
+  return value.replace(/[\s\p{P}\p{S}]+/gu, "").toLowerCase();
 }
 
 function normalizeContentPhraseText(value: string): string {
@@ -594,12 +591,12 @@ function findContentPhraseIndex(text: string, term: SearchTermPattern): number {
   return createContentPhraseIndex(text).normalized.indexOf(term.normalized.toLowerCase());
 }
 
-function findTermIndex(text: string, term: SearchTermPattern): number {
+function findTermIndex(text: string, term: SearchTermPattern, normalizedText?: string): number {
   if (term.exact) {
     return term.phrase ? findContentPhraseIndex(text, term) : findExactIndex(text, term.value);
   }
 
-  return normalizeSearchText(text).indexOf(term.normalized.toLowerCase());
+  return (normalizedText ?? normalizeSearchText(text)).indexOf(term.normalized.toLowerCase());
 }
 
 function expressionTermToPattern(expression: Extract<SearchExpression, { type: "term" }>, mode: SearchMatchMode): SearchTermPattern {
@@ -687,24 +684,34 @@ export function findFirstSearchTerm(text: string, terms: SearchTermPattern[]): {
   return ranges[0] ? { index: ranges[0].start, end: ranges[0].end, term: ranges[0].term } : null;
 }
 
-function evaluateSearchExpression(expression: SearchExpression, text: string, mode: SearchMatchMode): boolean {
+function evaluateSearchExpression(expression: SearchExpression, text: string, mode: SearchMatchMode, normalizedText?: string): boolean {
   if (expression.type === "term") {
-    return findTermIndex(text, expressionTermToPattern(expression, mode)) >= 0;
+    return findTermIndex(text, expressionTermToPattern(expression, mode), normalizedText) >= 0;
   }
 
   if (expression.type === "not") {
-    return !evaluateSearchExpression(expression.child, text, mode);
+    return !evaluateSearchExpression(expression.child, text, mode, normalizedText);
   }
 
   if (expression.type === "and") {
-    return evaluateSearchExpression(expression.left, text, mode) && evaluateSearchExpression(expression.right, text, mode);
+    return (
+      evaluateSearchExpression(expression.left, text, mode, normalizedText) &&
+      evaluateSearchExpression(expression.right, text, mode, normalizedText)
+    );
   }
 
-  return evaluateSearchExpression(expression.left, text, mode) || evaluateSearchExpression(expression.right, text, mode);
+  return (
+    evaluateSearchExpression(expression.left, text, mode, normalizedText) ||
+    evaluateSearchExpression(expression.right, text, mode, normalizedText)
+  );
 }
 
-export function matchesParsedSearchQuery(text: string, query: ParsedSearchQuery): boolean {
-  return query.requiredTerms.every((term) => findTermIndex(text, term) >= 0) && evaluateSearchExpression(query.expression, text, query.mode);
+export function matchesParsedSearchQuery(text: string, query: ParsedSearchQuery, normalizedText?: string): boolean {
+  const preparedText = normalizedText ?? (query.mode === "content" ? normalizeSearchText(text) : undefined);
+  return (
+    query.requiredTerms.every((term) => findTermIndex(text, term, preparedText) >= 0) &&
+    evaluateSearchExpression(query.expression, text, query.mode, preparedText)
+  );
 }
 
 export function createSearchSnippet(content: string, terms: SearchTermPattern[], before = 56, after = 84): string {

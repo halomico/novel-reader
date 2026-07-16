@@ -3,7 +3,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { isMediaKindAccessible, normalizeMediaFile, parseMediaByteRange } from "./media";
+import {
+  isMediaKindAccessible,
+  normalizeMediaFile,
+  normalizeMediaSortBy,
+  normalizeMediaSortOrder,
+  parseMediaByteRange,
+  sortMediaFolders,
+  type MediaFolder,
+} from "./media";
 import { readSiteSettings, writeSiteSettings } from "./site-settings";
 
 test("applies public, signed-in, and disabled media access modes", (t) => {
@@ -50,4 +58,19 @@ test("parses standard and suffix media ranges", () => {
   assert.equal(parseMediaByteRange("bytes=100-", 100), "invalid");
   assert.equal(parseMediaByteRange("bytes=20-10", 100), "invalid");
   assert.equal(parseMediaByteRange(null, 100), null);
+});
+
+test("normalizes media sorting and orders folders by name, size, or update time", () => {
+  assert.equal(normalizeMediaSortBy("name"), "name");
+  assert.equal(normalizeMediaSortBy("invalid"), "updated");
+  assert.equal(normalizeMediaSortOrder(undefined, "name"), "asc");
+  assert.equal(normalizeMediaSortOrder(undefined, "updated"), "desc");
+
+  const folders: MediaFolder[] = [
+    { path: "B", name: "B", depth: 0, directAssets: 1, totalSizeBytes: 20, mtimeMs: 10 },
+    { path: "A", name: "A", depth: 0, directAssets: 2, totalSizeBytes: 10, mtimeMs: 20 },
+  ];
+  assert.deepEqual(sortMediaFolders(folders, "name", "asc").map((folder) => folder.name), ["A", "B"]);
+  assert.deepEqual(sortMediaFolders(folders, "size", "desc").map((folder) => folder.name), ["B", "A"]);
+  assert.deepEqual(sortMediaFolders(folders, "updated", "desc").map((folder) => folder.name), ["A", "B"]);
 });

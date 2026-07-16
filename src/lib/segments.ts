@@ -8,8 +8,7 @@ export type NovelSegment = {
 const TARGET_SEGMENT_CHARS = 1200;
 const MIN_BREAK_CHARS = 700;
 
-export function createNovelSegments(content: string): NovelSegment[] {
-  const segments: NovelSegment[] = [];
+export function* iterateNovelSegments(content: string): Generator<NovelSegment> {
   let cursor = 0;
   let segmentIndex = 0;
 
@@ -25,17 +24,19 @@ export function createNovelSegments(content: string): NovelSegment[] {
 
     const segmentContent = content.slice(cursor, charEnd);
     if (segmentContent.trim()) {
-      segments.push({
+      yield {
         segmentIndex,
         charStart: cursor,
         charEnd,
         content: segmentContent,
-      });
+      };
       segmentIndex += 1;
     }
 
     cursor = charEnd;
   }
+}
 
-  return segments;
+export function createNovelSegments(content: string): NovelSegment[] {
+  return Array.from(iterateNovelSegments(content));
 }

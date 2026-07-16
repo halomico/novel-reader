@@ -7,7 +7,8 @@ import { Pagination } from "@/components/Pagination";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getVideoThumbnailSettings } from "@/lib/config";
 import { getAccessibleMediaKinds, isMediaKind, listMediaAssets, listMediaFolders, type MediaAsset, type MediaKind } from "@/lib/media";
-import { formatMediaDuration, loadMediaDurations } from "@/lib/media-metadata";
+import { scheduleMediaPreparation } from "@/lib/media-maintenance";
+import { formatMediaDuration } from "@/lib/media-metadata";
 import { getCurrentUser } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
@@ -79,7 +80,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
     page: Number(params.page || 1),
     pageSize: 18,
   });
-  result.assets = await loadMediaDurations(result.assets);
+  scheduleMediaPreparation(result.assets);
   const thumbnailSettings = getVideoThumbnailSettings();
   const folders = kind === "video" ? [] : listMediaFolders(kind);
   const EmptyIcon = KIND_ICONS[kind];

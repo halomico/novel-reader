@@ -67,7 +67,7 @@ export function SettingsPanel({ previewText, defaultFontSize }: { previewText: s
     const savedFontSize = Number(readLocalSetting("novel-font-size"));
     const nextTheme = savedTheme === "light" || savedTheme === "dark" || savedTheme === "system" ? savedTheme : "system";
     const nextUiMode = savedUiMode === "minimal" || savedUiMode === "standard" ? savedUiMode : "standard";
-    const nextFontSize = Number.isFinite(savedFontSize) && savedFontSize >= 5 && savedFontSize <= 50 ? savedFontSize : defaultFontSize;
+    const nextFontSize = Number.isFinite(savedFontSize) && savedFontSize >= 8 && savedFontSize <= 25 ? savedFontSize : defaultFontSize;
 
     setTheme(nextTheme);
     setUiMode(nextUiMode);
@@ -143,17 +143,17 @@ export function SettingsPanel({ previewText, defaultFontSize }: { previewText: s
             <strong>{fontSize} px</strong>
           </div>
           <div className="rangeRow">
-            <span>5</span>
+            <span>8</span>
             <input
               aria-label="正文字号"
               type="range"
-              min="5"
-              max="50"
+              min="8"
+              max="25"
               step="1"
               value={fontSize}
               onChange={(event) => changeFontSize(Number(event.target.value))}
             />
-            <span>50</span>
+            <span>25</span>
           </div>
         </div>
 

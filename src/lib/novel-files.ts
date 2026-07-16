@@ -141,7 +141,7 @@ export function upsertNovelRecord(db: DatabaseSync, record: NovelFileRecord): nu
     existing &&
     (existing.content_hash !== record.contentHash || existing.size_bytes !== record.sizeBytes || existing.mtime_ms !== record.mtimeMs)
   ) {
-    deleteIndexedContentForNovel(db, existing.id);
+    deleteIndexedContentForNovel(db, existing.id, true);
   }
 
   db.prepare(
@@ -150,11 +150,17 @@ export function upsertNovelRecord(db: DatabaseSync, record: NovelFileRecord): nu
      ON CONFLICT(relative_path) DO UPDATE SET
        title = excluded.title,
        file_name = excluded.file_name,
-       content_hash = excluded.content_hash,
-       size_bytes = excluded.size_bytes,
-       mtime_ms = excluded.mtime_ms,
-       word_count = excluded.word_count,
-       updated_at = CURRENT_TIMESTAMP`,
+        content_hash = excluded.content_hash,
+        size_bytes = excluded.size_bytes,
+        mtime_ms = excluded.mtime_ms,
+        word_count = excluded.word_count,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE novels.title IS NOT excluded.title
+         OR novels.file_name IS NOT excluded.file_name
+         OR novels.content_hash IS NOT excluded.content_hash
+         OR novels.size_bytes IS NOT excluded.size_bytes
+         OR novels.mtime_ms IS NOT excluded.mtime_ms
+         OR novels.word_count IS NOT excluded.word_count`,
   ).run(record);
 
   const row = db.prepare("SELECT id FROM novels WHERE relative_path = ?").get(record.relativePath) as { id: number } | undefined;

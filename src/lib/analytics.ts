@@ -36,6 +36,8 @@ export type AnalyticsOverview = {
   totalViews: number;
   uniqueIps: number;
   activeNow: number;
+  totalSearches: number;
+  topSearchQueries: AnalyticsMetric[];
   topContent: AnalyticsMetric[];
   topIps: AnalyticsMetric[];
   topCountries: AnalyticsMetric[];
@@ -257,6 +259,21 @@ export function recordAnalyticsEvent(params: {
     );
 }
 
+export function normalizeSearchAnalyticsQuery(value: string): string {
+  return clampText(value.normalize("NFKC").replace(/\s+/gu, " "), 200).toLocaleLowerCase();
+}
+
+export function recordSearchQuery(queryValue: string, mode: "title" | "content") {
+  if (!isAnalyticsEnabled()) {
+    return;
+  }
+  const query = normalizeSearchAnalyticsQuery(queryValue);
+  if (!query) {
+    return;
+  }
+  getDb().prepare("INSERT INTO search_query_events (query, mode) VALUES (?, ?)").run(query, mode);
+}
+
 function oneCount(sql: string, params: Array<string | number>): number {
   const row = getDb().prepare(sql).get(...params) as { count: number } | undefined;
   return row?.count || 0;
@@ -284,6 +301,7 @@ export function getAnalyticsOverview(
 ): AnalyticsOverview {
   const filter = resolveAnalyticsTimeFilter(rangeValue, options.customFrom, options.customTo);
   const eventWhere = contentTimeWhere(filter);
+  const searchTime = timeCondition(filter, "created_at");
   const realtimeLimit = Math.min(Math.max(Math.floor(options.realtimeLimit || 300), 30), 2000);
   const realtimePageSize = Math.min(Math.max(Math.floor(options.realtimePageSize || 30), 1), 100);
   const totalViews = oneCount(
@@ -352,6 +370,19 @@ export function getAnalyticsOverview(
     totalViews,
     uniqueIps,
     activeNow: activeRow?.count || 0,
+    totalSearches: oneCount(
+      `SELECT COUNT(*) AS count FROM search_query_events WHERE ${searchTime.sql}`,
+      searchTime.params,
+    ),
+    topSearchQueries: topMetrics(
+      `SELECT query AS label, COUNT(*) AS count
+       FROM search_query_events
+       WHERE ${searchTime.sql}
+       GROUP BY query
+       ORDER BY count DESC, MAX(created_at) DESC, label ASC
+       LIMIT 100`,
+      searchTime.params,
+    ),
     topContent: topMetrics(
       `SELECT COALESCE(n.title, m.title, e.path) AS label, COUNT(*) AS count
        FROM analytics_events e

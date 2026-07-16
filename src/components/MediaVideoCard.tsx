@@ -31,6 +31,7 @@ export function MediaVideoCard({
           singlePercent={thumbnail.singlePercent}
           frameCount={thumbnail.carouselFrames}
           intervalSeconds={thumbnail.carouselIntervalSeconds}
+          sourceVersion={asset.mtimeMs}
         />
         <span className="mediaVideoPlay" aria-hidden="true"><Play size={20} fill="currentColor" /></span>
         <span className="mediaVideoMeta">{formatMediaDuration(asset.durationSeconds)}</span>

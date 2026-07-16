@@ -95,6 +95,41 @@ input {
   padding: 22px 0 56px;
 }
 
+.catalogShell {
+  display: flex;
+  min-height: 100dvh;
+  flex-direction: column;
+}
+
+.catalogShell > .pagination {
+  margin-top: auto;
+  padding-top: 28px;
+}
+
+.routeLoadingBar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 100;
+  height: 3px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.routeLoadingBar span {
+  display: block;
+  width: 32%;
+  height: 100%;
+  background: var(--accent);
+  animation: route-loading-slide 900ms ease-in-out infinite;
+}
+
+@keyframes route-loading-slide {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(420%); }
+}
+
 .readerShell {
   width: min(960px, calc(100% - 28px));
 }
@@ -150,6 +185,14 @@ input {
   outline: 0;
   background: transparent;
   color: var(--text);
+}
+
+.searchForm.isContentSearch input {
+  font-size: 13px;
+}
+
+.searchSubmitIcon {
+  display: none;
 }
 
 .segmentedControl button {
@@ -743,6 +786,8 @@ button.pageNumber {
 }
 
 .readerSegment {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 900px;
   scroll-margin-top: 132px;
   white-space: pre-wrap;
 }
@@ -1761,12 +1806,32 @@ mark {
   background: #101214;
 }
 
+.mediaVideoPreviewImage,
 .mediaVideoPreview img,
 .mediaVideoFallback {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.mediaVideoPreviewImage {
+  position: relative;
+}
+
+.mediaVideoPreviewImage img,
+.mediaVideoPreviewImage .mediaVideoFallback {
+  position: absolute;
+  inset: 0;
+}
+
+.mediaVideoPreviewImage img {
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.mediaVideoPreviewImage img.isReady {
+  opacity: 1;
 }
 
 .mediaVideoFallback {
@@ -2094,10 +2159,20 @@ mark {
   overflow-y: auto;
 }
 
+.mediaAudioQueueViewport {
+  overflow-anchor: none;
+}
+
+.mediaAudioQueueSpacer {
+  width: 1px;
+  pointer-events: none;
+}
+
 .mediaAudioQueue button {
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr) minmax(80px, 130px);
   width: 100%;
+  height: 36px;
   align-items: center;
   gap: 7px;
   border: 0;
@@ -2107,6 +2182,13 @@ mark {
   color: var(--muted);
   cursor: pointer;
   text-align: left;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .routeLoadingBar span {
+    animation: none;
+    width: 100%;
+  }
 }
 
 .mediaAudioQueue button:hover,
@@ -3140,11 +3222,8 @@ mark {
 }
 
 .searchRateRulesList {
-  max-height: 620px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: 3px;
-  scrollbar-gutter: stable;
+  overflow: visible;
+  touch-action: pan-y;
 }
 
 .searchRateRule {
@@ -4062,6 +4141,48 @@ mark {
   font-size: 15px;
 }
 
+.analyticsSearchPanel h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.analyticsSearchTags {
+  display: flex;
+  max-height: 186px;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+
+.analyticsSearchTag {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.analyticsSearchTag > span {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analyticsSearchTag strong {
+  color: var(--accent);
+}
+
 .analyticsMetricList {
   display: grid;
   gap: 6px;
@@ -4261,7 +4382,80 @@ mark {
 }
 
 .adminMediaFilters {
+  margin: 0;
+}
+
+.adminMediaToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   margin-bottom: 12px;
+}
+
+.adminMediaSort,
+.adminMediaSortField,
+.adminMediaSortDirection {
+  display: inline-flex;
+  align-items: center;
+}
+
+.adminMediaSort {
+  gap: 6px;
+}
+
+.adminMediaSortField {
+  height: 34px;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0 5px 0 8px;
+  background: var(--bg-soft);
+  color: var(--muted);
+}
+
+.adminMediaSortField select {
+  min-width: 82px;
+  height: 30px;
+  border: 0;
+  outline: 0;
+  background: var(--bg-soft);
+  color: var(--text);
+  color-scheme: inherit;
+  font-size: 12px;
+}
+
+.adminMediaSortField select option {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.adminMediaSortDirection {
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-strong) 30%, transparent);
+}
+
+.adminMediaSortDirection button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.adminMediaSortDirection button:hover,
+.adminMediaSortDirection button:focus-visible,
+.adminMediaSortDirection button.isActive {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--accent);
 }
 
 .adminMediaDisplaySettings {
@@ -4499,6 +4693,23 @@ mark {
   color: #47714d;
 }
 
+.adminMediaKind.is-folder {
+  color: #86652b;
+}
+
+.adminMediaFolderRow {
+  cursor: pointer;
+}
+
+.adminMediaFolderRow:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.adminMediaFolderRow td:last-child {
+  color: var(--muted);
+}
+
 .adminTableIconButton {
   display: inline-grid;
   width: 30px;
@@ -4665,6 +4876,32 @@ mark {
     width: 100%;
   }
 
+  .searchForm.isContentSearch {
+    grid-template-columns: 28px minmax(0, 1fr) 30px;
+    gap: 6px;
+    padding-right: 6px;
+  }
+
+  .searchForm.isContentSearch input {
+    font-size: 12px;
+  }
+
+  .searchForm.isContentSearch .searchSubmit {
+    display: grid;
+    width: 30px;
+    height: 30px;
+    place-items: center;
+    padding: 0;
+  }
+
+  .searchForm.isContentSearch .searchSubmitIcon {
+    display: block;
+  }
+
+  .searchForm.isContentSearch .searchSubmit span {
+    display: none;
+  }
+
   :root[data-ui-mode="minimal"] .siteHeader {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
@@ -4720,11 +4957,11 @@ mark {
   :root[data-ui-mode="minimal"] .siteHeader.hasPrimaryNav .searchForm.isPinnedOpen:focus-within {
     position: absolute;
     top: calc(100% + 4px);
-    left: 0;
+    left: calc((100% - 100vw) / 2 + 8px);
     z-index: 80;
     grid-template-columns: 28px minmax(0, 1fr) auto;
-    width: 100%;
-    gap: 8px;
+    width: calc(100vw - 16px);
+    gap: 6px;
     padding: 6px 7px 6px 6px;
     box-shadow: 0 10px 26px rgb(84 54 31 / 12%);
   }
@@ -5113,12 +5350,21 @@ mark {
     overflow-x: auto;
   }
 
+  .adminMediaToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .adminMediaSort {
+    justify-content: flex-end;
+  }
+
   .adminMediaUploadStatus {
     grid-template-columns: 1fr;
   }
 
-  .adminMediaTable th,
-  .adminMediaTable td {
+  .adminTable.adminMediaTable th,
+  .adminTable.adminMediaTable td {
     display: table-cell;
   }
 

@@ -11,7 +11,7 @@ export function ThemeScript({
         var theme = localStorage.getItem("novel-theme") || ${JSON.stringify(defaultTheme)};
         var uiMode = localStorage.getItem("novel-ui-mode") || "standard";
         var fontSize = Number(localStorage.getItem("novel-font-size") || ${JSON.stringify(defaultFontSize)});
-        if (!Number.isFinite(fontSize) || fontSize < 5 || fontSize > 50) {
+        if (!Number.isFinite(fontSize) || fontSize < 8 || fontSize > 25) {
           fontSize = ${JSON.stringify(defaultFontSize)};
         }
         if (theme === "light" || theme === "dark") {

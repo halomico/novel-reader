@@ -23,6 +23,18 @@ export function getContentIndexDatabasePath(): string {
   return resolveFromProject(process.env.CONTENT_INDEX_DB_PATH || "./data/content-index.db");
 }
 
+export function getContentSearchDatabasePath(): string {
+  return resolveFromProject(process.env.CONTENT_SEARCH_DB_PATH || "./data/content-search.db");
+}
+
+export function getRipgrepPath(): string {
+  const configured = process.env.RIPGREP_PATH?.trim();
+  if (!configured) {
+    return "rg";
+  }
+  return path.isAbsolute(configured) || !/[\\/]/.test(configured) ? configured : resolveFromProject(configured);
+}
+
 export function getMediaDir(): string {
   return resolveFromProject(process.env.MEDIA_DIR || "./data/media");
 }
@@ -370,6 +382,7 @@ export function getConfiguredPaths() {
     libraryDir: getLibraryDir(),
     databasePath: getDatabasePath(),
     contentIndexDatabasePath: process.env.CONTENT_INDEX_DB_PATH || "./data/content-index.db",
+    contentSearchDatabasePath: process.env.CONTENT_SEARCH_DB_PATH || "./data/content-search.db",
     adminSettingsPath: process.env.ADMIN_SETTINGS_PATH || "./data/admin-settings.json",
   };
 }

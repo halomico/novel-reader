@@ -3,6 +3,7 @@ import { mediaFilePath, saveMediaDuration, type MediaAsset } from "./media";
 
 type MediaMetadataGlobal = typeof globalThis & {
   mediaDurationJobs?: Map<string, Promise<number>>;
+  mediaDurationQueue?: Promise<void>;
 };
 
 function probeDuration(sourcePath: string): Promise<number> {
@@ -41,13 +42,25 @@ export function ensureMediaDuration(asset: MediaAsset): Promise<number> {
     return existing;
   }
 
-  const job = probeDuration(mediaFilePath(asset.storedName)).then((duration) => {
+  const previous = state.mediaDurationQueue || Promise.resolve();
+  const job = previous.catch(() => undefined).then(async () => {
+    const duration = await probeDuration(mediaFilePath(asset.storedName));
     saveMediaDuration(asset.id, duration);
     return duration;
   });
+  state.mediaDurationQueue = job.then(() => undefined, () => undefined);
   jobs.set(key, job);
   void job.finally(() => jobs.delete(key)).catch(() => undefined);
   return job;
+}
+
+export function scheduleMediaDurations(assets: MediaAsset[]) {
+  for (const asset of assets) {
+    if (asset.kind === "file" || (asset.durationSeconds && asset.durationSeconds > 0)) {
+      continue;
+    }
+    void ensureMediaDuration(asset).catch(() => undefined);
+  }
 }
 
 export async function loadMediaDurations(assets: MediaAsset[], concurrency = 3): Promise<MediaAsset[]> {

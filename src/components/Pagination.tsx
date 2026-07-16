@@ -2,7 +2,8 @@
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { FormEvent, useEffect, useRef, useState, useTransition } from "react";
 
 type PageItem = number | "ellipsis";
 
@@ -65,8 +66,10 @@ function PageJump({
   index: number;
   onPageChange?: (page: number) => void;
 }) {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [value, setValue] = useState("");
+  const [isPending, startTransition] = useTransition();
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function clearCloseTimer() {
@@ -97,7 +100,10 @@ function PageJump({
       return;
     }
     clearCloseTimer();
-    window.location.assign(pageHrefWithParams(nextPage, query, basePath, extraParams));
+    const href = pageHrefWithParams(nextPage, query, basePath, extraParams);
+    startTransition(() => router.push(href));
+    setIsOpen(false);
+    setValue("");
   }
 
   return (
@@ -138,7 +144,7 @@ function PageJump({
             value={value}
             onChange={(event) => setValue(event.target.value)}
           />
-          <button type="submit">跳转</button>
+          <button type="submit" disabled={isPending}>跳转</button>
         </form>
       ) : null}
     </span>

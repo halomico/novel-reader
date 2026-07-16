@@ -11,6 +11,7 @@ import {
   MediaUploadError,
   startMediaUpload,
 } from "@/lib/media-upload";
+import { scheduleMediaPreparation } from "@/lib/media-maintenance";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -87,6 +88,7 @@ export async function POST(request: NextRequest) {
 
     if (action === "finish") {
       const asset = finishMediaUpload(uploadId);
+      scheduleMediaPreparation([asset]);
       revalidatePath("/media");
       revalidatePath("/admin");
       revalidatePath("/admin/media");

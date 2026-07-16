@@ -2,6 +2,7 @@ import { BookText } from "lucide-react";
 import Link from "next/link";
 import { Pagination } from "@/components/Pagination";
 import { SiteHeader } from "@/components/SiteHeader";
+import { recordSearchQuery } from "@/lib/analytics";
 import { listNovels } from "@/lib/books";
 import { getCatalogPageSize } from "@/lib/config";
 
@@ -20,6 +21,9 @@ export default async function Home({ searchParams }: HomeProps) {
   const query = params.q || "";
   const pageSize = getCatalogPageSize();
   const result = listNovels({ page, q: query, pageSize });
+  if (result.query && !params.page) {
+    recordSearchQuery(result.query, "title");
+  }
   const returnParams = new URLSearchParams();
   returnParams.set("page", String(result.page));
   if (result.query) {
@@ -28,7 +32,7 @@ export default async function Home({ searchParams }: HomeProps) {
   const returnHref = `/?${returnParams.toString()}`;
 
   return (
-    <main className="appShell">
+    <main className="appShell catalogShell">
       <SiteHeader query={result.query} />
       <section className="catalogSummary">
         <p>

@@ -40,8 +40,10 @@ import {
   MediaFolderError,
   renameMediaFolder,
   syncMediaLibrary,
+  type MediaKind,
   updateMediaAsset,
 } from "@/lib/media";
+import { scheduleMissingMediaPreparation } from "@/lib/media-maintenance";
 import { clearMediaThumbnails } from "@/lib/media-thumbnail";
 import { deleteNovelIds } from "@/lib/novel-files";
 import { hashPassword } from "@/lib/password";
@@ -69,6 +71,18 @@ function adminNotice(message: string, tone: "success" | "warning" | "error" = "s
 function mediaReturnPath(formData: FormData): string {
   const requested = String(formData.get("returnPath") || "");
   return requested === "/admin/media" || (requested.startsWith("/admin/media?") && !/[\r\n#]/.test(requested)) ? requested : "/admin/media";
+}
+
+function mediaFolderReturnPath(formData: FormData, kind: MediaKind, folder: string): string {
+  const current = mediaReturnPath(formData);
+  const params = new URLSearchParams(current.split("?", 2)[1] || "");
+  params.set("kind", kind);
+  if (folder) params.set("folder", folder);
+  else params.delete("folder");
+  params.delete("page");
+  params.delete("notice");
+  params.delete("tone");
+  return `/admin/media?${params.toString()}`;
 }
 
 function mediaFolderMessage(error: unknown): string {
@@ -320,7 +334,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
     siteName: String(formData.get("siteName") || "").trim(),
     siteTitle: String(formData.get("siteTitle") || "").trim(),
     settingsPreviewText: String(formData.get("settingsPreviewText") || "").trim(),
-    readerDefaultFontSize: intField(formData, "readerDefaultFontSize", previous.readerDefaultFontSize || 17, 5, 50),
+    readerDefaultFontSize: intField(formData, "readerDefaultFontSize", previous.readerDefaultFontSize || 17, 8, 25),
     adminUsername,
     adminPasswordHash: newPassword ? hashPassword(newPassword) : previous.adminPasswordHash,
     adminPasswordSha256: newPassword ? "" : previous.adminPasswordSha256,
@@ -480,6 +494,7 @@ export async function saveAdminMediaDisplaySettingsAction(formData: FormData) {
       previous.videoThumbnailCarouselFrames !== next.videoThumbnailCarouselFrames
     ) {
       clearMediaThumbnails();
+      scheduleMissingMediaPreparation();
     }
   } catch (error) {
     console.error("Failed to save media display settings", error);
@@ -517,9 +532,10 @@ export async function deleteAdminMediaAction(formData: FormData) {
 export async function syncAdminMediaAction(formData: FormData) {
   await requireAdminRequest("/admin/media");
   const returnPath = mediaReturnPath(formData);
-  let result: ReturnType<typeof syncMediaLibrary>;
+  let result: Awaited<ReturnType<typeof syncMediaLibrary>>;
   try {
-    result = syncMediaLibrary({ force: true });
+    result = await syncMediaLibrary({ force: true });
+    scheduleMissingMediaPreparation();
   } catch {
     adminNotice("媒体目录同步失败，请检查目录权限和文件状态", "error", returnPath);
   }
@@ -542,7 +558,7 @@ export async function createAdminMediaFolderAction(formData: FormData) {
   }
   revalidatePath("/media");
   revalidatePath("/admin/media");
-  adminNotice("文件夹已创建", "success", `/admin/media?kind=${kindValue}&folder=${encodeURIComponent(folder)}`);
+  adminNotice("文件夹已创建", "success", mediaFolderReturnPath(formData, kindValue, folder));
 }
 
 export async function renameAdminMediaFolderAction(formData: FormData) {
@@ -559,7 +575,7 @@ export async function renameAdminMediaFolderAction(formData: FormData) {
   }
   revalidatePath("/media");
   revalidatePath("/admin/media");
-  adminNotice("文件夹已重命名", "success", `/admin/media?kind=${kindValue}&folder=${encodeURIComponent(folder)}`);
+  adminNotice("文件夹已重命名", "success", mediaFolderReturnPath(formData, kindValue, folder));
 }
 
 export async function deleteAdminMediaFolderAction(formData: FormData) {
@@ -578,7 +594,11 @@ export async function deleteAdminMediaFolderAction(formData: FormData) {
   }
   revalidatePath("/media");
   revalidatePath("/admin/media");
-  adminNotice(deleted ? "空文件夹已删除" : "文件夹不存在", deleted ? "success" : "warning", `/admin/media?kind=${kindValue}&folder=${encodeURIComponent(parent)}`);
+  adminNotice(
+    deleted ? "空文件夹已删除" : "文件夹不存在",
+    deleted ? "success" : "warning",
+    mediaFolderReturnPath(formData, kindValue, parent),
+  );
 }
 
 export async function deleteIpRateLimitBanAction(formData: FormData) {

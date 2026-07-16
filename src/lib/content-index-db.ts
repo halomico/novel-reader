@@ -88,6 +88,11 @@ export function initializeContentIndexDb(db: DatabaseSync) {
         updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)
     WHERE created_at IS NULL OR updated_at IS NULL;
 
+    UPDATE content_search_term_stats
+    SET updated_at = created_at
+    WHERE last_used_at IS NOT NULL
+      AND updated_at = last_used_at;
+
     CREATE INDEX IF NOT EXISTS idx_content_search_term_stats_source_cold
       ON content_search_term_stats(source, last_used_at, hit_count, updated_at);
   `);

@@ -1,10 +1,17 @@
 import { ChevronRight, Folder, FolderOpen, HardDrive } from "lucide-react";
 import Link from "next/link";
-import type { MediaFolder, MediaKind } from "@/lib/media";
+import type { MediaFolder, MediaKind, MediaSortBy, MediaSortOrder } from "@/lib/media";
 
 type FolderNode = MediaFolder & { children: FolderNode[] };
 
-function folderHref(basePath: string, kind: MediaKind, folder: string, query: string): string {
+function folderHref(
+  basePath: string,
+  kind: MediaKind,
+  folder: string,
+  query: string,
+  sortBy?: MediaSortBy,
+  sortOrder?: MediaSortOrder,
+): string {
   const params = new URLSearchParams({ kind });
   if (folder) {
     params.set("folder", folder);
@@ -12,6 +19,8 @@ function folderHref(basePath: string, kind: MediaKind, folder: string, query: st
   if (query) {
     params.set("q", query);
   }
+  if (sortBy) params.set("sort", sortBy);
+  if (sortOrder) params.set("order", sortOrder);
   return `${basePath}?${params.toString()}`;
 }
 
@@ -37,18 +46,22 @@ function FolderBranch({
   activeFolder,
   basePath,
   query,
+  sortBy,
+  sortOrder,
 }: {
   node: FolderNode;
   kind: MediaKind;
   activeFolder: string;
   basePath: "/media" | "/admin/media";
   query: string;
+  sortBy?: MediaSortBy;
+  sortOrder?: MediaSortOrder;
 }) {
   const active = activeFolder === node.path;
   const containsActive = activeFolder.startsWith(`${node.path}/`);
   const Icon = active ? FolderOpen : Folder;
   const link = (
-    <Link className={active ? "isActive" : ""} href={folderHref(basePath, kind, node.path, query)} title={node.path}>
+    <Link className={active ? "isActive" : ""} href={folderHref(basePath, kind, node.path, query, sortBy, sortOrder)} title={node.path}>
       <Icon size={16} aria-hidden="true" />
       <span>{node.name}</span>
       <small>{node.directAssets}</small>
@@ -66,7 +79,16 @@ function FolderBranch({
       </summary>
       <div className="mediaFolderChildren">
         {node.children.map((child) => (
-          <FolderBranch node={child} kind={kind} activeFolder={activeFolder} basePath={basePath} query={query} key={child.path} />
+          <FolderBranch
+            node={child}
+            kind={kind}
+            activeFolder={activeFolder}
+            basePath={basePath}
+            query={query}
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            key={child.path}
+          />
         ))}
       </div>
     </details>
@@ -79,21 +101,37 @@ export function MediaFolderTree({
   activeFolder,
   basePath,
   query = "",
+  sortBy,
+  sortOrder,
 }: {
   kind: MediaKind;
   folders: MediaFolder[];
   activeFolder: string;
   basePath: "/media" | "/admin/media";
   query?: string;
+  sortBy?: MediaSortBy;
+  sortOrder?: MediaSortOrder;
 }) {
   return (
     <nav className="mediaFolderTree" aria-label="资源文件夹">
-      <Link className={!activeFolder ? "isActive mediaFolderRoot" : "mediaFolderRoot"} href={folderHref(basePath, kind, "", query)}>
+      <Link
+        className={!activeFolder ? "isActive mediaFolderRoot" : "mediaFolderRoot"}
+        href={folderHref(basePath, kind, "", query, sortBy, sortOrder)}
+      >
         <HardDrive size={16} aria-hidden="true" />
         <span>根目录</span>
       </Link>
       {buildFolderTree(folders).map((node) => (
-        <FolderBranch node={node} kind={kind} activeFolder={activeFolder} basePath={basePath} query={query} key={node.path} />
+        <FolderBranch
+          node={node}
+          kind={kind}
+          activeFolder={activeFolder}
+          basePath={basePath}
+          query={query}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          key={node.path}
+        />
       ))}
     </nav>
   );

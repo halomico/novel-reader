@@ -28,3 +28,23 @@ test("atomically replaces an existing settings file", () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test("clamps the configured reader font size to 8 through 25", () => {
+  const previousPath = process.env.ADMIN_SETTINGS_PATH;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-font-size-"));
+  process.env.ADMIN_SETTINGS_PATH = path.join(tempDir, "admin-settings.json");
+
+  try {
+    writeSiteSettings({ ...readSiteSettings(), readerDefaultFontSize: 50 });
+    assert.equal(readSiteSettings().readerDefaultFontSize, 25);
+    writeSiteSettings({ ...readSiteSettings(), readerDefaultFontSize: 5 });
+    assert.equal(readSiteSettings().readerDefaultFontSize, 8);
+  } finally {
+    if (previousPath === undefined) {
+      delete process.env.ADMIN_SETTINGS_PATH;
+    } else {
+      process.env.ADMIN_SETTINGS_PATH = previousPath;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});

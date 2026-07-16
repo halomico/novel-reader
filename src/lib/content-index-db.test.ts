@@ -22,3 +22,21 @@ test("upgrades a populated legacy index stats table without timestamp defaults",
   assert.ok(row.updatedAt);
   db.close();
 });
+
+test("repairs legacy rows whose last use overwrote the index build timestamp", () => {
+  const db = new DatabaseSync(":memory:");
+  initializeContentIndexDb(db);
+  db.prepare(
+    `INSERT INTO content_search_term_stats
+      (term, segment_count, novel_count, status, source, hit_count, last_used_at, created_at, updated_at)
+     VALUES ('legacy-used', 1, 1, 'indexed', 'auto', 2, '2026-07-16 12:00:00', '2026-07-15 09:00:00', '2026-07-16 12:00:00')`,
+  ).run();
+
+  initializeContentIndexDb(db);
+
+  const row = db
+    .prepare("SELECT created_at AS createdAt, updated_at AS updatedAt FROM content_search_term_stats WHERE term = 'legacy-used'")
+    .get() as { createdAt: string; updatedAt: string };
+  assert.equal(row.updatedAt, row.createdAt);
+  db.close();
+});

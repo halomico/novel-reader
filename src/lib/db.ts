@@ -212,6 +212,16 @@ function initialize(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_analytics_events_ip_time ON analytics_events(ip, created_at);
     CREATE INDEX IF NOT EXISTS idx_analytics_events_path_time ON analytics_events(path, created_at);
 
+    CREATE TABLE IF NOT EXISTS search_query_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      query TEXT NOT NULL,
+      mode TEXT NOT NULL CHECK(mode IN ('title', 'content')),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_search_query_events_time ON search_query_events(created_at);
+    CREATE INDEX IF NOT EXISTS idx_search_query_events_query_time ON search_query_events(query, created_at);
+
     CREATE TABLE IF NOT EXISTS rate_limit_bans (
       category TEXT NOT NULL,
       ip TEXT NOT NULL,

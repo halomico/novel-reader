@@ -1,0 +1,32 @@
+# Import this snippet inside each site block before the catch-all reverse_proxy.
+# Adjust the root path when the repository is not deployed at /opt/novel-reader.
+
+(novel_reader_media) {
+    @novelReaderMedia path /media-file/*
+    route @novelReaderMedia {
+        request_header -X-Media-Cache-Control
+        request_header -X-Media-Content-Disposition
+
+        forward_auth 127.0.0.1:3000 {
+            uri /api/media-authorize
+            copy_headers X-Media-Cache-Control X-Media-Content-Disposition
+        }
+
+        uri strip_prefix /media-file
+        root * /opt/novel-reader/data/media
+        header {
+            Cache-Control "{header.X-Media-Cache-Control}"
+            Content-Disposition "{header.X-Media-Content-Disposition}"
+            Vary "Cookie"
+            X-Content-Type-Options "nosniff"
+        }
+        file_server
+    }
+}
+
+# Example site block:
+# example.com {
+#     encode zstd gzip
+#     import novel_reader_media
+#     reverse_proxy 127.0.0.1:3000
+# }

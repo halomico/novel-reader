@@ -17,6 +17,7 @@ test("uploads media in chunks, records it, and removes the stored file", async (
   try {
     const upload = await import("./media-upload");
     const media = await import("./media");
+    const delivery = await import("./media-delivery");
     const { getDb } = await import("./db");
     const db = getDb();
     closeDatabase = () => db.close();
@@ -29,7 +30,7 @@ test("uploads media in chunks, records it, and removes the stored file", async (
          VALUES ('audio', '旧资源', 'legacy.mp3', ?, 'audio/mpeg', 21)`,
       )
       .run(legacyStoredName);
-    media.syncMediaLibrary({ force: true });
+    await media.syncMediaLibrary({ force: true });
     const legacyAsset = media.getMediaAsset(Number(legacyResult.lastInsertRowid))!;
     assert.equal(legacyAsset.storedName.startsWith("audio/"), true);
     assert.equal(fs.existsSync(media.mediaFilePath(legacyAsset.storedName)), true);
@@ -59,6 +60,11 @@ test("uploads media in chunks, records it, and removes the stored file", async (
     assert.equal(media.getMediaAsset(asset.id)?.artist, "新作者");
     assert.equal(media.getMediaAsset(asset.id)?.fileName, "新标题.mp3");
     assert.equal(fs.existsSync(storedPath), false);
+    const currentAsset = media.getMediaAsset(asset.id)!;
+    const deliveryUrl = delivery.mediaDeliveryUrl(currentAsset);
+    assert.equal(delivery.resolveMediaDeliveryUri(deliveryUrl)?.asset.id, asset.id);
+    assert.equal(delivery.resolveMediaDeliveryUri(deliveryUrl)?.download, false);
+    assert.equal(delivery.resolveMediaDeliveryUri(deliveryUrl.replace(`id=${asset.id}`, "id=999999")), null);
     const secondSource = Buffer.from("ID3-second-media-test");
     const secondStarted = upload.startMediaUpload({
       kind: "audio",
@@ -75,6 +81,17 @@ test("uploads media in chunks, records it, and removes the stored file", async (
     const secondStoredPath = media.mediaFilePath(secondAsset.storedName);
     assert.equal(secondAsset.title, "second");
     assert.equal(secondAsset.artist, "测试作者");
+    assert.deepEqual(
+      media.listMediaAssets({ kind: "audio", folder: "测试专辑", sortBy: "size", sortOrder: "asc" }).assets.map((item) => item.id),
+      [asset.id, secondAsset.id],
+    );
+    assert.deepEqual(
+      media.listMediaAssets({ kind: "audio", folder: "测试专辑", sortBy: "size", sortOrder: "desc" }).assets.map((item) => item.id),
+      [secondAsset.id, asset.id],
+    );
+    const albumFolder = media.listMediaFolders("audio").find((item) => item.path === "测试专辑");
+    assert.equal(albumFolder?.directAssets, 2);
+    assert.equal(albumFolder?.totalSizeBytes, source.length + secondSource.length);
     assert.equal(media.listMediaAssets({ query: "测试作者" }).totalAssets, 1);
     assert.equal(media.renameMediaFolder("audio", "测试专辑", "已整理专辑"), "已整理专辑");
     assert.equal(media.getMediaAsset(asset.id)?.folder, "已整理专辑");
@@ -85,16 +102,16 @@ test("uploads media in chunks, records it, and removes the stored file", async (
     fs.mkdirSync(externalFolder, { recursive: true });
     const externalPath = path.join(externalFolder, "external.mp3");
     fs.writeFileSync(externalPath, "ID3-external-media-test");
-    assert.equal(media.syncMediaLibrary({ force: true }).added, 1);
+    assert.equal((await media.syncMediaLibrary({ force: true })).added, 1);
     const externalAsset = media.listMediaAssets({ kind: "audio", folder: "外部目录" }).assets[0];
     assert.equal(externalAsset.fileName, "external.mp3");
     const renamedExternalPath = path.join(externalFolder, "renamed.mp3");
     fs.renameSync(externalPath, renamedExternalPath);
-    assert.equal(media.syncMediaLibrary({ force: true }).updated, 1);
+    assert.equal((await media.syncMediaLibrary({ force: true })).updated, 1);
     assert.equal(media.getMediaAsset(externalAsset.id)?.fileName, "renamed.mp3");
     assert.equal(media.getMediaAsset(externalAsset.id)?.title, "renamed");
     fs.rmSync(renamedExternalPath);
-    assert.equal(media.syncMediaLibrary({ force: true }).removed, 1);
+    assert.equal((await media.syncMediaLibrary({ force: true })).removed, 1);
     assert.equal(media.getMediaAsset(externalAsset.id), null);
 
     assert.equal(media.incrementMediaPlayCount(asset.id), true);

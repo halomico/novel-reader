@@ -150,7 +150,16 @@ export function startContentSearchJob(query: ParsedSearchQuery): ContentJobSnaps
           segmentCount: current.cacheSegmentCount,
           results: current.results,
           progress: progress(current.searchedBooks, current.totalBooks),
-          message: current.indexedTerm ? `正在从索引“${current.indexedTerm}”筛选` : "正在扫描小说正文",
+          message:
+            current.scanPhase === "prefilter"
+              ? "正在快速筛选小说正文"
+              : current.scanEngine === "fts5"
+                ? "正在从全文索引筛选"
+                : current.scanEngine === "ripgrep"
+                ? "正在核对候选正文"
+                : current.indexedTerm
+                  ? `正在从索引“${current.indexedTerm}”筛选`
+                  : "正在扫描小说正文",
         });
       }, { isCancelled: () => Boolean(job.cancelRequested) });
 

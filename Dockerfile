@@ -18,10 +18,12 @@ RUN ./node_modules/.bin/esbuild scripts/*.ts \
 RUN npm pkg set \
   scripts.start="node server.js" \
   scripts.scan:books="node maintenance/scan-books.js" \
+  scripts.index:search="node maintenance/build-content-search-index.js" \
   scripts.index:content="node maintenance/index-content.js" \
   scripts.compact:index="node maintenance/compact-content-index.js" \
   scripts.migrate:index-db="node maintenance/migrate-content-index-db.js" \
-  scripts.cleanup:legacy-index="node maintenance/cleanup-legacy-index.js"
+  scripts.cleanup:legacy-index="node maintenance/cleanup-legacy-index.js" \
+  scripts.optimize:media="node maintenance/optimize-media.js"
 
 FROM node:24-bookworm-slim AS runner
 WORKDIR /app
@@ -30,10 +32,11 @@ ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 ENV NOVEL_LIBRARY_DIR=/app/library/books
 ENV DATABASE_PATH=/app/data/novels.db
+ENV CONTENT_SEARCH_DB_PATH=/app/data/content-search.db
 ENV MEDIA_DIR=/app/data/media
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ffmpeg \
+  && apt-get install -y --no-install-recommends ffmpeg ripgrep \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/.next/standalone ./

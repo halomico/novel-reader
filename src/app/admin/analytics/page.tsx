@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { CalendarDays, Globe2, MonitorSmartphone, MousePointerClick, Radio, Search, X } from "lucide-react";
+import { CalendarDays, Globe2, MonitorSmartphone, MousePointerClick, Radio, Search, Tags, X } from "lucide-react";
 import Link from "next/link";
 import { LocalDateTime } from "@/components/LocalDateTime";
 import { Pagination } from "@/components/Pagination";
@@ -91,6 +91,29 @@ function MetricTable({ title, items }: { title: string; items: AnalyticsMetric[]
   );
 }
 
+function SearchTagPanel({ items }: { items: AnalyticsMetric[] }) {
+  return (
+    <details className="analyticsMetricPanel analyticsSearchPanel" open>
+      <summary>
+        <h3><Tags size={15} aria-hidden="true" />搜索热词</h3>
+        <span>{items.length} 项</span>
+      </summary>
+      {items.length ? (
+        <div className="analyticsSearchTags">
+          {items.map((item) => (
+            <span className="analyticsSearchTag" title={`${item.label} · ${formatCount(item.count)} 次`} key={item.label}>
+              <span>{item.label}</span>
+              <strong>{formatCount(item.count)}</strong>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="analyticsEmpty">暂无搜索记录</p>
+      )}
+    </details>
+  );
+}
+
 export default async function AdminAnalyticsPage({ searchParams }: AdminAnalyticsPageProps) {
   const params = await searchParams;
   const realtimeLimit = getAnalyticsRealtimeLimit();
@@ -164,9 +187,15 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
             <span>实时访问</span>
             <strong>{formatCount(overview.activeNow)}</strong>
           </div>
+          <div className="adminStatCard">
+            <Search size={20} aria-hidden="true" />
+            <span>搜索次数</span>
+            <strong>{formatCount(overview.totalSearches)}</strong>
+          </div>
         </div>
 
         <div className="analyticsGrid">
+          <SearchTagPanel items={overview.topSearchQueries} />
           <MetricTable title="内容访问" items={overview.topContent} />
           <MetricTable title="IP 地址" items={overview.topIps} />
           <MetricTable title="国家/地区" items={overview.topCountries} />

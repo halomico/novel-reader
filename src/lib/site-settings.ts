@@ -94,6 +94,17 @@ export type SiteSettings = {
   manualIndexMaxSegments: number;
 };
 
+type SiteSettingsCache = {
+  path: string;
+  mtimeMs: number;
+  size: number;
+  value: SiteSettings;
+};
+
+type SiteSettingsGlobal = typeof globalThis & {
+  siteSettingsCache?: SiteSettingsCache;
+};
+
 const DEFAULT_SETTINGS: SiteSettings = {
   siteName: "",
   siteTitle: "",
@@ -260,7 +271,7 @@ function cleanLoginRecords(value: unknown): AdminLoginRecord[] {
     .slice(0, 30);
 }
 
-export function readSiteSettings(): SiteSettings {
+function readSiteSettingsFromDisk(): SiteSettings {
   const settingsPath = getSiteSettingsPath();
   if (!fs.existsSync(settingsPath)) {
     return { ...DEFAULT_SETTINGS };
@@ -275,7 +286,7 @@ export function readSiteSettings(): SiteSettings {
       siteIconFileName: path.basename(cleanText(parsed.siteIconFileName)),
       siteIconMimeType: cleanSiteIconMimeType(parsed.siteIconMimeType),
       siteIconUpdatedAt: cleanText(parsed.siteIconUpdatedAt),
-      readerDefaultFontSize: cleanInt(parsed.readerDefaultFontSize, DEFAULT_SETTINGS.readerDefaultFontSize, 5, 50),
+      readerDefaultFontSize: cleanInt(parsed.readerDefaultFontSize, DEFAULT_SETTINGS.readerDefaultFontSize, 8, 25),
       adminUsername: cleanText(parsed.adminUsername),
       adminPasswordHash: cleanText(parsed.adminPasswordHash),
       adminPasswordSha256: cleanText(parsed.adminPasswordSha256),
@@ -363,6 +374,31 @@ export function readSiteSettings(): SiteSettings {
   }
 }
 
+export function readSiteSettings(): SiteSettings {
+  const settingsPath = getSiteSettingsPath();
+  const state = globalThis as SiteSettingsGlobal;
+  let mtimeMs = 0;
+  let size = 0;
+  try {
+    const stat = fs.statSync(settingsPath);
+    mtimeMs = stat.mtimeMs;
+    size = stat.size;
+  } catch {
+    // Missing settings use defaults and are cached below.
+  }
+  if (
+    state.siteSettingsCache?.path === settingsPath &&
+    state.siteSettingsCache.mtimeMs === mtimeMs &&
+    state.siteSettingsCache.size === size
+  ) {
+    return state.siteSettingsCache.value;
+  }
+
+  const value = readSiteSettingsFromDisk();
+  state.siteSettingsCache = { path: settingsPath, mtimeMs, size, value };
+  return value;
+}
+
 export function writeSiteSettings(settings: SiteSettings) {
   const settingsPath = getSiteSettingsPath();
   fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
@@ -370,6 +406,7 @@ export function writeSiteSettings(settings: SiteSettings) {
   try {
     fs.writeFileSync(tempPath, `${JSON.stringify(settings, null, 2)}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });
     fs.renameSync(tempPath, settingsPath);
+    delete (globalThis as SiteSettingsGlobal).siteSettingsCache;
   } catch (error) {
     fs.rmSync(tempPath, { force: true });
     throw error;

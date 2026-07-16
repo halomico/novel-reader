@@ -63,6 +63,12 @@ const upsertByPath = db.prepare(`
     mtime_ms = excluded.mtime_ms,
     word_count = excluded.word_count,
     updated_at = CURRENT_TIMESTAMP
+  WHERE novels.title IS NOT excluded.title
+     OR novels.file_name IS NOT excluded.file_name
+     OR novels.content_hash IS NOT excluded.content_hash
+     OR novels.size_bytes IS NOT excluded.size_bytes
+     OR novels.mtime_ms IS NOT excluded.mtime_ms
+     OR novels.word_count IS NOT excluded.word_count
 `);
 
 const findExistingByPath = db.prepare(`
@@ -107,7 +113,7 @@ function clearExistingIndexIfChanged(record: NovelFileRecord) {
     existing &&
     (existing.content_hash !== record.contentHash || existing.size_bytes !== record.sizeBytes || existing.mtime_ms !== record.mtimeMs)
   ) {
-    deleteIndexedContentForNovel(db, existing.id);
+    deleteIndexedContentForNovel(db, existing.id, true);
   }
 }
 
@@ -185,8 +191,8 @@ function scan() {
         if (!fs.existsSync(resolveLibraryFile(duplicate.relative_path))) {
           deleteNovelByRelativePath(db, duplicate.relative_path);
           clearExistingIndexIfChanged(record);
-          upsertByPath.run(record);
-          stats.insertedOrUpdated += 1;
+          const result = upsertByPath.run(record);
+          stats.insertedOrUpdated += Number(result.changes);
           stats.records.push(`${duplicate.file_name}: 数据库记录指向的文件不存在，已清理旧记录`);
           finishStep(index);
           continue;
@@ -205,8 +211,8 @@ function scan() {
       }
 
       clearExistingIndexIfChanged(record);
-      upsertByPath.run(record);
-      stats.insertedOrUpdated += 1;
+      const result = upsertByPath.run(record);
+      stats.insertedOrUpdated += Number(result.changes);
       finishStep(index);
     }
     db.exec("COMMIT");

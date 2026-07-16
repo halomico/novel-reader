@@ -3,7 +3,7 @@ import { Readable } from "node:stream";
 import { NextRequest } from "next/server";
 import { getVideoThumbnailSettings } from "@/lib/config";
 import { getMediaAsset, isMediaKindAccessible } from "@/lib/media";
-import { ensureMediaThumbnail } from "@/lib/media-thumbnail";
+import { ensureMediaThumbnail, mediaThumbnailEtag } from "@/lib/media-thumbnail";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
@@ -25,9 +25,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       : { fraction: settings.singlePercent / 100, cacheKey: `single-${settings.singlePercent}` };
     const thumbnailPath = await ensureMediaThumbnail(asset, options);
     const stat = fs.statSync(thumbnailPath);
+    const etag = mediaThumbnailEtag(asset.id, stat.mtimeMs, stat.size);
+    const cacheHeaders = {
+      "Cache-Control": "private, max-age=86400, stale-while-revalidate=604800, immutable",
+      ETag: etag,
+      "Last-Modified": stat.mtime.toUTCString(),
+      Vary: "Cookie",
+    };
+    if (request.headers.get("if-none-match") === etag) {
+      return new Response(null, { status: 304, headers: cacheHeaders });
+    }
     return new Response(Readable.toWeb(fs.createReadStream(thumbnailPath)) as ReadableStream<Uint8Array>, {
       headers: {
-        "Cache-Control": "private, max-age=3600",
+        ...cacheHeaders,
         "Content-Length": String(stat.size),
         "Content-Type": "image/jpeg",
       },

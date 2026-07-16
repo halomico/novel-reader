@@ -10,7 +10,9 @@ import {
   getContentIndexTerms,
 } from "./config";
 import { getContentIndexDb } from "./content-index-db";
-import { createNovelSegments } from "./segments";
+import { getContentSearchDb } from "./content-search-db";
+import { deleteContentSearchIndexNovel } from "./content-search-index";
+import { iterateNovelSegments } from "./segments";
 import { normalizeSearchText } from "./search-query";
 
 export type ContentIndexSource = "auto" | "manual";
@@ -20,6 +22,7 @@ export type ContentIndexTermStatus = {
   segmentCount: number;
   status: "indexed" | "skipped";
   source?: ContentIndexSource;
+  updatedAt?: string;
 };
 
 export type ContentIndexSummary = ContentIndexTermStatus & {
@@ -59,6 +62,7 @@ export type IndexedContentCandidatePlan = {
   terms: string[];
   requestedTerms: string[];
   novelIds: number[];
+  indexedAt: string;
 };
 
 type ContentIndexLimitOptions = {
@@ -120,13 +124,17 @@ function deleteContentIndexTermRows(db: DatabaseSync, term: string) {
   db.prepare("DELETE FROM content_search_term_stats WHERE term = ?").run(term);
 }
 
-function refreshNovelCountsForTerms(db: DatabaseSync, terms: string[]) {
+function refreshNovelCountsForTerms(db: DatabaseSync, terms: string[], updateTimestamp = true) {
   if (!terms.length) {
     return;
   }
 
   const countTerm = db.prepare("SELECT COUNT(*) AS count FROM content_search_terms WHERE term = ?");
-  const updateTerm = db.prepare("UPDATE content_search_term_stats SET novel_count = ?, updated_at = CURRENT_TIMESTAMP WHERE term = ?");
+  const updateTerm = db.prepare(
+    updateTimestamp
+      ? "UPDATE content_search_term_stats SET novel_count = ?, updated_at = CURRENT_TIMESTAMP WHERE term = ?"
+      : "UPDATE content_search_term_stats SET novel_count = ? WHERE term = ?",
+  );
   for (const term of terms) {
     const row = countTerm.get(term) as { count: number };
     updateTerm.run(row.count, term);
@@ -227,8 +235,7 @@ export function markContentIndexTermUsed(db: DatabaseSync, term: string) {
     `
     UPDATE content_search_term_stats
     SET hit_count = hit_count + 1,
-      last_used_at = CURRENT_TIMESTAMP,
-      updated_at = CURRENT_TIMESTAMP
+      last_used_at = CURRENT_TIMESTAMP
     WHERE term = ?
   `,
   ).run(term);
@@ -256,7 +263,7 @@ export function getIndexedNovelIds(db: DatabaseSync, term: string): number[] {
 
 export function findIndexedContentCandidateNovelIds(db: DatabaseSync, requiredTerms: string[]): IndexedContentCandidatePlan | null {
   const seenTerms = new Set<string>();
-  const entries: Array<{ requestedTerm: string; term: string; novelIds: number[] }> = [];
+  const entries: Array<{ requestedTerm: string; term: string; novelIds: number[]; indexedAt: string }> = [];
 
   for (const requiredTerm of normalizeContentIndexTerms(requiredTerms)) {
     const indexedTerm = findBestIndexedContentTerm(db, requiredTerm);
@@ -269,6 +276,7 @@ export function findIndexedContentCandidateNovelIds(db: DatabaseSync, requiredTe
       requestedTerm: requiredTerm,
       term: indexedTerm.term,
       novelIds: getIndexedNovelIds(db, indexedTerm.term),
+      indexedAt: indexedTerm.updatedAt,
     });
   }
 
@@ -291,6 +299,7 @@ export function findIndexedContentCandidateNovelIds(db: DatabaseSync, requiredTe
     terms: entries.map((entry) => entry.term),
     requestedTerms: entries.map((entry) => entry.requestedTerm),
     novelIds: Array.from(intersection).sort((left, right) => left - right),
+    indexedAt: entries.reduce((oldest, entry) => (entry.indexedAt < oldest ? entry.indexedAt : oldest), entries[0].indexedAt),
   };
 }
 
@@ -325,7 +334,7 @@ export function deleteLegacyFtsRows(db: DatabaseSync, novelId: number) {
   }
 }
 
-export function deleteContentIndexRowsForNovel(db: DatabaseSync, novelId: number) {
+export function deleteContentIndexRowsForNovel(db: DatabaseSync, novelId: number, preserveIndexTimestamp = false) {
   if (tableExists(db, "content_search_terms")) {
     db.prepare("DELETE FROM content_search_terms WHERE novel_id = ?").run(novelId);
   }
@@ -337,12 +346,13 @@ export function deleteContentIndexRowsForNovel(db: DatabaseSync, novelId: number
 
   indexDb.prepare("DELETE FROM content_search_terms WHERE novel_id = ?").run(novelId);
   indexDb.prepare("DELETE FROM content_index_novel_state WHERE novel_id = ?").run(novelId);
-  refreshNovelCountsForTerms(indexDb, terms);
+  refreshNovelCountsForTerms(indexDb, terms, !preserveIndexTimestamp);
 }
 
-export function deleteIndexedContentForNovel(db: DatabaseSync, novelId: number) {
+export function deleteIndexedContentForNovel(db: DatabaseSync, novelId: number, preserveIndexTimestamp = false) {
   deleteLegacyFtsRows(db, novelId);
-  deleteContentIndexRowsForNovel(db, novelId);
+  deleteContentIndexRowsForNovel(db, novelId, preserveIndexTimestamp);
+  deleteContentSearchIndexNovel(getContentSearchDb(), novelId);
   if (tableExists(db, "novel_segments")) {
     db.prepare("DELETE FROM novel_segments WHERE novel_id = ?").run(novelId);
   }
@@ -385,6 +395,7 @@ export function getContentIndexTermStatus(db: DatabaseSync, term: string): Conte
     .prepare(
       `
       SELECT term, segment_count AS segmentCount, status, source
+        , updated_at AS updatedAt
       FROM content_search_term_stats
       WHERE term = ?
       LIMIT 1
@@ -575,7 +586,7 @@ export async function buildContentIndexTerms(
     for (let index = 0; index < novels.length; index += 1) {
       throwIfCancelled();
       const novel = novels[index];
-      const segments = createNovelSegments(await readNovelContent(novel));
+      const segments = iterateNovelSegments(await readNovelContent(novel));
 
       indexDb.exec("BEGIN");
       try {
@@ -702,20 +713,22 @@ export async function buildContentIndexTerms(
   }
 }
 
-export function findBestIndexedContentTerm(db: DatabaseSync, anchorTerm: string): ContentIndexTermStatus | null {
+export function findBestIndexedContentTerm(
+  db: DatabaseSync,
+  anchorTerm: string,
+): (ContentIndexTermStatus & { updatedAt: string }) | null {
   const row = db
     .prepare(
       `
-      SELECT term, segment_count AS segmentCount, status, source
+      SELECT term, segment_count AS segmentCount, status, source, updated_at AS updatedAt
       FROM content_search_term_stats
       WHERE status = 'indexed'
-        AND segment_count > 0
         AND instr(?, term) > 0
       ORDER BY segment_count ASC, length(term) DESC
       LIMIT 1
     `,
     )
-    .get(anchorTerm) as ContentIndexTermStatus | undefined;
+    .get(anchorTerm) as (ContentIndexTermStatus & { updatedAt: string }) | undefined;
 
   return row || null;
 }

@@ -8,13 +8,23 @@ import { ensureMediaDuration } from "./media-metadata";
 
 type ThumbnailGlobal = typeof globalThis & {
   mediaThumbnailJobs?: Map<string, Promise<string>>;
-  mediaThumbnailQueue?: Promise<void>;
+  mediaThumbnailPending?: ThumbnailQueueJob[];
+  mediaThumbnailActive?: number;
+};
+
+type ThumbnailQueueJob = {
+  run: () => Promise<string>;
+  resolve: (value: string) => void;
+  reject: (error: unknown) => void;
 };
 
 export type MediaThumbnailOptions = {
   fraction: number;
   cacheKey: string;
 };
+
+const THUMBNAIL_CONCURRENCY = 2;
+const THUMBNAIL_PROFILE = "v2";
 
 function execFileText(command: string, args: string[], timeout: number): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -36,15 +46,19 @@ export function thumbnailSeekSeconds(durationSeconds: number, fraction = 1 / 3):
 
 export function mediaThumbnailPath(id: number, cacheKey = "single-33"): string {
   const safeKey = cacheKey.replace(/[^a-z0-9-]/gi, "").slice(0, 80) || "default";
-  return path.join(getMediaDir(), ".thumbnails", `${id}-${safeKey}.jpg`);
+  return path.join(getMediaDir(), ".thumbnails", `${id}-${THUMBNAIL_PROFILE}-${safeKey}.jpg`);
+}
+
+export function mediaThumbnailEtag(id: number, mtimeMs: number, size: number): string {
+  return `"media-thumbnail-${id}-${Math.floor(mtimeMs)}-${size}"`;
 }
 
 async function generateMediaThumbnail(asset: MediaAsset, options: MediaThumbnailOptions): Promise<string> {
   const sourcePath = mediaFilePath(asset.storedName);
-  const sourceStat = fs.statSync(sourcePath);
+  const sourceStat = await fs.promises.stat(sourcePath);
   const targetPath = mediaThumbnailPath(asset.id, options.cacheKey);
   try {
-    if (fs.statSync(targetPath).mtimeMs >= sourceStat.mtimeMs) {
+    if ((await fs.promises.stat(targetPath)).mtimeMs >= sourceStat.mtimeMs) {
       return targetPath;
     }
   } catch {
@@ -57,7 +71,7 @@ async function generateMediaThumbnail(asset: MediaAsset, options: MediaThumbnail
     throw new Error("无法读取视频时长");
   }
 
-  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
   const tempPath = path.join(path.dirname(targetPath), `${asset.id}-${crypto.randomBytes(6).toString("hex")}.tmp.jpg`);
   try {
     await execFileText(
@@ -76,19 +90,46 @@ async function generateMediaThumbnail(asset: MediaAsset, options: MediaThumbnail
         "-frames:v",
         "1",
         "-vf",
-        "scale=1280:-2:force_original_aspect_ratio=decrease",
+        "scale=640:-2:force_original_aspect_ratio=decrease",
         "-q:v",
-        "3",
+        "5",
         tempPath,
       ],
-      30_000,
+      20_000,
     );
-    fs.rmSync(targetPath, { force: true });
-    fs.renameSync(tempPath, targetPath);
+    await fs.promises.rm(targetPath, { force: true });
+    await fs.promises.rename(tempPath, targetPath);
     return targetPath;
   } finally {
-    fs.rmSync(tempPath, { force: true });
+    await fs.promises.rm(tempPath, { force: true });
   }
+}
+
+function runNextThumbnailJobs() {
+  const state = globalThis as ThumbnailGlobal;
+  const queue = state.mediaThumbnailPending || [];
+  state.mediaThumbnailPending = queue;
+  state.mediaThumbnailActive ||= 0;
+  while (state.mediaThumbnailActive < THUMBNAIL_CONCURRENCY && queue.length) {
+    const queued = queue.shift()!;
+    state.mediaThumbnailActive += 1;
+    void queued.run()
+      .then(queued.resolve, queued.reject)
+      .finally(() => {
+        state.mediaThumbnailActive = Math.max(0, (state.mediaThumbnailActive || 1) - 1);
+        runNextThumbnailJobs();
+      });
+  }
+}
+
+function enqueueThumbnail(run: () => Promise<string>): Promise<string> {
+  const state = globalThis as ThumbnailGlobal;
+  state.mediaThumbnailPending ||= [];
+  const job = new Promise<string>((resolve, reject) => {
+    state.mediaThumbnailPending!.push({ run, resolve, reject });
+  });
+  runNextThumbnailJobs();
+  return job;
 }
 
 export function ensureMediaThumbnail(
@@ -104,9 +145,7 @@ export function ensureMediaThumbnail(
     return existing;
   }
 
-  const previous = state.mediaThumbnailQueue || Promise.resolve();
-  const job = previous.catch(() => undefined).then(() => generateMediaThumbnail(asset, options));
-  state.mediaThumbnailQueue = job.then(() => undefined, () => undefined);
+  const job = enqueueThumbnail(() => generateMediaThumbnail(asset, options));
   jobs.set(key, job);
   void job.finally(() => jobs.delete(key)).catch(() => undefined);
   return job;

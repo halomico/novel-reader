@@ -26,7 +26,7 @@ test("records media analytics and unified user browse history", async () => {
     const audioDirectory = path.join(process.env.MEDIA_DIR, "audio", "测试专辑");
     fs.mkdirSync(audioDirectory, { recursive: true });
     fs.writeFileSync(path.join(audioDirectory, "analytics.mp3"), "ID3-analytics-media-test");
-    media.syncMediaLibrary({ force: true });
+    await media.syncMediaLibrary({ force: true });
     const asset = media.listMediaAssets({ kind: "audio", folder: "测试专辑" }).assets[0];
     const userResult = db
       .prepare("INSERT INTO users (username, display_name, password_hash) VALUES ('media-user', '媒体用户', 'test-hash')")

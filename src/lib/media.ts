@@ -13,6 +13,8 @@ import {
 import { getDb } from "./db";
 
 export type MediaKind = "video" | "audio" | "file";
+export type MediaSortBy = "name" | "size" | "updated";
+export type MediaSortOrder = "asc" | "desc";
 
 export type MediaAsset = {
   id: number;
@@ -38,6 +40,8 @@ export type MediaFolder = {
   name: string;
   depth: number;
   directAssets: number;
+  totalSizeBytes: number;
+  mtimeMs: number;
 };
 
 export type MediaSyncResult = {
@@ -73,13 +77,26 @@ type ScannedMediaFile = {
   mtimeMs: number;
 };
 
+type ScannedMediaLibrary = {
+  files: Map<string, ScannedMediaFile>;
+  folders: Record<MediaKind, Array<{ path: string; mtimeMs: number }>>;
+};
+
+type MediaLibrarySyncState = {
+  directory: string;
+  syncedAt: number;
+  prepared: boolean;
+  running?: Promise<MediaSyncResult>;
+  folders: Record<MediaKind, Array<{ path: string; mtimeMs: number }>>;
+};
+
 type MediaGlobal = typeof globalThis & {
-  mediaLibrarySyncState?: { directory: string; syncedAt: number };
+  mediaLibrarySyncState?: MediaLibrarySyncState;
 };
 
 export class MediaFolderError extends Error {}
 
-const MEDIA_SYNC_INTERVAL_MS = 2_000;
+export const MEDIA_SYNC_INTERVAL_MS = 5 * 60 * 1_000;
 const MEDIA_KINDS: MediaKind[] = ["video", "audio", "file"];
 
 const MEDIA_MIME_TYPES: Record<string, string> = {
@@ -266,8 +283,61 @@ export function createStoredMediaName(extension: string): string {
   return `${Date.now()}-${crypto.randomBytes(12).toString("hex")}${extension}`;
 }
 
+function emptyFolderSnapshot(): MediaLibrarySyncState["folders"] {
+  return { video: [], audio: [], file: [] };
+}
+
+function getMediaLibrarySyncState(): MediaLibrarySyncState {
+  const directory = path.resolve(getMediaDir());
+  const globalState = globalThis as MediaGlobal;
+  if (!globalState.mediaLibrarySyncState || globalState.mediaLibrarySyncState.directory !== directory) {
+    globalState.mediaLibrarySyncState = {
+      directory,
+      syncedAt: 0,
+      prepared: false,
+      folders: emptyFolderSnapshot(),
+    };
+  }
+  return globalState.mediaLibrarySyncState;
+}
+
 function markMediaLibraryDirty() {
-  delete (globalThis as MediaGlobal).mediaLibrarySyncState;
+  getMediaLibrarySyncState().syncedAt = 0;
+}
+
+function rememberMediaFolder(kind: MediaKind, folder: string) {
+  if (!folder) {
+    return;
+  }
+  const state = getMediaLibrarySyncState();
+  const known = new Map(state.folders[kind].map((item) => [item.path, item.mtimeMs]));
+  const segments = folder.split("/");
+  for (let index = 1; index <= segments.length; index += 1) {
+    const folderPath = segments.slice(0, index).join("/");
+    if (!known.has(folderPath)) {
+      known.set(folderPath, Date.now());
+    }
+  }
+  state.folders[kind] = Array.from(known, ([folderPath, mtimeMs]) => ({ path: folderPath, mtimeMs }));
+}
+
+function renameRememberedMediaFolder(kind: MediaKind, folder: string, nextFolder: string) {
+  const state = getMediaLibrarySyncState();
+  state.folders[kind] = state.folders[kind].map((item) => {
+    if (item.path === folder) {
+      return { ...item, path: nextFolder };
+    }
+    if (item.path.startsWith(`${folder}/`)) {
+      return { ...item, path: `${nextFolder}${item.path.slice(folder.length)}` };
+    }
+    return item;
+  });
+  rememberMediaFolder(kind, nextFolder);
+}
+
+function forgetMediaFolder(kind: MediaKind, folder: string) {
+  const state = getMediaLibrarySyncState();
+  state.folders[kind] = state.folders[kind].filter((item) => item.path !== folder && !item.path.startsWith(`${folder}/`));
 }
 
 function ensureMediaDirectories() {
@@ -357,16 +427,20 @@ function migrateGeneratedMediaFileNames() {
   }
 }
 
-function scanMediaFiles(): Map<string, ScannedMediaFile> {
+async function scanMediaFiles(): Promise<ScannedMediaLibrary> {
   const files = new Map<string, ScannedMediaFile>();
-  const visit = (kind: MediaKind, directory: string) => {
-    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+  const folders = emptyFolderSnapshot();
+  const visit = async (kind: MediaKind, directory: string, relativeFolder = "") => {
+    for (const entry of await fs.promises.readdir(directory, { withFileTypes: true })) {
       if (entry.isSymbolicLink()) {
         continue;
       }
       const absolutePath = path.join(directory, entry.name);
       if (entry.isDirectory()) {
-        visit(kind, absolutePath);
+        const folderPath = [relativeFolder, entry.name].filter(Boolean).join("/");
+        const stat = await fs.promises.stat(absolutePath);
+        folders[kind].push({ path: folderPath, mtimeMs: Math.floor(stat.mtimeMs) });
+        await visit(kind, absolutePath, folderPath);
         continue;
       }
       if (!entry.isFile()) {
@@ -376,7 +450,7 @@ function scanMediaFiles(): Map<string, ScannedMediaFile> {
       if (!normalizedFile) {
         continue;
       }
-      const stat = fs.statSync(absolutePath);
+      const stat = await fs.promises.stat(absolutePath);
       const storedName = toPosixPath(path.relative(getMediaDir(), absolutePath));
       files.set(storedName, {
         kind,
@@ -390,9 +464,9 @@ function scanMediaFiles(): Map<string, ScannedMediaFile> {
   };
 
   for (const kind of MEDIA_KINDS) {
-    visit(kind, path.join(getMediaDir(), kind));
+    await visit(kind, path.join(getMediaDir(), kind));
   }
-  return files;
+  return { files, folders };
 }
 
 function removeThumbnailFile(id: number) {
@@ -407,22 +481,29 @@ function removeThumbnailFile(id: number) {
   }
 }
 
-export function syncMediaLibrary(options: { force?: boolean } = {}): MediaSyncResult {
-  const directory = path.resolve(getMediaDir());
-  const now = Date.now();
-  const state = (globalThis as MediaGlobal).mediaLibrarySyncState;
-  if (!options.force && state?.directory === directory && now - state.syncedAt < MEDIA_SYNC_INTERVAL_MS) {
-    return { added: 0, updated: 0, removed: 0 };
-  }
-
+async function performMediaLibrarySync(state: MediaLibrarySyncState): Promise<MediaSyncResult> {
+  const startedAt = Date.now();
   ensureMediaDirectories();
-  migrateFlatMediaAssets();
-  migrateGeneratedMediaFileNames();
-  const scanned = scanMediaFiles();
+  if (!state.prepared) {
+    migrateFlatMediaAssets();
+    migrateGeneratedMediaFileNames();
+    state.prepared = true;
+  }
+  const scannedLibrary = await scanMediaFiles();
+  const scanned = scannedLibrary.files;
   const db = getDb();
   const rows = db.prepare("SELECT * FROM media_assets").all() as MediaRow[];
   const existing = new Map(rows.map((row) => [row.stored_name, row]));
-  const missingRows = rows.filter((row) => !scanned.has(row.stored_name));
+  const missingRows = rows.filter((row) => {
+    if (scanned.has(row.stored_name)) {
+      return false;
+    }
+    try {
+      return !fs.existsSync(mediaFilePath(row.stored_name));
+    } catch {
+      return true;
+    }
+  });
   const newFiles = Array.from(scanned.values()).filter((file) => !existing.has(file.storedName));
   const identity = (item: { kind: MediaKind; sizeBytes?: number; size_bytes?: number; mtimeMs?: number; mtime_ms?: number; fileName?: string; file_name?: string }) => {
     const size = item.sizeBytes ?? item.size_bytes ?? -1;
@@ -518,8 +599,34 @@ export function syncMediaLibrary(options: { force?: boolean } = {}): MediaSyncRe
   for (const row of removedRows) {
     removeThumbnailFile(row.id);
   }
-  (globalThis as MediaGlobal).mediaLibrarySyncState = { directory, syncedAt: now };
-  return { added, updated, removed: removedRows.length };
+  state.folders = scannedLibrary.folders;
+  state.syncedAt = Date.now();
+  const result = { added, updated, removed: removedRows.length };
+  const elapsedMs = state.syncedAt - startedAt;
+  if (elapsedMs >= 1_000 || added || updated || removedRows.length) {
+    console.info(`[media] library sync ${elapsedMs}ms: +${added} ~${updated} -${removedRows.length}`);
+  }
+  return result;
+}
+
+export function syncMediaLibrary(options: { force?: boolean } = {}): Promise<MediaSyncResult> {
+  const state = getMediaLibrarySyncState();
+  const now = Date.now();
+  if (state.running) {
+    return state.running;
+  }
+  if (!options.force && now - state.syncedAt < MEDIA_SYNC_INTERVAL_MS) {
+    return Promise.resolve({ added: 0, updated: 0, removed: 0 });
+  }
+
+  const job = performMediaLibrarySync(state);
+  state.running = job;
+  void job.finally(() => {
+    if (state.running === job) {
+      delete state.running;
+    }
+  }).catch(() => undefined);
+  return job;
 }
 
 export function createMediaAsset(params: {
@@ -556,7 +663,6 @@ export function getMediaAsset(id: number): MediaAsset | null {
   if (!Number.isInteger(id) || id <= 0) {
     return null;
   }
-  syncMediaLibrary();
   const row = getDb().prepare("SELECT * FROM media_assets WHERE id = ?").get(id) as MediaRow | undefined;
   return row ? toAsset(row) : null;
 }
@@ -571,6 +677,43 @@ function addFolderFilter(filters: string[], values: Array<string | number>, kind
   }
 }
 
+export function normalizeMediaSortBy(value: string | undefined): MediaSortBy {
+  return value === "name" || value === "size" ? value : "updated";
+}
+
+export function normalizeMediaSortOrder(value: string | undefined, sortBy: MediaSortBy): MediaSortOrder {
+  if (value === "asc" || value === "desc") {
+    return value;
+  }
+  return sortBy === "name" ? "asc" : "desc";
+}
+
+function mediaAssetOrderBy(sortBy: MediaSortBy, sortOrder: MediaSortOrder): string {
+  const direction = sortOrder === "asc" ? "ASC" : "DESC";
+  if (sortBy === "name") {
+    return `title COLLATE NOCASE ${direction}, file_name COLLATE NOCASE ${direction}, id ${direction}`;
+  }
+  if (sortBy === "size") {
+    return `size_bytes ${direction}, title COLLATE NOCASE ASC, id ASC`;
+  }
+  return `updated_at ${direction}, id ${direction}`;
+}
+
+export function sortMediaFolders(folders: MediaFolder[], sortBy: MediaSortBy, sortOrder: MediaSortOrder): MediaFolder[] {
+  const direction = sortOrder === "asc" ? 1 : -1;
+  return [...folders].sort((left, right) => {
+    let compared = 0;
+    if (sortBy === "size") {
+      compared = left.totalSizeBytes - right.totalSizeBytes;
+    } else if (sortBy === "updated") {
+      compared = left.mtimeMs - right.mtimeMs;
+    } else {
+      compared = left.name.localeCompare(right.name, "zh-CN", { numeric: true });
+    }
+    return compared ? compared * direction : left.name.localeCompare(right.name, "zh-CN", { numeric: true });
+  });
+}
+
 export function listMediaAssets(params: {
   kind?: MediaKind;
   folder?: string;
@@ -578,10 +721,13 @@ export function listMediaAssets(params: {
   query?: string;
   page?: number;
   pageSize?: number;
+  sortBy?: MediaSortBy;
+  sortOrder?: MediaSortOrder;
 } = {}): { assets: MediaAsset[]; page: number; totalPages: number; totalAssets: number; query: string; folder: string } {
-  syncMediaLibrary();
   const query = (params.query || "").trim().slice(0, 100);
   const pageSize = Math.min(Math.max(Math.floor(params.pageSize || 18), 1), 100);
+  const sortBy = normalizeMediaSortBy(params.sortBy);
+  const sortOrder = normalizeMediaSortOrder(params.sortOrder, sortBy);
   const folder = params.kind ? normalizeMediaFolder(params.folder || "") || "" : "";
   const filters: string[] = [];
   const values: Array<string | number> = [];
@@ -600,46 +746,45 @@ export function listMediaAssets(params: {
   const totalPages = Math.max(1, Math.ceil(count.count / pageSize));
   const page = Math.min(Math.max(Math.floor(params.page || 1), 1), totalPages);
   const rows = getDb()
-    .prepare(`SELECT * FROM media_assets ${where} ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?`)
+    .prepare(`SELECT * FROM media_assets ${where} ORDER BY ${mediaAssetOrderBy(sortBy, sortOrder)} LIMIT ? OFFSET ?`)
     .all(...values, pageSize, (page - 1) * pageSize) as MediaRow[];
   return { assets: rows.map(toAsset), page, totalPages, totalAssets: count.count, query, folder };
 }
 
 export function listMediaFolders(kind: MediaKind): MediaFolder[] {
-  syncMediaLibrary();
-  const root = path.join(getMediaDir(), kind);
-  const paths: string[] = [];
-  const visit = (directory: string) => {
-    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      if (!entry.isDirectory() || entry.isSymbolicLink()) {
-        continue;
-      }
-      const absolutePath = path.join(directory, entry.name);
-      paths.push(toPosixPath(path.relative(root, absolutePath)));
-      visit(absolutePath);
-    }
-  };
-  visit(root);
-
+  const paths = new Map(getMediaLibrarySyncState().folders[kind].map((item) => [item.path, item.mtimeMs]));
   const directCounts = new Map<string, number>();
-  const rows = getDb().prepare("SELECT stored_name FROM media_assets WHERE kind = ?").all(kind) as Array<{ stored_name: string }>;
+  const aggregates = new Map<string, { totalSizeBytes: number; mtimeMs: number }>();
+  const rows = getDb()
+    .prepare("SELECT stored_name, size_bytes, mtime_ms FROM media_assets WHERE kind = ?")
+    .all(kind) as Array<{ stored_name: string; size_bytes: number; mtime_ms: number }>;
   for (const row of rows) {
     const folder = mediaFolderFromStoredName(row.stored_name, kind);
     directCounts.set(folder, (directCounts.get(folder) || 0) + 1);
+    const segments = folder ? folder.split("/") : [];
+    for (let index = 1; index <= segments.length; index += 1) {
+      const ancestor = segments.slice(0, index).join("/");
+      paths.set(ancestor, Math.max(paths.get(ancestor) || 0, row.mtime_ms));
+      const aggregate = aggregates.get(ancestor) || { totalSizeBytes: 0, mtimeMs: 0 };
+      aggregate.totalSizeBytes += row.size_bytes;
+      aggregate.mtimeMs = Math.max(aggregate.mtimeMs, row.mtime_ms);
+      aggregates.set(ancestor, aggregate);
+    }
   }
 
-  return paths
-    .sort((left, right) => left.localeCompare(right, "zh-CN", { numeric: true }))
-    .map((folderPath) => ({
+  return Array.from(paths, ([folderPath, mtimeMs]) => ({ folderPath, mtimeMs }))
+    .sort((left, right) => left.folderPath.localeCompare(right.folderPath, "zh-CN", { numeric: true }))
+    .map(({ folderPath, mtimeMs }) => ({
       path: folderPath,
       name: folderPath.split("/").at(-1) || folderPath,
       depth: folderPath.split("/").length - 1,
       directAssets: directCounts.get(folderPath) || 0,
+      totalSizeBytes: aggregates.get(folderPath)?.totalSizeBytes || 0,
+      mtimeMs: Math.max(mtimeMs, aggregates.get(folderPath)?.mtimeMs || 0),
     }));
 }
 
 export function listMediaFolderAssets(kind: MediaKind, folder: string, limit = 1_000): MediaAsset[] {
-  syncMediaLibrary();
   const normalizedFolder = normalizeMediaFolder(folder) || "";
   const filters = ["kind = ?"];
   const values: Array<string | number> = [kind];
@@ -651,7 +796,6 @@ export function listMediaFolderAssets(kind: MediaKind, folder: string, limit = 1
 }
 
 export function listRelatedVideoAssets(currentId: number, count: number, mode: "next" | "random"): MediaAsset[] {
-  syncMediaLibrary();
   const limit = Math.min(Math.max(Math.floor(count), 0), 20);
   if (!limit) {
     return [];
@@ -677,6 +821,25 @@ export function saveMediaDuration(id: number, durationSeconds: number): boolean 
     .prepare("UPDATE media_assets SET duration_seconds = ? WHERE id = ?")
     .run(durationSeconds, id);
   return Number(info.changes) > 0;
+}
+
+export function listMediaAssetsNeedingDuration(limit = 100): MediaAsset[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM media_assets
+       WHERE kind IN ('video', 'audio') AND (duration_seconds IS NULL OR duration_seconds <= 0)
+       ORDER BY updated_at DESC, id ASC
+       LIMIT ?`,
+    )
+    .all(Math.min(Math.max(Math.floor(limit), 1), 1_000)) as MediaRow[];
+  return rows.map(toAsset);
+}
+
+export function listVideoAssetsForPreparation(limit = 200): MediaAsset[] {
+  const rows = getDb()
+    .prepare("SELECT * FROM media_assets WHERE kind = 'video' ORDER BY updated_at DESC, id ASC LIMIT ?")
+    .all(Math.min(Math.max(Math.floor(limit), 1), 1_000)) as MediaRow[];
+  return rows.map(toAsset);
 }
 
 function mediaFolderAbsolutePath(kind: MediaKind, folder: string): string {
@@ -714,11 +877,11 @@ export function createMediaFolder(kind: MediaKind, parent: string, nameValue: st
   }
   fs.mkdirSync(targetPath);
   markMediaLibraryDirty();
+  rememberMediaFolder(kind, folder);
   return folder;
 }
 
 export function renameMediaFolder(kind: MediaKind, folderValue: string, nameValue: string): string {
-  syncMediaLibrary({ force: true });
   const folder = normalizeMediaFolder(folderValue);
   const name = normalizeFolderName(nameValue);
   if (!folder || !name) {
@@ -760,6 +923,7 @@ export function renameMediaFolder(kind: MediaKind, folderValue: string, nameValu
     throw error;
   }
   markMediaLibraryDirty();
+  renameRememberedMediaFolder(kind, folder, nextFolder);
   return nextFolder;
 }
 
@@ -777,6 +941,7 @@ export function deleteMediaFolder(kind: MediaKind, folderValue: string): boolean
   }
   fs.rmdirSync(targetPath);
   markMediaLibraryDirty();
+  forgetMediaFolder(kind, folder);
   return true;
 }
 
@@ -884,7 +1049,6 @@ export function incrementMediaDownloadCount(id: number): boolean {
 }
 
 export function deleteMediaAssets(ids: number[]): { deleted: number; fileDeleteFailures: number } {
-  syncMediaLibrary();
   const uniqueIds = Array.from(new Set(ids.filter((id) => Number.isInteger(id) && id > 0)));
   if (!uniqueIds.length) {
     return { deleted: 0, fileDeleteFailures: 0 };

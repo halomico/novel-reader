@@ -3,7 +3,7 @@ import path from "node:path";
 import { getLibraryDir } from "./config";
 import { getDb } from "./db";
 import { createNovelSegments, NovelSegment } from "./segments";
-import { matchesParsedSearchQuery, parseSearchQuery } from "./search-query";
+import { parseSearchQuery, type ParsedSearchQuery, type SearchExpression } from "./search-query";
 import { decodeNovelBuffer } from "./text";
 
 export type Novel = {
@@ -52,6 +52,27 @@ function normalizePage(page: number, totalPages: number): number {
   return Math.min(Math.floor(page), Math.max(totalPages, 1));
 }
 
+function compileTitleSearchExpression(expression: SearchExpression): { sql: string; values: string[] } {
+  if (expression.type === "term") {
+    return { sql: "instr(lower(title), lower(?)) > 0", values: [expression.value] };
+  }
+  if (expression.type === "not") {
+    const child = compileTitleSearchExpression(expression.child);
+    return { sql: `NOT (${child.sql})`, values: child.values };
+  }
+  const left = compileTitleSearchExpression(expression.left);
+  const right = compileTitleSearchExpression(expression.right);
+  const operator = expression.type === "and" ? "AND" : "OR";
+  return { sql: `(${left.sql}) ${operator} (${right.sql})`, values: [...left.values, ...right.values] };
+}
+
+export function buildTitleSearchSql(query: ParsedSearchQuery): { whereSql: string; values: string[] } {
+  const expression = compileTitleSearchExpression(query.expression);
+  const required = query.requiredTerms.map((term) => ({ sql: "instr(lower(title), lower(?)) > 0", value: term.value }));
+  const clauses = [...required.map((item) => item.sql), `(${expression.sql})`];
+  return { whereSql: clauses.join(" AND "), values: [...required.map((item) => item.value), ...expression.values] };
+}
+
 export function listNovels(params: { page?: number; q?: string; pageSize?: number }): NovelListResult {
   const db = getDb();
   const pageSize = normalizePageSize(params.pageSize);
@@ -71,23 +92,32 @@ export function listNovels(params: { page?: number; q?: string; pageSize?: numbe
       };
     }
 
-    const candidates = db
+    const search = buildTitleSearchSql(validation.query);
+    const totalBooks = db
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM novels
+         WHERE ${search.whereSql}`,
+      )
+      .get(...search.values) as { count: number };
+    const totalPages = Math.ceil(totalBooks.count / pageSize);
+    const page = normalizePage(params.page || 1, totalPages);
+    const offset = (page - 1) * pageSize;
+    const books = db
       .prepare(
         `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
          FROM novels
-         ORDER BY title COLLATE NOCASE ASC, id ASC`,
+         WHERE ${search.whereSql}
+         ORDER BY title COLLATE NOCASE ASC, id ASC
+         LIMIT ? OFFSET ?`,
       )
-      .all() as Novel[];
-    const matchedBooks = candidates.filter((book) => matchesParsedSearchQuery(book.title, validation.query));
-    const totalPages = Math.ceil(matchedBooks.length / pageSize);
-    const page = normalizePage(params.page || 1, totalPages);
-    const offset = (page - 1) * pageSize;
+      .all(...search.values, pageSize, offset) as Novel[];
 
     return {
-      books: matchedBooks.slice(offset, offset + pageSize),
+      books,
       page,
       pageSize,
-      totalBooks: matchedBooks.length,
+      totalBooks: totalBooks.count,
       totalPages: Math.max(totalPages, 1),
       query: validation.keyword,
     };

@@ -1,11 +1,11 @@
 "use client";
 
-import { Clapperboard, File, Headphones, Pencil, Save, Trash2, Upload, X } from "lucide-react";
+import { ChevronRight, Clapperboard, File, Folder, Headphones, Pencil, Save, Trash2, Upload, X } from "lucide-react";
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { deleteAdminMediaAction, updateAdminMediaAction } from "@/app/admin/actions";
 import { LocalDateTime } from "@/components/LocalDateTime";
-import type { MediaAsset, MediaFolder, MediaKind } from "@/lib/media";
+import type { MediaAsset, MediaFolder, MediaKind, MediaSortBy, MediaSortOrder } from "@/lib/media";
 
 const KIND_LABELS: Record<MediaKind, string> = { video: "视频", audio: "音频", file: "文件" };
 const KIND_ICONS = { video: Clapperboard, audio: Headphones, file: File };
@@ -37,10 +37,51 @@ async function responseJson(response: Response): Promise<{ ok?: boolean; message
   }
 }
 
+function AdminMediaFolderRow({ folder, onOpen }: { folder: MediaFolder; onOpen: () => void }) {
+  const pointerType = useRef("");
+
+  return (
+    <tr
+      className="adminMediaFolderRow"
+      tabIndex={0}
+      title={`双击打开 ${folder.path}`}
+      aria-label={`打开文件夹 ${folder.name}`}
+      onPointerDown={(event) => {
+        pointerType.current = event.pointerType;
+      }}
+      onClick={() => {
+        if (pointerType.current !== "mouse") onOpen();
+      }}
+      onDoubleClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
+    >
+      <td aria-hidden="true" />
+      <td><span className="adminMediaKind is-folder"><Folder size={14} aria-hidden="true" />文件夹</span></td>
+      <td title={folder.name}><strong>{folder.name}</strong></td>
+      <td>-</td>
+      <td>-</td>
+      <td title={folder.path}>{folder.path}</td>
+      <td>{formatBytes(folder.totalSizeBytes)}</td>
+      <td>{folder.directAssets} 个直属资源</td>
+      <td><LocalDateTime value={folder.mtimeMs ? new Date(folder.mtimeMs).toISOString() : null} /></td>
+      <td><ChevronRight size={16} aria-hidden="true" /></td>
+    </tr>
+  );
+}
+
 export function AdminMediaManager({
   assets,
   totalAssets,
   folders,
+  directFolders,
+  query,
+  sortBy,
+  sortOrder,
   initialKind,
   initialFolder = "",
   returnPath,
@@ -48,6 +89,10 @@ export function AdminMediaManager({
   assets: MediaAsset[];
   totalAssets: number;
   folders: Record<MediaKind, MediaFolder[]>;
+  directFolders: MediaFolder[];
+  query: string;
+  sortBy: MediaSortBy;
+  sortOrder: MediaSortOrder;
   initialKind?: MediaKind;
   initialFolder?: string;
   returnPath: string;
@@ -241,7 +286,7 @@ export function AdminMediaManager({
         ) : null}
       </form> : null}
 
-      {assets.length ? (
+      {assets.length || directFolders.length ? (
         <>
           <div className="adminTableWrap adminMediaTableWrap">
             <table className="adminTable adminMediaTable">
@@ -260,6 +305,20 @@ export function AdminMediaManager({
                 </tr>
               </thead>
               <tbody>
+                {directFolders.map((item) => (
+                  <AdminMediaFolderRow
+                    folder={item}
+                    onOpen={() => {
+                      if (!kind) return;
+                      const params = new URLSearchParams({ kind, folder: item.path });
+                      if (query) params.set("q", query);
+                      params.set("sort", sortBy);
+                      params.set("order", sortOrder);
+                      router.push(`/admin/media?${params.toString()}`);
+                    }}
+                    key={item.path}
+                  />
+                ))}
                 {assets.map((asset) => {
                   const Icon = KIND_ICONS[asset.kind];
                   return (
@@ -293,7 +352,7 @@ export function AdminMediaManager({
                 删除所选
               </button>
             </form>
-            <span>当前显示 {assets.length} 个，共 {totalAssets} 个资源</span>
+            <span>当前显示 {directFolders.length} 个文件夹、{assets.length} 个资源，共 {totalAssets} 个资源</span>
           </div>
         </>
       ) : null}

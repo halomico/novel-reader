@@ -1,5 +1,6 @@
 import { ContentSearchClient } from "@/components/ContentSearchClient";
 import { SiteHeader } from "@/components/SiteHeader";
+import { recordSearchQuery } from "@/lib/analytics";
 import { getGlobalSearchMaxResults, getSearchResultsPageSize, shouldShowProgressBars } from "@/lib/config";
 import { validateSearchKeyword } from "@/lib/search";
 
@@ -18,6 +19,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const pageSize = getSearchResultsPageSize();
   const maxResults = getGlobalSearchMaxResults();
   const hasExplicitPage = Boolean(params.page);
+  if (validation.ok && !hasExplicitPage) {
+    recordSearchQuery(validation.keyword, "content");
+  }
   const pageValue = Number(params.page || 1);
   const page = Number.isFinite(pageValue) && pageValue > 0 ? Math.floor(pageValue) : 1;
 
