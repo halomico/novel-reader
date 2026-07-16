@@ -323,15 +323,15 @@ input {
   justify-self: end;
 }
 
-:root[data-ui-mode="minimal"] .readerShell .headerPrimaryNav {
+.readerShell .headerPrimaryNav {
   display: none;
 }
 
-:root[data-ui-mode="minimal"] .readerShell .siteHeader.hasPrimaryNav {
+.readerShell .siteHeader.hasPrimaryNav {
   grid-template-columns: auto minmax(0, 1fr);
 }
 
-:root[data-ui-mode="minimal"] .readerShell .siteHeader.hasPrimaryNav .headerTools {
+.readerShell .siteHeader.hasPrimaryNav .headerTools {
   grid-column: 2;
   grid-row: 1;
   justify-self: end;
