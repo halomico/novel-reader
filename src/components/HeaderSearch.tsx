@@ -1,19 +1,27 @@
 "use client";
 
 import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useId, useRef, useState } from "react";
 
 type SearchMode = "title" | "content" | "current";
 type MessageTone = "success" | "warning" | "error";
+type SearchVisibility = "default" | "open" | "closed";
+type UiMode = "standard" | "minimal";
 type CurrentMatch = {
   segment: HTMLElement;
   start: number;
   end: number;
 };
 
-const options: Array<{ value: SearchMode; label: string; action: string; placeholder: string }> = [
+const options: Array<{ value: SearchMode; label: string; action: string; placeholder: string; ariaLabel?: string }> = [
   { value: "title", label: "书名", action: "/", placeholder: "搜索小说名" },
-  { value: "content", label: "正文", action: "/search", placeholder: "搜索全部小说正文，多关键词用空格分隔" },
+  {
+    value: "content",
+    label: "正文",
+    action: "/search",
+    placeholder: "多个词用空格分隔",
+    ariaLabel: "搜索全部小说正文，多个关键词用空格分隔",
+  },
   { value: "current", label: "本文", action: "/search", placeholder: "搜索本文" },
 ];
 
@@ -80,12 +88,14 @@ async function findLiteralMatches(segments: HTMLElement[], keyword: string, isCu
 export function HeaderSearch({
   query = "",
   defaultMode = "title",
+  defaultExpanded = false,
   showCurrentSearch = false,
   noticeDisplaySeconds = 5,
   noticeStayVisibleAfterBlur = false,
 }: {
   query?: string;
   defaultMode?: SearchMode;
+  defaultExpanded?: boolean;
   showCurrentSearch?: boolean;
   noticeDisplaySeconds?: number;
   noticeStayVisibleAfterBlur?: boolean;
@@ -93,7 +103,10 @@ export function HeaderSearch({
   const [mode, setMode] = useState<SearchMode>(defaultMode);
   const [keyword, setKeyword] = useState(query);
   const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
-  const [isPinnedOpen, setIsPinnedOpen] = useState(false);
+  const [visibility, setVisibility] = useState<SearchVisibility>(() => (
+    query.trim() ? "open" : defaultExpanded ? "default" : "closed"
+  ));
+  const [uiMode, setUiMode] = useState<UiMode>("standard");
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<MessageTone>("success");
   const [isMessageVisible, setIsMessageVisible] = useState(false);
@@ -103,13 +116,16 @@ export function HeaderSearch({
   const currentMatchesRef = useRef<CurrentMatch[]>([]);
   const activeSegmentRef = useRef<HTMLElement | null>(null);
   const currentSearchRequestRef = useRef(0);
+  const searchInputId = useId();
   const visibleOptions = showCurrentSearch ? options : options.filter((option) => option.value !== "current");
   const activeOption = visibleOptions.find((option) => option.value === mode) || visibleOptions[0];
+  const isPinnedOpen = visibility === "open" || (visibility === "default" && uiMode === "standard");
   const formClassName = [
     "searchForm",
     mode === "content" ? "isContentSearch" : "",
     showCurrentSearch ? "readerSearchForm" : "",
-    isPinnedOpen ? "isPinnedOpen" : "",
+    visibility === "open" ? "isPinnedOpen" : "",
+    visibility === "default" ? "isDefaultOpen" : "",
     isModeMenuOpen ? "isModeMenuOpen" : "",
   ]
     .filter(Boolean)
@@ -120,7 +136,21 @@ export function HeaderSearch({
   }, [defaultMode, showCurrentSearch]);
 
   useEffect(() => {
+    function syncUiMode() {
+      setUiMode(document.documentElement.dataset.uiMode === "minimal" ? "minimal" : "standard");
+    }
+
+    syncUiMode();
+    const observer = new MutationObserver(syncUiMode);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-ui-mode"] });
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
     setKeyword(query);
+    if (query.trim()) {
+      setVisibility("open");
+    }
   }, [query]);
 
   useEffect(() => {
@@ -163,19 +193,18 @@ export function HeaderSearch({
   }, [isMessageVisible, message, noticeDisplaySeconds, noticeStayVisibleAfterBlur]);
 
   useEffect(() => {
-    const highlightedSegment = document.querySelector<HTMLElement>(".readerSegment.isHit");
-    if (!highlightedSegment) {
+    if (!showCurrentSearch) {
       return;
     }
 
-    const activeSegment = highlightedSegment;
-    const previousTabIndex = activeSegment.getAttribute("tabindex");
+    let activeSegment: HTMLElement | null = null;
+    let previousTabIndex: string | null = null;
     let cleared = false;
-    activeSegment.tabIndex = -1;
-    activeSegment.focus({ preventScroll: true });
+    let observer: MutationObserver | null = null;
+    let scrollFrame: number | null = null;
 
     function clearInitialHighlight() {
-      if (cleared) {
+      if (cleared || !activeSegment) {
         return;
       }
 
@@ -191,19 +220,55 @@ export function HeaderSearch({
     }
 
     function clearOnOutsidePointer(event: PointerEvent) {
-      if (!activeSegment.contains(event.target as Node)) {
+      if (activeSegment && !activeSegment.contains(event.target as Node)) {
         clearInitialHighlight();
       }
     }
 
-    activeSegment.addEventListener("blur", clearInitialHighlight);
-    document.addEventListener("pointerdown", clearOnOutsidePointer);
+    function activateInitialHighlight(): boolean {
+      const highlightedSegment = document.querySelector<HTMLElement>(".readerSegment.isHit");
+      if (!highlightedSegment) {
+        return false;
+      }
+
+      activeSegment = highlightedSegment;
+      previousTabIndex = highlightedSegment.getAttribute("tabindex");
+      highlightedSegment.tabIndex = -1;
+      highlightedSegment.focus({ preventScroll: true });
+      highlightedSegment.addEventListener("blur", clearInitialHighlight);
+      document.addEventListener("pointerdown", clearOnOutsidePointer);
+
+      if (window.location.hash === `#${highlightedSegment.id}`) {
+        scrollFrame = window.requestAnimationFrame(() => {
+          const bounds = highlightedSegment.getBoundingClientRect();
+          if (bounds.bottom < 0 || bounds.top > window.innerHeight) {
+            highlightedSegment.scrollIntoView({ block: "center" });
+          }
+        });
+      }
+
+      return true;
+    }
+
+    if (!activateInitialHighlight()) {
+      observer = new MutationObserver(() => {
+        if (activateInitialHighlight()) {
+          observer?.disconnect();
+          observer = null;
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
 
     return () => {
-      activeSegment.removeEventListener("blur", clearInitialHighlight);
+      observer?.disconnect();
+      if (scrollFrame !== null) {
+        window.cancelAnimationFrame(scrollFrame);
+      }
+      activeSegment?.removeEventListener("blur", clearInitialHighlight);
       document.removeEventListener("pointerdown", clearOnOutsidePointer);
     };
-  }, []);
+  }, [showCurrentSearch]);
 
   useEffect(() => {
     return () => {
@@ -316,7 +381,7 @@ export function HeaderSearch({
   function togglePinnedSearch(form: HTMLFormElement | null) {
     const input = form?.querySelector<HTMLInputElement>('input[name="q"]') || null;
     const nextPinnedOpen = !isPinnedOpen;
-    setIsPinnedOpen(nextPinnedOpen);
+    setVisibility(nextPinnedOpen ? "open" : "closed");
     setIsModeMenuOpen(false);
     if (nextPinnedOpen) {
       window.requestAnimationFrame(() => input?.focus());
@@ -331,7 +396,7 @@ export function HeaderSearch({
     setMessage("");
     setIsMessageVisible(false);
     setIsModeMenuOpen(false);
-    setIsPinnedOpen(false);
+    setVisibility("closed");
     form?.querySelector<HTMLInputElement>('input[name="q"]')?.blur();
   }
 
@@ -356,17 +421,20 @@ export function HeaderSearch({
         className="searchIconButton"
         type="button"
         aria-label={isPinnedOpen ? "收起搜索框" : "展开搜索框"}
+        aria-controls={searchInputId}
+        aria-expanded={isPinnedOpen}
         title={isPinnedOpen ? "收起搜索框" : "展开搜索框"}
         onClick={(event) => togglePinnedSearch(event.currentTarget.form)}
       >
-        {isPinnedOpen ? <X size={18} aria-hidden="true" /> : <Search size={18} aria-hidden="true" />}
+        <Search size={18} aria-hidden="true" />
       </button>
       <input
+        id={searchInputId}
         name="q"
         type="search"
         value={keyword}
         placeholder={activeOption.placeholder}
-        aria-label={activeOption.placeholder}
+        aria-label={activeOption.ariaLabel || activeOption.placeholder}
         onChange={(event) => {
           setKeyword(event.target.value);
           if (mode === "current" && currentMatchesRef.current.length) {

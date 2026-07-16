@@ -30,7 +30,7 @@ import {
   getSiteTitle,
   shouldBlockHeadlessBrowsers,
 } from "@/lib/config";
-import { readSiteSettings } from "@/lib/site-settings";
+import { MAX_CONTENT_INDEX_LIMIT_GB, readSiteSettings } from "@/lib/site-settings";
 import { listIpRateLimitBans } from "@/lib/ip-rate-limit";
 import {
   cancelFrontendSearchJobsAction,
@@ -431,11 +431,25 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
             <div className="adminFieldGrid">
               <label>
                 <span>索引库软上限 / GB</span>
-                <input name="contentIndexSoftLimitGb" type="number" min="0.1" max="10" step="0.01" defaultValue={softLimitGb} />
+                <input
+                  name="contentIndexSoftLimitGb"
+                  type="number"
+                  min="0.1"
+                  max={MAX_CONTENT_INDEX_LIMIT_GB}
+                  step="0.01"
+                  defaultValue={softLimitGb}
+                />
               </label>
               <label>
                 <span>索引库硬上限 / GB</span>
-                <input name="contentIndexHardLimitGb" type="number" min="0.1" max="10" step="0.01" defaultValue={hardLimitGb} />
+                <input
+                  name="contentIndexHardLimitGb"
+                  type="number"
+                  min="0.1"
+                  max={MAX_CONTENT_INDEX_LIMIT_GB}
+                  step="0.01"
+                  defaultValue={hardLimitGb}
+                />
               </label>
             </div>
           </section>

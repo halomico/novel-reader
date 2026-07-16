@@ -106,30 +106,6 @@ input {
   padding-top: 28px;
 }
 
-.routeLoadingBar {
-  position: fixed;
-  top: 0;
-  right: 0;
-  left: 0;
-  z-index: 100;
-  height: 3px;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.routeLoadingBar span {
-  display: block;
-  width: 32%;
-  height: 100%;
-  background: var(--accent);
-  animation: route-loading-slide 900ms ease-in-out infinite;
-}
-
-@keyframes route-loading-slide {
-  from { transform: translateX(-110%); }
-  to { transform: translateX(420%); }
-}
-
 .readerShell {
   width: min(960px, calc(100% - 28px));
 }
@@ -185,10 +161,6 @@ input {
   outline: 0;
   background: transparent;
   color: var(--text);
-}
-
-.searchForm.isContentSearch input {
-  font-size: 13px;
 }
 
 .searchSubmitIcon {
@@ -341,62 +313,68 @@ input {
   gap: 8px;
 }
 
+:root[data-ui-mode="minimal"] .siteHeader.hasPrimaryNav {
+  grid-template-columns: auto minmax(220px, 1fr) auto;
+}
+
+:root[data-ui-mode="minimal"] .siteHeader.hasPrimaryNav .headerTools {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+}
+
+:root[data-ui-mode="minimal"] .readerShell .headerPrimaryNav {
+  display: none;
+}
+
+:root[data-ui-mode="minimal"] .readerShell .siteHeader.hasPrimaryNav {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+:root[data-ui-mode="minimal"] .readerShell .siteHeader.hasPrimaryNav .headerTools {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+}
+
 :root[data-ui-mode="minimal"] .headerTools {
   grid-template-columns: minmax(180px, 440px) auto;
   gap: 8px;
   width: min(100%, 558px);
 }
 
-:root[data-ui-mode="minimal"] .searchForm {
-  grid-template-columns: 28px minmax(0, 1fr) auto;
+.searchForm:not(.isPinnedOpen):not(.isDefaultOpen),
+:root[data-ui-mode="minimal"] .searchForm.isDefaultOpen {
+  grid-template-columns: 28px;
   justify-self: end;
-  width: 100%;
-  min-width: 0;
-  overflow: visible;
-  transition:
-    border-color 140ms ease,
-    box-shadow 140ms ease;
-}
-
-:root[data-ui-mode="minimal"] .searchForm input {
-  grid-column: 2;
-  grid-row: 1;
-}
-
-:root[data-ui-mode="minimal"] .searchForm .searchSubmit {
-  grid-column: 3;
-  grid-row: 1;
-}
-
-:root[data-ui-mode="minimal"] .searchForm .searchIconButton {
-  grid-column: 1;
-  grid-row: 1;
-}
-
-:root[data-ui-mode="minimal"] .searchForm:hover,
-:root[data-ui-mode="minimal"] .searchForm:focus-within,
-:root[data-ui-mode="minimal"] .searchForm.isPinnedOpen {
-  justify-self: stretch;
-  z-index: 60;
-  width: 100%;
-  padding: 6px 7px 6px 6px;
-}
-
-:root[data-ui-mode="minimal"] .searchForm:not(:hover):not(:focus-within):not(.isPinnedOpen) {
-  grid-template-columns: minmax(0, 1fr) 28px;
+  width: 42px;
   gap: 0;
   padding: 6px;
+  box-shadow: none;
 }
 
-:root[data-ui-mode="minimal"] .searchForm:not(:hover):not(:focus-within):not(.isPinnedOpen) .searchIconButton {
-  grid-column: 2;
-}
-
-:root[data-ui-mode="minimal"] .searchForm:not(:hover):not(:focus-within):not(.isPinnedOpen) input,
-:root[data-ui-mode="minimal"] .searchForm:not(:hover):not(:focus-within):not(.isPinnedOpen) .searchSubmit,
-:root[data-ui-mode="minimal"] .searchForm:not(:hover):not(:focus-within):not(.isPinnedOpen) .searchModeMenu,
-:root[data-ui-mode="minimal"] .searchForm:not(:hover):not(:focus-within):not(.isPinnedOpen) .currentFindControls {
+.searchForm:not(.isPinnedOpen):not(.isDefaultOpen) input,
+.searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .searchSubmit,
+.searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .searchModeMenu,
+.searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .currentFindControls,
+.searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .searchNotice,
+:root[data-ui-mode="minimal"] .searchForm.isDefaultOpen input,
+:root[data-ui-mode="minimal"] .searchForm.isDefaultOpen .searchSubmit,
+:root[data-ui-mode="minimal"] .searchForm.isDefaultOpen .searchModeMenu,
+:root[data-ui-mode="minimal"] .searchForm.isDefaultOpen .currentFindControls,
+:root[data-ui-mode="minimal"] .searchForm.isDefaultOpen .searchNotice {
   display: none;
+}
+
+.headerTools:has(.searchForm:not(.isPinnedOpen):not(.isDefaultOpen)),
+:root[data-ui-mode="minimal"] .headerTools:has(.searchForm.isDefaultOpen) {
+  grid-template-columns: 42px auto;
+  width: auto;
+}
+
+.siteHeader.hasPrimaryNav:has(.searchForm:not(.isPinnedOpen):not(.isDefaultOpen)),
+:root[data-ui-mode="minimal"] .siteHeader.hasPrimaryNav:has(.searchForm.isDefaultOpen) {
+  grid-template-columns: auto minmax(220px, 1fr) auto;
 }
 
 .iconLink {
@@ -760,6 +738,13 @@ button.pageNumber {
   box-shadow: var(--shadow);
 }
 
+:root[data-ui-mode="minimal"] .readerPage {
+  padding-inline: clamp(8px, 4vw, 40px);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .readerTitle {
   display: flex;
   align-items: center;
@@ -778,11 +763,43 @@ button.pageNumber {
   overflow-wrap: anywhere;
 }
 
+:root[data-ui-mode="minimal"] .readerTitle {
+  margin-bottom: 24px;
+}
+
+:root[data-ui-mode="minimal"] .readerTitle > svg {
+  display: none;
+}
+
 .readerText {
   color: var(--text);
   font-size: var(--reader-font-size);
   line-height: 2.05;
   overflow-wrap: anywhere;
+}
+
+.readerContentLoading {
+  display: grid;
+  min-height: 260px;
+  gap: 14px;
+  align-content: start;
+  padding-top: 7px;
+}
+
+.readerContentLoading span {
+  display: block;
+  width: 100%;
+  height: 11px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--surface-strong) 74%, transparent);
+}
+
+.readerContentLoading span:nth-child(3n + 2) {
+  width: 92%;
+}
+
+.readerContentLoading span:nth-child(3n) {
+  width: 76%;
 }
 
 .readerSegment {
@@ -2182,13 +2199,6 @@ mark {
   color: var(--muted);
   cursor: pointer;
   text-align: left;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .routeLoadingBar span {
-    animation: none;
-    width: 100%;
-  }
 }
 
 .mediaAudioQueue button:hover,
@@ -4882,10 +4892,6 @@ mark {
     padding-right: 6px;
   }
 
-  .searchForm.isContentSearch input {
-    font-size: 12px;
-  }
-
   .searchForm.isContentSearch .searchSubmit {
     display: grid;
     width: 30px;
@@ -4933,8 +4939,8 @@ mark {
     width: 92px;
   }
 
-  .siteHeader.hasPrimaryNav .searchForm,
-  :root[data-ui-mode="minimal"] .siteHeader.hasPrimaryNav .searchForm {
+  .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen):not(.isDefaultOpen),
+  :root[data-ui-mode="minimal"] .siteHeader.hasPrimaryNav .searchForm.isDefaultOpen {
     grid-template-columns: 28px;
     justify-self: end;
     width: 42px;
@@ -4944,14 +4950,19 @@ mark {
     box-shadow: none;
   }
 
-  .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen) input,
-  .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen) .searchSubmit,
-  .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen) .searchModeMenu,
-  .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen) .currentFindControls {
+  .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) input,
+  .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .searchSubmit,
+  .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .searchModeMenu,
+  .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .currentFindControls,
+  :root[data-ui-mode="minimal"] .siteHeader.hasPrimaryNav .searchForm.isDefaultOpen input,
+  :root[data-ui-mode="minimal"] .siteHeader.hasPrimaryNav .searchForm.isDefaultOpen .searchSubmit,
+  :root[data-ui-mode="minimal"] .siteHeader.hasPrimaryNav .searchForm.isDefaultOpen .searchModeMenu,
+  :root[data-ui-mode="minimal"] .siteHeader.hasPrimaryNav .searchForm.isDefaultOpen .currentFindControls {
     display: none;
   }
 
   .siteHeader.hasPrimaryNav .searchForm.isPinnedOpen,
+  :root[data-ui-mode="standard"] .siteHeader.hasPrimaryNav .searchForm.isDefaultOpen,
   :root[data-ui-mode="minimal"] .siteHeader.hasPrimaryNav .searchForm.isPinnedOpen,
   :root[data-ui-mode="minimal"] .siteHeader.hasPrimaryNav .searchForm.isPinnedOpen:hover,
   :root[data-ui-mode="minimal"] .siteHeader.hasPrimaryNav .searchForm.isPinnedOpen:focus-within {
@@ -4966,16 +4977,11 @@ mark {
     box-shadow: 0 10px 26px rgb(84 54 31 / 12%);
   }
 
-  .siteHeader.hasPrimaryNav:has(.searchForm.isPinnedOpen) {
+  .siteHeader.hasPrimaryNav:has(.searchForm.isPinnedOpen),
+  :root[data-ui-mode="standard"] .siteHeader.hasPrimaryNav:has(.searchForm.isDefaultOpen) {
     margin-bottom: 56px;
   }
 
-  :root[data-ui-mode="minimal"] .searchForm {
-    width: 100%;
-  }
-
-  :root[data-ui-mode="minimal"] .searchForm:hover,
-  :root[data-ui-mode="minimal"] .searchForm:focus-within,
   :root[data-ui-mode="minimal"] .searchForm.isPinnedOpen {
     width: 100%;
   }

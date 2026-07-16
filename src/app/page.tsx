@@ -33,7 +33,7 @@ export default async function Home({ searchParams }: HomeProps) {
 
   return (
     <main className="appShell catalogShell">
-      <SiteHeader query={result.query} />
+      <SiteHeader query={result.query} defaultSearchExpanded />
       <section className="catalogSummary">
         <p>
           共 <strong>{result.totalBooks}</strong> 本，每页 {result.pageSize} 本

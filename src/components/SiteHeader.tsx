@@ -23,10 +23,12 @@ import { ThemeToggle } from "./ThemeToggle";
 export async function SiteHeader({
   query = "",
   defaultSearchMode = "title",
+  defaultSearchExpanded = false,
   showCurrentSearch = false,
 }: {
   query?: string;
   defaultSearchMode?: "title" | "content" | "current";
+  defaultSearchExpanded?: boolean;
   showCurrentSearch?: boolean;
 }) {
   const siteName = getSiteName();
@@ -59,6 +61,7 @@ export async function SiteHeader({
         <HeaderSearch
           query={query}
           defaultMode={defaultSearchMode}
+          defaultExpanded={defaultSearchExpanded}
           showCurrentSearch={showCurrentSearch}
           noticeDisplaySeconds={noticeDisplaySeconds}
           noticeStayVisibleAfterBlur={noticeStayVisibleAfterBlur}

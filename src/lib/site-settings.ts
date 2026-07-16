@@ -8,6 +8,9 @@ export type SiteIconMimeType = "" | "image/png" | "image/jpeg" | "image/webp" | 
 export type VideoThumbnailMode = "single" | "carousel";
 export type RelatedVideoMode = "next" | "random";
 
+export const MAX_CONTENT_INDEX_LIMIT_GB = 1000;
+export const MAX_CONTENT_INDEX_LIMIT_BYTES = MAX_CONTENT_INDEX_LIMIT_GB * 1024 ** 3;
+
 export type IpRateLimitRule = {
   id: string;
   enabled: boolean;
@@ -364,8 +367,18 @@ function readSiteSettingsFromDisk(): SiteSettings {
       contentRateLimitRules: normalizeIpRateLimitRules(parsed.contentRateLimitRules),
       contentBlockHeadlessBrowsers: cleanBool(parsed.contentBlockHeadlessBrowsers, DEFAULT_SETTINGS.contentBlockHeadlessBrowsers),
       contentIndexMaxSegments: cleanInt(parsed.contentIndexMaxSegments, DEFAULT_SETTINGS.contentIndexMaxSegments, 0, 100000),
-      contentIndexSoftLimitBytes: cleanInt(parsed.contentIndexSoftLimitBytes, DEFAULT_SETTINGS.contentIndexSoftLimitBytes, 0, 10 * 1024 ** 3),
-      contentIndexHardLimitBytes: cleanInt(parsed.contentIndexHardLimitBytes, DEFAULT_SETTINGS.contentIndexHardLimitBytes, 0, 10 * 1024 ** 3),
+      contentIndexSoftLimitBytes: cleanInt(
+        parsed.contentIndexSoftLimitBytes,
+        DEFAULT_SETTINGS.contentIndexSoftLimitBytes,
+        0,
+        MAX_CONTENT_INDEX_LIMIT_BYTES,
+      ),
+      contentIndexHardLimitBytes: cleanInt(
+        parsed.contentIndexHardLimitBytes,
+        DEFAULT_SETTINGS.contentIndexHardLimitBytes,
+        0,
+        MAX_CONTENT_INDEX_LIMIT_BYTES,
+      ),
       manualIndexMaxSegmentsEnabled: cleanBool(parsed.manualIndexMaxSegmentsEnabled, DEFAULT_SETTINGS.manualIndexMaxSegmentsEnabled),
       manualIndexMaxSegments: cleanInt(parsed.manualIndexMaxSegments, DEFAULT_SETTINGS.manualIndexMaxSegments, 0, 1000000),
     };

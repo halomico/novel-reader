@@ -3,7 +3,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { readSiteSettings, writeSiteSettings } from "./site-settings";
+import {
+  MAX_CONTENT_INDEX_LIMIT_BYTES,
+  readSiteSettings,
+  writeSiteSettings,
+} from "./site-settings";
 
 test("atomically replaces an existing settings file", () => {
   const previousPath = process.env.ADMIN_SETTINGS_PATH;
@@ -39,6 +43,38 @@ test("clamps the configured reader font size to 8 through 25", () => {
     assert.equal(readSiteSettings().readerDefaultFontSize, 25);
     writeSiteSettings({ ...readSiteSettings(), readerDefaultFontSize: 5 });
     assert.equal(readSiteSettings().readerDefaultFontSize, 8);
+  } finally {
+    if (previousPath === undefined) {
+      delete process.env.ADMIN_SETTINGS_PATH;
+    } else {
+      process.env.ADMIN_SETTINGS_PATH = previousPath;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("allows content index limits up to 1000 GB", () => {
+  const previousPath = process.env.ADMIN_SETTINGS_PATH;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-index-limits-"));
+  process.env.ADMIN_SETTINGS_PATH = path.join(tempDir, "admin-settings.json");
+  const fiveHundredGb = 500 * 1024 ** 3;
+
+  try {
+    writeSiteSettings({
+      ...readSiteSettings(),
+      contentIndexSoftLimitBytes: fiveHundredGb,
+      contentIndexHardLimitBytes: fiveHundredGb,
+    });
+    assert.equal(readSiteSettings().contentIndexSoftLimitBytes, fiveHundredGb);
+    assert.equal(readSiteSettings().contentIndexHardLimitBytes, fiveHundredGb);
+
+    writeSiteSettings({
+      ...readSiteSettings(),
+      contentIndexSoftLimitBytes: MAX_CONTENT_INDEX_LIMIT_BYTES + 1,
+      contentIndexHardLimitBytes: MAX_CONTENT_INDEX_LIMIT_BYTES + 1,
+    });
+    assert.equal(readSiteSettings().contentIndexSoftLimitBytes, MAX_CONTENT_INDEX_LIMIT_BYTES);
+    assert.equal(readSiteSettings().contentIndexHardLimitBytes, MAX_CONTENT_INDEX_LIMIT_BYTES);
   } finally {
     if (previousPath === undefined) {
       delete process.env.ADMIN_SETTINGS_PATH;

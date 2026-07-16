@@ -49,7 +49,13 @@ import { deleteNovelIds } from "@/lib/novel-files";
 import { hashPassword } from "@/lib/password";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { detectSiteIconFormat, MAX_SITE_ICON_BYTES, removeSiteIconFile, writeSiteIconFile } from "@/lib/site-icon";
-import { normalizeIpRateLimitRules, readSiteSettings, type SiteSettings, writeSiteSettings } from "@/lib/site-settings";
+import {
+  MAX_CONTENT_INDEX_LIMIT_GB,
+  normalizeIpRateLimitRules,
+  readSiteSettings,
+  type SiteSettings,
+  writeSiteSettings,
+} from "@/lib/site-settings";
 import { deleteUserSessions, hashUserPassword } from "@/lib/user-auth";
 import {
   clearBrowseHistory,
@@ -317,8 +323,20 @@ export async function saveAdminSettingsAction(formData: FormData) {
     adminNotice(`后台${adminPasswordError}`, "warning", "/admin/settings");
   }
 
-  const softLimitGb = numberField(formData, "contentIndexSoftLimitGb", getContentIndexSoftLimitBytes() / 1024 ** 3, 0.1, 10);
-  const hardLimitGb = numberField(formData, "contentIndexHardLimitGb", getContentIndexHardLimitBytes() / 1024 ** 3, softLimitGb, 10);
+  const softLimitGb = numberField(
+    formData,
+    "contentIndexSoftLimitGb",
+    getContentIndexSoftLimitBytes() / 1024 ** 3,
+    0.1,
+    MAX_CONTENT_INDEX_LIMIT_GB,
+  );
+  const hardLimitGb = numberField(
+    formData,
+    "contentIndexHardLimitGb",
+    getContentIndexHardLimitBytes() / 1024 ** 3,
+    softLimitGb,
+    MAX_CONTENT_INDEX_LIMIT_GB,
+  );
   const userAvatarMaxMb = numberField(formData, "userAvatarMaxMb", getUserAvatarMaxBytes() / 1024 ** 2, 0.1, 10);
   const searchRateLimitRules = rateLimitRulesField(formData, "searchRateLimitRules", "搜索限速");
   const contentRateLimitRules = rateLimitRulesField(formData, "contentRateLimitRules", "正文限速").map((rule) => ({

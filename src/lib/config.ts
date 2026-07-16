@@ -1,5 +1,6 @@
 ﻿import path from "node:path";
 import {
+  MAX_CONTENT_INDEX_LIMIT_BYTES,
   readSiteSettings,
   type IpRateLimitRule,
   type RelatedVideoMode,
@@ -284,14 +285,26 @@ export function isFrontendAutoIndexEnabled(): boolean {
 }
 
 export function getContentIndexSoftLimitBytes(): number {
-  return readSettingInt(readSiteSettings().contentIndexSoftLimitBytes, "CONTENT_INDEX_SOFT_LIMIT_BYTES", 2684354560, 1, 10 * 1024 ** 3);
+  return readSettingInt(
+    readSiteSettings().contentIndexSoftLimitBytes,
+    "CONTENT_INDEX_SOFT_LIMIT_BYTES",
+    2684354560,
+    1,
+    MAX_CONTENT_INDEX_LIMIT_BYTES,
+  );
 }
 
 export function getContentIndexHardLimitBytes(): number {
   const softLimit = getContentIndexSoftLimitBytes();
   return Math.max(
     softLimit,
-    readSettingInt(readSiteSettings().contentIndexHardLimitBytes, "CONTENT_INDEX_HARD_LIMIT_BYTES", 3221225472, 1, 10 * 1024 ** 3),
+    readSettingInt(
+      readSiteSettings().contentIndexHardLimitBytes,
+      "CONTENT_INDEX_HARD_LIMIT_BYTES",
+      3221225472,
+      1,
+      MAX_CONTENT_INDEX_LIMIT_BYTES,
+    ),
   );
 }
 
