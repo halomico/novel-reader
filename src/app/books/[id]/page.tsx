@@ -1,13 +1,16 @@
 import { BookOpenText } from "lucide-react";
 import { headers } from "next/headers";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { BackButton } from "@/components/BackButton";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getClientIp } from "@/lib/admin-access";
 import { recordAnalyticsEvent } from "@/lib/analytics";
 import { getNovelById, readNovelSegments, type Novel } from "@/lib/books";
+import { areGuestHotwordLinksEnabled, areHotwordLinksEnabled, isGuestTagLibraryNavEnabled, isTagLibraryEnabled } from "@/lib/config";
 import { checkContentAccess } from "@/lib/content-access";
+import { listHotwordsForNovel, listTagsForNovel, type Tag } from "@/lib/tags";
 import { getCurrentUser } from "@/lib/user-auth";
 import { recordNovelVisit, recordReadingHistory } from "@/lib/users";
 
@@ -23,6 +26,8 @@ type BookPageProps = {
   }>;
 };
 
+type CurrentUser = Awaited<ReturnType<typeof getCurrentUser>>;
+
 function safeReturnHref(value: string | undefined): string {
   return value?.startsWith("/") && !value.startsWith("//") && !value.includes("\\") ? value : "/";
 }
@@ -35,18 +40,49 @@ function ReaderContentLoading() {
   );
 }
 
+function ReaderTagLinks({ tags }: { tags: Tag[] }) {
+  if (!tags.length) {
+    return null;
+  }
+  return (
+    <nav className="readerTagLinks" aria-label="文章标签">
+      {tags.map((tag) => (
+        <Link href={`/tags/${tag.slug}`} key={tag.id}>
+          {tag.name}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+function ReaderHotwordLinks({ hotwords }: { hotwords: string[] }) {
+  if (!hotwords.length) {
+    return null;
+  }
+  return (
+    <nav className="readerHotwordLinks" aria-label="文末热词">
+      {hotwords.map((term) => (
+        <Link href={`/search?q=${encodeURIComponent(term)}`} key={term}>
+          {term}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
 async function ReaderContent({
   book,
   hitSegment,
   requestHeaders,
+  user,
 }: {
   book: Novel;
   hitSegment: number;
   requestHeaders: Awaited<ReturnType<typeof headers>>;
+  user: CurrentUser;
 }) {
   const segments = await readNovelSegments(book);
   recordNovelVisit(book.id, getClientIp(requestHeaders), requestHeaders.get("user-agent") || "");
-  const user = await getCurrentUser();
   recordAnalyticsEvent({
     headers: requestHeaders,
     userId: user?.id ?? null,
@@ -103,20 +139,34 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
   }
 
   const hitSegment = Number(query.hit);
+  const user = await getCurrentUser();
+  const showTags = isTagLibraryEnabled() && (Boolean(user) || isGuestTagLibraryNavEnabled());
+  const showHotwords = areHotwordLinksEnabled() && (Boolean(user) || areGuestHotwordLinksEnabled());
+  const tags = showTags ? listTagsForNovel(book.id) : [];
+  const hotwords = showHotwords ? listHotwordsForNovel(book.id) : [];
 
   return (
     <main className="readerShell">
-      <SiteHeader defaultSearchMode="current" showCurrentSearch />
+      <SiteHeader defaultSearchMode="current" showCurrentSearch currentUser={user} />
 
-      <article className="readerPage">
+      <article className={user ? "readerPage hasReaderPreferences" : "readerPage"}>
+        <Breadcrumbs
+          className="readerBreadcrumbs"
+          items={[
+            { label: "首页", href: "/" },
+            { label: "书库", href: safeReturnHref(query.from) },
+            { label: book.title },
+          ]}
+        />
         <header className="readerTitle">
-          <BackButton fallbackHref={safeReturnHref(query.from)} />
           <BookOpenText size={26} aria-hidden="true" />
           <h1>{book.title}</h1>
         </header>
+        <ReaderTagLinks tags={tags} />
         <Suspense fallback={<ReaderContentLoading />}>
-          <ReaderContent book={book} hitSegment={hitSegment} requestHeaders={headerStore} />
+          <ReaderContent book={book} hitSegment={hitSegment} requestHeaders={headerStore} user={user} />
         </Suspense>
+        <ReaderHotwordLinks hotwords={hotwords} />
       </article>
     </main>
   );

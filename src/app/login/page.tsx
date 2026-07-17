@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AuthCaptchaForm } from "@/components/AuthCaptchaForm";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SiteHeader } from "@/components/SiteHeader";
 import {
   getNoticeDisplaySeconds,
@@ -38,7 +39,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   return (
     <main className="appShell">
-      <SiteHeader />
+      <SiteHeader currentUser={null} />
+      <Breadcrumbs items={[{ label: "首页", href: "/" }, { label: "登录" }]} />
       {params.notice ? (
         <DismissibleNotice
           message={params.notice}

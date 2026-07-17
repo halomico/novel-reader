@@ -1,9 +1,9 @@
 import { LockKeyhole } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { loginAdminAction } from "../actions";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession, isAdminSecurityConfigured } from "@/lib/admin-auth";
@@ -45,6 +45,7 @@ export default async function AdminLoginPage({ searchParams }: AdminLoginPagePro
   return (
     <main className="adminLoginShell">
       <section className="adminLoginPanel">
+        <Breadcrumbs className="adminBreadcrumbs" items={[{ label: "首页", href: "/" }, { label: "后台登录" }]} />
         <div className="adminLoginBrand">
           <span className="adminLogo" aria-hidden="true">
             <LockKeyhole size={24} />
@@ -87,10 +88,6 @@ export default async function AdminLoginPage({ searchParams }: AdminLoginPagePro
             登录
           </button>
         </form>
-
-        <Link className="adminBackHome" href="/">
-          返回前台
-        </Link>
       </section>
     </main>
   );

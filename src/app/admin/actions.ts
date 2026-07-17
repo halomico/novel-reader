@@ -46,8 +46,11 @@ import { clearMediaThumbnails } from "@/lib/media-thumbnail";
 import { deleteNovelIds } from "@/lib/novel-files";
 import { hashPassword } from "@/lib/password";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { validateSearchKeyword } from "@/lib/search";
 import { detectSiteIconFormat, MAX_SITE_ICON_BYTES, removeSiteIconFile, writeSiteIconFile } from "@/lib/site-icon";
 import { normalizeIpRateLimitRules, readSiteSettings, type SiteSettings, writeSiteSettings } from "@/lib/site-settings";
+import { isColorPalette } from "@/lib/ui-preferences";
+import { createTag, deleteTag, parseHotwordInput, setNovelHotwords, setNovelTags, updateTag } from "@/lib/tags";
 import { deleteUserSessions, hashUserPassword } from "@/lib/user-auth";
 import {
   clearBrowseHistory,
@@ -304,6 +307,94 @@ export async function deleteNovelsAction(formData: FormData) {
   adminNotice(`已删除 ${result.deleted} 本小说`, result.deleted ? "success" : "warning");
 }
 
+function tagOperationMessage(error: unknown): string {
+  if (error instanceof Error && error.message.includes("UNIQUE constraint failed")) {
+    return "标签名称或链接标识已存在";
+  }
+  return error instanceof Error ? error.message : "标签操作失败，请检查数据库状态";
+}
+
+export async function saveAdminTagAction(formData: FormData) {
+  await requireAdminRequest("/admin/tags");
+  const tagId = Number(formData.get("tagId") || 0);
+  try {
+    if (Number.isInteger(tagId) && tagId > 0) {
+      const updated = updateTag({
+        id: tagId,
+        parentId: String(formData.get("parentId") || ""),
+        name: String(formData.get("name") || ""),
+        slug: String(formData.get("slug") || ""),
+        description: String(formData.get("description") || ""),
+        sortOrder: String(formData.get("sortOrder") || "0"),
+        isVisible: formData.get("isVisible") === "on",
+      });
+      if (!updated) {
+        adminNotice("标签不存在", "warning", "/admin/tags");
+      }
+    } else {
+      createTag({
+        parentId: String(formData.get("parentId") || ""),
+        name: String(formData.get("name") || ""),
+        slug: String(formData.get("slug") || ""),
+        description: String(formData.get("description") || ""),
+        sortOrder: String(formData.get("sortOrder") || "0"),
+        isVisible: formData.get("isVisible") === "on",
+      });
+    }
+  } catch (error) {
+    adminNotice(tagOperationMessage(error), "warning", "/admin/tags");
+  }
+  revalidatePath("/", "layout");
+  revalidatePath("/tags");
+  revalidatePath("/admin/tags");
+  adminNotice(tagId ? "标签已更新" : "标签已创建", "success", "/admin/tags");
+}
+
+export async function deleteAdminTagAction(formData: FormData) {
+  await requireAdminRequest("/admin/tags");
+  const tagId = Number(formData.get("tagId") || 0);
+  if (!Number.isInteger(tagId) || tagId < 1) {
+    adminNotice("标签不存在", "warning", "/admin/tags");
+  }
+  const deleted = deleteTag(tagId);
+  revalidatePath("/", "layout");
+  revalidatePath("/tags");
+  revalidatePath("/admin/tags");
+  adminNotice(deleted ? "标签已删除" : "标签不存在", deleted ? "success" : "warning", "/admin/tags");
+}
+
+export async function saveNovelTaggingAction(formData: FormData) {
+  const bookId = Number(formData.get("bookId") || 0);
+  const returnPath = Number.isInteger(bookId) && bookId > 0 ? `/admin/books/${bookId}/tags` : "/admin/books";
+  await requireAdminRequest(returnPath);
+  if (!Number.isInteger(bookId) || bookId < 1) {
+    adminNotice("小说不存在", "warning", "/admin/books");
+  }
+  const tagIds = formData
+    .getAll("tagIds")
+    .map(Number)
+    .filter((id) => Number.isInteger(id) && id > 0);
+  let hotwords: string[];
+  try {
+    hotwords = parseHotwordInput(String(formData.get("hotwords") || ""));
+  } catch (error) {
+    adminNotice(error instanceof Error ? error.message : "热词格式无效", "warning", returnPath);
+  }
+  for (const term of hotwords) {
+    const validation = validateSearchKeyword(term);
+    if (!validation.ok) {
+      adminNotice(`热词“${term}”：${validation.message}`, "warning", returnPath);
+    }
+  }
+  setNovelTags(bookId, tagIds);
+  setNovelHotwords(bookId, hotwords);
+  revalidatePath(`/books/${bookId}`);
+  revalidatePath("/tags");
+  revalidatePath("/admin/books");
+  revalidatePath(returnPath);
+  adminNotice("标签和热词已保存", "success", returnPath);
+}
+
 export async function saveAdminSettingsAction(formData: FormData) {
   await requireAdminRequest("/admin/settings");
   const previous = readSiteSettings();
@@ -331,12 +422,16 @@ export async function saveAdminSettingsAction(formData: FormData) {
   const videoAccessMode = mediaAccessModeField(formData, "videoAccessMode");
   const audioAccessMode = mediaAccessModeField(formData, "audioAccessMode");
   const fileAccessMode = mediaAccessModeField(formData, "fileAccessMode");
+  const tagAccessMode = mediaAccessModeField(formData, "tagAccessMode");
+  const hotwordAccessMode = mediaAccessModeField(formData, "hotwordAccessMode");
+  const defaultPalette = String(formData.get("defaultPalette") || "default");
   const next: SiteSettings = {
     ...previous,
     siteName: String(formData.get("siteName") || "").trim(),
     siteTitle: String(formData.get("siteTitle") || "").trim(),
     settingsPreviewText: String(formData.get("settingsPreviewText") || "").trim(),
     readerDefaultFontSize: intField(formData, "readerDefaultFontSize", previous.readerDefaultFontSize || 17, 8, 25),
+    defaultPalette: isColorPalette(defaultPalette) ? defaultPalette : "default",
     adminUsername,
     adminPasswordHash: newPassword ? hashPassword(newPassword) : previous.adminPasswordHash,
     adminPasswordSha256: newPassword ? "" : previous.adminPasswordSha256,
@@ -388,10 +483,14 @@ export async function saveAdminSettingsAction(formData: FormData) {
     videoLibraryEnabled: videoAccessMode !== "off",
     audioLibraryEnabled: audioAccessMode !== "off",
     fileLibraryEnabled: fileAccessMode !== "off",
+    tagLibraryEnabled: tagAccessMode !== "off",
+    hotwordLinksEnabled: hotwordAccessMode !== "off",
     guestLibraryNavEnabled: formData.get("libraryGuestAccess") === "public",
     guestVideoNavEnabled: videoAccessMode === "public",
     guestAudioNavEnabled: audioAccessMode === "public",
     guestFileNavEnabled: fileAccessMode === "public",
+    guestTagLibraryNavEnabled: tagAccessMode === "public",
+    guestHotwordLinksEnabled: hotwordAccessMode === "public",
     contentBlockHeadlessBrowsers: formData.get("contentBlockHeadlessBrowsers") === "on",
     frontendSearchConcurrencyLimit: intField(
       formData,
@@ -417,6 +516,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
   revalidatePath("/register");
   revalidatePath("/account");
   revalidatePath("/media");
+  revalidatePath("/tags");
   revalidatePath("/search");
   revalidatePath("/settings");
   revalidatePath("/admin");

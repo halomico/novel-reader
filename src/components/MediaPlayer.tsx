@@ -1,16 +1,27 @@
 "use client";
 
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 
-export function MediaPlayer({ id, posterVersion, sourceVersion }: { id: number; posterVersion: string; sourceVersion: number }) {
+export function MediaPlayer({
+  id,
+  posterVersion,
+  sourceVersion,
+  basePath,
+}: {
+  id: number;
+  posterVersion: string;
+  sourceVersion: number;
+  basePath?: string;
+}) {
   const countedRef = useRef(false);
+  const mediaBasePath = useMemo(() => basePath || `/media/${id}`, [basePath, id]);
 
   function recordPlay() {
     if (countedRef.current) {
       return;
     }
     countedRef.current = true;
-    void fetch(`/media/${id}/play`, { method: "POST", keepalive: true }).catch(() => {
+    void fetch(`${mediaBasePath}/play`, { method: "POST", keepalive: true }).catch(() => {
       countedRef.current = false;
     });
   }
@@ -20,11 +31,11 @@ export function MediaPlayer({ id, posterVersion, sourceVersion }: { id: number; 
       className="mediaVideoPlayer"
       controls
       playsInline
-      poster={`/media/${id}/thumbnail?frame=0&v=${encodeURIComponent(posterVersion)}`}
+      poster={`${mediaBasePath}/thumbnail?frame=0&v=${encodeURIComponent(posterVersion)}`}
       preload="none"
       onPlay={recordPlay}
     >
-      <source src={`/media/${id}/stream?v=${Math.floor(sourceVersion)}`} />
+      <source src={`${mediaBasePath}/stream?v=${Math.floor(sourceVersion)}`} />
       当前浏览器无法播放这个视频。
     </video>
   );

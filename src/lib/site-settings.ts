@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { isColorPalette, type ColorPalette } from "./ui-preferences";
 
 export type AdminTheme = "system" | "light" | "dark";
 export type UserLoginCaptchaMode = "off" | "image" | "slider";
@@ -36,6 +37,7 @@ export type SiteSettings = {
   siteIconMimeType: SiteIconMimeType;
   siteIconUpdatedAt: string;
   readerDefaultFontSize: number;
+  defaultPalette: ColorPalette;
   adminUsername: string;
   adminPasswordHash: string;
   adminPasswordSha256: string;
@@ -71,10 +73,14 @@ export type SiteSettings = {
   videoLibraryEnabled: boolean;
   audioLibraryEnabled: boolean;
   fileLibraryEnabled: boolean;
+  tagLibraryEnabled: boolean;
+  hotwordLinksEnabled: boolean;
   guestLibraryNavEnabled: boolean;
   guestVideoNavEnabled: boolean;
   guestAudioNavEnabled: boolean;
   guestFileNavEnabled: boolean;
+  guestTagLibraryNavEnabled: boolean;
+  guestHotwordLinksEnabled: boolean;
   videoThumbnailMode: VideoThumbnailMode;
   videoThumbnailSinglePercent: number;
   videoThumbnailCarouselFrames: number;
@@ -116,6 +122,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   siteIconMimeType: "",
   siteIconUpdatedAt: "",
   readerDefaultFontSize: 17,
+  defaultPalette: "default",
   adminUsername: "",
   adminPasswordHash: "",
   adminPasswordSha256: "",
@@ -151,10 +158,14 @@ const DEFAULT_SETTINGS: SiteSettings = {
   videoLibraryEnabled: true,
   audioLibraryEnabled: true,
   fileLibraryEnabled: true,
+  tagLibraryEnabled: true,
+  hotwordLinksEnabled: true,
   guestLibraryNavEnabled: false,
   guestVideoNavEnabled: false,
   guestAudioNavEnabled: false,
   guestFileNavEnabled: false,
+  guestTagLibraryNavEnabled: false,
+  guestHotwordLinksEnabled: false,
   videoThumbnailMode: "single",
   videoThumbnailSinglePercent: 33,
   videoThumbnailCarouselFrames: 3,
@@ -189,6 +200,10 @@ function cleanInt(value: unknown, fallback: number, min: number, max: number): n
 
 function cleanTheme(value: unknown): AdminTheme {
   return value === "light" || value === "dark" || value === "system" ? value : "system";
+}
+
+function cleanColorPalette(value: unknown): ColorPalette {
+  return typeof value === "string" && isColorPalette(value) ? value : "default";
 }
 
 function cleanCaptchaMode(value: unknown): UserLoginCaptchaMode {
@@ -316,6 +331,7 @@ function readSiteSettingsFromDisk(): SiteSettings {
       siteIconMimeType: cleanSiteIconMimeType(parsed.siteIconMimeType),
       siteIconUpdatedAt: cleanText(parsed.siteIconUpdatedAt),
       readerDefaultFontSize: cleanInt(parsed.readerDefaultFontSize, DEFAULT_SETTINGS.readerDefaultFontSize, 8, 25),
+      defaultPalette: cleanColorPalette(parsed.defaultPalette),
       adminUsername: cleanText(parsed.adminUsername),
       adminPasswordHash: cleanText(parsed.adminPasswordHash),
       adminPasswordSha256: cleanText(parsed.adminPasswordSha256),
@@ -371,10 +387,14 @@ function readSiteSettingsFromDisk(): SiteSettings {
       videoLibraryEnabled: cleanBool(parsed.videoLibraryEnabled, DEFAULT_SETTINGS.videoLibraryEnabled),
       audioLibraryEnabled: cleanBool(parsed.audioLibraryEnabled, DEFAULT_SETTINGS.audioLibraryEnabled),
       fileLibraryEnabled: cleanBool(parsed.fileLibraryEnabled, DEFAULT_SETTINGS.fileLibraryEnabled),
+      tagLibraryEnabled: cleanBool(parsed.tagLibraryEnabled, DEFAULT_SETTINGS.tagLibraryEnabled),
+      hotwordLinksEnabled: cleanBool(parsed.hotwordLinksEnabled, DEFAULT_SETTINGS.hotwordLinksEnabled),
       guestLibraryNavEnabled: cleanBool(parsed.guestLibraryNavEnabled, DEFAULT_SETTINGS.guestLibraryNavEnabled),
       guestVideoNavEnabled: cleanBool(parsed.guestVideoNavEnabled, DEFAULT_SETTINGS.guestVideoNavEnabled),
       guestAudioNavEnabled: cleanBool(parsed.guestAudioNavEnabled, DEFAULT_SETTINGS.guestAudioNavEnabled),
       guestFileNavEnabled: cleanBool(parsed.guestFileNavEnabled, DEFAULT_SETTINGS.guestFileNavEnabled),
+      guestTagLibraryNavEnabled: cleanBool(parsed.guestTagLibraryNavEnabled, DEFAULT_SETTINGS.guestTagLibraryNavEnabled),
+      guestHotwordLinksEnabled: cleanBool(parsed.guestHotwordLinksEnabled, DEFAULT_SETTINGS.guestHotwordLinksEnabled),
       videoThumbnailMode: cleanVideoThumbnailMode(parsed.videoThumbnailMode),
       videoThumbnailSinglePercent: cleanInt(parsed.videoThumbnailSinglePercent, DEFAULT_SETTINGS.videoThumbnailSinglePercent, 1, 99),
       videoThumbnailCarouselFrames: cleanInt(parsed.videoThumbnailCarouselFrames, DEFAULT_SETTINGS.videoThumbnailCarouselFrames, 2, 8),

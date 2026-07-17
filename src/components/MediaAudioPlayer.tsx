@@ -22,7 +22,15 @@ const QUEUE_ROW_HEIGHT = 36;
 const QUEUE_VIEWPORT_HEIGHT = 260;
 const QUEUE_OVERSCAN = 5;
 
-export function MediaAudioPlayer({ initialId, tracks }: { initialId: number; tracks: AudioQueueTrack[] }) {
+export function MediaAudioPlayer({
+  initialId,
+  tracks,
+  basePathPrefix = "/media",
+}: {
+  initialId: number;
+  tracks: AudioQueueTrack[];
+  basePathPrefix?: string;
+}) {
   const initialTrack = tracks.find((track) => track.id === initialId) || tracks[0];
   const [activeTrack, setActiveTrack] = useState(initialTrack);
   const [mode, setMode] = useState<PlaybackMode>("stop");
@@ -72,13 +80,13 @@ export function MediaAudioPlayer({ initialId, tracks }: { initialId: number; tra
     if (track.id === activeTrack.id) return;
     autoPlayRef.current = autoPlay;
     setActiveTrack(track);
-    void fetch(`/media/${track.id}/access`, { method: "POST", keepalive: true });
+    void fetch(`${basePathPrefix}/${track.id}/access`, { method: "POST", keepalive: true });
   }
 
   function recordPlay() {
     if (countedIdsRef.current.has(activeTrack.id)) return;
     countedIdsRef.current.add(activeTrack.id);
-    void fetch(`/media/${activeTrack.id}/play`, { method: "POST", keepalive: true }).catch(() => countedIdsRef.current.delete(activeTrack.id));
+    void fetch(`${basePathPrefix}/${activeTrack.id}/play`, { method: "POST", keepalive: true }).catch(() => countedIdsRef.current.delete(activeTrack.id));
   }
 
   function playAdjacent(offset: -1 | 1) {
@@ -107,7 +115,7 @@ export function MediaAudioPlayer({ initialId, tracks }: { initialId: number; tra
       </div>
       <div className="mediaAudioPlayerPanel">
         <audio ref={audioRef} className="mediaAudioPlayer" controls preload="metadata" onPlay={recordPlay} onEnded={handleEnded} aria-label={`播放 ${activeTrack.title}`}>
-          <source src={`/media/${activeTrack.id}/stream?v=${Math.floor(activeTrack.version)}`} />
+          <source src={`${basePathPrefix}/${activeTrack.id}/stream?v=${Math.floor(activeTrack.version)}`} />
           当前浏览器无法播放这个音频。
         </audio>
         <div className="mediaAudioControls">

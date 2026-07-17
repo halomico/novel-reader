@@ -1,9 +1,10 @@
 ﻿import { BookOpen, LogOut, Search, Settings, Users } from "lucide-react";
 import Link from "next/link";
-import { BarChart3, LibraryBig } from "lucide-react";
+import { BarChart3, LibraryBig, Tags } from "lucide-react";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
+import { Breadcrumbs, type BreadcrumbItem } from "@/components/Breadcrumbs";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
@@ -11,14 +12,16 @@ import { getNoticeDisplaySeconds, getSiteName, shouldNoticeStayVisibleAfterBlur 
 import { logoutAdminAction } from "./actions";
 
 type AdminFrameProps = {
-  active: "home" | "books" | "indexes" | "settings" | "users" | "analytics" | "media";
+  active: "home" | "books" | "indexes" | "settings" | "users" | "analytics" | "media" | "tags";
   notice?: string;
   tone?: "success" | "warning" | "error";
+  breadcrumbs?: BreadcrumbItem[];
   children: React.ReactNode;
 };
 
 const navItems = [
   { href: "/admin/books", label: "小说管理", value: "books", icon: BookOpen },
+  { href: "/admin/tags", label: "标签管理", value: "tags", icon: Tags },
   { href: "/admin/media", label: "资源管理", value: "media", icon: LibraryBig },
   { href: "/admin/indexes", label: "搜索索引", value: "indexes", icon: Search },
   { href: "/admin/users", label: "用户管理", value: "users", icon: Users },
@@ -36,6 +39,9 @@ function titleFor(active: AdminFrameProps["active"]): string {
   if (active === "indexes") {
     return "搜索索引";
   }
+  if (active === "tags") {
+    return "标签管理";
+  }
   if (active === "users") {
     return "用户管理";
   }
@@ -48,7 +54,7 @@ function titleFor(active: AdminFrameProps["active"]): string {
   return "系统设置";
 }
 
-export async function AdminFrame({ active, notice = "", tone, children }: AdminFrameProps) {
+export async function AdminFrame({ active, notice = "", tone, breadcrumbs, children }: AdminFrameProps) {
   const headerStore = await headers();
   const access = getAdminAccessState(headerStore);
   if (!access.allowed) {
@@ -63,6 +69,12 @@ export async function AdminFrame({ active, notice = "", tone, children }: AdminF
   const siteName = getSiteName();
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
   const noticeStayVisibleAfterBlur = shouldNoticeStayVisibleAfterBlur();
+  const trail = breadcrumbs ?? (active === "home" ? [] : [{ label: titleFor(active) }]);
+  const breadcrumbItems: BreadcrumbItem[] = [
+    { label: "首页", href: "/" },
+    trail.length ? { label: "后台", href: "/admin" } : { label: "后台" },
+    ...trail,
+  ];
 
   return (
     <main className="adminShell adminLayout">
@@ -88,6 +100,7 @@ export async function AdminFrame({ active, notice = "", tone, children }: AdminF
       </aside>
 
       <section className="adminMain">
+        <Breadcrumbs className="adminBreadcrumbs" items={breadcrumbItems} />
         <header className="adminTopbar">
           <div className="adminTitleBlock">
             <h1>{titleFor(active)}</h1>

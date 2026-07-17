@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Clapperboard, File, Headphones } from "lucide-react";
+import { BookOpen, Clapperboard, File, Headphones, Tags } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { MediaKind } from "@/lib/media";
@@ -11,7 +11,15 @@ const MEDIA_LINKS: Record<MediaKind, { label: string; icon: typeof Clapperboard 
   file: { label: "文件", icon: File },
 };
 
-export function HeaderPrimaryNav({ mediaKinds, showLibrary = true }: { mediaKinds: MediaKind[]; showLibrary?: boolean }) {
+export function HeaderPrimaryNav({
+  mediaKinds,
+  showLibrary = true,
+  showTags = false,
+}: {
+  mediaKinds: MediaKind[];
+  showLibrary?: boolean;
+  showTags?: boolean;
+}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const requestedKind = searchParams.get("kind");
@@ -23,6 +31,12 @@ export function HeaderPrimaryNav({ mediaKinds, showLibrary = true }: { mediaKind
         <Link href="/" aria-current={pathname === "/" ? "page" : undefined}>
           <BookOpen size={15} aria-hidden="true" />
           书库
+        </Link>
+      ) : null}
+      {showTags ? (
+        <Link href="/tags" aria-current={pathname.startsWith("/tags") ? "page" : undefined}>
+          <Tags size={15} aria-hidden="true" />
+          标签
         </Link>
       ) : null}
       {mediaKinds.map((kind) => {

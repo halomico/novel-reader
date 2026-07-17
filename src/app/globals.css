@@ -1,14 +1,29 @@
 :root {
   color-scheme: light;
-  --bg: #f3f5f6;
-  --bg-soft: #f8fafb;
-  --surface: #ffffff;
-  --surface-strong: #e9eef1;
-  --text: #202a32;
-  --muted: #66747e;
-  --border: #d7e0e5;
-  --accent: #b43b43;
-  --accent-strong: #922f36;
+  --theme-bg: #f3f5f6;
+  --theme-bg-soft: #f8fafb;
+  --theme-surface: #ffffff;
+  --theme-surface-strong: #e9eef1;
+  --theme-text: #202a32;
+  --theme-muted: #66747e;
+  --theme-border: #d7e0e5;
+  --palette-light-accent: #b43b43;
+  --palette-light-strong: #922f36;
+  --palette-light-tint: #b43b43;
+  --palette-dark-accent: #b9652a;
+  --palette-dark-strong: #d77b3d;
+  --palette-dark-tint: #a95320;
+  --palette-tint: var(--palette-light-tint);
+  --tag-color: #2a7068;
+  --bg: color-mix(in srgb, var(--theme-bg) 97%, var(--palette-tint));
+  --bg-soft: color-mix(in srgb, var(--theme-bg-soft) 97%, var(--palette-tint));
+  --surface: color-mix(in srgb, var(--theme-surface) 99%, var(--palette-tint));
+  --surface-strong: color-mix(in srgb, var(--theme-surface-strong) 93%, var(--palette-tint));
+  --text: var(--theme-text);
+  --muted: var(--theme-muted);
+  --border: color-mix(in srgb, var(--theme-border) 94%, var(--palette-tint));
+  --accent: var(--palette-light-accent);
+  --accent-strong: var(--palette-light-strong);
   --shadow: 0 10px 28px rgb(31 45 54 / 9%);
   --reader-font-size: 17px;
 }
@@ -16,44 +31,50 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #15191c;
-    --bg-soft: #1a1f23;
-    --surface: #20262a;
-    --surface-strong: #2a3237;
-    --text: #edf1f3;
-    --muted: #a7b2b9;
-    --border: #39434a;
-    --accent: #df7379;
-    --accent-strong: #f08b91;
+    --theme-bg: #15191c;
+    --theme-bg-soft: #1a1f23;
+    --theme-surface: #20262a;
+    --theme-surface-strong: #2a3237;
+    --theme-text: #edf1f3;
+    --theme-muted: #a7b2b9;
+    --theme-border: #39434a;
+    --palette-tint: var(--palette-dark-tint);
+    --accent: var(--palette-dark-accent);
+    --accent-strong: var(--palette-dark-strong);
+    --tag-color: #78cabe;
     --shadow: 0 10px 30px rgb(0 0 0 / 24%);
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #15191c;
-  --bg-soft: #1a1f23;
-  --surface: #20262a;
-  --surface-strong: #2a3237;
-  --text: #edf1f3;
-  --muted: #a7b2b9;
-  --border: #39434a;
-  --accent: #df7379;
-  --accent-strong: #f08b91;
+  --theme-bg: #15191c;
+  --theme-bg-soft: #1a1f23;
+  --theme-surface: #20262a;
+  --theme-surface-strong: #2a3237;
+  --theme-text: #edf1f3;
+  --theme-muted: #a7b2b9;
+  --theme-border: #39434a;
+  --palette-tint: var(--palette-dark-tint);
+  --accent: var(--palette-dark-accent);
+  --accent-strong: var(--palette-dark-strong);
+  --tag-color: #78cabe;
   --shadow: 0 10px 30px rgb(0 0 0 / 24%);
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #f3f5f6;
-  --bg-soft: #f8fafb;
-  --surface: #ffffff;
-  --surface-strong: #e9eef1;
-  --text: #202a32;
-  --muted: #66747e;
-  --border: #d7e0e5;
-  --accent: #b43b43;
-  --accent-strong: #922f36;
+  --theme-bg: #f3f5f6;
+  --theme-bg-soft: #f8fafb;
+  --theme-surface: #ffffff;
+  --theme-surface-strong: #e9eef1;
+  --theme-text: #202a32;
+  --theme-muted: #66747e;
+  --theme-border: #d7e0e5;
+  --palette-tint: var(--palette-light-tint);
+  --accent: var(--palette-light-accent);
+  --accent-strong: var(--palette-light-strong);
+  --tag-color: #2a7068;
   --shadow: 0 10px 28px rgb(31 45 54 / 9%);
 }
 
@@ -237,8 +258,7 @@ input {
 }
 
 .iconLink,
-.pageButton,
-.backLink {
+.pageButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -482,11 +502,10 @@ input {
 }
 
 .settingsHero {
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) 38px;
+  display: flex;
   align-items: center;
-  justify-content: initial;
-  padding: 20px 0 16px;
+  justify-content: center;
+  padding: 2px 0 16px;
 }
 
 .catalogSummary {
@@ -502,15 +521,12 @@ input {
 
 .settingsHero h1 {
   margin: 0;
-  letter-spacing: 0;
-}
-
-.settingsHero h1 {
   justify-self: center;
   color: var(--muted);
   font-size: 18px;
   font-weight: 700;
   line-height: 1;
+  letter-spacing: 0;
 }
 
 .settingsHero p {
@@ -564,6 +580,7 @@ input {
 }
 
 .bookTitle {
+  display: block;
   overflow: hidden;
   color: var(--text);
   font-size: 18px;
@@ -571,6 +588,28 @@ input {
   line-height: 1.45;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.bookCardBody {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.bookCardTags {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--tag-color);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-ui-mode="minimal"] .bookCardTags {
+  display: none;
 }
 
 .emptyState {
@@ -590,6 +629,122 @@ input {
 .emptyState p {
   margin: 0;
   color: var(--muted);
+}
+
+.tagLibrary,
+.tagDetailHeader {
+  display: grid;
+  gap: 20px;
+}
+
+.tagLibrary {
+  margin-top: 24px;
+}
+
+.tagDetailHeader {
+  margin: 26px 0 32px;
+}
+
+.tagLibraryHeader,
+.tagDetailHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tagLibraryIcon {
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--accent);
+}
+
+.tagLibraryHeader h1,
+.tagDetailHeader h1 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.25;
+}
+
+.tagLibraryHeader p,
+.tagDetailHeader p,
+.tagEmptyText {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.tagGroupStack {
+  display: grid;
+  gap: 4px;
+}
+
+.tagGroupBlock {
+  display: grid;
+  gap: 10px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.tagGroupHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tagGroupHeader h2,
+.tagGroupHeader h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.tagGroupHeader small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tagChipCloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tagChip {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.tagChip small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tagChip:hover,
+.tagChip:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  color: var(--accent);
+}
+
+.tagChip.isMuted {
+  opacity: 0.48;
 }
 
 .pagination {
@@ -722,14 +877,6 @@ button.pageNumber {
   line-height: 1.2;
 }
 
-.backLink {
-  width: 38px;
-  height: 38px;
-  padding: 0;
-  color: var(--muted);
-  cursor: pointer;
-}
-
 .readerPage {
   padding: clamp(24px, 5vw, 56px);
   border: 1px solid var(--border);
@@ -761,6 +908,33 @@ button.pageNumber {
   line-height: 1.2;
   letter-spacing: 0;
   overflow-wrap: anywhere;
+}
+
+.readerTagLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: -12px 0 44px;
+}
+
+.readerTagLinks a {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  background: color-mix(in srgb, var(--surface-strong) 34%, transparent);
+  color: var(--tag-color);
+  font-size: var(--reader-font-size);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.readerTagLinks a:hover,
+.readerTagLinks a:focus-visible {
+  border-color: color-mix(in srgb, var(--tag-color) 44%, var(--border));
+  color: var(--tag-color);
 }
 
 :root[data-ui-mode="minimal"] .readerTitle {
@@ -807,6 +981,91 @@ button.pageNumber {
   contain-intrinsic-size: auto 900px;
   scroll-margin-top: 132px;
   white-space: pre-wrap;
+}
+
+.readerHotwordLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px 18px;
+  align-items: center;
+  margin-top: 38px;
+  padding-top: 20px;
+  border-top: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
+  color: var(--muted);
+  font-size: var(--reader-font-size);
+}
+
+.breadcrumbs {
+  min-width: 0;
+  margin: 18px 0 22px;
+  font-family: system-ui, sans-serif;
+  font-size: 13px;
+}
+
+.breadcrumbs ol {
+  display: flex;
+  min-width: 0;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.breadcrumbs li {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+}
+
+.breadcrumbs li + li::before {
+  content: "/";
+  color: color-mix(in srgb, var(--muted) 58%, transparent);
+}
+
+.breadcrumbs a {
+  color: var(--tag-color);
+}
+
+.breadcrumbs a:hover,
+.breadcrumbs a:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.breadcrumbs [aria-current="page"] {
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.readerBreadcrumbs {
+  margin-top: 0;
+  margin-bottom: 22px;
+}
+
+:root[data-reader-tags="hide"] .readerPage.hasReaderPreferences .readerTagLinks,
+:root[data-reader-hotwords="hide"] .readerPage.hasReaderPreferences .readerHotwordLinks,
+:root[data-ui-mode="minimal"] .readerPage:not(.hasReaderPreferences) .readerHotwordLinks {
+  display: none;
+}
+
+.readerHotwordLinks a {
+  color: color-mix(in srgb, var(--text) 82%, var(--accent));
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 42%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 6px;
+}
+
+.readerHotwordLinks a:hover,
+.readerHotwordLinks a:focus-visible {
+  color: var(--accent);
+  text-decoration-color: currentColor;
 }
 
 .readerSegment.isHit,
@@ -1014,18 +1273,17 @@ mark {
 .settingsPanel {
   display: grid;
   gap: 14px;
-  max-width: 840px;
+  max-width: 900px;
 }
 
 .settingsGrid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 12px;
 }
 
 .settingBlock,
 .previewReader {
-  padding: 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
@@ -1037,7 +1295,8 @@ mark {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 10px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border);
 }
 
 .settingBlock h2 {
@@ -1046,17 +1305,46 @@ mark {
   line-height: 1.3;
 }
 
-.settingBlockHeader strong {
+.settingRowTitle strong {
   color: var(--accent);
-  font-size: 14px;
+  font-size: 13px;
   white-space: nowrap;
+}
+
+.settingRows {
+  display: grid;
+}
+
+.settingRow {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 13px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.settingRow:last-child {
+  border-bottom: 0;
+}
+
+.settingRowTitle {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .segmentedControl {
   display: flex;
   width: fit-content;
   max-width: 100%;
-  margin: 0 auto;
+  margin: 0;
+  justify-self: end;
   gap: 2px;
   padding: 3px;
   border: 1px solid var(--border);
@@ -1085,6 +1373,51 @@ mark {
   color: #fffaf2;
 }
 
+.paletteOptions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 7px;
+}
+
+.paletteOptions button {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 6px 8px;
+  background: var(--bg-soft);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.paletteOptions button:hover,
+.paletteOptions button:focus-visible,
+.paletteOptions button.isActive {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  color: var(--accent);
+}
+
+.paletteSwatches {
+  display: inline-grid;
+  width: 30px;
+  height: 18px;
+  flex: 0 0 auto;
+  grid-template-columns: 1fr 1fr;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--text) 20%, transparent);
+  border-radius: 4px;
+}
+
+.settingPaletteRow {
+  align-items: start;
+}
+
 .rangeRow {
   display: grid;
   grid-template-columns: auto minmax(120px, 220px) auto;
@@ -1092,6 +1425,7 @@ mark {
   gap: 4px;
   color: var(--muted);
   min-height: 36px;
+  justify-self: end;
 }
 
 .rangeRow span:first-child {
@@ -1107,7 +1441,72 @@ mark {
   accent-color: var(--accent);
 }
 
+.settingMetaToggles {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 9px 18px;
+}
+
+.settingToggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settingToggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.settingToggleTrack {
+  position: relative;
+  width: 34px;
+  height: 19px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-strong);
+  transition: background 140ms ease;
+}
+
+.settingToggleTrack::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 140ms ease, background 140ms ease;
+}
+
+.settingToggle input:checked + .settingToggleTrack {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.settingToggle input:checked + .settingToggleTrack::after {
+  background: #fffaf2;
+  transform: translateX(15px);
+}
+
+.settingToggle input:focus-visible + .settingToggleTrack {
+  outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  outline-offset: 2px;
+}
+
 .previewReader {
+  padding: 14px 16px;
   color: var(--text);
   font-size: var(--reader-font-size);
   line-height: 2;
@@ -1124,6 +1523,14 @@ mark {
   gap: 14px;
   align-items: start;
   margin-top: 28px;
+}
+
+.breadcrumbs + .authPage,
+.breadcrumbs + .userAuthGrid,
+.breadcrumbs + .accountLayout,
+.breadcrumbs + .tagLibrary,
+.breadcrumbs + .tagDetailHeader {
+  margin-top: 0;
 }
 
 .authPage {
@@ -1150,8 +1557,7 @@ mark {
 }
 
 #account-tab-profile:focus-visible ~ .accountSideNav label[for="account-tab-profile"],
-#account-tab-security:focus-visible ~ .accountSideNav label[for="account-tab-security"],
-#account-tab-history:focus-visible ~ .accountSideNav label[for="account-tab-history"] {
+#account-tab-security:focus-visible ~ .accountSideNav label[for="account-tab-security"] {
   outline: 2px solid color-mix(in srgb, var(--accent) 48%, transparent);
   outline-offset: 2px;
 }
@@ -1187,8 +1593,7 @@ mark {
 }
 
 .userPanelHeader p,
-.accountProfile p,
-.emptyAccountText {
+.accountProfile p {
   margin: 0;
   color: var(--muted);
   font-size: 13px;
@@ -1212,9 +1617,7 @@ mark {
 }
 
 .userPanel button,
-.authPrimaryButton,
-.secondaryUserButton,
-.iconTextDanger {
+.authPrimaryButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2029,16 +2432,6 @@ mark {
   margin-inline: auto;
 }
 
-.mediaBackLink {
-  display: inline-flex;
-  justify-self: start;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
-}
-
 .mediaDetailHeader > div {
   min-width: 0;
 }
@@ -2303,8 +2696,7 @@ mark {
 .accountSideNav a:hover,
 .accountSideNav a:focus-visible,
 #account-tab-profile:checked ~ .accountSideNav label[for="account-tab-profile"],
-#account-tab-security:checked ~ .accountSideNav label[for="account-tab-security"],
-#account-tab-history:checked ~ .accountSideNav label[for="account-tab-history"] {
+#account-tab-security:checked ~ .accountSideNav label[for="account-tab-security"] {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent);
 }
@@ -2320,8 +2712,7 @@ mark {
 }
 
 #account-tab-profile:checked ~ .accountContent .accountProfile,
-#account-tab-security:checked ~ .accountContent .accountSecurity,
-#account-tab-history:checked ~ .accountContent .accountHistory {
+#account-tab-security:checked ~ .accountContent .accountSecurity {
   display: grid;
 }
 
@@ -2391,8 +2782,7 @@ mark {
   font-size: 13px;
 }
 
-.accountContent .userPanel button,
-.accountHistoryActions .secondaryUserButton {
+.accountContent .userPanel button {
   min-height: 32px;
   padding: 6px 11px;
   font-size: 13px;
@@ -2407,69 +2797,6 @@ mark {
 .avatarUploadForm small {
   color: var(--muted);
   font-size: 12px;
-}
-
-.secondaryUserButton {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: var(--accent);
-}
-
-.historyList {
-  display: grid;
-  gap: 8px;
-}
-
-.historyItem {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface-strong) 24%, transparent);
-}
-
-.historyItem div {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-}
-
-.historyItem a,
-.historyItem strong {
-  overflow: hidden;
-  color: var(--text);
-  font-size: 15px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.historyItem span {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.iconTextDanger {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  background: color-mix(in srgb, #b42318 10%, transparent);
-  color: #b42318;
-}
-
-.accountHistoryTable a,
-.accountHistoryTable strong {
-  color: var(--text);
-  font-weight: 700;
-}
-
-.accountHistoryTable .adminCheckbox {
-  width: 15px;
-  height: 15px;
-  padding: 0;
-  border: 0;
-  background: transparent;
 }
 
 .accountHistoryKind {
@@ -2496,50 +2823,6 @@ mark {
 .accountHistoryKind.is-file {
   background: color-mix(in srgb, #47714d 11%, transparent);
   color: #47714d;
-}
-
-.accountHistoryActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-start;
-  margin-top: 10px;
-}
-
-.accountHistoryHeader {
-  justify-content: space-between;
-}
-
-.accountHistoryHeading {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 10px;
-}
-
-.accountHistoryVisibility {
-  display: inline-flex;
-  flex: 0 0 auto;
-  gap: 2px;
-  padding: 3px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-soft);
-}
-
-.accountHistoryVisibility button {
-  min-height: 26px;
-  border-radius: 999px;
-  padding: 3px 9px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1;
-}
-
-.accountHistoryVisibility button.isActive {
-  background: var(--accent);
-  color: #fffaf2;
 }
 
 .adminShell,
@@ -2656,24 +2939,18 @@ mark {
 .adminForbidden button {
   border: 0;
   border-radius: 7px;
-  padding: 9px 14px;
+  padding: 7px 12px;
   background: var(--accent);
   color: #fffaf2;
   cursor: pointer;
+  font-size: 13px;
   font-weight: 700;
+  line-height: 1.25;
 }
 
 .adminLoginForm button:disabled {
   cursor: not-allowed;
   opacity: 0.52;
-}
-
-.adminBackHome {
-  display: block;
-  margin-top: 14px;
-  color: var(--muted);
-  text-align: center;
-  font-size: 14px;
 }
 
 .adminNotice {
@@ -3046,6 +3323,11 @@ mark {
   min-width: 0;
 }
 
+.adminBreadcrumbs {
+  margin-top: 2px;
+  margin-bottom: 12px;
+}
+
 .adminMain .adminTopbar {
   padding-top: 0;
 }
@@ -3072,6 +3354,239 @@ mark {
   color: var(--text);
   font-size: 15px;
   line-height: 1.3;
+}
+
+.adminSettingsDisclosure {
+  padding: 0;
+}
+
+.adminSettingsDisclosure > summary {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 12px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1.3;
+  list-style: none;
+}
+
+.adminSettingsDisclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.adminSettingsDisclosure > summary::after {
+  content: "+";
+  color: var(--muted);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.adminSettingsDisclosure[open] {
+  padding: 0 12px 12px;
+}
+
+.adminSettingsDisclosure[open] > summary {
+  margin: 0 -12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.adminSettingsDisclosure[open] > summary::after {
+  content: "-";
+}
+
+.adminTagsPanel,
+.adminBookTagPanel {
+  max-width: 980px;
+}
+
+.adminTagTreePreview .tagGroupStack {
+  gap: 0;
+}
+
+.adminTagTreePreview .tagGroupBlock {
+  padding: 12px 0;
+}
+
+.adminTagCreateForm label,
+.adminTagEditRow label,
+.adminBookTagForm label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.adminTagCreateForm input,
+.adminTagCreateForm textarea,
+.adminTagCreateForm select,
+.adminTagEditRow input,
+.adminTagEditRow select,
+.adminBookTagForm textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 8px 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.adminTagFormGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1fr) 96px;
+  gap: 10px;
+}
+
+.adminTagEditList,
+.adminBookTagGroups {
+  display: grid;
+  gap: 10px;
+}
+
+.adminTagEditRow {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(110px, 0.8fr) minmax(110px, 0.8fr) 82px minmax(140px, 1fr) 72px auto;
+  gap: 8px;
+  align-items: end;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+}
+
+.adminTagEditRow.isRoot {
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+}
+
+.adminTagVisibleToggle {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: center;
+  align-self: center;
+  gap: 6px !important;
+  color: var(--text) !important;
+  font-size: 13px;
+}
+
+.adminTagVisibleToggle input {
+  width: auto;
+}
+
+.adminTagRowActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adminTagRowActions button,
+.adminTagCreateForm > button,
+.adminBookTagForm > button {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 26px;
+  align-items: center;
+  justify-content: center;
+  justify-self: start;
+  border: 0;
+  border-radius: 5px;
+  padding: 3px 8px;
+  background: var(--accent);
+  color: #fffaf2;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.adminTagRowActions .adminDangerButton {
+  background: color-mix(in srgb, #b3261e 11%, transparent);
+  color: #b3261e;
+}
+
+.adminBookTitleCell {
+  display: grid;
+  gap: 4px;
+}
+
+.adminBookTitleCell a {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.adminBookTagForm {
+  margin-top: 18px;
+}
+
+.adminBookTagChooser,
+.adminBookTagGroup {
+  display: grid;
+  gap: 10px;
+}
+
+.adminBookTagGroup {
+  min-width: 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  padding: 12px 0 0;
+}
+
+.adminBookTagGroup legend {
+  padding-right: 10px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.adminBookTagOptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.adminBookTagOption {
+  display: inline-flex !important;
+  grid-template-columns: none !important;
+  min-height: 30px;
+  align-items: center;
+  gap: 7px !important;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: var(--surface);
+  color: var(--text) !important;
+  cursor: pointer;
+  font-size: 13px !important;
+  font-weight: 750;
+}
+
+.adminBookTagOption input {
+  width: auto;
+}
+
+.adminBookTagOption small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.adminBookTagOption.isMuted {
+  opacity: 0.5;
+}
+
+.adminHotwordField small {
+  color: var(--muted);
 }
 
 .siteIconManager {
@@ -3755,21 +4270,9 @@ mark {
   width: min(410px, 100%);
 }
 
-.adminUserNameLink,
-.adminBackLink {
+.adminUserNameLink {
   color: var(--accent);
   font-weight: 700;
-}
-
-.adminBackLink {
-  display: inline-flex;
-  width: fit-content;
-  align-items: center;
-  gap: 6px;
-  border-radius: 999px;
-  padding: 6px 10px;
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  font-size: 13px;
 }
 
 .adminUserDetailGrid {
@@ -4319,6 +4822,15 @@ mark {
 
 .adminMediaPanel {
   min-width: 0;
+}
+
+.adminPreviewShell {
+  min-height: 100vh;
+  padding: clamp(18px, 4vw, 42px);
+}
+
+.adminMediaPreview {
+  width: min(980px, 100%);
 }
 
 .adminMediaWorkspace {
@@ -4907,6 +5419,27 @@ mark {
   max-width: 230px;
 }
 
+.adminMediaPreviewLink {
+  display: inline-flex;
+  max-width: 100%;
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 34%, transparent);
+  text-underline-offset: 4px;
+}
+
+.adminMediaPreviewLink:hover,
+.adminMediaPreviewLink:focus-visible {
+  color: var(--accent);
+  text-decoration-color: currentColor;
+}
+
+.adminMediaPreviewLink strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .adminMediaTable td:nth-child(4) {
   max-width: 130px;
 }
@@ -5020,6 +5553,10 @@ mark {
 .adminMediaVideoCopy strong {
   color: var(--text);
   font-size: 13px;
+}
+
+.adminMediaVideoCopy .adminMediaPreviewLink strong {
+  display: block;
 }
 
 .adminMediaVideoCopy span,
@@ -5359,9 +5896,7 @@ mark {
   }
 
   .settingsHero {
-    align-items: center;
-    grid-template-columns: 38px minmax(0, 1fr) 38px;
-    padding-top: 18px;
+    padding-top: 2px;
   }
 
   .bookGrid {
@@ -5376,12 +5911,30 @@ mark {
     gap: 8px;
   }
 
-  .readerTitle .backLink {
+  .readerTitle h1 {
+    font-size: 24px;
+  }
+
+  .readerTagLinks {
+    margin: -12px 0 24px;
+  }
+
+  .readerBreadcrumbs {
     display: none;
   }
 
-  .readerTitle h1 {
-    font-size: 24px;
+  .settingRow {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+
+  .segmentedControl,
+  .rangeRow {
+    justify-self: start;
+  }
+
+  .settingMetaToggles {
+    justify-content: flex-start;
   }
 
   .readerShell .siteHeader {
@@ -5776,6 +6329,8 @@ mark {
   }
 
   .adminAccessModeGrid,
+  .adminTagFormGrid,
+  .adminTagEditRow,
   .adminMediaDisplaySettings form,
   .adminMediaUploadFields,
   .adminMediaUploadFields.hasArtist,
@@ -5783,6 +6338,10 @@ mark {
   .adminMediaUploadFields.hasArtist.hasCategory {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .adminTagRowActions {
+    justify-content: flex-start;
   }
 
   .adminAccessModeRow:nth-child(odd) {

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ArrowLeft, Clock, KeyRound, Trash2, UserRound } from "lucide-react";
+import { Clock, KeyRound, Trash2, UserRound } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LocalDateTime } from "@/components/LocalDateTime";
@@ -37,13 +37,8 @@ export default async function AdminUserDetailPage({ params }: AdminUserDetailPag
   const loginRecords = listUserLoginRecords(user.id);
 
   return (
-    <AdminFrame active="users">
+    <AdminFrame active="users" breadcrumbs={[{ label: "用户管理", href: "/admin/users" }, { label: user.displayName }]}>
       <section className="adminHome adminUserDetailPage">
-        <Link className="adminBackLink" href="/admin/users">
-          <ArrowLeft size={16} aria-hidden="true" />
-          返回用户管理
-        </Link>
-
         <article className="adminPanel">
           <div className="adminPanelHeader">
             <div>

@@ -1,6 +1,6 @@
 ﻿import { Settings } from "lucide-react";
 import type { Metadata } from "next";
-import { BookOpen, Clapperboard, File, Globe2, Headphones, Trash2, Upload } from "lucide-react";
+import { BookOpen, Clapperboard, File, Globe2, Headphones, Search, Tags, Trash2, Upload } from "lucide-react";
 import { RateLimitBanTable } from "@/components/RateLimitBanTable";
 import { RateLimitRulesEditor } from "@/components/RateLimitRulesEditor";
 import { getAdminBookStats } from "@/lib/admin-books";
@@ -26,6 +26,7 @@ import {
   shouldBlockHeadlessBrowsers,
 } from "@/lib/config";
 import { readSiteSettings } from "@/lib/site-settings";
+import { COLOR_PALETTES } from "@/lib/ui-preferences";
 import { listIpRateLimitBans } from "@/lib/ip-rate-limit";
 import {
   cancelFrontendSearchJobsAction,
@@ -130,8 +131,8 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
         </form>
 
         <form className="adminSettingsForm" action={saveAdminSettingsAction}>
-          <section className="adminSettingsSection">
-            <h3>基础信息</h3>
+          <details className="adminSettingsSection adminSettingsDisclosure" open>
+            <summary>基础信息</summary>
             <div className="adminFieldGrid">
               <label>
                 <span>站点名称</span>
@@ -158,10 +159,19 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 <option value="dark">深色</option>
               </select>
             </label>
-          </section>
+            <label>
+              <span>用户默认配色</span>
+              <select name="defaultPalette" defaultValue={settings.defaultPalette}>
+                {COLOR_PALETTES.map((palette) => (
+                  <option value={palette.value} key={palette.value}>{palette.label}</option>
+                ))}
+              </select>
+              <small>仅在浏览器没有保存个人配色时生效。</small>
+            </label>
+          </details>
 
-          <section className="adminSettingsSection">
-            <h3>后台安全</h3>
+          <details className="adminSettingsSection adminSettingsDisclosure">
+            <summary>后台安全</summary>
             <label>
               <span>后台用户名</span>
               <input name="adminUsername" defaultValue={adminUsername} />
@@ -214,10 +224,10 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               </span>
               <input name="adminOperationRateLimitBanEnabled" type="checkbox" defaultChecked={settings.adminOperationRateLimitBanEnabled} />
             </label>
-          </section>
+          </details>
 
-          <section className="adminSettingsSection">
-            <h3>分页显示</h3>
+          <details className="adminSettingsSection adminSettingsDisclosure">
+            <summary>分页显示</summary>
             <div className="adminFieldGrid">
               <label>
                 <span>首页书名每页 / 本</span>
@@ -245,10 +255,10 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               </span>
               <input name="noticeStayVisibleAfterBlur" type="checkbox" defaultChecked={settings.noticeStayVisibleAfterBlur} />
             </label>
-          </section>
+          </details>
 
-          <section className="adminSettingsSection">
-            <h3>应用级访问保护</h3>
+          <details className="adminSettingsSection adminSettingsDisclosure">
+            <summary>应用级访问保护</summary>
             <div className="rateLimitPolicyStack">
               <RateLimitRulesEditor
                 fieldName="searchRateLimitRules"
@@ -344,6 +354,22 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                     <option value="public">公开访问</option>
                   </select>
                 </label>
+                <label className="adminAccessModeRow">
+                  <span><Tags size={16} aria-hidden="true" /><strong>标签</strong></span>
+                  <select name="tagAccessMode" defaultValue={mediaAccessMode(settings.tagLibraryEnabled, settings.guestTagLibraryNavEnabled)}>
+                    <option value="off">关闭</option>
+                    <option value="user">登录可见</option>
+                    <option value="public">公开显示</option>
+                  </select>
+                </label>
+                <label className="adminAccessModeRow">
+                  <span><Search size={16} aria-hidden="true" /><strong>文末热词</strong></span>
+                  <select name="hotwordAccessMode" defaultValue={mediaAccessMode(settings.hotwordLinksEnabled, settings.guestHotwordLinksEnabled)}>
+                    <option value="off">关闭</option>
+                    <option value="user">登录可见</option>
+                    <option value="public">公开显示</option>
+                  </select>
+                </label>
               </div>
             </div>
             <div className="adminFieldGrid">
@@ -359,10 +385,10 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               </span>
               <input name="contentBlockHeadlessBrowsers" type="checkbox" defaultChecked={contentBlockHeadlessBrowsers} />
             </label>
-          </section>
+          </details>
 
-          <section className="adminSettingsSection">
-            <h3>索引策略</h3>
+          <details className="adminSettingsSection adminSettingsDisclosure">
+            <summary>索引策略</summary>
             <label className="adminSwitchLabel">
               <span>
                 <strong>显示搜索进度条</strong>
@@ -386,10 +412,10 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               </button>
               <small>索引构建与存储状态统一在“搜索索引”页面管理。</small>
             </div>
-          </section>
+          </details>
 
-          <section className="adminSettingsSection">
-            <h3>IP 规则</h3>
+          <details className="adminSettingsSection adminSettingsDisclosure">
+            <summary>IP 规则</summary>
             <label>
               <span>入站 IP 白名单</span>
               <textarea name="adminAllowedIps" rows={3} defaultValue={settings.adminAllowedIps} placeholder="留空表示不限制，可用英文逗号或换行分隔" />
@@ -398,18 +424,18 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               <span>入站 IP 黑名单</span>
               <textarea name="adminBlockedIps" rows={3} defaultValue={settings.adminBlockedIps} />
             </label>
-          </section>
+          </details>
 
           <button type="submit">保存设置</button>
         </form>
 
-        <section className="adminSettingsSection rateLimitBanSection">
-          <h3>IP 封禁记录</h3>
+        <details className="adminSettingsSection adminSettingsDisclosure rateLimitBanSection">
+          <summary>IP 封禁记录</summary>
           <div className="rateLimitBanTables">
             <RateLimitBanTable title="搜索封禁" bans={searchRateLimitBans} />
             <RateLimitBanTable title="正文封禁" bans={contentRateLimitBans} />
           </div>
-        </section>
+        </details>
 
         <div className="adminPaths">
           <p>

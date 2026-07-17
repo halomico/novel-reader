@@ -15,10 +15,35 @@ test("atomically replaces an existing settings file", () => {
     assert.equal(defaults.videoLibraryEnabled, true);
     assert.equal(defaults.audioLibraryEnabled, true);
     assert.equal(defaults.fileLibraryEnabled, true);
+    assert.equal(defaults.tagLibraryEnabled, true);
+    assert.equal(defaults.hotwordLinksEnabled, true);
+    assert.equal(defaults.guestTagLibraryNavEnabled, false);
+    assert.equal(defaults.guestHotwordLinksEnabled, false);
+    assert.equal(defaults.defaultPalette, "default");
     writeSiteSettings({ ...defaults, siteName: "第一次" });
     writeSiteSettings({ ...readSiteSettings(), siteName: "第二次" });
     assert.equal(readSiteSettings().siteName, "第二次");
     assert.deepEqual(fs.readdirSync(tempDir), ["admin-settings.json"]);
+  } finally {
+    if (previousPath === undefined) {
+      delete process.env.ADMIN_SETTINGS_PATH;
+    } else {
+      process.env.ADMIN_SETTINGS_PATH = previousPath;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("normalizes the configured user default palette", () => {
+  const previousPath = process.env.ADMIN_SETTINGS_PATH;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-default-palette-"));
+  process.env.ADMIN_SETTINGS_PATH = path.join(tempDir, "admin-settings.json");
+
+  try {
+    writeSiteSettings({ ...readSiteSettings(), defaultPalette: "journal" });
+    assert.equal(readSiteSettings().defaultPalette, "journal");
+    fs.writeFileSync(process.env.ADMIN_SETTINGS_PATH, JSON.stringify({ defaultPalette: "invalid" }), "utf8");
+    assert.equal(readSiteSettings().defaultPalette, "default");
   } finally {
     if (previousPath === undefined) {
       delete process.env.ADMIN_SETTINGS_PATH;

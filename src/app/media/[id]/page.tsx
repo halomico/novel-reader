@@ -1,8 +1,8 @@
-import { ArrowLeft, Clapperboard, Download, File, Headphones } from "lucide-react";
-import Link from "next/link";
+import { Clapperboard, Download, File, Headphones } from "lucide-react";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { MediaAudioPlayer, type AudioQueueTrack } from "@/components/MediaAudioPlayer";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { MediaPlayer } from "@/components/MediaPlayer";
 import { MediaVideoCard } from "@/components/MediaVideoCard";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -60,7 +60,6 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
   const Icon = KIND_ICONS[asset.kind];
   const title = displayTitle(asset.title, asset.fileName);
   const listFolder = asset.kind === "video" ? "" : asset.folder;
-  const backLabel = asset.kind === "video" ? "返回视频列表" : `返回${asset.folder || `${KIND_LABELS[asset.kind]}根目录`}`;
   const folderAudio = asset.kind === "audio" ? listMediaFolderAssets("audio", asset.folder, 2_000) : [];
   if (asset.kind === "audio" && !folderAudio.some((item) => item.id === asset.id)) folderAudio.push(asset);
   const audioQueue: AudioQueueTrack[] = folderAudio
@@ -79,12 +78,15 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
 
   return (
     <main className="appShell">
-      <SiteHeader />
+      <SiteHeader currentUser={user} />
       <article className={`mediaDetail is-${asset.kind}`}>
-        <Link className="mediaBackLink" href={listHref(asset.kind, listFolder)} aria-label={backLabel}>
-          <ArrowLeft size={17} aria-hidden="true" />
-          {backLabel}
-        </Link>
+        <Breadcrumbs
+          items={[
+            { label: "首页", href: "/" },
+            { label: KIND_LABELS[asset.kind], href: listHref(asset.kind, listFolder) },
+            { label: title },
+          ]}
+        />
 
         <header className="mediaDetailHeader">
           <span className={`mediaAssetIcon is-${asset.kind}`} aria-hidden="true"><Icon size={23} /></span>

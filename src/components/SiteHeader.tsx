@@ -9,12 +9,15 @@ import {
   isGuestVideoNavEnabled,
   isAudioLibraryEnabled,
   isFileLibraryEnabled,
+  isGuestTagLibraryNavEnabled,
   isUserLoginEnabled,
   isUserRegistrationEnabled,
+  isTagLibraryEnabled,
   isVideoLibraryEnabled,
   shouldNoticeStayVisibleAfterBlur,
 } from "@/lib/config";
 import { getCurrentUser } from "@/lib/user-auth";
+import type { UserProfile } from "@/lib/users";
 import { HeaderSearch } from "./HeaderSearch";
 import { HeaderPrimaryNav } from "./HeaderPrimaryNav";
 import { HeaderUserMenu } from "./HeaderUserMenu";
@@ -25,14 +28,16 @@ export async function SiteHeader({
   defaultSearchMode = "title",
   defaultSearchExpanded = false,
   showCurrentSearch = false,
+  currentUser,
 }: {
   query?: string;
   defaultSearchMode?: "title" | "content" | "current";
   defaultSearchExpanded?: boolean;
   showCurrentSearch?: boolean;
+  currentUser?: UserProfile | null;
 }) {
   const siteName = getSiteName();
-  const user = await getCurrentUser();
+  const user = currentUser === undefined ? await getCurrentUser() : currentUser;
   const loginEnabled = isUserLoginEnabled();
   const registrationEnabled = isUserRegistrationEnabled();
   const enabledMediaKinds = [
@@ -41,12 +46,13 @@ export async function SiteHeader({
     isFileLibraryEnabled() ? "file" : null,
   ].filter((kind): kind is "video" | "audio" | "file" => kind !== null);
   const showLibraryNav = Boolean(user) || isGuestLibraryNavEnabled();
+  const showTagNav = isTagLibraryEnabled() && (Boolean(user) || isGuestTagLibraryNavEnabled());
   const mediaKinds = user
     ? enabledMediaKinds
     : enabledMediaKinds.filter((kind) => (
       kind === "video" ? isGuestVideoNavEnabled() : kind === "audio" ? isGuestAudioNavEnabled() : isGuestFileNavEnabled()
     ));
-  const showPrimaryNav = showLibraryNav || mediaKinds.length > 0;
+  const showPrimaryNav = showLibraryNav || showTagNav || mediaKinds.length > 0;
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
   const noticeStayVisibleAfterBlur = shouldNoticeStayVisibleAfterBlur();
 
@@ -56,7 +62,7 @@ export async function SiteHeader({
         <BookOpen size={24} aria-hidden="true" />
         <span>{siteName}</span>
       </Link>
-      {showPrimaryNav ? <HeaderPrimaryNav mediaKinds={mediaKinds} showLibrary={showLibraryNav} /> : null}
+      {showPrimaryNav ? <HeaderPrimaryNav mediaKinds={mediaKinds} showLibrary={showLibraryNav} showTags={showTagNav} /> : null}
       <div className="headerTools">
         <HeaderSearch
           query={query}

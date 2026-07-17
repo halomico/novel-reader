@@ -319,7 +319,12 @@ export function AdminBookTable({
 
   function renderCell(book: Novel, column: BookColumn) {
     if (column.key === "title") {
-      return <strong>{book.title}</strong>;
+      return (
+        <span className="adminBookTitleCell">
+          <strong>{book.title}</strong>
+          <Link href={`/admin/books/${book.id}/tags`}>标签/热词</Link>
+        </span>
+      );
     }
     if (column.key === "file") {
       return book.file_name;

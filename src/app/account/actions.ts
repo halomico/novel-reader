@@ -28,12 +28,9 @@ import {
   countTodayRegistrationsForIp,
   createUserRecord,
   getUserPasswordHashById,
-  hideBrowseHistory,
-  hideBrowseHistoryItem,
   removeAvatarFile,
   normalizeUsername,
   updateUserDisplayName,
-  updateUserHistoryVisibility,
   updateUserPasswordHash,
   updateUserAvatar,
   validateDisplayName,
@@ -301,50 +298,4 @@ export async function updateAccountPasswordAction(formData: FormData) {
   await createUserSession(user.id, getClientIp(headerStore), headerStore.get("user-agent") || "");
   revalidatePath("/account");
   authNotice("/account", "密码已更新");
-}
-
-export async function deleteHistoryItemAction(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) {
-    redirect("/login");
-  }
-  const historyKeys = Array.from(
-    new Set(
-      formData
-        .getAll("historyIds")
-        .concat(formData.getAll("historyId"))
-        .map(String)
-        .filter((value) => /^(novel|media):\d+$/.test(value)),
-    ),
-  );
-  if (!historyKeys.length) {
-    authNotice("/account", "浏览记录不存在", "warning");
-  }
-  const hidden = historyKeys.reduce((count, historyKey) => count + Number(hideBrowseHistoryItem(user.id, historyKey)), 0);
-  if (!hidden) {
-    authNotice("/account", "浏览记录不存在", "warning");
-  }
-  revalidatePath("/account");
-  authNotice("/account", `已隐藏 ${hidden} 条浏览记录`);
-}
-
-export async function clearHistoryAction() {
-  const user = await getCurrentUser();
-  if (!user) {
-    redirect("/login");
-  }
-  hideBrowseHistory(user.id);
-  revalidatePath("/account");
-  authNotice("/account", "浏览记录已隐藏");
-}
-
-export async function updateHistoryVisibilityAction(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) {
-    redirect("/login");
-  }
-  const visible = formData.get("historyVisible") === "on";
-  updateUserHistoryVisibility(user.id, visible);
-  revalidatePath("/account");
-  authNotice("/account", visible ? "浏览记录显示已开启" : "浏览记录显示已关闭");
 }

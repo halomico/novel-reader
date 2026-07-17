@@ -1,10 +1,11 @@
-import { BookText } from "lucide-react";
-import Link from "next/link";
+import { CatalogBookGrid } from "@/components/CatalogBookGrid";
 import { Pagination } from "@/components/Pagination";
 import { SiteHeader } from "@/components/SiteHeader";
 import { recordSearchQuery } from "@/lib/analytics";
 import { listNovels } from "@/lib/books";
-import { getCatalogPageSize } from "@/lib/config";
+import { getCatalogPageSize, isGuestTagLibraryNavEnabled, isTagLibraryEnabled } from "@/lib/config";
+import { listTagsForNovels } from "@/lib/tags";
+import { getCurrentUser } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,9 @@ export default async function Home({ searchParams }: HomeProps) {
   const query = params.q || "";
   const pageSize = getCatalogPageSize();
   const result = listNovels({ page, q: query, pageSize });
+  const user = await getCurrentUser();
+  const showTags = isTagLibraryEnabled() && (Boolean(user) || isGuestTagLibraryNavEnabled());
+  const tagsByNovel = showTags ? listTagsForNovels(result.books.map((book) => book.id)) : new Map();
   if (result.query && !params.page) {
     recordSearchQuery(result.query, "title");
   }
@@ -33,7 +37,7 @@ export default async function Home({ searchParams }: HomeProps) {
 
   return (
     <main className="appShell catalogShell">
-      <SiteHeader query={result.query} defaultSearchExpanded />
+      <SiteHeader query={result.query} defaultSearchExpanded currentUser={user} />
       <section className="catalogSummary">
         <p>
           共 <strong>{result.totalBooks}</strong> 本，每页 {result.pageSize} 本
@@ -41,16 +45,7 @@ export default async function Home({ searchParams }: HomeProps) {
       </section>
 
       {result.books.length > 0 ? (
-        <section className="bookGrid" aria-label="小说列表">
-          {result.books.map((book) => (
-            <Link className="bookCard" href={`/books/${book.id}?from=${encodeURIComponent(returnHref)}`} key={book.id}>
-              <span className="bookMark" aria-hidden="true">
-                <BookText size={20} />
-              </span>
-              <span className="bookTitle">{book.title}</span>
-            </Link>
-          ))}
-        </section>
+        <CatalogBookGrid books={result.books} returnHref={returnHref} ariaLabel="小说列表" tagsByNovel={tagsByNovel} />
       ) : (
         <section className="emptyState">
           <h2>{result.message || "未找到匹配内容"}</h2>

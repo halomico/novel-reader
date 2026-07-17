@@ -23,7 +23,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
-        <ThemeScript defaultTheme={settings.adminTheme} defaultFontSize={defaultFontSize} />
+        <ThemeScript defaultTheme={settings.adminTheme} defaultFontSize={defaultFontSize} defaultPalette={settings.defaultPalette} />
       </head>
       <body>
         {children}

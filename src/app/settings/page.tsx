@@ -1,22 +1,31 @@
-import { BackButton } from "@/components/BackButton";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getReaderDefaultFontSize, getSettingsPreviewText } from "@/lib/config";
+import { readSiteSettings } from "@/lib/site-settings";
+import { getCurrentUser } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const settings = readSiteSettings();
   const previewText = getSettingsPreviewText();
   const defaultFontSize = getReaderDefaultFontSize();
+  const user = await getCurrentUser();
 
   return (
     <main className="appShell">
-      <SiteHeader />
+      <SiteHeader currentUser={user} />
+      <Breadcrumbs items={[{ label: "首页", href: "/" }, { label: "阅读设置" }]} />
       <section className="settingsHero">
-        <BackButton />
         <h1>设置</h1>
       </section>
-      <SettingsPanel previewText={previewText} defaultFontSize={defaultFontSize} />
+      <SettingsPanel
+        previewText={previewText}
+        defaultFontSize={defaultFontSize}
+        defaultPalette={settings.defaultPalette}
+        canConfigureContentMeta={Boolean(user)}
+      />
     </main>
   );
 }

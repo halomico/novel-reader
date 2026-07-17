@@ -2,6 +2,7 @@
 
 import { ChevronRight, Clapperboard, File, Folder, Headphones, Pencil, Save, Tags, Trash2, Upload, X } from "lucide-react";
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { assignAdminVideoCategoryAction, deleteAdminMediaAction, updateAdminMediaAction } from "@/app/admin/actions";
 import { LocalDateTime } from "@/components/LocalDateTime";
@@ -83,6 +84,21 @@ function AdminMediaFolderRow({ folder, onOpen }: { folder: MediaFolder; onOpen: 
       <td><LocalDateTime value={folder.mtimeMs ? new Date(folder.mtimeMs).toISOString() : null} /></td>
       <td><ChevronRight size={16} aria-hidden="true" /></td>
     </tr>
+  );
+}
+
+function canPreview(asset: MediaAsset): boolean {
+  return asset.kind === "video" || asset.kind === "audio";
+}
+
+function AdminMediaTitleLink({ asset, children }: { asset: MediaAsset; children: React.ReactNode }) {
+  if (!canPreview(asset)) {
+    return <>{children}</>;
+  }
+  return (
+    <Link className="adminMediaPreviewLink" href={`/admin/media/${asset.id}/preview`} title={`预览 ${asset.title}`}>
+      {children}
+    </Link>
   );
 }
 
@@ -368,7 +384,9 @@ export function AdminMediaManager({
                       <span className="mediaVideoMeta">{formatDuration(asset.durationSeconds)}</span>
                     </div>
                     <div className="adminMediaVideoCopy">
-                      <strong title={asset.title}>{asset.title}</strong>
+                      <AdminMediaTitleLink asset={asset}>
+                        <strong title={asset.title}>{asset.title}</strong>
+                      </AdminMediaTitleLink>
                       <span>
                         {asset.categoryId ? categoryNames.get(asset.categoryId) || "未分类" : "未分类"}
                         {asset.artist ? ` · ${asset.artist}` : ""}
@@ -423,7 +441,11 @@ export function AdminMediaManager({
                       <tr key={asset.id}>
                         <td><input className="adminCheckbox" type="checkbox" checked={selectedIds.includes(asset.id)} onChange={() => toggleOne(asset.id)} aria-label={`选择 ${asset.title}`} /></td>
                         <td><span className={`adminMediaKind is-${asset.kind}`}><Icon size={14} aria-hidden="true" />{KIND_LABELS[asset.kind]}</span></td>
-                        <td title={asset.title}><strong>{asset.title}</strong></td>
+                        <td title={asset.title}>
+                          <AdminMediaTitleLink asset={asset}>
+                            <strong>{asset.title}</strong>
+                          </AdminMediaTitleLink>
+                        </td>
                         <td>{asset.kind === "video" ? (asset.categoryId ? categoryNames.get(asset.categoryId) || "未分类" : "未分类") : "-"}</td>
                         <td title={asset.artist}>{asset.kind === "file" ? "-" : asset.artist || "-"}</td>
                         <td title={asset.fileName}>{asset.fileName}</td>

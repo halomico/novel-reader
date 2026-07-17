@@ -1,4 +1,5 @@
 import { ContentSearchClient } from "@/components/ContentSearchClient";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SiteHeader } from "@/components/SiteHeader";
 import { recordSearchQuery } from "@/lib/analytics";
 import { getGlobalSearchMaxResults, getSearchResultsPageSize, shouldShowProgressBars } from "@/lib/config";
@@ -28,6 +29,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   return (
     <main className="appShell">
       <SiteHeader query={validation.keyword} defaultSearchMode="content" />
+      <Breadcrumbs items={[{ label: "首页", href: "/" }, { label: "全文搜索" }]} />
       {validation.ok ? (
         <ContentSearchClient
           keyword={validation.keyword}

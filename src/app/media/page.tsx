@@ -18,6 +18,7 @@ import {
 import { scheduleMediaPreparation } from "@/lib/media-maintenance";
 import { formatMediaDuration } from "@/lib/media-metadata";
 import { getCurrentUser } from "@/lib/user-auth";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 
 export const dynamic = "force-dynamic";
 
@@ -75,7 +76,8 @@ function MediaResourceRow({ asset, showFolder }: { asset: MediaAsset; showFolder
 }
 
 export default async function MediaPage({ searchParams }: MediaPageProps) {
-  const accessibleKinds = getAccessibleMediaKinds(Boolean(await getCurrentUser()));
+  const user = await getCurrentUser();
+  const accessibleKinds = getAccessibleMediaKinds(Boolean(user));
   if (!accessibleKinds.length) notFound();
   const params = await searchParams;
   const requestedKind = isMediaKind(params.kind) ? params.kind : null;
@@ -106,7 +108,8 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
 
   return (
     <main className="appShell">
-      <SiteHeader />
+      <SiteHeader currentUser={user} />
+      <Breadcrumbs items={[{ label: "首页", href: "/" }, { label: KIND_LABELS[kind] }]} />
       <section className="mediaLibrary">
         <header className="mediaLibraryHeader">
           <span className="mediaLibraryTitleIcon" aria-hidden="true"><EmptyIcon size={23} /></span>

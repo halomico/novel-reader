@@ -195,6 +195,14 @@ export function isFileLibraryEnabled(): boolean {
   return readSiteSettings().fileLibraryEnabled;
 }
 
+export function isTagLibraryEnabled(): boolean {
+  return readSiteSettings().tagLibraryEnabled;
+}
+
+export function areHotwordLinksEnabled(): boolean {
+  return readSiteSettings().hotwordLinksEnabled;
+}
+
 export function isGuestLibraryNavEnabled(): boolean {
   return readSiteSettings().guestLibraryNavEnabled;
 }
@@ -209,6 +217,14 @@ export function isGuestAudioNavEnabled(): boolean {
 
 export function isGuestFileNavEnabled(): boolean {
   return readSiteSettings().guestFileNavEnabled;
+}
+
+export function isGuestTagLibraryNavEnabled(): boolean {
+  return readSiteSettings().guestTagLibraryNavEnabled;
+}
+
+export function areGuestHotwordLinksEnabled(): boolean {
+  return readSiteSettings().guestHotwordLinksEnabled;
 }
 
 export function getVideoThumbnailSettings(): {
