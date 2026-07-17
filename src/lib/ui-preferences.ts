@@ -3,7 +3,7 @@ export const READER_TAGS_STORAGE_KEY = "novel-reader-tags";
 export const READER_HOTWORDS_STORAGE_KEY = "novel-reader-hotwords";
 
 export const COLOR_PALETTES = [
-  { value: "default", label: "Default", lightAccent: "#b43b43", lightStrong: "#922f36", lightTint: "#b43b43", darkAccent: "#b9652a", darkStrong: "#d77b3d", darkTint: "#a95320" },
+  { value: "default", label: "Default", lightAccent: "#800020", lightStrong: "#650019", lightTint: "#800020", darkAccent: "#b9652a", darkStrong: "#d77b3d", darkTint: "#a95320" },
   { value: "spacelab", label: "Spacelab", lightAccent: "#446e9b", lightStrong: "#2f557d", lightTint: "#446e9b", darkAccent: "#5f7da0", darkStrong: "#7694b6", darkTint: "#496986" },
   { value: "cerulean", label: "Cerulean", lightAccent: "#1178a8", lightStrong: "#0b5b82", lightTint: "#1178a8", darkAccent: "#177ca7", darkStrong: "#2892be", darkTint: "#126789" },
   { value: "cosmo", label: "Cosmo", lightAccent: "#5a55b5", lightStrong: "#413d91", lightTint: "#5a55b5", darkAccent: "#7164ad", darkStrong: "#887bc2", darkTint: "#5c5192" },
