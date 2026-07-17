@@ -1,11 +1,46 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { getDatabasePath } from "./config";
+import { getContentSearchDatabasePath, getDatabasePath } from "./config";
 
 type DbGlobal = typeof globalThis & {
   novelReaderDb?: DatabaseSync;
 };
+
+const LEGACY_SEARCH_TABLES = [
+  "novel_segments_fts",
+  "novel_segments",
+  "content_index_staging_terms",
+  "content_index_jobs",
+  "content_index_novel_state",
+  "content_search_terms",
+  "content_search_term_stats",
+  "search_index_state",
+] as const;
+
+function cleanupLegacySearchTables(db: DatabaseSync) {
+  db.exec("BEGIN");
+  try {
+    for (const tableName of LEGACY_SEARCH_TABLES) {
+      db.exec(`DROP TABLE IF EXISTS ${tableName};`);
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+function cleanupLegacyContentIndexFiles(databasePath: string) {
+  const legacyPath = path.join(path.dirname(databasePath), "content-index.db");
+  const protectedPaths = new Set([databasePath, getContentSearchDatabasePath()].map((filePath) => path.resolve(filePath)));
+  if (protectedPaths.has(path.resolve(legacyPath))) {
+    return;
+  }
+  for (const filePath of [legacyPath, `${legacyPath}-wal`, `${legacyPath}-shm`]) {
+    fs.rmSync(filePath, { force: true });
+  }
+}
 
 function migrateNovelsAllowDuplicateTitles(db: DatabaseSync) {
   const table = db
@@ -80,6 +115,7 @@ function initialize(db: DatabaseSync) {
   db.exec("PRAGMA foreign_keys = ON;");
   db.exec("PRAGMA busy_timeout = 5000;");
   db.exec("PRAGMA journal_mode = WAL;");
+  cleanupLegacySearchTables(db);
   migrateNovelsAllowDuplicateTitles(db);
   db.exec(`
     CREATE TABLE IF NOT EXISTS novels (
@@ -100,17 +136,6 @@ function initialize(db: DatabaseSync) {
     );
 
     CREATE INDEX IF NOT EXISTS idx_novels_title ON novels(title);
-
-    CREATE TABLE IF NOT EXISTS search_index_state (
-      novel_id INTEGER PRIMARY KEY,
-      size_bytes INTEGER NOT NULL,
-      mtime_ms INTEGER NOT NULL,
-      segment_count INTEGER NOT NULL,
-      status TEXT NOT NULL,
-      error TEXT,
-      indexed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE
-    );
 
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -235,9 +260,19 @@ function initialize(db: DatabaseSync) {
 
     CREATE INDEX IF NOT EXISTS idx_rate_limit_bans_category_until ON rate_limit_bans(category, banned_until);
 
+    CREATE TABLE IF NOT EXISTS video_categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_visible INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS media_assets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       kind TEXT NOT NULL CHECK(kind IN ('video', 'audio', 'file')),
+      category_id INTEGER REFERENCES video_categories(id) ON DELETE SET NULL,
       title TEXT NOT NULL,
       artist TEXT NOT NULL DEFAULT '',
       description TEXT NOT NULL DEFAULT '',
@@ -255,7 +290,6 @@ function initialize(db: DatabaseSync) {
 
     CREATE INDEX IF NOT EXISTS idx_media_assets_kind_created ON media_assets(kind, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_media_assets_title ON media_assets(title);
-
     CREATE TABLE IF NOT EXISTS user_media_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -289,12 +323,14 @@ function initialize(db: DatabaseSync) {
   addColumnIfMissing(db, "media_assets", "artist", "artist TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(db, "media_assets", "mtime_ms", "mtime_ms INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(db, "media_assets", "duration_seconds", "duration_seconds REAL");
+  addColumnIfMissing(db, "media_assets", "category_id", "category_id INTEGER REFERENCES video_categories(id) ON DELETE SET NULL");
   addColumnIfMissing(db, "analytics_events", "media_id", "media_id INTEGER REFERENCES media_assets(id) ON DELETE SET NULL");
   db.exec("CREATE INDEX IF NOT EXISTS idx_novels_title_hash ON novels(title, content_hash);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_novels_last_accessed ON novels(last_accessed_at);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_novels_last_accessed_ip ON novels(last_accessed_ip);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_users_registration_ip_created ON users(registration_ip, created_at);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_analytics_events_media_time ON analytics_events(media_id, created_at);");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_media_assets_video_category ON media_assets(kind, category_id, updated_at DESC);");
 }
 
 export function getDb(): DatabaseSync {
@@ -305,6 +341,7 @@ export function getDb(): DatabaseSync {
 
   const databasePath = getDatabasePath();
   fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+  cleanupLegacyContentIndexFiles(databasePath);
 
   const db = new DatabaseSync(databasePath);
   initialize(db);

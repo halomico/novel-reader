@@ -162,7 +162,7 @@ export function getNovelById(id: number): Novel | null {
   return book || null;
 }
 
-export async function readNovelContent(book: Novel): Promise<string> {
+export async function readNovelContent(book: Pick<Novel, "relative_path">): Promise<string> {
   const libraryDir = getLibraryDir();
   const filePath = path.resolve(libraryDir, book.relative_path);
   const libraryRoot = path.resolve(libraryDir);

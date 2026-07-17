@@ -10,15 +10,12 @@ test("uses the full-text index for mixed encodings and safely includes changed b
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "novel-search-flow-"));
   const libraryDir = path.join(root, "library");
   let mainDb: DatabaseSync | undefined;
-  let indexDb: DatabaseSync | undefined;
   let searchDb: DatabaseSync | undefined;
   await fs.mkdir(libraryDir, { recursive: true });
   process.env.NOVEL_LIBRARY_DIR = libraryDir;
   process.env.DATABASE_PATH = path.join(root, "novels.db");
-  process.env.CONTENT_INDEX_DB_PATH = path.join(root, "content-index.db");
   process.env.CONTENT_SEARCH_DB_PATH = path.join(root, "content-search.db");
   process.env.ADMIN_SETTINGS_PATH = path.join(root, "admin-settings.json");
-  process.env.FRONTEND_AUTO_CONTENT_INDEX = "true";
 
   const files = [
     { name: "utf8.txt", title: "UTF8 小说", content: Buffer.from("开头 张，三丰 结尾", "utf8") },
@@ -28,7 +25,6 @@ test("uses the full-text index for mixed encodings and safely includes changed b
 
   try {
     const { getDb } = await import("./db");
-    const { getContentIndexDb } = await import("./content-index-db");
     const { getContentSearchDb } = await import("./content-search-db");
     const { buildContentSearchIndex } = await import("./content-search-index");
     const { buildNovelRecordFromFile, upsertNovelRecord } = await import("./novel-files");
@@ -36,7 +32,6 @@ test("uses the full-text index for mixed encodings and safely includes changed b
     const { searchNovelContent } = await import("./search");
     const db = getDb();
     mainDb = db;
-    indexDb = getContentIndexDb();
     searchDb = getContentSearchDb();
     const insert = db.prepare(
       `INSERT INTO novels
@@ -103,10 +98,8 @@ test("uses the full-text index for mixed encodings and safely includes changed b
     assert.equal(missingResult.searchedBooks, 0);
   } finally {
     mainDb?.close();
-    indexDb?.close();
     searchDb?.close();
     delete (globalThis as typeof globalThis & { novelReaderDb?: DatabaseSync }).novelReaderDb;
-    delete (globalThis as typeof globalThis & { novelReaderContentIndexDb?: DatabaseSync }).novelReaderContentIndexDb;
     delete (globalThis as typeof globalThis & { novelReaderContentSearchDb?: DatabaseSync }).novelReaderContentSearchDb;
     await fs.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }

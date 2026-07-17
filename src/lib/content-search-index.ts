@@ -8,7 +8,21 @@ export const CONTENT_SEARCH_INDEX_VERSION = 1;
 export const CONTENT_SEARCH_MAX_SOURCE_RATIO = 5;
 const CONTENT_SEARCH_RATIO_MIN_SOURCE_BYTES = 10 * 1024 * 1024;
 
+export type ContentSearchNovelRecord = Pick<
+  Novel,
+  "id" | "relative_path" | "content_hash" | "size_bytes" | "mtime_ms"
+>;
+
 type ContentSearchStateRow = {
+  novelId: number;
+  contentHash: string | null;
+  sizeBytes: number;
+  mtimeMs: number;
+  indexVersion: number;
+  indexedAt: string;
+};
+
+type ContentSearchFailureRow = {
   novelId: number;
   contentHash: string | null;
   sizeBytes: number;
@@ -17,7 +31,8 @@ type ContentSearchStateRow = {
 };
 
 export type ContentSearchCandidatePlan = {
-  engine: "fts5-bigram" | "fts5-trigram";
+  engine: "fts5-bigram" | "fts5-trigram" | "fts5-hybrid";
+  terms: string[];
   candidateIds: number[];
   coveredNovelCount: number;
   uncoveredNovelCount: number;
@@ -36,6 +51,19 @@ export type ContentSearchIndexResult = ContentSearchIndexProgress & {
   databaseBytes: number;
 };
 
+export type ContentSearchIndexSummary = {
+  totalBooks: number;
+  indexedBooks: number;
+  pendingBooks: number;
+  staleBooks: number;
+  failedBooks: number;
+  sourceBytes: number;
+  databaseBytes: number;
+  databaseRatio: number;
+  indexVersion: number;
+  lastIndexedAt: string | null;
+};
+
 export type ContentSearchIndexBuildOptions = {
   force?: boolean;
   optimize?: boolean;
@@ -43,7 +71,7 @@ export type ContentSearchIndexBuildOptions = {
 };
 
 type PreparedNovelIndex = {
-  novel: Novel;
+  novel: ContentSearchNovelRecord;
   normalizedContent: string;
   bigramTokens: string;
 };
@@ -111,39 +139,75 @@ function listStates(db: DatabaseSync): ContentSearchStateRow[] {
   return db
     .prepare(
       `SELECT novel_id AS novelId, content_hash AS contentHash, size_bytes AS sizeBytes,
-              mtime_ms AS mtimeMs, index_version AS indexVersion
+              mtime_ms AS mtimeMs, index_version AS indexVersion, indexed_at AS indexedAt
        FROM content_search_state`,
     )
     .all() as ContentSearchStateRow[];
 }
 
-function stateMatchesNovel(state: ContentSearchStateRow | undefined, novel: Novel): boolean {
+function listFailures(db: DatabaseSync): ContentSearchFailureRow[] {
+  return db
+    .prepare(
+      `SELECT novel_id AS novelId, content_hash AS contentHash, size_bytes AS sizeBytes,
+              mtime_ms AS mtimeMs, index_version AS indexVersion
+       FROM content_search_failures`,
+    )
+    .all() as ContentSearchFailureRow[];
+}
+
+function recordMatchesNovel(
+  record: Pick<ContentSearchStateRow, "contentHash" | "sizeBytes" | "mtimeMs" | "indexVersion"> | undefined,
+  novel: ContentSearchNovelRecord,
+): boolean {
   return Boolean(
-    state &&
-      state.indexVersion === CONTENT_SEARCH_INDEX_VERSION &&
-      state.contentHash === novel.content_hash &&
-      state.sizeBytes === novel.size_bytes &&
-      state.mtimeMs === novel.mtime_ms,
+    record &&
+      record.indexVersion === CONTENT_SEARCH_INDEX_VERSION &&
+      record.contentHash === novel.content_hash &&
+      record.sizeBytes === novel.size_bytes &&
+      record.mtimeMs === novel.mtime_ms,
   );
+}
+
+function normalizeCandidateTerms(values: string | string[]): string[] {
+  const terms = Array.isArray(values) ? values : [values];
+  return Array.from(
+    new Set(
+      terms
+        .map(normalizeSearchText)
+        .filter((term) => Array.from(term).length >= 2),
+    ),
+  );
+}
+
+function queryCoveredIds(db: DatabaseSync, term: string): { engine: "bigram" | "trigram"; ids: Set<number> } {
+  const chars = Array.from(term);
+  const rows =
+    chars.length === 2
+      ? (db
+          .prepare("SELECT rowid AS novelId FROM content_bigram_fts WHERE content_bigram_fts MATCH ? ORDER BY rowid")
+          .all(createBigramToken(chars[0], chars[1])) as Array<{ novelId: number }>)
+      : (db
+          .prepare("SELECT rowid AS novelId FROM content_trigram_fts WHERE content_trigram_fts MATCH ? ORDER BY rowid")
+          .all(buildTrigramMatchQuery(term)) as Array<{ novelId: number }>);
+
+  return { engine: chars.length === 2 ? "bigram" : "trigram", ids: new Set(rows.map((row) => row.novelId)) };
 }
 
 export function findContentSearchCandidateNovelIds(
   db: DatabaseSync,
-  novels: Novel[],
-  anchorTerm: string,
+  novels: ContentSearchNovelRecord[],
+  requiredTerms: string | string[],
 ): ContentSearchCandidatePlan | null {
-  const normalizedTerm = normalizeSearchText(anchorTerm);
-  const termChars = Array.from(normalizedTerm);
-  if (termChars.length < 2 || !novels.length) {
+  const terms = normalizeCandidateTerms(requiredTerms);
+  if (!terms.length || !novels.length) {
     return null;
   }
 
   const states = new Map(listStates(db).map((state) => [state.novelId, state]));
   const coveredIds = new Set<number>();
   const candidateIds = new Set<number>();
-  const currentNovelIds = new Set(novels.map((novel) => novel.id));
   for (const novel of novels) {
-    if (stateMatchesNovel(states.get(novel.id), novel)) {
+    if (recordMatchesNovel(states.get(novel.id), novel)) {
       coveredIds.add(novel.id);
     } else {
       candidateIds.add(novel.id);
@@ -155,23 +219,31 @@ export function findContentSearchCandidateNovelIds(
   }
 
   try {
-    const rows =
-      termChars.length === 2
-        ? (db
-            .prepare("SELECT rowid AS novelId FROM content_bigram_fts WHERE content_bigram_fts MATCH ? ORDER BY rowid")
-            .all(createBigramToken(termChars[0], termChars[1])) as Array<{ novelId: number }>)
-        : (db
-            .prepare("SELECT rowid AS novelId FROM content_trigram_fts WHERE content_trigram_fts MATCH ? ORDER BY rowid")
-            .all(buildTrigramMatchQuery(normalizedTerm)) as Array<{ novelId: number }>);
+    let matchedIds: Set<number> | null = null;
+    const engines = new Set<"bigram" | "trigram">();
+    for (const term of terms) {
+      const result = queryCoveredIds(db, term);
+      engines.add(result.engine);
+      if (matchedIds === null) {
+        matchedIds = result.ids;
+      } else {
+        const currentMatches: Set<number> = matchedIds;
+        matchedIds = new Set<number>(Array.from(currentMatches).filter((id) => result.ids.has(id)));
+      }
+      if (!matchedIds.size) {
+        break;
+      }
+    }
 
-    for (const row of rows) {
-      if (coveredIds.has(row.novelId) && currentNovelIds.has(row.novelId)) {
-        candidateIds.add(row.novelId);
+    for (const novelId of matchedIds || []) {
+      if (coveredIds.has(novelId)) {
+        candidateIds.add(novelId);
       }
     }
 
     return {
-      engine: termChars.length === 2 ? "fts5-bigram" : "fts5-trigram",
+      engine: engines.size > 1 ? "fts5-hybrid" : engines.has("bigram") ? "fts5-bigram" : "fts5-trigram",
+      terms,
       candidateIds: Array.from(candidateIds).sort((left, right) => left - right),
       coveredNovelCount: coveredIds.size,
       uncoveredNovelCount: novels.length - coveredIds.size,
@@ -181,12 +253,58 @@ export function findContentSearchCandidateNovelIds(
   }
 }
 
+export function getContentSearchIndexSummary(
+  mainDb: DatabaseSync,
+  searchDb: DatabaseSync,
+): ContentSearchIndexSummary {
+  const novels = mainDb
+    .prepare("SELECT id, relative_path, content_hash, size_bytes, mtime_ms FROM novels ORDER BY id ASC")
+    .all() as ContentSearchNovelRecord[];
+  const states = new Map(listStates(searchDb).map((state) => [state.novelId, state]));
+  const failures = new Map(listFailures(searchDb).map((failure) => [failure.novelId, failure]));
+  let indexedBooks = 0;
+  let staleBooks = 0;
+  let failedBooks = 0;
+  let lastIndexedAt: string | null = null;
+
+  for (const novel of novels) {
+    const state = states.get(novel.id);
+    if (recordMatchesNovel(state, novel)) {
+      indexedBooks += 1;
+      if (!lastIndexedAt || state!.indexedAt > lastIndexedAt) {
+        lastIndexedAt = state!.indexedAt;
+      }
+    } else if (state) {
+      staleBooks += 1;
+    }
+    if (recordMatchesNovel(failures.get(novel.id), novel)) {
+      failedBooks += 1;
+    }
+  }
+
+  const sourceBytes = novels.reduce((total, novel) => total + novel.size_bytes, 0);
+  const databaseBytes = getContentSearchDiskUsageBytes();
+  return {
+    totalBooks: novels.length,
+    indexedBooks,
+    pendingBooks: novels.length - indexedBooks,
+    staleBooks,
+    failedBooks,
+    sourceBytes,
+    databaseBytes,
+    databaseRatio: sourceBytes > 0 ? databaseBytes / sourceBytes : 0,
+    indexVersion: CONTENT_SEARCH_INDEX_VERSION,
+    lastIndexedAt,
+  };
+}
+
 export function deleteContentSearchIndexNovel(db: DatabaseSync, novelId: number) {
   db.exec("BEGIN");
   try {
     db.prepare("DELETE FROM content_trigram_fts WHERE rowid = ?").run(novelId);
     db.prepare("DELETE FROM content_bigram_fts WHERE rowid = ?").run(novelId);
     db.prepare("DELETE FROM content_search_state WHERE novel_id = ?").run(novelId);
+    db.prepare("DELETE FROM content_search_failures WHERE novel_id = ?").run(novelId);
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");
@@ -201,6 +319,7 @@ export function clearContentSearchIndex(db: DatabaseSync) {
       INSERT INTO content_trigram_fts(content_trigram_fts) VALUES('delete-all');
       INSERT INTO content_bigram_fts(content_bigram_fts) VALUES('delete-all');
       DELETE FROM content_search_state;
+      DELETE FROM content_search_failures;
     `);
     db.exec("COMMIT");
   } catch (error) {
@@ -222,13 +341,8 @@ export async function buildContentSearchIndex(
   options: ContentSearchIndexBuildOptions = {},
 ): Promise<ContentSearchIndexResult> {
   const novels = mainDb
-    .prepare(
-      `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count,
-              visit_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
-       FROM novels
-       ORDER BY id ASC`,
-    )
-    .all() as Novel[];
+    .prepare("SELECT id, relative_path, content_hash, size_bytes, mtime_ms FROM novels ORDER BY id ASC")
+    .all() as ContentSearchNovelRecord[];
   const sourceBytes = novels.reduce((total, novel) => total + novel.size_bytes, 0);
   if (options.force) {
     clearContentSearchIndex(searchDb);
@@ -237,10 +351,12 @@ export async function buildContentSearchIndex(
   const stateRows = listStates(searchDb);
   const states = new Map(stateRows.map((state) => [state.novelId, state]));
   const currentIds = new Set(novels.map((novel) => novel.id));
-  for (const state of stateRows) {
-    if (!currentIds.has(state.novelId)) {
-      deleteContentSearchIndexNovel(searchDb, state.novelId);
-    }
+  const obsoleteIds = new Set([
+    ...stateRows.filter((state) => !currentIds.has(state.novelId)).map((state) => state.novelId),
+    ...listFailures(searchDb).filter((failure) => !currentIds.has(failure.novelId)).map((failure) => failure.novelId),
+  ]);
+  for (const novelId of obsoleteIds) {
+    deleteContentSearchIndexNovel(searchDb, novelId);
   }
 
   let processedBooks = 0;
@@ -251,6 +367,8 @@ export async function buildContentSearchIndex(
   const prepared: PreparedNovelIndex[] = [];
   const deleteTrigram = searchDb.prepare("DELETE FROM content_trigram_fts WHERE rowid = ?");
   const deleteBigram = searchDb.prepare("DELETE FROM content_bigram_fts WHERE rowid = ?");
+  const deleteState = searchDb.prepare("DELETE FROM content_search_state WHERE novel_id = ?");
+  const deleteFailure = searchDb.prepare("DELETE FROM content_search_failures WHERE novel_id = ?");
   const insertTrigram = searchDb.prepare("INSERT INTO content_trigram_fts(rowid, body) VALUES (?, ?)");
   const insertBigram = searchDb.prepare("INSERT INTO content_bigram_fts(rowid, tokens) VALUES (?, ?)");
   const upsertState = searchDb.prepare(
@@ -262,6 +380,18 @@ export async function buildContentSearchIndex(
        mtime_ms = excluded.mtime_ms,
        index_version = excluded.index_version,
        indexed_at = CURRENT_TIMESTAMP`,
+  );
+  const upsertFailure = searchDb.prepare(
+    `INSERT INTO content_search_failures
+       (novel_id, content_hash, size_bytes, mtime_ms, index_version, error, attempted_at)
+     VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(novel_id) DO UPDATE SET
+       content_hash = excluded.content_hash,
+       size_bytes = excluded.size_bytes,
+       mtime_ms = excluded.mtime_ms,
+       index_version = excluded.index_version,
+       error = excluded.error,
+       attempted_at = CURRENT_TIMESTAMP`,
   );
 
   const emitProgress = () =>
@@ -289,6 +419,7 @@ export async function buildContentSearchIndex(
           item.novel.mtime_ms,
           CONTENT_SEARCH_INDEX_VERSION,
         );
+        deleteFailure.run(item.novel.id);
         indexedBooks += 1;
       }
       searchDb.exec("COMMIT");
@@ -303,7 +434,8 @@ export async function buildContentSearchIndex(
   emitProgress();
   for (const novel of novels) {
     throwIfCancelled();
-    if (!options.force && stateMatchesNovel(states.get(novel.id), novel)) {
+    if (!options.force && recordMatchesNovel(states.get(novel.id), novel)) {
+      deleteFailure.run(novel.id);
       reusedBooks += 1;
       processedBooks += 1;
       if (processedBooks % 100 === 0) {
@@ -316,7 +448,25 @@ export async function buildContentSearchIndex(
       const normalizedContent = normalizeSearchText(await readNovelContent(novel));
       prepared.push({ novel, normalizedContent, bigramTokens: createBigramTokenDocument(normalizedContent) });
       preparedChars += normalizedContent.length;
-    } catch {
+    } catch (error) {
+      searchDb.exec("BEGIN");
+      try {
+        deleteTrigram.run(novel.id);
+        deleteBigram.run(novel.id);
+        deleteState.run(novel.id);
+        upsertFailure.run(
+          novel.id,
+          novel.content_hash,
+          novel.size_bytes,
+          novel.mtime_ms,
+          CONTENT_SEARCH_INDEX_VERSION,
+          (error instanceof Error ? error.message : String(error)).slice(0, 500),
+        );
+        searchDb.exec("COMMIT");
+      } catch (writeError) {
+        searchDb.exec("ROLLBACK");
+        throw writeError;
+      }
       failedBooks += 1;
     }
     processedBooks += 1;

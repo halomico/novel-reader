@@ -2,7 +2,8 @@
 
 import fs from "node:fs";
 import { getLibraryDir } from "../src/lib/config";
-import { deleteIndexedContentForNovel } from "../src/lib/content-index";
+import { getContentSearchDb } from "../src/lib/content-search-db";
+import { deleteContentSearchIndexNovel } from "../src/lib/content-search-index";
 import { getDb } from "../src/lib/db";
 import { isNovelTextFile } from "../src/lib/filename";
 import { buildNovelRecordFromFile, deleteNovelByRelativePath, resolveLibraryFile, type NovelFileRecord } from "../src/lib/novel-files";
@@ -113,7 +114,7 @@ function clearExistingIndexIfChanged(record: NovelFileRecord) {
     existing &&
     (existing.content_hash !== record.contentHash || existing.size_bytes !== record.sizeBytes || existing.mtime_ms !== record.mtimeMs)
   ) {
-    deleteIndexedContentForNovel(db, existing.id, true);
+    deleteContentSearchIndexNovel(getContentSearchDb(), existing.id);
   }
 }
 

@@ -1,14 +1,12 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
 import { checkAdminOperationLimit } from "@/lib/admin-operation-limit";
 import { shouldShowProgressBars } from "@/lib/config";
 import { cancelContentJob, countActiveContentJobs, getContentJob, startContentIndexJob } from "@/lib/content-jobs";
-import { normalizeContentIndexTerms } from "@/lib/content-index";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-const INVALID_INDEX_TERM_PATTERN = /[\s\p{P}\p{S}]/u;
 
 function jsonError(message: string, status: number) {
   return NextResponse.json({ ok: false, message }, { status });
@@ -41,27 +39,17 @@ export async function POST(request: NextRequest) {
     return auth.response;
   }
 
-  let body: { term?: unknown; terms?: unknown } = {};
+  let body: { force?: unknown } = {};
   try {
-    body = (await request.json()) as { term?: unknown; terms?: unknown };
+    body = (await request.json()) as { force?: unknown };
   } catch {
     return jsonError("索引请求格式有误", 400);
-  }
-
-  const rawTerms = Array.isArray(body.terms) ? body.terms.map((item) => String(item || "")) : String(body.term || "").split(/[\n,]/);
-  const invalidTerm = rawTerms.map((item) => item.trim()).filter(Boolean).find((term) => INVALID_INDEX_TERM_PATTERN.test(term));
-  if (invalidTerm) {
-    return jsonError(`索引词“${invalidTerm}”不能包含空格、标点或符号`, 400);
-  }
-  const terms = normalizeContentIndexTerms(rawTerms);
-  if (!terms.length) {
-    return jsonError("请输入索引关键词", 400);
   }
   if (countActiveContentJobs("index") > 0) {
     return jsonError("已有索引任务正在运行，请等待完成或先取消当前任务", 409);
   }
 
-  const job = startContentIndexJob(terms);
+  const job = startContentIndexJob({ force: body.force === true });
   return NextResponse.json({ ok: true, jobId: job.id, job, showProgressBars: shouldShowProgressBars() });
 }
 

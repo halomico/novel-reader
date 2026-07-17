@@ -7,17 +7,23 @@ import { FormEvent, useEffect, useRef, useState, useTransition } from "react";
 
 type PageItem = number | "ellipsis";
 
-function pageHref(page: number, query: string, basePath: string) {
+function pageHref(page: number, query: string, basePath: string, pageParam: string) {
   const params = new URLSearchParams();
-  params.set("page", String(page));
+  params.set(pageParam, String(page));
   if (query) {
     params.set("q", query);
   }
   return `${basePath}?${params.toString()}`;
 }
 
-function pageHrefWithParams(page: number, query: string, basePath: string, extraParams: Record<string, string | undefined>) {
-  const params = new URLSearchParams(pageHref(page, query, basePath).split("?")[1]);
+function pageHrefWithParams(
+  page: number,
+  query: string,
+  basePath: string,
+  extraParams: Record<string, string | undefined>,
+  pageParam: string,
+) {
+  const params = new URLSearchParams(pageHref(page, query, basePath, pageParam).split("?")[1]);
   for (const [key, value] of Object.entries(extraParams)) {
     if (value) {
       params.set(key, value);
@@ -56,6 +62,7 @@ function PageJump({
   query,
   basePath,
   extraParams,
+  pageParam,
   index,
   onPageChange,
 }: {
@@ -63,6 +70,7 @@ function PageJump({
   query: string;
   basePath: string;
   extraParams: Record<string, string | undefined>;
+  pageParam: string;
   index: number;
   onPageChange?: (page: number) => void;
 }) {
@@ -100,7 +108,7 @@ function PageJump({
       return;
     }
     clearCloseTimer();
-    const href = pageHrefWithParams(nextPage, query, basePath, extraParams);
+    const href = pageHrefWithParams(nextPage, query, basePath, extraParams, pageParam);
     startTransition(() => router.push(href));
     setIsOpen(false);
     setValue("");
@@ -125,14 +133,14 @@ function PageJump({
         className="pageEllipsis"
         type="button"
         aria-expanded={isOpen}
-        aria-controls={`page-jump-${index}`}
+        aria-controls={`page-jump-${pageParam}-${index}`}
         aria-label="输入页码跳转"
         onClick={() => setIsOpen((current) => !current)}
       >
         ...
       </button>
       {isOpen ? (
-        <form className="pageJumpPanel" id={`page-jump-${index}`} onSubmit={jump}>
+        <form className="pageJumpPanel" id={`page-jump-${pageParam}-${index}`} onSubmit={jump}>
           <input
             autoFocus
             inputMode="numeric"
@@ -157,6 +165,7 @@ export function Pagination({
   query,
   basePath = "/",
   extraParams = {},
+  pageParam = "page",
   onPageChange,
 }: {
   page: number;
@@ -164,6 +173,7 @@ export function Pagination({
   query: string;
   basePath?: string;
   extraParams?: Record<string, string | undefined>;
+  pageParam?: string;
   onPageChange?: (page: number) => void;
 }) {
   const canGoPrev = page > 1;
@@ -182,7 +192,7 @@ export function Pagination({
             <ChevronLeft size={18} aria-hidden="true" />
           </button>
         ) : (
-          <Link className="pageButton" href={pageHrefWithParams(page - 1, query, basePath, extraParams)} aria-label="上一页">
+          <Link className="pageButton" href={pageHrefWithParams(page - 1, query, basePath, extraParams, pageParam)} aria-label="上一页">
             <ChevronLeft size={18} aria-hidden="true" />
           </Link>
         )
@@ -200,6 +210,7 @@ export function Pagination({
               query={query}
               basePath={basePath}
               extraParams={extraParams}
+              pageParam={pageParam}
               index={index}
               onPageChange={onPageChange}
               key={`ellipsis-${index}`}
@@ -213,7 +224,7 @@ export function Pagination({
               {item}
             </button>
           ) : (
-            <Link className="pageNumber" href={pageHrefWithParams(item, query, basePath, extraParams)} key={item} aria-label={`第 ${item} 页`}>
+            <Link className="pageNumber" href={pageHrefWithParams(item, query, basePath, extraParams, pageParam)} key={item} aria-label={`第 ${item} 页`}>
               {item}
             </Link>
           ),
@@ -226,7 +237,7 @@ export function Pagination({
             <ChevronRight size={18} aria-hidden="true" />
           </button>
         ) : (
-          <Link className="pageButton" href={pageHrefWithParams(page + 1, query, basePath, extraParams)} aria-label="下一页">
+          <Link className="pageButton" href={pageHrefWithParams(page + 1, query, basePath, extraParams, pageParam)} aria-label="下一页">
             <ChevronRight size={18} aria-hidden="true" />
           </Link>
         )

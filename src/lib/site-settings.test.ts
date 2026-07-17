@@ -3,11 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import {
-  MAX_CONTENT_INDEX_LIMIT_BYTES,
-  readSiteSettings,
-  writeSiteSettings,
-} from "./site-settings";
+import { readSiteSettings, writeSiteSettings } from "./site-settings";
 
 test("atomically replaces an existing settings file", () => {
   const previousPath = process.env.ADMIN_SETTINGS_PATH;
@@ -53,28 +49,44 @@ test("clamps the configured reader font size to 8 through 25", () => {
   }
 });
 
-test("allows content index limits up to 1000 GB", () => {
+test("removes legacy content index settings while preserving current values", () => {
   const previousPath = process.env.ADMIN_SETTINGS_PATH;
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-index-limits-"));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-legacy-index-settings-"));
   process.env.ADMIN_SETTINGS_PATH = path.join(tempDir, "admin-settings.json");
-  const fiveHundredGb = 500 * 1024 ** 3;
 
   try {
-    writeSiteSettings({
-      ...readSiteSettings(),
-      contentIndexSoftLimitBytes: fiveHundredGb,
-      contentIndexHardLimitBytes: fiveHundredGb,
-    });
-    assert.equal(readSiteSettings().contentIndexSoftLimitBytes, fiveHundredGb);
-    assert.equal(readSiteSettings().contentIndexHardLimitBytes, fiveHundredGb);
-
-    writeSiteSettings({
-      ...readSiteSettings(),
-      contentIndexSoftLimitBytes: MAX_CONTENT_INDEX_LIMIT_BYTES + 1,
-      contentIndexHardLimitBytes: MAX_CONTENT_INDEX_LIMIT_BYTES + 1,
-    });
-    assert.equal(readSiteSettings().contentIndexSoftLimitBytes, MAX_CONTENT_INDEX_LIMIT_BYTES);
-    assert.equal(readSiteSettings().contentIndexHardLimitBytes, MAX_CONTENT_INDEX_LIMIT_BYTES);
+    fs.writeFileSync(
+      process.env.ADMIN_SETTINGS_PATH,
+      JSON.stringify({
+        siteName: "保留站点",
+        frontendSearchConcurrencyLimit: 8,
+        adminIndexPageSize: 30,
+        frontendAutoIndexEnabled: true,
+        contentIndexMaxSegments: 5000,
+        contentIndexSoftLimitBytes: 1024,
+        contentIndexHardLimitBytes: 2048,
+        manualIndexMaxSegmentsEnabled: true,
+        manualIndexMaxSegments: 10000,
+      }),
+      "utf8",
+    );
+    const settings = readSiteSettings();
+    assert.equal(settings.siteName, "保留站点");
+    assert.equal(settings.frontendSearchConcurrencyLimit, 8);
+    const stored = JSON.parse(fs.readFileSync(process.env.ADMIN_SETTINGS_PATH, "utf8")) as Record<string, unknown>;
+    assert.equal(stored.siteName, "保留站点");
+    assert.equal(stored.frontendSearchConcurrencyLimit, 8);
+    for (const key of [
+      "adminIndexPageSize",
+      "frontendAutoIndexEnabled",
+      "contentIndexMaxSegments",
+      "contentIndexSoftLimitBytes",
+      "contentIndexHardLimitBytes",
+      "manualIndexMaxSegmentsEnabled",
+      "manualIndexMaxSegments",
+    ]) {
+      assert.equal(Object.hasOwn(stored, key), false);
+    }
   } finally {
     if (previousPath === undefined) {
       delete process.env.ADMIN_SETTINGS_PATH;

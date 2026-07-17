@@ -24,6 +24,19 @@ export function initializeContentSearchDb(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_content_search_state_version
       ON content_search_state(index_version, novel_id);
 
+    CREATE TABLE IF NOT EXISTS content_search_failures (
+      novel_id INTEGER PRIMARY KEY,
+      content_hash TEXT,
+      size_bytes INTEGER NOT NULL,
+      mtime_ms INTEGER NOT NULL,
+      index_version INTEGER NOT NULL,
+      error TEXT NOT NULL,
+      attempted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_content_search_failures_attempted
+      ON content_search_failures(attempted_at DESC, novel_id);
+
     CREATE VIRTUAL TABLE IF NOT EXISTS content_trigram_fts USING fts5(
       body,
       content='',

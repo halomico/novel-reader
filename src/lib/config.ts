@@ -1,6 +1,5 @@
 ﻿import path from "node:path";
 import {
-  MAX_CONTENT_INDEX_LIMIT_BYTES,
   readSiteSettings,
   type IpRateLimitRule,
   type RelatedVideoMode,
@@ -18,10 +17,6 @@ export function getLibraryDir(): string {
 
 export function getDatabasePath(): string {
   return resolveFromProject(process.env.DATABASE_PATH || "./data/novels.db");
-}
-
-export function getContentIndexDatabasePath(): string {
-  return resolveFromProject(process.env.CONTENT_INDEX_DB_PATH || "./data/content-index.db");
 }
 
 export function getContentSearchDatabasePath(): string {
@@ -108,10 +103,6 @@ export function getSearchResultsPageSize(): number {
 
 export function getAdminBookPageSize(): number {
   return readSettingInt(readSiteSettings().adminBookPageSize, "ADMIN_BOOK_PAGE_SIZE", 20, 1, 200);
-}
-
-export function getAdminIndexPageSize(): number {
-  return readSettingInt(readSiteSettings().adminIndexPageSize, "ADMIN_INDEX_PAGE_SIZE", 30, 1, 200);
 }
 
 export function getNoticeDisplaySeconds(): number {
@@ -276,50 +267,6 @@ export function shouldBlockHeadlessBrowsers(): boolean {
   return readSiteSettings().contentBlockHeadlessBrowsers && readBoolConfig("CONTENT_BLOCK_HEADLESS_BROWSERS", true);
 }
 
-export function getContentIndexMaxSegments(): number {
-  return readSettingInt(readSiteSettings().contentIndexMaxSegments, "CONTENT_INDEX_MAX_SEGMENTS", 5000, 1, 100000);
-}
-
-export function isFrontendAutoIndexEnabled(): boolean {
-  return readSiteSettings().frontendAutoIndexEnabled && readBoolConfig("FRONTEND_AUTO_CONTENT_INDEX", true);
-}
-
-export function getContentIndexSoftLimitBytes(): number {
-  return readSettingInt(
-    readSiteSettings().contentIndexSoftLimitBytes,
-    "CONTENT_INDEX_SOFT_LIMIT_BYTES",
-    2684354560,
-    1,
-    MAX_CONTENT_INDEX_LIMIT_BYTES,
-  );
-}
-
-export function getContentIndexHardLimitBytes(): number {
-  const softLimit = getContentIndexSoftLimitBytes();
-  return Math.max(
-    softLimit,
-    readSettingInt(
-      readSiteSettings().contentIndexHardLimitBytes,
-      "CONTENT_INDEX_HARD_LIMIT_BYTES",
-      3221225472,
-      1,
-      MAX_CONTENT_INDEX_LIMIT_BYTES,
-    ),
-  );
-}
-
-export function isManualIndexMaxSegmentsEnabled(): boolean {
-  return readSiteSettings().manualIndexMaxSegmentsEnabled;
-}
-
-export function getManualIndexMaxSegments(): number {
-  return readSettingInt(readSiteSettings().manualIndexMaxSegments, "MANUAL_CONTENT_INDEX_MAX_SEGMENTS", 50000, 1, 1000000);
-}
-
-export function getContentIndexTerms(): string[] {
-  return splitList(process.env.CONTENT_INDEX_TERMS || "");
-}
-
 export function shouldShowProgressBars(): boolean {
   return readSiteSettings().showProgressBars;
 }
@@ -394,7 +341,6 @@ export function getConfiguredPaths() {
   return {
     libraryDir: getLibraryDir(),
     databasePath: getDatabasePath(),
-    contentIndexDatabasePath: process.env.CONTENT_INDEX_DB_PATH || "./data/content-index.db",
     contentSearchDatabasePath: process.env.CONTENT_SEARCH_DB_PATH || "./data/content-search.db",
     adminSettingsPath: process.env.ADMIN_SETTINGS_PATH || "./data/admin-settings.json",
   };

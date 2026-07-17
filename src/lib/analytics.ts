@@ -38,6 +38,10 @@ export type AnalyticsOverview = {
   activeNow: number;
   totalSearches: number;
   topSearchQueries: AnalyticsMetric[];
+  searchQueryPage: number;
+  searchQueryPageSize: number;
+  searchQueryTotal: number;
+  searchQueryTotalPages: number;
   topContent: AnalyticsMetric[];
   topIps: AnalyticsMetric[];
   topCountries: AnalyticsMetric[];
@@ -297,13 +301,22 @@ function normalizePositivePage(value: number | string | undefined, totalPages: n
 
 export function getAnalyticsOverview(
   rangeValue: string | undefined,
-  options: { realtimeLimit?: number; realtimePage?: number | string; realtimePageSize?: number; customFrom?: string; customTo?: string } = {},
+  options: {
+    realtimeLimit?: number;
+    realtimePage?: number | string;
+    realtimePageSize?: number;
+    searchQueryPage?: number | string;
+    searchQueryPageSize?: number;
+    customFrom?: string;
+    customTo?: string;
+  } = {},
 ): AnalyticsOverview {
   const filter = resolveAnalyticsTimeFilter(rangeValue, options.customFrom, options.customTo);
   const eventWhere = contentTimeWhere(filter);
   const searchTime = timeCondition(filter, "created_at");
   const realtimeLimit = Math.min(Math.max(Math.floor(options.realtimeLimit || 300), 30), 2000);
   const realtimePageSize = Math.min(Math.max(Math.floor(options.realtimePageSize || 30), 1), 100);
+  const searchQueryPageSize = Math.min(Math.max(Math.floor(options.searchQueryPageSize || 100), 1), 100);
   const totalViews = oneCount(
     `SELECT COUNT(*) AS count FROM analytics_events WHERE ${eventWhere.sql}`,
     eventWhere.params,
@@ -331,6 +344,13 @@ export function getAnalyticsOverview(
   const realtimeTotalPages = Math.max(1, Math.ceil(realtimeTotal / realtimePageSize));
   const realtimePage = normalizePositivePage(options.realtimePage, realtimeTotalPages);
   const realtimeOffset = (realtimePage - 1) * realtimePageSize;
+  const searchQueryTotal = oneCount(
+    `SELECT COUNT(DISTINCT query) AS count FROM search_query_events WHERE ${searchTime.sql}`,
+    searchTime.params,
+  );
+  const searchQueryTotalPages = Math.max(1, Math.ceil(searchQueryTotal / searchQueryPageSize));
+  const searchQueryPage = normalizePositivePage(options.searchQueryPage, searchQueryTotalPages);
+  const searchQueryOffset = (searchQueryPage - 1) * searchQueryPageSize;
 
   const realtimeRows = getDb()
     .prepare(
@@ -380,9 +400,13 @@ export function getAnalyticsOverview(
        WHERE ${searchTime.sql}
        GROUP BY query
        ORDER BY count DESC, MAX(created_at) DESC, label ASC
-       LIMIT 100`,
-      searchTime.params,
+       LIMIT ? OFFSET ?`,
+      [...searchTime.params, searchQueryPageSize, searchQueryOffset],
     ),
+    searchQueryPage,
+    searchQueryPageSize,
+    searchQueryTotal,
+    searchQueryTotalPages,
     topContent: topMetrics(
       `SELECT COALESCE(n.title, m.title, e.path) AS label, COUNT(*) AS count
        FROM analytics_events e

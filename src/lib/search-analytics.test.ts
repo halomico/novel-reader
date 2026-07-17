@@ -40,10 +40,24 @@ test("records normalized search queries and aggregates hot terms by range", asyn
         { query: "科幻", mode: "content" },
       ],
     );
+
+    const insertTerm = db.prepare("INSERT INTO search_query_events (query, mode) VALUES (?, 'content')");
+    for (let index = 0; index < 105; index += 1) {
+      insertTerm.run(`分页热词 ${String(index).padStart(3, "0")}`);
+    }
+    const secondPage = analytics.getAnalyticsOverview("24h", {
+      searchQueryPage: 2,
+      searchQueryPageSize: 100,
+    });
+    assert.equal(secondPage.searchQueryTotal, 107);
+    assert.equal(secondPage.searchQueryTotalPages, 2);
+    assert.equal(secondPage.searchQueryPage, 2);
+    assert.equal(secondPage.topSearchQueries.length, 7);
+
     fs.writeFileSync(process.env.ADMIN_SETTINGS_PATH, JSON.stringify({ analyticsEnabled: false }));
     analytics.recordSearchQuery("不会写入", "content");
     const count = db.prepare("SELECT COUNT(*) AS count FROM search_query_events").get() as { count: number };
-    assert.equal(count.count, 3);
+    assert.equal(count.count, 108);
   } finally {
     closeDatabase?.();
     if (previousDatabasePath === undefined) delete process.env.DATABASE_PATH;

@@ -10,15 +10,10 @@ import { recordAdminLogin } from "@/lib/admin-login-records";
 import { checkAdminOperationLimit } from "@/lib/admin-operation-limit";
 import {
   getAdminBookPageSize,
-  getAdminIndexPageSize,
   getAdminLoginRateLimitPerMinute,
-  getContentIndexHardLimitBytes,
-  getContentIndexMaxSegments,
-  getContentIndexSoftLimitBytes,
   getCatalogPageSize,
   getFrontendSearchConcurrencyLimit,
   getGlobalSearchMaxResults,
-  getManualIndexMaxSegments,
   getNoticeDisplaySeconds,
   getSearchResultsPageSize,
   getUserDailyRegistrationLimitPerIp,
@@ -27,20 +22,23 @@ import {
   getUserSearchRateLimitPerMinute,
   shouldAdminLoginRateLimitBan,
 } from "@/lib/config";
-import { deleteContentIndexTerm } from "@/lib/content-index";
-import { getContentIndexDb } from "@/lib/content-index-db";
 import { cancelContentJobs } from "@/lib/content-jobs";
 import { deleteIpRateLimitBans, parseIpRateLimitBanKey, type IpRateLimitBanKey } from "@/lib/ip-rate-limit";
 import {
+  createVideoCategory,
   createMediaFolder,
+  deleteVideoCategory,
   deleteMediaAssets,
   deleteMediaFolder,
   getMediaAsset,
   isMediaKind,
+  MediaCategoryError,
   MediaFolderError,
   renameMediaFolder,
+  setVideoCategoryForAssets,
   syncMediaLibrary,
   type MediaKind,
+  updateVideoCategory,
   updateMediaAsset,
 } from "@/lib/media";
 import { scheduleMissingMediaPreparation } from "@/lib/media-maintenance";
@@ -49,13 +47,7 @@ import { deleteNovelIds } from "@/lib/novel-files";
 import { hashPassword } from "@/lib/password";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { detectSiteIconFormat, MAX_SITE_ICON_BYTES, removeSiteIconFile, writeSiteIconFile } from "@/lib/site-icon";
-import {
-  MAX_CONTENT_INDEX_LIMIT_GB,
-  normalizeIpRateLimitRules,
-  readSiteSettings,
-  type SiteSettings,
-  writeSiteSettings,
-} from "@/lib/site-settings";
+import { normalizeIpRateLimitRules, readSiteSettings, type SiteSettings, writeSiteSettings } from "@/lib/site-settings";
 import { deleteUserSessions, hashUserPassword } from "@/lib/user-auth";
 import {
   clearBrowseHistory,
@@ -93,6 +85,12 @@ function mediaFolderReturnPath(formData: FormData, kind: MediaKind, folder: stri
 
 function mediaFolderMessage(error: unknown): string {
   return error instanceof MediaFolderError ? error.message : "文件夹操作失败，请检查媒体目录权限";
+}
+
+function mediaOperationMessage(error: unknown): string {
+  return error instanceof MediaFolderError || error instanceof MediaCategoryError
+    ? error.message
+    : "资源操作失败，请检查媒体目录和数据库状态";
 }
 
 function loginNotice(message: string): never {
@@ -323,20 +321,6 @@ export async function saveAdminSettingsAction(formData: FormData) {
     adminNotice(`后台${adminPasswordError}`, "warning", "/admin/settings");
   }
 
-  const softLimitGb = numberField(
-    formData,
-    "contentIndexSoftLimitGb",
-    getContentIndexSoftLimitBytes() / 1024 ** 3,
-    0.1,
-    MAX_CONTENT_INDEX_LIMIT_GB,
-  );
-  const hardLimitGb = numberField(
-    formData,
-    "contentIndexHardLimitGb",
-    getContentIndexHardLimitBytes() / 1024 ** 3,
-    softLimitGb,
-    MAX_CONTENT_INDEX_LIMIT_GB,
-  );
   const userAvatarMaxMb = numberField(formData, "userAvatarMaxMb", getUserAvatarMaxBytes() / 1024 ** 2, 0.1, 10);
   const searchRateLimitRules = rateLimitRulesField(formData, "searchRateLimitRules", "搜索限速");
   const contentRateLimitRules = rateLimitRulesField(formData, "contentRateLimitRules", "正文限速").map((rule) => ({
@@ -373,10 +357,8 @@ export async function saveAdminSettingsAction(formData: FormData) {
     catalogPageSize: intField(formData, "catalogPageSize", previous.catalogPageSize || getCatalogPageSize(), 1, 100),
     searchResultsPageSize: intField(formData, "searchResultsPageSize", previous.searchResultsPageSize || getSearchResultsPageSize(), 1, 100),
     adminBookPageSize: intField(formData, "adminBookPageSize", previous.adminBookPageSize || getAdminBookPageSize(), 1, 200),
-    adminIndexPageSize: intField(formData, "adminIndexPageSize", previous.adminIndexPageSize || getAdminIndexPageSize(), 1, 200),
     noticeDisplaySeconds: intField(formData, "noticeDisplaySeconds", previous.noticeDisplaySeconds || getNoticeDisplaySeconds(), 0, 60),
     noticeStayVisibleAfterBlur: formData.get("noticeStayVisibleAfterBlur") === "on",
-    contentIndexMaxSegments: intField(formData, "contentIndexMaxSegments", previous.contentIndexMaxSegments || getContentIndexMaxSegments(), 1, 100000),
     globalSearchMaxResults: intField(formData, "globalSearchMaxResults", previous.globalSearchMaxResults || getGlobalSearchMaxResults(), 1, 1000),
     searchRateLimitRules,
     contentRateLimitRules,
@@ -411,7 +393,6 @@ export async function saveAdminSettingsAction(formData: FormData) {
     guestAudioNavEnabled: audioAccessMode === "public",
     guestFileNavEnabled: fileAccessMode === "public",
     contentBlockHeadlessBrowsers: formData.get("contentBlockHeadlessBrowsers") === "on",
-    frontendAutoIndexEnabled: formData.get("frontendAutoIndexEnabled") === "on",
     frontendSearchConcurrencyLimit: intField(
       formData,
       "frontendSearchConcurrencyLimit",
@@ -419,10 +400,6 @@ export async function saveAdminSettingsAction(formData: FormData) {
       1,
       50,
     ),
-    contentIndexSoftLimitBytes: Math.floor(softLimitGb * 1024 ** 3),
-    contentIndexHardLimitBytes: Math.floor(hardLimitGb * 1024 ** 3),
-    manualIndexMaxSegmentsEnabled: formData.get("manualIndexMaxSegmentsEnabled") === "on",
-    manualIndexMaxSegments: intField(formData, "manualIndexMaxSegments", previous.manualIndexMaxSegments || getManualIndexMaxSegments(), 1, 1000000),
     adminTheme:
       formData.get("adminTheme") === "light" || formData.get("adminTheme") === "dark" || formData.get("adminTheme") === "system"
         ? (formData.get("adminTheme") as SiteSettings["adminTheme"])
@@ -475,14 +452,87 @@ export async function updateAdminMediaAction(formData: FormData) {
     adminNotice("作者不能超过 80 个字符", "warning", returnPath);
   }
   try {
-    updateMediaAsset(id, title, asset.kind === "audio" ? artist : "", description, String(formData.get("targetFolder") || ""));
+    updateMediaAsset(
+      id,
+      title,
+      asset.kind === "file" ? "" : artist,
+      description,
+      String(formData.get("targetFolder") || ""),
+      asset.kind === "video" && formData.has("categoryId") ? formData.get("categoryId") : undefined,
+    );
   } catch (error) {
-    adminNotice(mediaFolderMessage(error), "warning", returnPath);
+    adminNotice(mediaOperationMessage(error), "warning", returnPath);
   }
   revalidatePath("/media");
   revalidatePath(`/media/${id}`);
   revalidatePath("/admin/media");
   adminNotice("资源信息已更新", "success", returnPath);
+}
+
+export async function createAdminVideoCategoryAction(formData: FormData) {
+  await requireAdminRequest("/admin/media");
+  const returnPath = mediaReturnPath(formData);
+  try {
+    createVideoCategory(String(formData.get("name") || ""));
+  } catch (error) {
+    adminNotice(mediaOperationMessage(error), "warning", returnPath);
+  }
+  revalidatePath("/media");
+  revalidatePath("/admin/media");
+  adminNotice("视频分类已创建", "success", returnPath);
+}
+
+export async function updateAdminVideoCategoryAction(formData: FormData) {
+  await requireAdminRequest("/admin/media");
+  const returnPath = mediaReturnPath(formData);
+  const id = Number(formData.get("categoryId"));
+  let updated = false;
+  try {
+    updated = updateVideoCategory(
+      id,
+      String(formData.get("name") || ""),
+      Number(formData.get("sortOrder") || 0),
+      formData.get("visible") === "on",
+    );
+  } catch (error) {
+    adminNotice(mediaOperationMessage(error), "warning", returnPath);
+  }
+  if (!updated) {
+    adminNotice("视频分类不存在", "warning", returnPath);
+  }
+  revalidatePath("/media");
+  revalidatePath("/admin/media");
+  adminNotice("视频分类已更新", "success", returnPath);
+}
+
+export async function deleteAdminVideoCategoryAction(formData: FormData) {
+  await requireAdminRequest("/admin/media");
+  const returnPath = mediaReturnPath(formData);
+  const deleted = deleteVideoCategory(Number(formData.get("categoryId")));
+  revalidatePath("/media");
+  revalidatePath("/admin/media");
+  adminNotice(deleted ? "视频分类已删除，原视频已归入未分类" : "视频分类不存在", deleted ? "success" : "warning", returnPath);
+}
+
+export async function assignAdminVideoCategoryAction(formData: FormData) {
+  await requireAdminRequest("/admin/media");
+  const returnPath = mediaReturnPath(formData);
+  const ids = formData
+    .getAll("mediaIds")
+    .map(Number)
+    .filter((id) => Number.isInteger(id) && id > 0);
+  if (!ids.length) {
+    adminNotice("请选择要归类的视频", "warning", returnPath);
+  }
+  let updated = 0;
+  try {
+    updated = setVideoCategoryForAssets(ids, formData.get("categoryId"));
+  } catch (error) {
+    adminNotice(mediaOperationMessage(error), "warning", returnPath);
+  }
+  revalidatePath("/media");
+  revalidatePath("/admin/media");
+  adminNotice(updated ? `已归类 ${updated} 个视频` : "所选视频不存在", updated ? "success" : "warning", returnPath);
 }
 
 export async function saveAdminMediaDisplaySettingsAction(formData: FormData) {
@@ -630,13 +680,6 @@ export async function deleteIpRateLimitBanAction(formData: FormData) {
   const deleted = deleteIpRateLimitBans(bans);
   revalidatePath("/admin/settings");
   adminNotice(deleted ? `已解除 ${deleted} 条封禁记录` : "所选封禁记录已不存在", deleted ? "success" : "warning", "/admin/settings");
-}
-
-export async function deleteContentIndexAction(formData: FormData) {
-  await requireAdminRequest("/admin/indexes");
-  const term = deleteContentIndexTerm(getContentIndexDb(), String(formData.get("term") || ""));
-  revalidatePath("/admin/indexes");
-  adminNotice(term ? `索引词“${term}”已删除` : "索引关键词不能为空", term ? "success" : "warning", "/admin/indexes");
 }
 
 export async function createAdminUserAction(formData: FormData) {

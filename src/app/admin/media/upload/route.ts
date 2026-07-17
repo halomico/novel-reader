@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
       }
       const body = (await request.json()) as {
         kind?: unknown;
+        categoryId?: unknown;
         title?: unknown;
         artist?: unknown;
         description?: unknown;
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest) {
       };
       const result = startMediaUpload({
         kind: body.kind,
+        categoryId: body.categoryId,
         title: typeof body.title === "string" ? body.title : "",
         artist: typeof body.artist === "string" ? body.artist : "",
         description: typeof body.description === "string" ? body.description : "",

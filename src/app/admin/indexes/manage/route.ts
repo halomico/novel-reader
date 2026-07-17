@@ -1,10 +1,11 @@
-﻿import { revalidatePath } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
 import { checkAdminOperationLimit } from "@/lib/admin-operation-limit";
-import { deleteContentIndexTerms } from "@/lib/content-index";
-import { getContentIndexDb } from "@/lib/content-index-db";
+import { countActiveContentJobs } from "@/lib/content-jobs";
+import { getContentSearchDb } from "@/lib/content-search-db";
+import { clearContentSearchIndex } from "@/lib/content-search-index";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -38,19 +39,24 @@ export async function POST(request: NextRequest) {
     return auth.response;
   }
 
-  let body: { action?: unknown; terms?: unknown } = {};
+  let body: { action?: unknown } = {};
   try {
-    body = (await request.json()) as { action?: unknown; terms?: unknown };
+    body = (await request.json()) as { action?: unknown };
   } catch {
     return jsonError("索引管理请求格式有误", 400);
   }
-
-  if (body.action !== "delete") {
+  if (body.action !== "clear") {
     return jsonError("不支持的索引管理操作", 400);
   }
+  if (countActiveContentJobs("index") > 0) {
+    return jsonError("索引任务运行期间不能清空索引", 409);
+  }
 
-  const terms = Array.isArray(body.terms) ? body.terms.map((item) => String(item || "")) : [];
-  const deleted = deleteContentIndexTerms(getContentIndexDb(), terms);
+  const db = getContentSearchDb();
+  clearContentSearchIndex(db);
+  db.exec("PRAGMA wal_checkpoint(TRUNCATE);");
+  db.exec("VACUUM;");
   revalidatePath("/admin/indexes");
-  return NextResponse.json({ ok: true, deleted });
+  revalidatePath("/admin");
+  return NextResponse.json({ ok: true, message: "全文索引已清空" });
 }

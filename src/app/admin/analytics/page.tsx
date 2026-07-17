@@ -22,6 +22,7 @@ type AdminAnalyticsPageProps = {
     to?: string;
     page?: string;
     realtimePage?: string;
+    hotPage?: string;
     notice?: string;
     tone?: "success" | "warning" | "error";
   }>;
@@ -91,12 +92,24 @@ function MetricTable({ title, items }: { title: string; items: AnalyticsMetric[]
   );
 }
 
-function SearchTagPanel({ items }: { items: AnalyticsMetric[] }) {
+function SearchTagPanel({
+  items,
+  page,
+  total,
+  totalPages,
+  paginationParams,
+}: {
+  items: AnalyticsMetric[];
+  page: number;
+  total: number;
+  totalPages: number;
+  paginationParams: Record<string, string | undefined>;
+}) {
   return (
     <details className="analyticsMetricPanel analyticsSearchPanel" open>
       <summary>
         <h3><Tags size={15} aria-hidden="true" />搜索热词</h3>
-        <span>{items.length} 项</span>
+        <span>{formatCount(total)} 项</span>
       </summary>
       {items.length ? (
         <div className="analyticsSearchTags">
@@ -110,6 +123,14 @@ function SearchTagPanel({ items }: { items: AnalyticsMetric[] }) {
       ) : (
         <p className="analyticsEmpty">暂无搜索记录</p>
       )}
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        query=""
+        basePath="/admin/analytics"
+        extraParams={paginationParams}
+        pageParam="hotPage"
+      />
     </details>
   );
 }
@@ -121,6 +142,8 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
     realtimeLimit,
     realtimePage: params.page || params.realtimePage,
     realtimePageSize: 30,
+    searchQueryPage: params.hotPage,
+    searchQueryPageSize: 100,
     customFrom: params.from,
     customTo: params.to,
   });
@@ -129,6 +152,13 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
     range: overview.range,
     from: overview.range === "custom" ? overview.customFrom : undefined,
     to: overview.range === "custom" ? overview.customTo : undefined,
+    hotPage: overview.searchQueryPage > 1 ? String(overview.searchQueryPage) : undefined,
+  };
+  const searchPaginationParams: Record<string, string | undefined> = {
+    range: overview.range,
+    from: overview.range === "custom" ? overview.customFrom : undefined,
+    to: overview.range === "custom" ? overview.customTo : undefined,
+    page: overview.realtimePage > 1 ? String(overview.realtimePage) : undefined,
   };
 
   return (
@@ -195,7 +225,13 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
         </div>
 
         <div className="analyticsGrid">
-          <SearchTagPanel items={overview.topSearchQueries} />
+          <SearchTagPanel
+            items={overview.topSearchQueries}
+            page={overview.searchQueryPage}
+            total={overview.searchQueryTotal}
+            totalPages={overview.searchQueryTotalPages}
+            paginationParams={searchPaginationParams}
+          />
           <MetricTable title="内容访问" items={overview.topContent} />
           <MetricTable title="IP 地址" items={overview.topIps} />
           <MetricTable title="国家/地区" items={overview.topCountries} />

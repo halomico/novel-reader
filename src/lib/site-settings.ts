@@ -8,9 +8,6 @@ export type SiteIconMimeType = "" | "image/png" | "image/jpeg" | "image/webp" | 
 export type VideoThumbnailMode = "single" | "carousel";
 export type RelatedVideoMode = "next" | "random";
 
-export const MAX_CONTENT_INDEX_LIMIT_GB = 1000;
-export const MAX_CONTENT_INDEX_LIMIT_BYTES = MAX_CONTENT_INDEX_LIMIT_GB * 1024 ** 3;
-
 export type IpRateLimitRule = {
   id: string;
   enabled: boolean;
@@ -55,11 +52,9 @@ export type SiteSettings = {
   catalogPageSize: number;
   searchResultsPageSize: number;
   adminBookPageSize: number;
-  adminIndexPageSize: number;
   noticeDisplaySeconds: number;
   noticeStayVisibleAfterBlur: boolean;
   showProgressBars: boolean;
-  frontendAutoIndexEnabled: boolean;
   frontendSearchConcurrencyLimit: number;
   globalSearchMaxResults: number;
   searchRateLimitPerMinute: number;
@@ -90,11 +85,6 @@ export type SiteSettings = {
   contentRateLimitWindowSeconds: number;
   contentRateLimitRules: IpRateLimitRule[];
   contentBlockHeadlessBrowsers: boolean;
-  contentIndexMaxSegments: number;
-  contentIndexSoftLimitBytes: number;
-  contentIndexHardLimitBytes: number;
-  manualIndexMaxSegmentsEnabled: boolean;
-  manualIndexMaxSegments: number;
 };
 
 type SiteSettingsCache = {
@@ -107,6 +97,16 @@ type SiteSettingsCache = {
 type SiteSettingsGlobal = typeof globalThis & {
   siteSettingsCache?: SiteSettingsCache;
 };
+
+const LEGACY_INDEX_SETTING_KEYS = [
+  "adminIndexPageSize",
+  "frontendAutoIndexEnabled",
+  "contentIndexMaxSegments",
+  "contentIndexSoftLimitBytes",
+  "contentIndexHardLimitBytes",
+  "manualIndexMaxSegmentsEnabled",
+  "manualIndexMaxSegments",
+] as const;
 
 const DEFAULT_SETTINGS: SiteSettings = {
   siteName: "",
@@ -132,11 +132,9 @@ const DEFAULT_SETTINGS: SiteSettings = {
   catalogPageSize: 0,
   searchResultsPageSize: 0,
   adminBookPageSize: 0,
-  adminIndexPageSize: 0,
   noticeDisplaySeconds: 0,
   noticeStayVisibleAfterBlur: false,
   showProgressBars: true,
-  frontendAutoIndexEnabled: true,
   frontendSearchConcurrencyLimit: 0,
   globalSearchMaxResults: 0,
   searchRateLimitPerMinute: 0,
@@ -167,11 +165,6 @@ const DEFAULT_SETTINGS: SiteSettings = {
   contentRateLimitWindowSeconds: 0,
   contentRateLimitRules: [],
   contentBlockHeadlessBrowsers: true,
-  contentIndexMaxSegments: 0,
-  contentIndexSoftLimitBytes: 0,
-  contentIndexHardLimitBytes: 0,
-  manualIndexMaxSegmentsEnabled: false,
-  manualIndexMaxSegments: 0,
 };
 
 function resolveFromProject(value: string): string {
@@ -274,6 +267,30 @@ function cleanLoginRecords(value: unknown): AdminLoginRecord[] {
     .slice(0, 30);
 }
 
+function writeSettingsFile(settingsPath: string, settings: object) {
+  fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+  const tempPath = `${settingsPath}.${process.pid}-${crypto.randomBytes(5).toString("hex")}.tmp`;
+  try {
+    fs.writeFileSync(tempPath, `${JSON.stringify(settings, null, 2)}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });
+    fs.renameSync(tempPath, settingsPath);
+  } catch (error) {
+    fs.rmSync(tempPath, { force: true });
+    throw error;
+  }
+}
+
+function removeLegacyIndexSettings(value: Record<string, unknown>): { settings: Partial<SiteSettings>; changed: boolean } {
+  const settings = { ...value };
+  let changed = false;
+  for (const key of LEGACY_INDEX_SETTING_KEYS) {
+    if (Object.hasOwn(settings, key)) {
+      delete settings[key];
+      changed = true;
+    }
+  }
+  return { settings: settings as Partial<SiteSettings>, changed };
+}
+
 function readSiteSettingsFromDisk(): SiteSettings {
   const settingsPath = getSiteSettingsPath();
   if (!fs.existsSync(settingsPath)) {
@@ -281,7 +298,16 @@ function readSiteSettingsFromDisk(): SiteSettings {
   }
 
   try {
-    const parsed = JSON.parse(fs.readFileSync(settingsPath, "utf8")) as Partial<SiteSettings>;
+    const raw = JSON.parse(fs.readFileSync(settingsPath, "utf8")) as Record<string, unknown>;
+    const cleaned = removeLegacyIndexSettings(raw);
+    const parsed = cleaned.settings;
+    if (cleaned.changed) {
+      try {
+        writeSettingsFile(settingsPath, parsed);
+      } catch (error) {
+        console.error("Failed to remove legacy search index settings", error);
+      }
+    }
     return {
       siteName: cleanText(parsed.siteName),
       siteTitle: cleanText(parsed.siteTitle),
@@ -311,11 +337,9 @@ function readSiteSettingsFromDisk(): SiteSettings {
       catalogPageSize: cleanInt(parsed.catalogPageSize, DEFAULT_SETTINGS.catalogPageSize, 0, 100),
       searchResultsPageSize: cleanInt(parsed.searchResultsPageSize, DEFAULT_SETTINGS.searchResultsPageSize, 0, 100),
       adminBookPageSize: cleanInt(parsed.adminBookPageSize, DEFAULT_SETTINGS.adminBookPageSize, 0, 200),
-      adminIndexPageSize: cleanInt(parsed.adminIndexPageSize, DEFAULT_SETTINGS.adminIndexPageSize, 0, 200),
       noticeDisplaySeconds: cleanInt(parsed.noticeDisplaySeconds, DEFAULT_SETTINGS.noticeDisplaySeconds, 0, 60),
       noticeStayVisibleAfterBlur: cleanBool(parsed.noticeStayVisibleAfterBlur, DEFAULT_SETTINGS.noticeStayVisibleAfterBlur),
       showProgressBars: cleanBool(parsed.showProgressBars, DEFAULT_SETTINGS.showProgressBars),
-      frontendAutoIndexEnabled: cleanBool(parsed.frontendAutoIndexEnabled, DEFAULT_SETTINGS.frontendAutoIndexEnabled),
       frontendSearchConcurrencyLimit: cleanInt(parsed.frontendSearchConcurrencyLimit, DEFAULT_SETTINGS.frontendSearchConcurrencyLimit, 0, 50),
       globalSearchMaxResults: cleanInt(parsed.globalSearchMaxResults, DEFAULT_SETTINGS.globalSearchMaxResults, 0, 1000),
       searchRateLimitPerMinute: cleanInt(parsed.searchRateLimitPerMinute, DEFAULT_SETTINGS.searchRateLimitPerMinute, 0, 120),
@@ -366,21 +390,6 @@ function readSiteSettingsFromDisk(): SiteSettings {
       contentRateLimitWindowSeconds: cleanInt(parsed.contentRateLimitWindowSeconds, DEFAULT_SETTINGS.contentRateLimitWindowSeconds, 0, 3600),
       contentRateLimitRules: normalizeIpRateLimitRules(parsed.contentRateLimitRules),
       contentBlockHeadlessBrowsers: cleanBool(parsed.contentBlockHeadlessBrowsers, DEFAULT_SETTINGS.contentBlockHeadlessBrowsers),
-      contentIndexMaxSegments: cleanInt(parsed.contentIndexMaxSegments, DEFAULT_SETTINGS.contentIndexMaxSegments, 0, 100000),
-      contentIndexSoftLimitBytes: cleanInt(
-        parsed.contentIndexSoftLimitBytes,
-        DEFAULT_SETTINGS.contentIndexSoftLimitBytes,
-        0,
-        MAX_CONTENT_INDEX_LIMIT_BYTES,
-      ),
-      contentIndexHardLimitBytes: cleanInt(
-        parsed.contentIndexHardLimitBytes,
-        DEFAULT_SETTINGS.contentIndexHardLimitBytes,
-        0,
-        MAX_CONTENT_INDEX_LIMIT_BYTES,
-      ),
-      manualIndexMaxSegmentsEnabled: cleanBool(parsed.manualIndexMaxSegmentsEnabled, DEFAULT_SETTINGS.manualIndexMaxSegmentsEnabled),
-      manualIndexMaxSegments: cleanInt(parsed.manualIndexMaxSegments, DEFAULT_SETTINGS.manualIndexMaxSegments, 0, 1000000),
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -414,14 +423,6 @@ export function readSiteSettings(): SiteSettings {
 
 export function writeSiteSettings(settings: SiteSettings) {
   const settingsPath = getSiteSettingsPath();
-  fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
-  const tempPath = `${settingsPath}.${process.pid}-${crypto.randomBytes(5).toString("hex")}.tmp`;
-  try {
-    fs.writeFileSync(tempPath, `${JSON.stringify(settings, null, 2)}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });
-    fs.renameSync(tempPath, settingsPath);
-    delete (globalThis as SiteSettingsGlobal).siteSettingsCache;
-  } catch (error) {
-    fs.rmSync(tempPath, { force: true });
-    throw error;
-  }
+  writeSettingsFile(settingsPath, settings);
+  delete (globalThis as SiteSettingsGlobal).siteSettingsCache;
 }

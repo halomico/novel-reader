@@ -73,7 +73,12 @@ test("persists and removes an IP ban with the same category and address key", as
   try {
     assert.equal(checkIpRateLimit({ category: "content", ip: "203.0.113.9", rules: [rule], now: 1_000 }).allowed, true);
     assert.equal(checkIpRateLimit({ category: "content", ip: "203.0.113.9", rules: [rule], now: 1_001 }).permanent, true);
-    assert.equal(listIpRateLimitBans("content", 10, 1_002).length, 1);
+    getDb()
+      .prepare("INSERT INTO analytics_events (event_type, path, ip, country) VALUES ('content_view', '/novel/1', ?, 'CN')")
+      .run("203.0.113.9");
+    const bans = listIpRateLimitBans("content", 10, 1_002);
+    assert.equal(bans.length, 1);
+    assert.equal(bans[0].country, "CN");
     assert.equal(deleteIpRateLimitBan("content", "203.0.113.9"), true);
     assert.equal(listIpRateLimitBans("content", 10, 1_003).length, 0);
   } finally {

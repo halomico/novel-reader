@@ -1,10 +1,9 @@
-import { getDb } from "./db";
-import { getContentIndexMaxSegments, getGlobalSearchMaxResults, getLibraryDir, isFrontendAutoIndexEnabled } from "./config";
-import { findIndexedContentCandidateNovelIds, getContentIndexTermStatus, markContentIndexTermUsed, saveContentIndexTerm } from "./content-index";
-import { getContentIndexDb } from "./content-index-db";
-import { getContentSearchDb } from "./content-search-db";
-import { findContentSearchCandidateNovelIds } from "./content-search-index";
+import type { DatabaseSync } from "node:sqlite";
 import { readNovelContent, type Novel } from "./books";
+import { getContentSearchDb } from "./content-search-db";
+import { findContentSearchCandidateNovelIds, type ContentSearchNovelRecord } from "./content-search-index";
+import { getGlobalSearchMaxResults, getLibraryDir } from "./config";
+import { getDb } from "./db";
 import { iterateNovelSegments } from "./segments";
 import {
   createSearchSnippet,
@@ -34,7 +33,7 @@ export type SearchNovelContentProgress = {
   searchedBooks: number;
   resultCount: number;
   indexedTerm?: string;
-  scanEngine?: "fts5" | "index" | "ripgrep" | "node";
+  scanEngine?: "fts5" | "ripgrep" | "node";
   scanPhase?: "prefilter" | "verify";
   cacheSegmentCount: number;
   results?: SearchResult[];
@@ -43,6 +42,10 @@ export type SearchNovelContentProgress = {
 export type SearchNovelContentOptions = {
   isCancelled?: () => boolean;
 };
+
+type SearchCandidate = Pick<Novel, "id" | "title" | "relative_path">;
+
+const SQLITE_ID_CHUNK_SIZE = 400;
 
 export class ContentSearchCancelledError extends Error {
   constructor() {
@@ -55,21 +58,50 @@ export function validateSearchKeyword(value: string | undefined): SearchValidati
   return parseSearchQuery(value);
 }
 
+function normalizeRelativePath(value: string): string {
+  return value.replace(/\\/g, "/").replace(/^(?:\.\/)+/, "");
+}
+
+function listSearchIndexRecords(db: DatabaseSync): ContentSearchNovelRecord[] {
+  return db
+    .prepare("SELECT id, relative_path, content_hash, size_bytes, mtime_ms FROM novels ORDER BY id ASC")
+    .all() as ContentSearchNovelRecord[];
+}
+
+function listSearchCandidatesByIds(db: DatabaseSync, ids: number[]): SearchCandidate[] {
+  if (!ids.length) {
+    return [];
+  }
+
+  const candidates: SearchCandidate[] = [];
+  for (let offset = 0; offset < ids.length; offset += SQLITE_ID_CHUNK_SIZE) {
+    const chunk = ids.slice(offset, offset + SQLITE_ID_CHUNK_SIZE);
+    const placeholders = chunk.map(() => "?").join(", ");
+    candidates.push(
+      ...(db
+        .prepare(`SELECT id, title, relative_path FROM novels WHERE id IN (${placeholders})`)
+        .all(...chunk) as SearchCandidate[]),
+    );
+  }
+  return candidates.sort((left, right) => left.id - right.id);
+}
+
+function listAllSearchCandidates(db: DatabaseSync): SearchCandidate[] {
+  return db.prepare("SELECT id, title, relative_path FROM novels ORDER BY id ASC").all() as SearchCandidate[];
+}
+
 export async function searchNovelContent(
   query: ParsedSearchQuery,
   onProgress?: (progress: SearchNovelContentProgress) => void,
   options: SearchNovelContentOptions = {},
 ): Promise<SearchResultSet> {
   const db = getDb();
-  const indexDb = getContentIndexDb();
   const maxResults = getGlobalSearchMaxResults();
-  const maxIndexSegments = getContentIndexMaxSegments();
   const results: SearchResult[] = [];
   const matchedNovelIds = new Set<number>();
   let searchedBooks = 0;
-  let candidates: Novel[] = [];
+  let candidates: SearchCandidate[] = [];
   let scanEngine: SearchNovelContentProgress["scanEngine"] = "node";
-  let cacheSegmentCount = 0;
   let indexLabel: string | undefined;
 
   function throwIfCancelled() {
@@ -86,7 +118,7 @@ export async function searchNovelContent(
       indexedTerm: indexLabel,
       scanEngine,
       scanPhase: "verify",
-      cacheSegmentCount,
+      cacheSegmentCount: 0,
       results: [...results],
     });
   }
@@ -103,47 +135,32 @@ export async function searchNovelContent(
       segmentIndex: row.segmentIndex,
       snippet: createSearchSnippet(row.content, query.highlightTerms),
     });
-
     return results.length >= maxResults;
   }
 
-  const allNovels = db
-    .prepare(
-      `
-      SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
-      FROM novels
-      ORDER BY id ASC
-    `,
-    )
-    .all() as Novel[];
-
-  const indexedPlan = findIndexedContentCandidateNovelIds(
-    indexDb,
-    query.requiredTerms.filter((term) => !term.phrase && term.normalized).map((term) => term.normalized),
-  );
-  for (const indexedTerm of indexedPlan?.terms || []) {
-    markContentIndexTermUsed(indexDb, indexedTerm);
-  }
+  const novelRecords = listSearchIndexRecords(db);
+  const requiredIndexTerms = query.requiredTerms
+    .filter((term) => !term.phrase && Array.from(term.normalized).length >= 2)
+    .map((term) => term.normalized);
 
   let fullTextPlan: ReturnType<typeof findContentSearchCandidateNovelIds> = null;
   try {
-    fullTextPlan = findContentSearchCandidateNovelIds(getContentSearchDb(), allNovels, query.anchorTerm);
+    fullTextPlan = findContentSearchCandidateNovelIds(getContentSearchDb(), novelRecords, requiredIndexTerms);
   } catch {
     fullTextPlan = null;
   }
 
-  const changedSinceIndex = indexedPlan ? allNovels.filter((novel) => novel.updated_at >= indexedPlan.indexedAt) : allNovels;
-  const fallbackNovelCount = fullTextPlan?.uncoveredNovelCount ?? (indexedPlan ? changedSinceIndex.length : allNovels.length);
-  const nativeRescanThreshold = Math.max(500, Math.floor(allNovels.length * 0.1));
-  const shouldTryNativeScanner = (!fullTextPlan && !indexedPlan) || fallbackNovelCount > nativeRescanThreshold;
+  const fallbackNovelCount = fullTextPlan?.uncoveredNovelCount ?? novelRecords.length;
+  const nativeRescanThreshold = Math.max(500, Math.floor(novelRecords.length * 0.1));
+  const shouldTryNativeScanner = !fullTextPlan || fallbackNovelCount > nativeRescanThreshold;
   let nativeCandidatePaths: Set<string> | null = null;
 
   if (shouldTryNativeScanner) {
     onProgress?.({
-      totalBooks: allNovels.length,
+      totalBooks: novelRecords.length,
       searchedBooks: 0,
       resultCount: 0,
-      indexedTerm: fullTextPlan ? query.anchorTerm : indexedPlan?.terms.join(" + "),
+      indexedTerm: fullTextPlan?.terms.join(" + "),
       scanEngine: "ripgrep",
       scanPhase: "prefilter",
       cacheSegmentCount: 0,
@@ -166,39 +183,20 @@ export async function searchNovelContent(
   }
 
   if (nativeCandidatePaths) {
-    candidates = allNovels.filter((novel) => nativeCandidatePaths.has(novel.relative_path.replace(/\\/g, "/").replace(/^(?:\.\/)+/, "")));
+    const candidateIds = novelRecords
+      .filter((novel) => nativeCandidatePaths!.has(normalizeRelativePath(novel.relative_path)))
+      .map((novel) => novel.id);
+    candidates = listSearchCandidatesByIds(db, candidateIds);
   } else if (fullTextPlan) {
     scanEngine = "fts5";
-    indexLabel = query.anchorTerm;
-    const fullTextCandidateIds = new Set(fullTextPlan.candidateIds);
-    candidates = allNovels.filter((novel) => fullTextCandidateIds.has(novel.id));
-  } else if (indexedPlan) {
-    scanEngine = "index";
-    indexLabel = indexedPlan.terms.join(" + ");
-    const indexedNovelIds = new Set(indexedPlan.novelIds);
-    candidates = allNovels.filter((novel) => indexedNovelIds.has(novel.id) || novel.updated_at >= indexedPlan.indexedAt);
+    indexLabel = fullTextPlan.terms.join(" + ");
+    candidates = listSearchCandidatesByIds(db, fullTextPlan.candidateIds);
   } else {
     scanEngine = "node";
-    candidates = allNovels;
+    candidates = listAllSearchCandidates(db);
   }
 
-  const anchorStatus = getContentIndexTermStatus(indexDb, query.anchorTerm);
-  const anchorIndexIsStale = Boolean(
-    anchorStatus?.status === "indexed" &&
-      (!anchorStatus.updatedAt || allNovels.some((novel) => novel.updated_at >= (anchorStatus.updatedAt || ""))),
-  );
-  const shouldCacheAnchor =
-    isFrontendAutoIndexEnabled() && (!anchorStatus || (anchorStatus.status === "indexed" && anchorIndexIsStale));
-  const canCacheAnchor =
-    shouldCacheAnchor &&
-    (scanEngine === "ripgrep" ||
-      (!fullTextPlan && !indexedPlan) ||
-      Boolean(indexedPlan && indexedPlan.requestedTerms.length === 1 && indexedPlan.requestedTerms[0] === query.anchorTerm));
-  const cacheNovelIds = new Set<number>();
-  let cacheLimitExceeded = false;
-
   emitProgress();
-
   for (const novel of candidates) {
     throwIfCancelled();
     let content: string;
@@ -209,23 +207,16 @@ export async function searchNovelContent(
     }
     searchedBooks += 1;
 
-    let novelHasAnchor = false;
+    let reachedMaxResults = false;
     for (const segment of iterateNovelSegments(content)) {
       throwIfCancelled();
       const normalizedContent = normalizeSearchText(segment.content);
-      const segmentHasAnchor = normalizedContent.includes(query.anchorTerm);
-      if (canCacheAnchor && !cacheLimitExceeded && segmentHasAnchor) {
-        cacheSegmentCount += 1;
-        novelHasAnchor = true;
-        cacheLimitExceeded = cacheSegmentCount > maxIndexSegments;
-      }
-
-      if (!segmentHasAnchor) {
+      if (!normalizedContent.includes(query.anchorTerm)) {
         continue;
       }
 
       const beforeResultCount = results.length;
-      const reachedMaxResults =
+      reachedMaxResults =
         results.length < maxResults &&
         pushMatch({
           novelId: novel.id,
@@ -237,28 +228,15 @@ export async function searchNovelContent(
       if (results.length !== beforeResultCount && (reachedMaxResults || results.length <= 50 || results.length % 10 === 0)) {
         emitProgress();
       }
-      if (reachedMaxResults && (!canCacheAnchor || cacheLimitExceeded)) {
+      if (reachedMaxResults) {
         break;
       }
     }
 
-    if (novelHasAnchor) {
-      cacheNovelIds.add(novel.id);
-    }
-
     emitProgress();
-
-    if (results.length >= maxResults && (!canCacheAnchor || cacheLimitExceeded)) {
+    if (reachedMaxResults) {
       break;
     }
-  }
-
-  if (canCacheAnchor) {
-    throwIfCancelled();
-    saveContentIndexTerm(indexDb, query.anchorTerm, cacheNovelIds, cacheSegmentCount, {
-      maxSegments: maxIndexSegments,
-      source: "auto",
-    });
   }
 
   return { results, searchedBooks };

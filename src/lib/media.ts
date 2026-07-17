@@ -19,6 +19,7 @@ export type MediaSortOrder = "asc" | "desc";
 export type MediaAsset = {
   id: number;
   kind: MediaKind;
+  categoryId: number | null;
   title: string;
   artist: string;
   description: string;
@@ -31,6 +32,16 @@ export type MediaAsset = {
   durationSeconds: number | null;
   playCount: number;
   downloadCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type VideoCategory = {
+  id: number;
+  name: string;
+  sortOrder: number;
+  visible: boolean;
+  videoCount: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -53,6 +64,7 @@ export type MediaSyncResult = {
 type MediaRow = {
   id: number;
   kind: MediaKind;
+  category_id: number | null;
   title: string;
   artist: string;
   description: string;
@@ -64,6 +76,16 @@ type MediaRow = {
   duration_seconds: number | null;
   play_count: number;
   download_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type VideoCategoryRow = {
+  id: number;
+  name: string;
+  sort_order: number;
+  is_visible: number;
+  video_count: number;
   created_at: string;
   updated_at: string;
 };
@@ -95,6 +117,7 @@ type MediaGlobal = typeof globalThis & {
 };
 
 export class MediaFolderError extends Error {}
+export class MediaCategoryError extends Error {}
 
 export const MEDIA_SYNC_INTERVAL_MS = 5 * 60 * 1_000;
 const MEDIA_KINDS: MediaKind[] = ["video", "audio", "file"];
@@ -194,6 +217,7 @@ function toAsset(row: MediaRow): MediaAsset {
   return {
     id: row.id,
     kind: row.kind,
+    categoryId: row.category_id,
     title: row.title,
     artist: row.artist,
     description: row.description,
@@ -209,6 +233,115 @@ function toAsset(row: MediaRow): MediaAsset {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function toVideoCategory(row: VideoCategoryRow): VideoCategory {
+  return {
+    id: row.id,
+    name: row.name,
+    sortOrder: row.sort_order,
+    visible: row.is_visible === 1,
+    videoCount: row.video_count,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function normalizeVideoCategoryName(value: string): string | null {
+  const name = value.normalize("NFKC").trim().replace(/\s+/gu, " ");
+  return name && name.length <= 24 && !/[\u0000-\u001f\u007f]/u.test(name) ? name : null;
+}
+
+function normalizeVideoCategorySortOrder(value: number): number {
+  return Number.isFinite(value) ? Math.min(Math.max(Math.floor(value), -9_999), 9_999) : 0;
+}
+
+export function listVideoCategories(options: { includeHidden?: boolean } = {}): VideoCategory[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT c.id, c.name, c.sort_order, c.is_visible, c.created_at, c.updated_at,
+              COUNT(a.id) AS video_count
+       FROM video_categories c
+       LEFT JOIN media_assets a ON a.category_id = c.id AND a.kind = 'video'
+       ${options.includeHidden ? "" : "WHERE c.is_visible = 1"}
+       GROUP BY c.id
+       ORDER BY c.sort_order ASC, c.name COLLATE NOCASE ASC, c.id ASC`,
+    )
+    .all() as VideoCategoryRow[];
+  return rows.map(toVideoCategory);
+}
+
+export function resolveVideoCategoryId(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new MediaCategoryError("视频分类无效");
+  }
+  const found = getDb().prepare("SELECT id FROM video_categories WHERE id = ?").get(id) as { id: number } | undefined;
+  if (!found) {
+    throw new MediaCategoryError("视频分类不存在");
+  }
+  return id;
+}
+
+export function createVideoCategory(nameValue: string, sortOrder?: number, visible = true): VideoCategory {
+  const name = normalizeVideoCategoryName(nameValue);
+  if (!name) {
+    throw new MediaCategoryError("分类名称应为 1 到 24 个字符");
+  }
+  const duplicate = getDb().prepare("SELECT id FROM video_categories WHERE name = ? COLLATE NOCASE").get(name) as { id: number } | undefined;
+  if (duplicate) {
+    throw new MediaCategoryError("同名视频分类已存在");
+  }
+  const nextOrder = sortOrder === undefined
+    ? Number((getDb().prepare("SELECT COALESCE(MAX(sort_order), -10) + 10 AS value FROM video_categories").get() as { value: number }).value)
+    : normalizeVideoCategorySortOrder(sortOrder);
+  const result = getDb()
+    .prepare("INSERT INTO video_categories (name, sort_order, is_visible) VALUES (?, ?, ?)")
+    .run(name, nextOrder, visible ? 1 : 0);
+  return listVideoCategories({ includeHidden: true }).find((category) => category.id === Number(result.lastInsertRowid))!;
+}
+
+export function updateVideoCategory(id: number, nameValue: string, sortOrder: number, visible: boolean): boolean {
+  if (!Number.isInteger(id) || id <= 0) {
+    return false;
+  }
+  const name = normalizeVideoCategoryName(nameValue);
+  if (!name) {
+    throw new MediaCategoryError("分类名称应为 1 到 24 个字符");
+  }
+  const duplicate = getDb()
+    .prepare("SELECT id FROM video_categories WHERE name = ? COLLATE NOCASE AND id <> ?")
+    .get(name, id) as { id: number } | undefined;
+  if (duplicate) {
+    throw new MediaCategoryError("同名视频分类已存在");
+  }
+  const result = getDb()
+    .prepare("UPDATE video_categories SET name = ?, sort_order = ?, is_visible = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .run(name, normalizeVideoCategorySortOrder(sortOrder), visible ? 1 : 0, id);
+  return Number(result.changes) > 0;
+}
+
+export function deleteVideoCategory(id: number): boolean {
+  return Number.isInteger(id) && id > 0
+    ? Number(getDb().prepare("DELETE FROM video_categories WHERE id = ?").run(id).changes) > 0
+    : false;
+}
+
+export function setVideoCategoryForAssets(ids: number[], categoryValue: unknown): number {
+  const uniqueIds = Array.from(new Set(ids.filter((id) => Number.isInteger(id) && id > 0)));
+  if (!uniqueIds.length) {
+    return 0;
+  }
+  const categoryId = resolveVideoCategoryId(categoryValue);
+  const placeholders = uniqueIds.map(() => "?").join(", ");
+  return Number(
+    getDb()
+      .prepare(`UPDATE media_assets SET category_id = ?, updated_at = CURRENT_TIMESTAMP WHERE kind = 'video' AND id IN (${placeholders})`)
+      .run(categoryId, ...uniqueIds).changes,
+  );
 }
 
 export function isMediaKind(value: unknown): value is MediaKind {
@@ -631,6 +764,7 @@ export function syncMediaLibrary(options: { force?: boolean } = {}): Promise<Med
 
 export function createMediaAsset(params: {
   kind: MediaKind;
+  categoryId?: unknown;
   title: string;
   artist?: string;
   description?: string;
@@ -640,15 +774,17 @@ export function createMediaAsset(params: {
   sizeBytes: number;
   mtimeMs?: number;
 }): MediaAsset {
+  const categoryId = params.kind === "video" ? resolveVideoCategoryId(params.categoryId) : null;
   const result = getDb()
     .prepare(
-      `INSERT INTO media_assets (kind, title, artist, description, file_name, stored_name, mime_type, size_bytes, mtime_ms)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO media_assets (kind, category_id, title, artist, description, file_name, stored_name, mime_type, size_bytes, mtime_ms)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       params.kind,
+      categoryId,
       params.title,
-      params.kind === "audio" ? params.artist || "" : "",
+      params.kind === "file" ? "" : params.artist || "",
       params.description || "",
       params.fileName,
       params.storedName,
@@ -716,6 +852,7 @@ export function sortMediaFolders(folders: MediaFolder[], sortBy: MediaSortBy, so
 
 export function listMediaAssets(params: {
   kind?: MediaKind;
+  videoCategoryId?: number | null;
   folder?: string;
   recursive?: boolean;
   query?: string;
@@ -735,6 +872,14 @@ export function listMediaAssets(params: {
     filters.push("kind = ?");
     values.push(params.kind);
     addFolderFilter(filters, values, params.kind, folder, Boolean(params.recursive || query));
+  }
+  if (params.kind === "video" && params.videoCategoryId !== undefined) {
+    if (params.videoCategoryId === null) {
+      filters.push("category_id IS NULL");
+    } else {
+      filters.push("category_id = ?");
+      values.push(resolveVideoCategoryId(params.videoCategoryId)!);
+    }
   }
   if (query) {
     filters.push("(title LIKE ? ESCAPE '\\' OR file_name LIKE ? ESCAPE '\\' OR artist LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' OR stored_name LIKE ? ESCAPE '\\')");
@@ -975,7 +1120,14 @@ export function moveMediaAsset(id: number, folderValue: string): boolean {
   return true;
 }
 
-export function updateMediaAsset(id: number, titleValue: string, artist: string, description: string, folderValue?: string): boolean {
+export function updateMediaAsset(
+  id: number,
+  titleValue: string,
+  artist: string,
+  description: string,
+  folderValue?: string,
+  categoryValue?: unknown,
+): boolean {
   const asset = getMediaAsset(id);
   if (!asset) {
     return false;
@@ -989,6 +1141,7 @@ export function updateMediaAsset(id: number, titleValue: string, artist: string,
   if (folder === null || !mediaFolderExists(asset.kind, folder)) {
     throw new MediaFolderError("目标文件夹不存在");
   }
+  const categoryId = asset.kind === "video" && categoryValue !== undefined ? resolveVideoCategoryId(categoryValue) : asset.categoryId;
 
   const nextFileName = `${title}${extension}`;
   const nextStoredName = mediaStoredName(asset.kind, folder, nextFileName);
@@ -1022,11 +1175,14 @@ export function updateMediaAsset(id: number, titleValue: string, artist: string,
     const result = db
       .prepare(
         `UPDATE media_assets
-         SET title = ?, artist = CASE WHEN kind = 'audio' THEN ? ELSE '' END, description = ?,
+         SET title = ?, artist = CASE WHEN kind IN ('video', 'audio') THEN ? ELSE '' END, description = ?,
              file_name = ?, stored_name = ?, updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`,
       )
       .run(title, artist, description, nextFileName, nextStoredName, id);
+    if (asset.kind === "video" && categoryValue !== undefined) {
+      db.prepare("UPDATE media_assets SET category_id = ? WHERE id = ?").run(categoryId, id);
+    }
     db.prepare("UPDATE user_media_history SET title = ? WHERE media_id = ?").run(title, id);
     db.exec("COMMIT");
     markMediaLibraryDirty();

@@ -6,7 +6,15 @@ import { MediaVideoCard } from "@/components/MediaVideoCard";
 import { Pagination } from "@/components/Pagination";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getVideoThumbnailSettings } from "@/lib/config";
-import { getAccessibleMediaKinds, isMediaKind, listMediaAssets, listMediaFolders, type MediaAsset, type MediaKind } from "@/lib/media";
+import {
+  getAccessibleMediaKinds,
+  isMediaKind,
+  listMediaAssets,
+  listMediaFolders,
+  listVideoCategories,
+  type MediaAsset,
+  type MediaKind,
+} from "@/lib/media";
 import { scheduleMediaPreparation } from "@/lib/media-maintenance";
 import { formatMediaDuration } from "@/lib/media-metadata";
 import { getCurrentUser } from "@/lib/user-auth";
@@ -14,7 +22,7 @@ import { getCurrentUser } from "@/lib/user-auth";
 export const dynamic = "force-dynamic";
 
 type MediaPageProps = {
-  searchParams: Promise<{ kind?: string; folder?: string; q?: string; page?: string }>;
+  searchParams: Promise<{ kind?: string; folder?: string; q?: string; page?: string; category?: string }>;
 };
 
 const KIND_LABELS: Record<MediaKind, string> = { video: "视频", audio: "音频", file: "文件" };
@@ -37,10 +45,11 @@ function displayTitle(title: string, fileName: string): string {
   return extension && title.toLowerCase().endsWith(extension.toLowerCase()) ? title.slice(0, -extension.length) : title;
 }
 
-function mediaHref(kind: MediaKind, folder = "", query = ""): string {
+function mediaHref(kind: MediaKind, folder = "", query = "", category = ""): string {
   const params = new URLSearchParams({ kind });
   if (folder) params.set("folder", folder);
   if (query) params.set("q", query);
+  if (kind === "video" && category) params.set("category", category);
   return `/media?${params.toString()}`;
 }
 
@@ -72,8 +81,15 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
   const requestedKind = isMediaKind(params.kind) ? params.kind : null;
   if (requestedKind && !accessibleKinds.includes(requestedKind)) notFound();
   const kind = requestedKind || accessibleKinds[0];
+  const videoCategories = kind === "video" ? listVideoCategories() : [];
+  const requestedCategoryId = /^\d+$/.test(params.category || "") ? Number(params.category) : undefined;
+  const videoCategoryId = requestedCategoryId && videoCategories.some((category) => category.id === requestedCategoryId)
+    ? requestedCategoryId
+    : undefined;
+  const categoryParam = videoCategoryId ? String(videoCategoryId) : "";
   const result = listMediaAssets({
     kind,
+    videoCategoryId,
     folder: kind === "video" ? "" : params.folder,
     recursive: kind === "video",
     query: params.q,
@@ -100,6 +116,21 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
           </div>
         </header>
 
+        {kind === "video" && videoCategories.length ? (
+          <nav className="mediaVideoChannels" aria-label="视频分类">
+            <Link className={!categoryParam ? "isActive" : ""} href={mediaHref(kind, "", result.query)}>全部</Link>
+            {videoCategories.map((category) => (
+              <Link
+                className={categoryParam === String(category.id) ? "isActive" : ""}
+                href={mediaHref(kind, "", result.query, String(category.id))}
+                key={category.id}
+              >
+                {category.name}
+              </Link>
+            ))}
+          </nav>
+        ) : null}
+
         <div className="mediaLibraryToolbar isSearchOnly">
           <form className="mediaSearchForm" action="/media">
             <Search size={16} aria-hidden="true" />
@@ -110,9 +141,10 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
               aria-label={kind === "video" ? "搜索视频" : kind === "audio" ? "搜索标题、作者或目录" : "搜索文件或目录"}
             />
             <input name="kind" type="hidden" value={kind} />
+            {categoryParam ? <input name="category" type="hidden" value={categoryParam} /> : null}
             {kind !== "video" && result.folder ? <input name="folder" type="hidden" value={result.folder} /> : null}
             {result.query ? (
-              <Link className="mediaSearchIconButton" href={mediaHref(kind, kind === "video" ? "" : result.folder)} aria-label="清除资源搜索" title="清除搜索">
+              <Link className="mediaSearchIconButton" href={mediaHref(kind, kind === "video" ? "" : result.folder, "", categoryParam)} aria-label="清除资源搜索" title="清除搜索">
                 <X size={15} aria-hidden="true" />
               </Link>
             ) : null}
@@ -167,7 +199,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
               totalPages={result.totalPages}
               query={result.query}
               basePath="/media"
-              extraParams={{ kind, folder: kind === "video" ? undefined : result.folder || undefined }}
+              extraParams={{ kind, folder: kind === "video" ? undefined : result.folder || undefined, category: categoryParam || undefined }}
             />
         </div>
       </section>

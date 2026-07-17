@@ -19,10 +19,6 @@ RUN npm pkg set \
   scripts.start="node server.js" \
   scripts.scan:books="node maintenance/scan-books.js" \
   scripts.index:search="node maintenance/build-content-search-index.js" \
-  scripts.index:content="node maintenance/index-content.js" \
-  scripts.compact:index="node maintenance/compact-content-index.js" \
-  scripts.migrate:index-db="node maintenance/migrate-content-index-db.js" \
-  scripts.cleanup:legacy-index="node maintenance/cleanup-legacy-index.js" \
   scripts.optimize:media="node maintenance/optimize-media.js"
 
 FROM node:24-bookworm-slim AS runner

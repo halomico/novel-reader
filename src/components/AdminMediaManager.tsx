@@ -1,11 +1,12 @@
 "use client";
 
-import { ChevronRight, Clapperboard, File, Folder, Headphones, Pencil, Save, Trash2, Upload, X } from "lucide-react";
-import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
+import { ChevronRight, Clapperboard, File, Folder, Headphones, Pencil, Save, Tags, Trash2, Upload, X } from "lucide-react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { deleteAdminMediaAction, updateAdminMediaAction } from "@/app/admin/actions";
+import { assignAdminVideoCategoryAction, deleteAdminMediaAction, updateAdminMediaAction } from "@/app/admin/actions";
 import { LocalDateTime } from "@/components/LocalDateTime";
-import type { MediaAsset, MediaFolder, MediaKind, MediaSortBy, MediaSortOrder } from "@/lib/media";
+import { MediaVideoPreview } from "@/components/MediaVideoPreview";
+import type { MediaAsset, MediaFolder, MediaKind, MediaSortBy, MediaSortOrder, VideoCategory } from "@/lib/media";
 
 const KIND_LABELS: Record<MediaKind, string> = { video: "视频", audio: "音频", file: "文件" };
 const KIND_ICONS = { video: Clapperboard, audio: Headphones, file: File };
@@ -27,6 +28,16 @@ function formatBytes(bytes: number): string {
     unit += 1;
   }
   return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[unit]}`;
+}
+
+function formatDuration(durationSeconds: number | null): string {
+  if (!durationSeconds || !Number.isFinite(durationSeconds) || durationSeconds <= 0) return "--:--";
+  const totalSeconds = Math.floor(durationSeconds);
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  return totalMinutes < 60
+    ? `${totalMinutes}:${seconds}`
+    : `${Math.floor(totalMinutes / 60)}:${String(totalMinutes % 60).padStart(2, "0")}:${seconds}`;
 }
 
 async function responseJson(response: Response): Promise<{ ok?: boolean; message?: string; uploadId?: string; chunkBytes?: number }> {
@@ -65,6 +76,7 @@ function AdminMediaFolderRow({ folder, onOpen }: { folder: MediaFolder; onOpen: 
       <td title={folder.name}><strong>{folder.name}</strong></td>
       <td>-</td>
       <td>-</td>
+      <td>-</td>
       <td title={folder.path}>{folder.path}</td>
       <td>{formatBytes(folder.totalSizeBytes)}</td>
       <td>{folder.directAssets} 个直属资源</td>
@@ -85,6 +97,10 @@ export function AdminMediaManager({
   initialKind,
   initialFolder = "",
   returnPath,
+  categories,
+  categoryParam = "",
+  view = "table",
+  thumbnail,
 }: {
   assets: MediaAsset[];
   totalAssets: number;
@@ -96,6 +112,15 @@ export function AdminMediaManager({
   initialKind?: MediaKind;
   initialFolder?: string;
   returnPath: string;
+  categories: VideoCategory[];
+  categoryParam?: string;
+  view?: "table" | "grid";
+  thumbnail: {
+    mode: "single" | "carousel";
+    singlePercent: number;
+    carouselFrames: number;
+    carouselIntervalSeconds: number;
+  };
 }) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -105,6 +130,7 @@ export function AdminMediaManager({
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
   const [description, setDescription] = useState("");
+  const [uploadCategoryId, setUploadCategoryId] = useState(/^\d+$/.test(categoryParam) ? categoryParam : "");
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState("");
@@ -112,6 +138,7 @@ export function AdminMediaManager({
   const [editingAsset, setEditingAsset] = useState<MediaAsset | null>(null);
   const visibleIds = assets.map((asset) => asset.id);
   const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+  const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories]);
 
   useEffect(() => {
     setSelectedIds([]);
@@ -120,11 +147,12 @@ export function AdminMediaManager({
 
   useEffect(() => {
     setFolder(initialFolder);
+    setUploadCategoryId(/^\d+$/.test(categoryParam) ? categoryParam : "");
     setFiles([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
-  }, [initialFolder, initialKind]);
+  }, [categoryParam, initialFolder, initialKind]);
 
   function chooseFiles(event: ChangeEvent<HTMLInputElement>) {
     const nextFiles = Array.from(event.target.files || []);
@@ -166,6 +194,7 @@ export function AdminMediaManager({
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
               kind,
+              categoryId: kind === "video" ? uploadCategoryId : undefined,
               title: uploadFiles.length === 1 ? title : "",
               artist,
               description,
@@ -241,7 +270,7 @@ export function AdminMediaManager({
   return (
     <>
       {kind ? <form className="adminMediaUpload" onSubmit={upload}>
-        <div className={kind === "audio" ? "adminMediaUploadFields hasArtist" : "adminMediaUploadFields"}>
+        <div className={`adminMediaUploadFields${kind !== "file" ? " hasArtist" : ""}${kind === "video" ? " hasCategory" : ""}`}>
           <label>
             <span>名称</span>
             <input
@@ -252,10 +281,19 @@ export function AdminMediaManager({
               disabled={isUploading || files.length > 1}
             />
           </label>
-          {kind === "audio" ? (
+          {kind !== "file" ? (
             <label>
               <span>作者</span>
               <input value={artist} onChange={(event) => setArtist(event.target.value)} maxLength={80} placeholder="可选，本批次共用" disabled={isUploading} />
+            </label>
+          ) : null}
+          {kind === "video" ? (
+            <label>
+              <span>分类</span>
+              <select value={uploadCategoryId} onChange={(event) => setUploadCategoryId(event.target.value)} disabled={isUploading}>
+                <option value="">未分类</option>
+                {categories.map((category) => <option value={category.id} key={category.id}>{category.name}{category.visible ? "" : "（隐藏）"}</option>)}
+              </select>
             </label>
           ) : null}
           <label>
@@ -288,70 +326,147 @@ export function AdminMediaManager({
 
       {assets.length || directFolders.length ? (
         <>
-          <div className="adminTableWrap adminMediaTableWrap">
-            <table className="adminTable adminMediaTable">
-              <thead>
-                <tr>
-                  <th aria-label="选择资源"><input className="adminCheckbox" type="checkbox" checked={allSelected} onChange={toggleAll} /></th>
-                  <th>类型</th>
-                  <th>名称</th>
-                  <th>作者</th>
-                  <th>文件名</th>
-                  <th>目录</th>
-                  <th>大小</th>
-                  <th>播放/下载</th>
-                  <th>更新时间</th>
-                  <th aria-label="编辑">编辑</th>
-                </tr>
-              </thead>
-              <tbody>
-                {directFolders.map((item) => (
-                  <AdminMediaFolderRow
-                    folder={item}
-                    onOpen={() => {
-                      if (!kind) return;
-                      const params = new URLSearchParams({ kind, folder: item.path });
-                      if (query) params.set("q", query);
-                      params.set("sort", sortBy);
-                      params.set("order", sortOrder);
-                      router.push(`/admin/media?${params.toString()}`);
-                    }}
-                    key={item.path}
-                  />
+          {view === "grid" && kind === "video" ? (
+            <div className="adminMediaGridContent">
+              {directFolders.length ? (
+                <div className="adminMediaGridFolders">
+                  {directFolders.map((item) => (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const params = new URLSearchParams({ kind, folder: item.path, sort: sortBy, order: sortOrder, view });
+                        if (query) params.set("q", query);
+                        if (categoryParam) params.set("category", categoryParam);
+                        router.push(`/admin/media?${params.toString()}`);
+                      }}
+                      title={`打开 ${item.path}`}
+                      key={item.path}
+                    >
+                      <Folder size={18} aria-hidden="true" />
+                      <span>{item.name}</span>
+                      <ChevronRight size={15} aria-hidden="true" />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <div className="adminMediaVideoGrid">
+                {assets.map((asset) => (
+                  <article className={selectedIds.includes(asset.id) ? "adminMediaVideoItem isSelected" : "adminMediaVideoItem"} key={asset.id}>
+                    <label className="adminMediaVideoSelect" title={`选择 ${asset.title}`}>
+                      <input className="adminCheckbox" type="checkbox" checked={selectedIds.includes(asset.id)} onChange={() => toggleOne(asset.id)} aria-label={`选择 ${asset.title}`} />
+                    </label>
+                    <div className="adminMediaVideoThumbnail">
+                      <MediaVideoPreview
+                        id={asset.id}
+                        mode={thumbnail.mode}
+                        singlePercent={thumbnail.singlePercent}
+                        frameCount={thumbnail.carouselFrames}
+                        intervalSeconds={thumbnail.carouselIntervalSeconds}
+                        sourceVersion={asset.mtimeMs}
+                        admin
+                      />
+                      <span className="mediaVideoMeta">{formatDuration(asset.durationSeconds)}</span>
+                    </div>
+                    <div className="adminMediaVideoCopy">
+                      <strong title={asset.title}>{asset.title}</strong>
+                      <span>
+                        {asset.categoryId ? categoryNames.get(asset.categoryId) || "未分类" : "未分类"}
+                        {asset.artist ? ` · ${asset.artist}` : ""}
+                      </span>
+                      <small title={asset.fileName}>{asset.fileName}</small>
+                    </div>
+                    <button className="adminTableIconButton" type="button" onClick={() => setEditingAsset(asset)} aria-label={`编辑 ${asset.title}`} title="编辑">
+                      <Pencil size={15} aria-hidden="true" />
+                    </button>
+                  </article>
                 ))}
-                {assets.map((asset) => {
-                  const Icon = KIND_ICONS[asset.kind];
-                  return (
-                    <tr key={asset.id}>
-                      <td><input className="adminCheckbox" type="checkbox" checked={selectedIds.includes(asset.id)} onChange={() => toggleOne(asset.id)} aria-label={`选择 ${asset.title}`} /></td>
-                      <td><span className={`adminMediaKind is-${asset.kind}`}><Icon size={14} aria-hidden="true" />{KIND_LABELS[asset.kind]}</span></td>
-                      <td title={asset.title}><strong>{asset.title}</strong></td>
-                      <td title={asset.artist}>{asset.kind === "audio" ? asset.artist || "-" : "-"}</td>
-                      <td title={asset.fileName}>{asset.fileName}</td>
-                      <td title={asset.folder || "根目录"}>{asset.folder || "根目录"}</td>
-                      <td>{formatBytes(asset.sizeBytes)}</td>
-                      <td>{asset.kind === "file" ? `${asset.downloadCount} 次下载` : `${asset.playCount} 次播放`}</td>
-                      <td><LocalDateTime value={asset.updatedAt} /></td>
-                      <td>
-                        <button className="adminTableIconButton" type="button" onClick={() => setEditingAsset(asset)} aria-label={`编辑 ${asset.title}`} title="编辑">
-                          <Pencil size={15} aria-hidden="true" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+              </div>
+            </div>
+          ) : (
+            <div className="adminTableWrap adminMediaTableWrap">
+              <table className="adminTable adminMediaTable">
+                <thead>
+                  <tr>
+                    <th aria-label="选择资源"><input className="adminCheckbox" type="checkbox" checked={allSelected} onChange={toggleAll} /></th>
+                    <th>类型</th>
+                    <th>名称</th>
+                    <th>分类</th>
+                    <th>作者</th>
+                    <th>文件名</th>
+                    <th>目录</th>
+                    <th>大小</th>
+                    <th>播放/下载</th>
+                    <th>更新时间</th>
+                    <th aria-label="编辑">编辑</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {directFolders.map((item) => (
+                    <AdminMediaFolderRow
+                      folder={item}
+                      onOpen={() => {
+                        if (!kind) return;
+                        const params = new URLSearchParams({ kind, folder: item.path });
+                        if (query) params.set("q", query);
+                        if (categoryParam) params.set("category", categoryParam);
+                        if (view === "grid") params.set("view", view);
+                        params.set("sort", sortBy);
+                        params.set("order", sortOrder);
+                        router.push(`/admin/media?${params.toString()}`);
+                      }}
+                      key={item.path}
+                    />
+                  ))}
+                  {assets.map((asset) => {
+                    const Icon = KIND_ICONS[asset.kind];
+                    return (
+                      <tr key={asset.id}>
+                        <td><input className="adminCheckbox" type="checkbox" checked={selectedIds.includes(asset.id)} onChange={() => toggleOne(asset.id)} aria-label={`选择 ${asset.title}`} /></td>
+                        <td><span className={`adminMediaKind is-${asset.kind}`}><Icon size={14} aria-hidden="true" />{KIND_LABELS[asset.kind]}</span></td>
+                        <td title={asset.title}><strong>{asset.title}</strong></td>
+                        <td>{asset.kind === "video" ? (asset.categoryId ? categoryNames.get(asset.categoryId) || "未分类" : "未分类") : "-"}</td>
+                        <td title={asset.artist}>{asset.kind === "file" ? "-" : asset.artist || "-"}</td>
+                        <td title={asset.fileName}>{asset.fileName}</td>
+                        <td title={asset.folder || "根目录"}>{asset.folder || "根目录"}</td>
+                        <td>{formatBytes(asset.sizeBytes)}</td>
+                        <td>{asset.kind === "file" ? `${asset.downloadCount} 次下载` : `${asset.playCount} 次播放`}</td>
+                        <td><LocalDateTime value={asset.updatedAt} /></td>
+                        <td>
+                          <button className="adminTableIconButton" type="button" onClick={() => setEditingAsset(asset)} aria-label={`编辑 ${asset.title}`} title="编辑">
+                            <Pencil size={15} aria-hidden="true" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
           <div className="adminTableFooter adminMediaFooter">
-            <form action={deleteAdminMediaAction}>
-              <input name="returnPath" type="hidden" value={returnPath} />
-              {selectedIds.map((id) => <input name="mediaIds" type="hidden" value={id} key={id} />)}
-              <button className="adminDangerButton" type="submit" disabled={!selectedIds.length}>
-                <Trash2 size={16} aria-hidden="true" />
-                删除所选
-              </button>
-            </form>
+            <div className="adminMediaBulkActions">
+              {kind === "video" ? (
+                <form className="adminMediaCategoryBulkForm" action={assignAdminVideoCategoryAction}>
+                  <input name="returnPath" type="hidden" value={returnPath} />
+                  {selectedIds.map((id) => <input name="mediaIds" type="hidden" value={id} key={id} />)}
+                  <select name="categoryId" aria-label="批量设置视频分类" disabled={!selectedIds.length}>
+                    <option value="">未分类</option>
+                    {categories.map((category) => <option value={category.id} key={category.id}>{category.name}{category.visible ? "" : "（隐藏）"}</option>)}
+                  </select>
+                  <button className="adminIconTextButton" type="submit" disabled={!selectedIds.length}>
+                    <Tags size={15} aria-hidden="true" />归类
+                  </button>
+                </form>
+              ) : null}
+              <form action={deleteAdminMediaAction}>
+                <input name="returnPath" type="hidden" value={returnPath} />
+                {selectedIds.map((id) => <input name="mediaIds" type="hidden" value={id} key={id} />)}
+                <button className="adminDangerButton" type="submit" disabled={!selectedIds.length}>
+                  <Trash2 size={16} aria-hidden="true" />
+                  删除所选
+                </button>
+              </form>
+            </div>
             <span>当前显示 {directFolders.length} 个文件夹、{assets.length} 个资源，共 {totalAssets} 个资源</span>
           </div>
         </>
@@ -373,10 +488,19 @@ export function AdminMediaManager({
               <span>名称</span>
               <input name="title" defaultValue={editingAsset.title} maxLength={120} required autoFocus />
             </label>
-            {editingAsset.kind === "audio" ? (
+            {editingAsset.kind !== "file" ? (
               <label>
                 <span>作者</span>
                 <input name="artist" defaultValue={editingAsset.artist} maxLength={80} placeholder="可选" />
+              </label>
+            ) : null}
+            {editingAsset.kind === "video" ? (
+              <label>
+                <span>分类</span>
+                <select name="categoryId" defaultValue={editingAsset.categoryId || ""}>
+                  <option value="">未分类</option>
+                  {categories.map((category) => <option value={category.id} key={category.id}>{category.name}{category.visible ? "" : "（隐藏）"}</option>)}
+                </select>
               </label>
             ) : null}
             <label>

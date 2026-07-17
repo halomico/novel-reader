@@ -3,7 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { getLibraryDir } from "./config";
-import { deleteIndexedContentForNovel } from "./content-index";
+import { getContentSearchDb } from "./content-search-db";
+import { deleteContentSearchIndexNovel } from "./content-search-index";
 import { getDb } from "./db";
 import { isNovelTextFile, parseNovelTitle } from "./filename";
 import { decodeNovelBuffer } from "./text";
@@ -141,7 +142,7 @@ export function upsertNovelRecord(db: DatabaseSync, record: NovelFileRecord): nu
     existing &&
     (existing.content_hash !== record.contentHash || existing.size_bytes !== record.sizeBytes || existing.mtime_ms !== record.mtimeMs)
   ) {
-    deleteIndexedContentForNovel(db, existing.id, true);
+    deleteContentSearchIndexNovel(getContentSearchDb(), existing.id);
   }
 
   db.prepare(
@@ -176,7 +177,7 @@ export function deleteNovelByRelativePath(db: DatabaseSync, relativePath: string
     return false;
   }
 
-  deleteIndexedContentForNovel(db, row.id);
+  deleteContentSearchIndexNovel(getContentSearchDb(), row.id);
   db.prepare("DELETE FROM novels WHERE id = ?").run(row.id);
   return true;
 }
@@ -193,7 +194,7 @@ export function deleteNovelById(db: DatabaseSync, id: number): DeletedNovel | nu
   const filePath = resolveLibraryFile(novel.relative_path);
   db.exec("BEGIN");
   try {
-    deleteIndexedContentForNovel(db, id);
+    deleteContentSearchIndexNovel(getContentSearchDb(), id);
     db.prepare("DELETE FROM novels WHERE id = ?").run(id);
     db.exec("COMMIT");
   } catch (error) {

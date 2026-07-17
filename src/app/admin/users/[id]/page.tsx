@@ -133,7 +133,7 @@ export default async function AdminUserDetailPage({ params }: AdminUserDetailPag
           <form action={deleteAdminUserHistoryAction}>
             <input name="userId" type="hidden" value={user.id} />
             <div className="adminTableWrap">
-              <table className="adminTable">
+              <table className="adminTable adminUserHistoryTable">
                 <thead>
                   <tr>
                     <th aria-label="选择记录">选择</th>
@@ -152,19 +152,19 @@ export default async function AdminUserDetailPage({ params }: AdminUserDetailPag
                       const typeLabel = item.source === "novel" ? "小说" : item.source === "video" ? "视频" : item.source === "audio" ? "音频" : "文件";
                       return (
                       <tr key={item.key}>
-                        <td><input className="adminCheckbox" name="historyIds" type="checkbox" value={item.key} aria-label={`选择 ${item.title}`} /></td>
-                        <td><span className={`accountHistoryKind is-${item.source}`}>{typeLabel}</span></td>
-                        <td>
+                        <td className="adminUserHistorySelect"><input className="adminCheckbox" name="historyIds" type="checkbox" value={item.key} aria-label={`选择 ${item.title}`} /></td>
+                        <td className="adminUserHistoryKind"><span className={`accountHistoryKind is-${item.source}`}>{typeLabel}</span></td>
+                        <td className="adminUserHistoryContent">
                           {item.itemExists ? (
                             <Link href={href}>{item.title}</Link>
                           ) : (
                             <strong>{item.title}</strong>
                           )}
                         </td>
-                        <td>
+                        <td className="adminUserHistoryTime">
                           <LocalDateTime value={item.lastAccessedAt} />
                         </td>
-                        <td>{item.visitCount}</td>
+                        <td className="adminUserHistoryCount">{item.visitCount}</td>
                       </tr>
                       );
                     })

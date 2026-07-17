@@ -6,19 +6,14 @@ import { RateLimitRulesEditor } from "@/components/RateLimitRulesEditor";
 import { getAdminBookStats } from "@/lib/admin-books";
 import {
   getAdminBookPageSize,
-  getAdminIndexPageSize,
   getAdminLoginRateLimitPerMinute,
   getAdminOperationRateLimitPerMinute,
   getAdminUsername,
   getAnalyticsRealtimeLimit,
   getCatalogPageSize,
   getContentRateLimitRules,
-  getContentIndexHardLimitBytes,
-  getContentIndexMaxSegments,
-  getContentIndexSoftLimitBytes,
   getFrontendSearchConcurrencyLimit,
   getGlobalSearchMaxResults,
-  getManualIndexMaxSegments,
   getNoticeDisplaySeconds,
   getReaderDefaultFontSize,
   getSearchRateLimitRules,
@@ -30,7 +25,7 @@ import {
   getSiteTitle,
   shouldBlockHeadlessBrowsers,
 } from "@/lib/config";
-import { MAX_CONTENT_INDEX_LIMIT_GB, readSiteSettings } from "@/lib/site-settings";
+import { readSiteSettings } from "@/lib/site-settings";
 import { listIpRateLimitBans } from "@/lib/ip-rate-limit";
 import {
   cancelFrontendSearchJobsAction,
@@ -72,7 +67,6 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
   const catalogPageSize = settings.catalogPageSize || getCatalogPageSize();
   const searchResultsPageSize = settings.searchResultsPageSize || getSearchResultsPageSize();
   const adminBookPageSize = settings.adminBookPageSize || getAdminBookPageSize();
-  const adminIndexPageSize = settings.adminIndexPageSize || getAdminIndexPageSize();
   const noticeDisplaySeconds = settings.noticeDisplaySeconds || getNoticeDisplaySeconds();
   const readerDefaultFontSize = settings.readerDefaultFontSize || getReaderDefaultFontSize();
   const globalSearchMaxResults = settings.globalSearchMaxResults || getGlobalSearchMaxResults();
@@ -85,11 +79,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
   const userAvatarMaxMb = ((settings.userAvatarMaxBytes || getUserAvatarMaxBytes()) / 1024 ** 2).toFixed(1);
   const analyticsRealtimeLimit = settings.analyticsRealtimeLimit || getAnalyticsRealtimeLimit();
   const frontendSearchConcurrencyLimit = settings.frontendSearchConcurrencyLimit || getFrontendSearchConcurrencyLimit();
-  const contentIndexMaxSegments = settings.contentIndexMaxSegments || getContentIndexMaxSegments();
-  const manualIndexMaxSegments = settings.manualIndexMaxSegments || getManualIndexMaxSegments();
   const contentBlockHeadlessBrowsers = shouldBlockHeadlessBrowsers();
-  const softLimitGb = ((settings.contentIndexSoftLimitBytes || getContentIndexSoftLimitBytes()) / 1024 ** 3).toFixed(2);
-  const hardLimitGb = ((settings.contentIndexHardLimitBytes || getContentIndexHardLimitBytes()) / 1024 ** 3).toFixed(2);
 
   return (
     <AdminFrame active="settings" notice={params.notice} tone={params.tone}>
@@ -97,7 +87,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
         <div className="adminPanelHeader">
           <div>
             <h2>系统设置</h2>
-            <p>站点展示、登录安全、索引容量和 IP 规则会写入后台设置文件。</p>
+            <p>站点展示、登录安全、搜索行为和 IP 规则会写入后台设置文件。</p>
           </div>
           <Settings size={20} aria-hidden="true" />
         </div>
@@ -244,12 +234,6 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 <input name="adminBookPageSize" type="number" min="1" max="200" defaultValue={adminBookPageSize} />
               </label>
               <label>
-                <span>索引词每页 / 个</span>
-                <input name="adminIndexPageSize" type="number" min="1" max="200" defaultValue={adminIndexPageSize} />
-              </label>
-            </div>
-            <div className="adminFieldGrid">
-              <label>
                 <span>提示显示秒数</span>
                 <input name="noticeDisplaySeconds" type="number" min="0" max="60" defaultValue={noticeDisplaySeconds} />
               </label>
@@ -382,16 +366,9 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
             <label className="adminSwitchLabel">
               <span>
                 <strong>显示搜索进度条</strong>
-                <small>前台全文搜索和后台手动索引会显示扫描进度。</small>
+                <small>前台全文搜索和后台全文索引构建会显示处理进度。</small>
               </span>
               <input name="showProgressBars" type="checkbox" defaultChecked={settings.showProgressBars} />
-            </label>
-            <label className="adminSwitchLabel">
-              <span>
-                <strong>前台搜索后自动建立索引</strong>
-                <small>关闭后仍会使用已有索引，但不会把新搜索词写入索引库。</small>
-              </span>
-              <input name="frontendAutoIndexEnabled" type="checkbox" defaultChecked={settings.frontendAutoIndexEnabled} />
             </label>
             <div className="adminFieldGrid">
               <label>
@@ -407,50 +384,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               <button className="adminSecondaryButton" type="submit" formAction={cancelFrontendSearchJobsAction}>
                 停止所有前台搜索任务
               </button>
-              <small>用于释放正在扫描正文或自动建立索引的前台搜索任务。</small>
-            </div>
-            <div className="adminFieldGrid">
-              <label>
-                <span>前台自动索引片段上限</span>
-                <input name="contentIndexMaxSegments" type="number" min="1" max="100000" defaultValue={contentIndexMaxSegments} />
-              </label>
-            </div>
-            <div className="adminFieldGrid">
-              <label>
-                <span>手动索引片段上限</span>
-                <input name="manualIndexMaxSegments" type="number" min="1" max="1000000" defaultValue={manualIndexMaxSegments} />
-              </label>
-            </div>
-            <label className="adminSwitchLabel">
-              <span>
-                <strong>启用手动索引片段上限</strong>
-                <small>默认关闭。关闭时后台手动索引完全不受片段数量限制。</small>
-              </span>
-              <input name="manualIndexMaxSegmentsEnabled" type="checkbox" defaultChecked={settings.manualIndexMaxSegmentsEnabled} />
-            </label>
-            <div className="adminFieldGrid">
-              <label>
-                <span>索引库软上限 / GB</span>
-                <input
-                  name="contentIndexSoftLimitGb"
-                  type="number"
-                  min="0.1"
-                  max={MAX_CONTENT_INDEX_LIMIT_GB}
-                  step="0.01"
-                  defaultValue={softLimitGb}
-                />
-              </label>
-              <label>
-                <span>索引库硬上限 / GB</span>
-                <input
-                  name="contentIndexHardLimitGb"
-                  type="number"
-                  min="0.1"
-                  max={MAX_CONTENT_INDEX_LIMIT_GB}
-                  step="0.01"
-                  defaultValue={hardLimitGb}
-                />
-              </label>
+              <small>索引构建与存储状态统一在“搜索索引”页面管理。</small>
             </div>
           </section>
 

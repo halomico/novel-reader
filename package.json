@@ -9,12 +9,8 @@
     "start": "next start",
     "scan:books": "tsx scripts/scan-books.ts",
     "index:search": "tsx scripts/build-content-search-index.ts",
-    "index:content": "tsx scripts/index-content.ts",
-    "compact:index": "tsx scripts/compact-content-index.ts",
-    "migrate:index-db": "tsx scripts/migrate-content-index-db.ts",
-    "cleanup:legacy-index": "tsx scripts/cleanup-legacy-index.ts",
     "optimize:media": "tsx scripts/optimize-media.ts",
-    "test": "node --import tsx --test src/lib/filename.test.ts src/lib/books.test.ts src/lib/text.test.ts src/lib/search-query.test.ts src/lib/content-search-scanner.node.test.ts src/lib/content-search-index.test.ts src/lib/search.test.ts src/lib/admin-access.test.ts src/lib/content-index-db.test.ts src/lib/content-index.test.ts src/lib/date-time.test.ts src/lib/analytics.test.ts src/lib/search-analytics.test.ts src/lib/rate-limit.test.ts src/lib/ip-rate-limit.test.ts src/lib/login-captcha.test.ts src/lib/media.test.ts src/lib/media-thumbnail.test.ts src/lib/media-metadata.test.ts src/lib/media-upload.test.ts src/lib/media-analytics.test.ts src/lib/mp4-faststart.test.ts src/lib/site-icon.test.ts src/lib/site-settings.test.ts src/lib/password.test.ts"
+    "test": "node --import tsx --test src/lib/filename.test.ts src/lib/books.test.ts src/lib/text.test.ts src/lib/search-query.test.ts src/lib/content-search-scanner.node.test.ts src/lib/content-search-index.test.ts src/lib/search.test.ts src/lib/db.test.ts src/lib/admin-access.test.ts src/lib/date-time.test.ts src/lib/analytics.test.ts src/lib/search-analytics.test.ts src/lib/rate-limit.test.ts src/lib/ip-rate-limit.test.ts src/lib/login-captcha.test.ts src/lib/media.test.ts src/lib/media-thumbnail.test.ts src/lib/media-metadata.test.ts src/lib/media-upload.test.ts src/lib/media-analytics.test.ts src/lib/mp4-faststart.test.ts src/lib/site-icon.test.ts src/lib/site-settings.test.ts src/lib/password.test.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

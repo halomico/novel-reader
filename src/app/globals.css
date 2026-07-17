@@ -875,27 +875,6 @@ button.pageNumber {
   padding: 10px 12px;
 }
 
-.adminIndexProgressActions {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.adminIndexProgressActions button {
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: var(--accent);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.adminIndexProgressActions button:hover,
-.adminIndexProgressActions button:focus-visible {
-  text-decoration: underline;
-}
-
 .currentFindControls {
   position: absolute;
   top: calc(100% + 6px);
@@ -1798,6 +1777,50 @@ mark {
   font-size: 12px;
 }
 
+.mediaVideoChannels {
+  display: flex;
+  min-width: 0;
+  gap: 18px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: none;
+}
+
+.mediaVideoChannels::-webkit-scrollbar {
+  display: none;
+}
+
+.mediaVideoChannels a {
+  position: relative;
+  flex: 0 0 auto;
+  padding: 8px 1px 10px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.mediaVideoChannels a::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: transparent;
+  content: "";
+}
+
+.mediaVideoChannels a:hover,
+.mediaVideoChannels a:focus-visible,
+.mediaVideoChannels a.isActive {
+  color: var(--accent);
+}
+
+.mediaVideoChannels a.isActive::after {
+  background: var(--accent);
+}
+
 .mediaAssetGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2553,7 +2576,6 @@ mark {
 .adminTopActions,
 .adminPanelHeader,
 .adminUploadForm,
-.adminIndexForm,
 .adminTableFooter,
 .adminStatCard,
 .adminPaths p {
@@ -2612,8 +2634,6 @@ mark {
 .adminSettingsForm input,
 .adminSettingsForm textarea,
 .adminSettingsForm select,
-.adminIndexForm input,
-.adminIndexForm textarea,
 .adminSearchForm input {
   width: 100%;
   border: 1px solid var(--border);
@@ -2627,15 +2647,9 @@ mark {
   resize: vertical;
 }
 
-.adminIndexForm textarea {
-  min-height: 104px;
-  resize: vertical;
-}
-
 .adminLoginForm button,
 .adminSettingsForm button,
 .adminUploadForm button,
-.adminIndexForm button,
 .adminSearchForm button,
 .adminIconTextButton,
 .adminDangerButton,
@@ -2791,46 +2805,11 @@ mark {
   background: color-mix(in srgb, var(--surface-strong) 38%, transparent);
 }
 
-.adminIndexForm {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.adminIndexForm label {
-  display: grid;
-  flex: 1;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.adminIndexForm button,
 .adminIconTextButton {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   white-space: nowrap;
-}
-
-.adminIndexStatus {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 3px 8px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.adminIndexStatus.isIndexed {
-  background: color-mix(in srgb, #2e7d52 12%, transparent);
-  color: #2e7d52;
-}
-
-.adminIndexStatus.isSkipped {
-  background: color-mix(in srgb, #b7791f 13%, transparent);
-  color: #9a5b10;
 }
 
 .adminIconTextButton {
@@ -2854,9 +2833,53 @@ mark {
 }
 
 .adminUploadForm button:disabled,
-.adminIndexForm button:disabled {
+.adminIconTextButton:disabled {
   cursor: not-allowed;
   opacity: 0.52;
+}
+
+.adminSearchIndexManager {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.adminSearchIndexActions,
+.adminSearchIndexMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.adminSearchIndexMeta {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.adminSearchIndexMeta span:not(:last-child)::after {
+  margin-left: 8px;
+  color: var(--border-strong);
+  content: "·";
+}
+
+.adminIconTextButton.adminIndexCommand {
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  color: var(--accent);
+}
+
+.adminIconTextButton.adminIndexCommand:hover,
+.adminIconTextButton.adminIndexCommand:focus-visible {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+}
+
+.adminIconTextButton.adminIndexCommand.isDanger {
+  border-color: color-mix(in srgb, #b42318 28%, var(--border));
+  background: color-mix(in srgb, #b42318 8%, var(--surface));
+  color: #b42318;
 }
 
 .adminUploadStatus {
@@ -2935,6 +2958,7 @@ mark {
 .adminPaths p {
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
   margin: 0;
   color: var(--muted);
   font-size: 13px;
@@ -3331,7 +3355,7 @@ mark {
 }
 
 .rateLimitBanTable {
-  min-width: 680px;
+  min-width: 790px;
 }
 
 .rateLimitBanTableWrap {
@@ -3348,6 +3372,11 @@ mark {
 
 .rateLimitBanTable code {
   color: var(--text);
+  white-space: nowrap;
+}
+
+.rateLimitBanCountry {
+  min-width: 116px;
   white-space: nowrap;
 }
 
@@ -3460,6 +3489,7 @@ mark {
 }
 
 .adminLoginAudit {
+  min-width: 0;
   padding: 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -3525,22 +3555,6 @@ mark {
 .adminTitleSearchForm button:hover,
 .adminTitleSearchForm button:focus-visible {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
-}
-
-.adminIndexSearchForm {
-  grid-template-columns: 16px minmax(120px, 1fr) auto;
-  width: min(430px, 100%);
-  margin: 10px 0 10px;
-  padding: 4px 5px 4px 9px;
-  box-shadow: 0 6px 16px rgb(84 54 31 / 6%);
-}
-
-.adminIndexSearchForm input {
-  font-size: 13px;
-}
-
-.adminIndexSearchForm button {
-  padding: 5px 10px;
 }
 
 .adminInlineMessage {
@@ -3636,7 +3650,7 @@ mark {
 .adminCreateUserForm {
   display: grid;
   grid-template-columns: repeat(3, minmax(130px, 1fr));
-  align-items: end;
+  align-items: flex-end;
   gap: 9px;
   padding: 10px 0 12px;
   border-top: 1px solid var(--border);
@@ -3992,13 +4006,6 @@ mark {
   opacity: 1;
 }
 
-.adminBookPanel .adminTable th:nth-child(3),
-.adminBookPanel .adminTable td:nth-child(3),
-.adminBookPanel .adminTable th:nth-child(5),
-.adminBookPanel .adminTable td:nth-child(5) {
-  display: table-cell;
-}
-
 .analyticsHeaderPanel {
   padding-bottom: 8px;
 }
@@ -4191,6 +4198,12 @@ mark {
 
 .analyticsSearchTag strong {
   color: var(--accent);
+}
+
+.analyticsSearchPanel > .pagination {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
 }
 
 .analyticsMetricList {
@@ -4403,6 +4416,98 @@ mark {
   margin-bottom: 12px;
 }
 
+.adminMediaToolbarControls,
+.adminMediaViewSwitch {
+  display: inline-flex;
+  align-items: center;
+}
+
+.adminMediaToolbarControls {
+  gap: 7px;
+}
+
+.adminMediaViewSwitch {
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-strong) 30%, transparent);
+}
+
+.adminMediaViewSwitch a {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--muted);
+}
+
+.adminMediaViewSwitch a:hover,
+.adminMediaViewSwitch a:focus-visible,
+.adminMediaViewSwitch a.isActive {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--accent);
+}
+
+.adminVideoCategoryTabs {
+  display: flex;
+  min-width: 0;
+  gap: 16px;
+  margin: -2px 0 12px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: none;
+}
+
+.adminVideoCategoryTabs::-webkit-scrollbar {
+  display: none;
+}
+
+.adminVideoCategoryTabs a {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 1px 9px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.adminVideoCategoryTabs a::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  background: transparent;
+  content: "";
+}
+
+.adminVideoCategoryTabs a.isActive {
+  color: var(--accent);
+}
+
+.adminVideoCategoryTabs a.isActive::after {
+  background: var(--accent);
+}
+
+.adminVideoCategoryTabs small {
+  color: inherit;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.adminVideoCategoryTabs span {
+  border-radius: 4px;
+  padding: 1px 4px;
+  background: color-mix(in srgb, var(--muted) 11%, transparent);
+  font-size: 10px;
+}
+
 .adminMediaSort,
 .adminMediaSortField,
 .adminMediaSortDirection {
@@ -4531,6 +4636,114 @@ mark {
   cursor: pointer;
 }
 
+.adminVideoCategoryManager {
+  margin: -5px 0 14px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--border);
+}
+
+.adminVideoCategoryManager summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.adminVideoCategoryManager summary small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.adminVideoCategoryContent {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+}
+
+.adminVideoCategoryCreate {
+  display: grid;
+  grid-template-columns: minmax(140px, 260px) 30px;
+  gap: 6px;
+}
+
+.adminVideoCategoryCreate input,
+.adminVideoCategoryRow input,
+.adminMediaCategoryBulkForm select {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-soft);
+  color: var(--text);
+  font: inherit;
+}
+
+.adminVideoCategoryCreate > input,
+.adminVideoCategoryRow > input {
+  padding: 6px 8px;
+}
+
+.adminVideoCategoryList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 6px 12px;
+}
+
+.adminVideoCategoryRow {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) 78px 62px 30px 30px;
+  align-items: center;
+  gap: 6px;
+}
+
+.adminVideoCategoryOrder {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.adminVideoCategoryOrder input {
+  width: 100%;
+  padding: 6px;
+}
+
+.adminVideoCategoryVisibility {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.adminVideoCategoryVisibility input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.adminTableIconButton.isDanger {
+  background: color-mix(in srgb, #b42318 10%, transparent);
+  color: #b42318;
+}
+
+.adminVideoCategoryEmpty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .adminMediaFilters a {
   display: inline-flex;
   min-height: 30px;
@@ -4563,14 +4776,22 @@ mark {
 }
 
 .adminMediaUploadFields {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(140px, 1fr)) auto;
-  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
   gap: 9px;
 }
 
 .adminMediaUploadFields.hasArtist {
-  grid-template-columns: repeat(4, minmax(120px, 1fr)) auto;
+  grid-template-columns: none;
+}
+
+.adminMediaUploadFields.hasCategory {
+  grid-template-columns: none;
+}
+
+.adminMediaUploadFields.hasArtist.hasCategory {
+  grid-template-columns: none;
 }
 
 .adminMediaUploadFields label,
@@ -4580,6 +4801,10 @@ mark {
   gap: 5px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.adminMediaUploadFields > label:not(.adminMediaDescriptionField) {
+  flex: 1 1 150px;
 }
 
 .adminMediaUploadFields input,
@@ -4615,10 +4840,11 @@ mark {
 }
 
 .adminMediaDescriptionField {
-  grid-column: 1 / -2;
+  flex: 1 1 420px;
 }
 
-.adminMediaUploadFields.hasArtist .adminMediaDescriptionField {
+.adminMediaUploadFields.hasArtist .adminMediaDescriptionField,
+.adminMediaUploadFields.hasCategory .adminMediaDescriptionField {
   grid-column: 1 / -2;
 }
 
@@ -4640,6 +4866,9 @@ mark {
   color: #fffaf2;
   cursor: pointer;
   font-weight: 700;
+  min-width: 88px;
+  justify-self: end;
+  white-space: nowrap;
 }
 
 .adminMediaUploadButton:disabled {
@@ -4663,7 +4892,7 @@ mark {
 }
 
 .adminMediaTable {
-  min-width: 1100px;
+  min-width: 1180px;
 }
 
 .adminMediaTable th:first-child,
@@ -4678,12 +4907,125 @@ mark {
   max-width: 230px;
 }
 
-.adminMediaTable td:nth-child(5) {
-  max-width: 190px;
+.adminMediaTable td:nth-child(4) {
+  max-width: 130px;
 }
 
 .adminMediaTable td:nth-child(6) {
+  max-width: 190px;
+}
+
+.adminMediaTable td:nth-child(7) {
   max-width: 170px;
+}
+
+.adminMediaGridContent {
+  display: grid;
+  gap: 10px;
+}
+
+.adminMediaGridFolders {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 7px;
+}
+
+.adminMediaGridFolders button {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 8px 9px;
+  background: var(--bg-soft);
+  color: var(--muted);
+  cursor: pointer;
+  text-align: left;
+}
+
+.adminMediaGridFolders button span {
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminMediaVideoGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.adminMediaVideoItem {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.adminMediaVideoItem.isSelected {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.adminMediaVideoSelect {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 2;
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 6px;
+  background: rgb(16 19 21 / 74%);
+  cursor: pointer;
+}
+
+.adminMediaVideoThumbnail {
+  position: relative;
+  grid-column: 1 / -1;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 7px;
+  background: #101214;
+}
+
+.adminMediaVideoThumbnail .mediaVideoPreviewImage {
+  width: 100%;
+  height: 100%;
+}
+
+.adminMediaVideoCopy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.adminMediaVideoCopy strong,
+.adminMediaVideoCopy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminMediaVideoCopy strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.adminMediaVideoCopy span,
+.adminMediaVideoCopy small {
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .adminMediaKind {
@@ -4734,6 +5076,25 @@ mark {
 }
 
 .adminMediaFooter form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+}
+
+.adminMediaBulkActions,
+.adminMediaCategoryBulkForm {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.adminMediaCategoryBulkForm select {
+  height: 32px;
+  padding-inline: 8px;
+  font-size: 12px;
+}
+
+.adminMediaCategoryBulkForm button:disabled,
+.adminMediaCategoryBulkForm select:disabled {
   cursor: not-allowed;
   opacity: 0.46;
 }
@@ -4851,6 +5212,11 @@ mark {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
+  .siteHeader.hasPrimaryNav:has(.searchForm:not(.isPinnedOpen):not(.isDefaultOpen)),
+  :root[data-ui-mode="minimal"] .siteHeader.hasPrimaryNav:has(.searchForm.isDefaultOpen) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
   .brand {
     font-size: 22px;
   }
@@ -4861,6 +5227,12 @@ mark {
     grid-template-columns: minmax(0, 1fr) auto;
     width: 100%;
     gap: 10px;
+  }
+
+  .headerTools .headerActions {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
   }
 
   .siteHeader.hasPrimaryNav .headerPrimaryNav,
@@ -5212,7 +5584,6 @@ mark {
   .adminTopbar,
   .adminPanelHeader,
   .adminActionRow,
-  .adminIndexForm,
   .adminUploadForm,
   .adminTableFooter,
   .adminTableToolbar {
@@ -5248,6 +5619,24 @@ mark {
     width: 100%;
   }
 
+  .adminSearchIndexActions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .adminSearchIndexActions button {
+    justify-content: center;
+  }
+
+  .adminSearchIndexMeta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .adminSearchIndexMeta span::after {
+    display: none;
+  }
+
   .adminUploadForm input {
     max-width: 100%;
   }
@@ -5259,6 +5648,91 @@ mark {
   .adminUserDetailGrid,
   .analyticsGrid {
     grid-template-columns: 1fr;
+  }
+
+  .adminUserHistoryTable {
+    display: block;
+  }
+
+  .adminUserHistoryTable thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .adminUserHistoryTable tbody {
+    display: grid;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .adminUserHistoryTable tbody tr {
+    display: grid;
+    grid-template-areas:
+      "select kind content count"
+      "select time time count";
+    grid-template-columns: 26px auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 3px 8px;
+    padding: 9px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--surface-strong) 24%, transparent);
+  }
+
+  .adminUserHistoryTable td {
+    display: block;
+    max-width: none;
+    overflow: visible;
+    padding: 0;
+    border: 0;
+  }
+
+  .adminUserHistorySelect {
+    grid-area: select;
+  }
+
+  .adminUserHistoryKind {
+    grid-area: kind;
+  }
+
+  .adminUserHistoryContent {
+    grid-area: content;
+    min-width: 0;
+  }
+
+  .adminUserHistoryContent a,
+  .adminUserHistoryContent strong {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .adminUserHistoryTime {
+    grid-area: time;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .adminUserHistoryCount {
+    grid-area: count;
+    color: var(--accent);
+    font-weight: 800;
+  }
+
+  .adminUserHistoryCount::after {
+    content: " 次";
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .adminUserHistoryTable td[colspan] {
+    grid-column: 1 / -1;
   }
 
   .analyticsControls {
@@ -5301,24 +5775,13 @@ mark {
     right: 0;
   }
 
-  .adminTable th:nth-child(3),
-  .adminTable td:nth-child(3),
-  .adminTable th:nth-child(5),
-  .adminTable td:nth-child(5) {
-    display: none;
-  }
-
-  .adminUserTable th:nth-child(3),
-  .adminUserTable td:nth-child(3),
-  .adminUserTable th:nth-child(5),
-  .adminUserTable td:nth-child(5) {
-    display: table-cell;
-  }
-
   .adminAccessModeGrid,
   .adminMediaDisplaySettings form,
   .adminMediaUploadFields,
-  .adminMediaUploadFields.hasArtist {
+  .adminMediaUploadFields.hasArtist,
+  .adminMediaUploadFields.hasCategory,
+  .adminMediaUploadFields.hasArtist.hasCategory {
+    display: grid;
     grid-template-columns: 1fr;
   }
 
@@ -5331,7 +5794,8 @@ mark {
   }
 
   .adminMediaDescriptionField,
-  .adminMediaUploadFields.hasArtist .adminMediaDescriptionField {
+  .adminMediaUploadFields.hasArtist .adminMediaDescriptionField,
+  .adminMediaUploadFields.hasCategory .adminMediaDescriptionField {
     grid-column: auto;
   }
 
@@ -5361,6 +5825,18 @@ mark {
     flex-direction: column;
   }
 
+  .adminMediaToolbarControls {
+    justify-content: space-between;
+  }
+
+  .adminVideoCategoryList {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .adminMediaVideoGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .adminMediaSort {
     justify-content: flex-end;
   }
@@ -5385,25 +5861,6 @@ mark {
 
   .analyticsRealtimeTable {
     min-width: 880px;
-  }
-
-  .analyticsRealtimeTable th:nth-child(3),
-  .analyticsRealtimeTable td:nth-child(3),
-  .analyticsRealtimeTable th:nth-child(5),
-  .analyticsRealtimeTable td:nth-child(5) {
-    display: table-cell;
-  }
-
-  .rateLimitBanTable th:nth-child(3),
-  .rateLimitBanTable td:nth-child(3),
-  .rateLimitBanTable th:nth-child(5),
-  .rateLimitBanTable td:nth-child(5) {
-    display: table-cell;
-  }
-
-  .accountHistoryTable th:nth-child(3),
-  .accountHistoryTable td:nth-child(3) {
-    display: table-cell;
   }
 
   .pageJumpPanel {
@@ -5451,6 +5908,33 @@ mark {
 
   .mediaAudioQueue button small {
     display: none;
+  }
+
+  .adminVideoCategoryRow {
+    grid-template-columns: minmax(90px, 1fr) 72px 54px 30px 30px;
+    gap: 4px;
+  }
+
+  .adminVideoCategoryOrder > span {
+    display: none;
+  }
+
+  .adminMediaVideoGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .adminMediaFooter,
+  .adminMediaBulkActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .adminMediaCategoryBulkForm {
+    width: 100%;
+  }
+
+  .adminMediaCategoryBulkForm select {
+    flex: 1;
   }
 }
 

@@ -10,6 +10,17 @@ function banKey(ban: IpRateLimitBan): string {
   return JSON.stringify({ category: ban.category, ip: ban.ip });
 }
 
+const regionNames = new Intl.DisplayNames(["zh-CN"], { type: "region" });
+
+function formatCountry(country: string): string {
+  const code = country.trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code) || code === "XX") {
+    return code && code !== "UNKNOWN" ? code : "未知";
+  }
+  const name = regionNames.of(code);
+  return name && name !== code ? `${name} (${code})` : code;
+}
+
 export function RateLimitBanTable({ title, bans }: { title: string; bans: IpRateLimitBan[] }) {
   const entries = useMemo(() => bans.map((ban) => ({ ban, key: banKey(ban) })), [bans]);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
@@ -60,6 +71,7 @@ export function RateLimitBanTable({ title, bans }: { title: string; bans: IpRate
                 />
               </th>
               <th>IP 地址</th>
+              <th>地区</th>
               <th>规则</th>
               <th>方式</th>
               <th>到期时间</th>
@@ -82,6 +94,7 @@ export function RateLimitBanTable({ title, bans }: { title: string; bans: IpRate
                   <td>
                     <code title={ban.ip}>{ban.ip}</code>
                   </td>
+                  <td className="rateLimitBanCountry" title={ban.country}>{formatCountry(ban.country)}</td>
                   <td>
                     <code title={ban.ruleId}>{ban.ruleId}</code>
                   </td>
@@ -103,7 +116,7 @@ export function RateLimitBanTable({ title, bans }: { title: string; bans: IpRate
               ))
             ) : (
               <tr>
-                <td colSpan={6}>暂无封禁记录。</td>
+                <td colSpan={7}>暂无封禁记录。</td>
               </tr>
             )}
           </tbody>

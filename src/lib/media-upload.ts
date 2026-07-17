@@ -6,6 +6,7 @@ import {
   availableMediaStoredName,
   createMediaAsset,
   isMediaKind,
+  MediaCategoryError,
   mediaFolderExists,
   mediaFolderFromStoredName,
   mediaFilePath,
@@ -13,6 +14,7 @@ import {
   normalizeMediaFolder,
   normalizeMediaFile,
   normalizeMediaTitle,
+  resolveVideoCategoryId,
   type MediaAsset,
   type MediaKind,
 } from "./media";
@@ -23,6 +25,7 @@ export const MEDIA_UPLOAD_MAX_BYTES = 5 * 1024 * 1024 * 1024;
 type UploadSession = {
   id: string;
   kind: MediaKind;
+  categoryId: number | null;
   title: string;
   artist: string;
   description: string;
@@ -72,7 +75,7 @@ function cleanDescription(value: string): string {
 }
 
 function cleanArtist(value: string, kind: MediaKind): string {
-  if (kind !== "audio") {
+  if (kind === "file") {
     return "";
   }
   const artist = value.trim();
@@ -121,6 +124,7 @@ function pruneStaleUploads(now = Date.now()) {
 
 export function startMediaUpload(params: {
   kind: unknown;
+  categoryId?: unknown;
   title: string;
   artist?: string;
   description: string;
@@ -143,6 +147,17 @@ export function startMediaUpload(params: {
   if (folder === null || !mediaFolderExists(params.kind, folder)) {
     throw new MediaUploadError("上传目标文件夹不存在");
   }
+  let categoryId: number | null = null;
+  if (params.kind === "video") {
+    try {
+      categoryId = resolveVideoCategoryId(params.categoryId);
+    } catch (error) {
+      if (error instanceof MediaCategoryError) {
+        throw new MediaUploadError(error.message);
+      }
+      throw error;
+    }
+  }
 
   fs.mkdirSync(uploadTempDir(), { recursive: true });
   pruneStaleUploads();
@@ -152,6 +167,7 @@ export function startMediaUpload(params: {
   const session: UploadSession = {
     id: uploadId,
     kind: params.kind,
+    categoryId,
     title,
     artist: cleanArtist(params.artist || "", params.kind),
     description: cleanDescription(params.description),
@@ -203,6 +219,7 @@ export function finishMediaUpload(uploadId: string): MediaAsset {
   try {
     asset = createMediaAsset({
       kind: session.kind,
+      categoryId: session.categoryId,
       title: path.basename(storedName, path.extname(storedName)) || session.title,
       artist: session.artist,
       description: session.description,

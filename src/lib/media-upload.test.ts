@@ -98,6 +98,37 @@ test("uploads media in chunks, records it, and removes the stored file", async (
     assert.equal(media.listMediaAssets({ kind: "audio" }).totalAssets, 1);
     assert.equal(media.listMediaAssets({ kind: "audio", recursive: true }).totalAssets, 3);
 
+    const animation = media.createVideoCategory("动画");
+    const technology = media.createVideoCategory("科技", 5, false);
+    assert.deepEqual(media.listVideoCategories().map((item) => item.name), ["动画"]);
+    assert.deepEqual(media.listVideoCategories({ includeHidden: true }).map((item) => item.name), ["动画", "科技"]);
+    const videoSource = Buffer.from("fake-mp4-video-test");
+    const videoStarted = upload.startMediaUpload({
+      kind: "video",
+      categoryId: animation.id,
+      title: "分类视频",
+      artist: "测试作者",
+      description: "视频分类测试",
+      fileName: "category.mp4",
+      mimeType: "video/mp4",
+      sizeBytes: videoSource.length,
+    });
+    upload.appendMediaUploadChunk(videoStarted.uploadId, 0, videoSource);
+    const videoAsset = upload.finishMediaUpload(videoStarted.uploadId);
+    assert.equal(videoAsset.categoryId, animation.id);
+    assert.equal(videoAsset.artist, "测试作者");
+    assert.equal(media.listMediaAssets({ kind: "video", videoCategoryId: animation.id }).totalAssets, 1);
+    assert.equal(media.listMediaAssets({ kind: "video", videoCategoryId: null }).totalAssets, 0);
+    assert.equal(media.setVideoCategoryForAssets([videoAsset.id], technology.id), 1);
+    assert.equal(media.getMediaAsset(videoAsset.id)?.categoryId, technology.id);
+    assert.equal(media.updateMediaAsset(videoAsset.id, "分类视频", "新视频作者", "视频分类测试", "", technology.id), true);
+    assert.equal(media.getMediaAsset(videoAsset.id)?.artist, "新视频作者");
+    assert.equal(media.updateVideoCategory(technology.id, "数码", 15, true), true);
+    assert.equal(media.listVideoCategories().find((item) => item.id === technology.id)?.videoCount, 1);
+    assert.equal(media.deleteVideoCategory(technology.id), true);
+    assert.equal(media.getMediaAsset(videoAsset.id)?.categoryId, null);
+    assert.equal(media.listMediaAssets({ kind: "video", videoCategoryId: null }).totalAssets, 1);
+
     const externalFolder = path.join(process.env.MEDIA_DIR, "audio", "外部目录");
     fs.mkdirSync(externalFolder, { recursive: true });
     const externalPath = path.join(externalFolder, "external.mp3");
@@ -118,7 +149,7 @@ test("uploads media in chunks, records it, and removes the stored file", async (
     assert.equal(media.getMediaAsset(asset.id)?.playCount, 1);
     const renamedStoredPath = media.mediaFilePath(media.getMediaAsset(asset.id)!.storedName);
     const renamedSecondStoredPath = media.mediaFilePath(media.getMediaAsset(secondAsset.id)!.storedName);
-    assert.deepEqual(media.deleteMediaAssets([asset.id, secondAsset.id, legacyAsset.id]), { deleted: 3, fileDeleteFailures: 0 });
+    assert.deepEqual(media.deleteMediaAssets([asset.id, secondAsset.id, legacyAsset.id, videoAsset.id]), { deleted: 4, fileDeleteFailures: 0 });
     assert.equal(fs.existsSync(storedPath), false);
     assert.equal(fs.existsSync(secondStoredPath), false);
     assert.equal(fs.existsSync(renamedStoredPath), false);

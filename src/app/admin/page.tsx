@@ -8,7 +8,9 @@ import { AdminFrame } from "./AdminFrame";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminBookStats } from "@/lib/admin-books";
 import { listAdminLoginRecords } from "@/lib/admin-login-records";
-import { getContentIndexStorageSummary } from "@/lib/content-index";
+import { getContentSearchDb } from "@/lib/content-search-db";
+import { getContentSearchIndexSummary } from "@/lib/content-search-index";
+import { getDb } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -36,7 +38,7 @@ export default async function AdminPage() {
   const headerStore = await headers();
   const access = getAdminAccessState(headerStore);
   const stats = getAdminBookStats();
-  const indexStats = getContentIndexStorageSummary();
+  const indexStats = getContentSearchIndexSummary(getDb(), getContentSearchDb());
   const loginRecords = listAdminLoginRecords();
 
   return (
@@ -51,7 +53,7 @@ export default async function AdminPage() {
           <div className="adminStatCard">
             <Database size={20} aria-hidden="true" />
             <span>已建索引</span>
-            <strong>{stats.indexedBooks}</strong>
+            <strong>{indexStats.indexedBooks}</strong>
           </div>
           <div className="adminStatCard">
             <HardDrive size={20} aria-hidden="true" />
@@ -65,8 +67,8 @@ export default async function AdminPage() {
           </div>
           <div className="adminStatCard">
             <Database size={20} aria-hidden="true" />
-            <span>索引词</span>
-            <strong>{indexStats.termCount}</strong>
+            <span>待更新</span>
+            <strong>{indexStats.pendingBooks}</strong>
           </div>
           <div className="adminStatCard">
             <Globe2 size={20} aria-hidden="true" />
@@ -101,7 +103,7 @@ export default async function AdminPage() {
             <Search size={19} aria-hidden="true" />
             <span>
               <strong>搜索索引</strong>
-              <small>查看、添加和删除正文搜索缓存</small>
+              <small>构建和维护 FTS5 全文索引</small>
             </span>
           </Link>
           <Link className="adminHomeLink" href="/admin/users">

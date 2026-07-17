@@ -8,6 +8,7 @@ export type RateLimitCategory = "search" | "content";
 type IpRateLimitBanRow = {
   category: RateLimitCategory;
   ip: string;
+  country?: string | null;
   rule_id: string;
   is_permanent: number;
   banned_until: number | null;
@@ -18,6 +19,7 @@ type IpRateLimitBanRow = {
 export type IpRateLimitBan = {
   category: RateLimitCategory;
   ip: string;
+  country: string;
   ruleId: string;
   permanent: boolean;
   bannedUntil: number | null;
@@ -38,6 +40,7 @@ function toBan(row: IpRateLimitBanRow): IpRateLimitBan {
   return {
     category: row.category,
     ip: row.ip,
+    country: row.country?.trim() || "unknown",
     ruleId: row.rule_id,
     permanent: row.is_permanent === 1,
     bannedUntil: row.banned_until,
@@ -213,10 +216,19 @@ export function listIpRateLimitBans(category: RateLimitCategory, limit = 100, no
   const safeLimit = Math.min(Math.max(Math.floor(limit), 1), 500);
   const rows = getDb()
     .prepare(
-      `SELECT category, ip, rule_id, is_permanent, banned_until, created_at, updated_at
-       FROM rate_limit_bans
-       WHERE category = ?
-       ORDER BY is_permanent DESC, COALESCE(banned_until, 9223372036854775807) DESC
+      `SELECT b.category, b.ip, b.rule_id, b.is_permanent, b.banned_until, b.created_at, b.updated_at,
+              COALESCE(
+                (SELECT a.country
+                 FROM analytics_events a
+                 WHERE a.ip = b.ip
+                   AND LOWER(COALESCE(a.country, '')) NOT IN ('', 'unknown', 'xx')
+                 ORDER BY a.created_at DESC, a.id DESC
+                 LIMIT 1),
+                'unknown'
+              ) AS country
+       FROM rate_limit_bans b
+       WHERE b.category = ?
+       ORDER BY b.is_permanent DESC, COALESCE(b.banned_until, 9223372036854775807) DESC
        LIMIT ?`,
     )
     .all(category, safeLimit) as IpRateLimitBanRow[];

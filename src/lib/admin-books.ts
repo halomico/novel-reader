@@ -1,5 +1,4 @@
 import { getConfiguredPaths } from "./config";
-import { getContentIndexDb } from "./content-index-db";
 import { getDb } from "./db";
 import { matchesParsedSearchQuery, parseSearchQuery } from "./search-query";
 import type { Novel } from "./books";
@@ -21,7 +20,6 @@ export type AdminBookListResult = {
 
 export type AdminBookStats = {
   totalBooks: number;
-  indexedBooks: number;
   totalSizeBytes: number;
   libraryDir: string;
   databasePath: string;
@@ -185,13 +183,8 @@ export function getAdminBookStats(): AdminBookStats {
     count: number;
     size: number;
   };
-  const indexed = getContentIndexDb()
-    .prepare("SELECT COUNT(DISTINCT novel_id) AS count FROM content_search_terms")
-    .get() as { count: number };
-
   return {
     totalBooks: total.count,
-    indexedBooks: indexed.count,
     totalSizeBytes: total.size,
     libraryDir: paths.libraryDir,
     databasePath: paths.databasePath,

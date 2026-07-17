@@ -13,6 +13,7 @@ import {
   createBigramTokenDocument,
   deleteContentSearchIndexNovel,
   findContentSearchCandidateNovelIds,
+  getContentSearchIndexSummary,
 } from "./content-search-index";
 import { normalizeSearchText } from "./search-query";
 
@@ -61,12 +62,21 @@ test("uses trigram and bigram FTS rows while including uncovered novels", () => 
 
   assert.deepEqual(findContentSearchCandidateNovelIds(db, [first, second], "张三丰"), {
     engine: "fts5-trigram",
+    terms: ["张三丰"],
     candidateIds: [1],
     coveredNovelCount: 2,
     uncoveredNovelCount: 0,
   });
   assert.deepEqual(findContentSearchCandidateNovelIds(db, [first, second], "三丰"), {
     engine: "fts5-bigram",
+    terms: ["三丰"],
+    candidateIds: [1],
+    coveredNovelCount: 2,
+    uncoveredNovelCount: 0,
+  });
+  assert.deepEqual(findContentSearchCandidateNovelIds(db, [first, second], ["张三丰", "开头"]), {
+    engine: "fts5-hybrid",
+    terms: ["张三丰", "开头"],
     candidateIds: [1],
     coveredNovelCount: 2,
     uncoveredNovelCount: 0,
@@ -150,6 +160,19 @@ test("builds and incrementally refreshes an independent content search database"
     const updatedNovels = mainDb.prepare("SELECT * FROM novels ORDER BY id").all() as Novel[];
     assert.deepEqual(findContentSearchCandidateNovelIds(searchDb, updatedNovels, "张三丰")?.candidateIds, []);
     assert.deepEqual(findContentSearchCandidateNovelIds(searchDb, updatedNovels, "东方不败")?.candidateIds, [1]);
+
+    mainDb.prepare(
+      `INSERT INTO novels
+         (id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, created_at, updated_at)
+       VALUES (3, 'Missing', 'missing.txt', 'missing.txt', 'hash-missing', 10, 1, 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+    ).run();
+    const failedBuild = await buildContentSearchIndex(mainDb, searchDb, undefined, { optimize: false });
+    assert.equal(failedBuild.failedBooks, 1);
+    assert.equal((searchDb.prepare("SELECT COUNT(*) AS count FROM content_search_failures").get() as { count: number }).count, 1);
+    const summary = getContentSearchIndexSummary(mainDb, searchDb);
+    assert.equal(summary.indexedBooks, 2);
+    assert.equal(summary.pendingBooks, 1);
+    assert.equal(summary.failedBooks, 1);
   } finally {
     mainDb.close();
     searchDb.close();

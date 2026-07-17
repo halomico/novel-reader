@@ -10,6 +10,7 @@ export function MediaVideoPreview({
   intervalSeconds = 3,
   singlePercent = 33,
   sourceVersion,
+  admin = false,
 }: {
   id: number;
   mode?: "single" | "carousel";
@@ -17,6 +18,7 @@ export function MediaVideoPreview({
   intervalSeconds?: number;
   singlePercent?: number;
   sourceVersion: number;
+  admin?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
   const [ready, setReady] = useState(false);
@@ -62,7 +64,7 @@ export function MediaVideoPreview({
       {!failed ? (
         <img
           className={ready ? "isReady" : undefined}
-          src={`/media/${id}/thumbnail?frame=${frame}&v=${version}`}
+          src={`${admin ? "/admin/media" : "/media"}/${id}/thumbnail?frame=${frame}&v=${version}`}
           alt=""
           decoding="async"
           height="360"
