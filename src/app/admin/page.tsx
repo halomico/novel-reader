@@ -4,10 +4,11 @@ import Link from "next/link";
 import { LibraryBig } from "lucide-react";
 import { headers } from "next/headers";
 import { LocalDateTime } from "@/components/LocalDateTime";
+import { Pagination } from "@/components/Pagination";
 import { AdminFrame } from "./AdminFrame";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminBookStats } from "@/lib/admin-books";
-import { listAdminLoginRecords } from "@/lib/admin-login-records";
+import { listAdminLoginRecordPage } from "@/lib/admin-login-records";
 import { getContentSearchDb } from "@/lib/content-search-db";
 import { getContentSearchIndexSummary } from "@/lib/content-search-index";
 import { getDb } from "@/lib/db";
@@ -34,12 +35,19 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[unitIndex]}`;
 }
 
-export default async function AdminPage() {
+type AdminPageProps = {
+  searchParams: Promise<{
+    loginPage?: string;
+  }>;
+};
+
+export default async function AdminPage({ searchParams }: AdminPageProps) {
+  const params = await searchParams;
   const headerStore = await headers();
   const access = getAdminAccessState(headerStore);
   const stats = getAdminBookStats();
   const indexStats = getContentSearchIndexSummary(getDb(), getContentSearchDb());
-  const loginRecords = listAdminLoginRecords();
+  const loginRecords = listAdminLoginRecordPage(Number(params.loginPage || "1"));
 
   return (
     <AdminFrame active="home">
@@ -57,7 +65,7 @@ export default async function AdminPage() {
           </div>
           <div className="adminStatCard">
             <HardDrive size={20} aria-hidden="true" />
-            <span>书库体积</span>
+            <span>小说体积</span>
             <strong>{formatBytes(stats.totalSizeBytes)}</strong>
           </div>
           <div className="adminStatCard">
@@ -124,7 +132,7 @@ export default async function AdminPage() {
 
         <div className="adminPaths adminHomePaths">
           <p>
-            <strong>书库目录</strong>
+            <strong>小说目录</strong>
             <span>{stats.libraryDir}</span>
           </p>
           <p>
@@ -141,7 +149,7 @@ export default async function AdminPage() {
           <div className="adminPanelHeader">
             <div>
               <h2>登录记录</h2>
-              <p>当前登录 IP：{access.clientIp}</p>
+              <p>共 {loginRecords.total} 条，当前登录 IP：{access.clientIp}</p>
             </div>
             <History size={20} aria-hidden="true" />
           </div>
@@ -156,9 +164,9 @@ export default async function AdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {loginRecords.length ? (
-                  loginRecords.map((record) => (
-                    <tr key={`${record.loggedAt}-${record.ip}`}>
+                {loginRecords.records.length ? (
+                  loginRecords.records.map((record, index) => (
+                    <tr key={`${record.loggedAt}-${record.ip}-${index}`}>
                       <td>
                         <LocalDateTime value={record.loggedAt} />
                       </td>
@@ -175,6 +183,13 @@ export default async function AdminPage() {
               </tbody>
             </table>
           </div>
+          <Pagination
+            page={loginRecords.page}
+            totalPages={loginRecords.totalPages}
+            query=""
+            basePath="/admin"
+            pageParam="loginPage"
+          />
         </section>
       </section>
     </AdminFrame>

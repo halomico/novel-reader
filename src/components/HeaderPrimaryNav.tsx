@@ -15,10 +15,16 @@ export function HeaderPrimaryNav({
   mediaKinds,
   showLibrary = true,
   showTags = false,
+  className = "headerPrimaryNav",
+  ariaLabel = "前台主导航",
+  onNavigate,
 }: {
   mediaKinds: MediaKind[];
   showLibrary?: boolean;
   showTags?: boolean;
+  className?: string;
+  ariaLabel?: string;
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -26,15 +32,15 @@ export function HeaderPrimaryNav({
   const activeKind = mediaKinds.includes(requestedKind as MediaKind) ? requestedKind : mediaKinds[0];
 
   return (
-    <nav className="headerPrimaryNav" aria-label="前台主导航">
+    <nav className={className} aria-label={ariaLabel}>
       {showLibrary ? (
-        <Link href="/" aria-current={pathname === "/" ? "page" : undefined}>
+        <Link href="/novels" aria-current={pathname === "/novels" ? "page" : undefined} onClick={onNavigate}>
           <BookOpen size={15} aria-hidden="true" />
-          书库
+          小说
         </Link>
       ) : null}
       {showTags ? (
-        <Link href="/tags" aria-current={pathname.startsWith("/tags") ? "page" : undefined}>
+        <Link href="/tags" aria-current={pathname.startsWith("/tags") ? "page" : undefined} onClick={onNavigate}>
           <Tags size={15} aria-hidden="true" />
           标签
         </Link>
@@ -44,7 +50,7 @@ export function HeaderPrimaryNav({
         const Icon = item.icon;
         const active = pathname === "/media" && activeKind === kind;
         return (
-          <Link href={`/media?kind=${kind}`} aria-current={active ? "page" : undefined} key={kind}>
+          <Link href={`/media?kind=${kind}`} aria-current={active ? "page" : undefined} key={kind} onClick={onNavigate}>
             <Icon size={15} aria-hidden="true" />
             {item.label}
           </Link>

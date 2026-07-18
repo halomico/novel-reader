@@ -1,21 +1,24 @@
 import { UserPlus } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AuthCaptchaForm } from "@/components/AuthCaptchaForm";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
+import { HumanVerificationField } from "@/components/HumanVerificationField";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SiteHeader } from "@/components/SiteHeader";
 import {
   getNoticeDisplaySeconds,
-  getUserLoginCaptchaMode,
   isUserLoginEnabled,
   isUserRegistrationEnabled,
   shouldNoticeStayVisibleAfterBlur,
 } from "@/lib/config";
 import { getCurrentUser } from "@/lib/user-auth";
+import { getTurnstileSiteKey } from "@/lib/human-verification";
+import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { registerUserAction } from "../account/actions";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: "注册", robots: NO_INDEX_ROBOTS };
 
 type RegisterPageProps = {
   searchParams: Promise<{
@@ -33,7 +36,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
   const params = await searchParams;
   const loginEnabled = isUserLoginEnabled();
   const registrationEnabled = isUserRegistrationEnabled();
-  const captchaMode = getUserLoginCaptchaMode();
+  const turnstileSiteKey = getTurnstileSiteKey();
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
   const noticeStayVisibleAfterBlur = shouldNoticeStayVisibleAfterBlur();
 
@@ -51,7 +54,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
         />
       ) : null}
       <section className="authPage">
-        <AuthCaptchaForm action={registerUserAction} captchaMode={captchaMode} purpose="register">
+        <form className="userPanel authPanel" action={registerUserAction}>
           <div className="userPanelHeader">
             <UserPlus size={20} aria-hidden="true" />
             <div>
@@ -83,8 +86,9 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
               required
             />
           </label>
+          <HumanVerificationField siteKey={turnstileSiteKey} purpose="register" />
           <button className="authPrimaryButton" type="submit" disabled={!registrationEnabled}>
-            {loginEnabled ? "注册并登录" : "注册账号"}
+            注册
           </button>
           {!registrationEnabled ? <p className="authHint">注册暂未开放。</p> : null}
           {loginEnabled ? (
@@ -92,7 +96,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
               已有账号？<Link href="/login">去登录</Link>
             </p>
           ) : null}
-        </AuthCaptchaForm>
+        </form>
       </section>
     </main>
   );

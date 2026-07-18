@@ -28,12 +28,18 @@ export async function SiteHeader({
   defaultSearchMode = "title",
   defaultSearchExpanded = false,
   showCurrentSearch = false,
+  showPrimaryNavigation = true,
+  showTools = true,
+  isHomePage = false,
   currentUser,
 }: {
   query?: string;
   defaultSearchMode?: "title" | "content" | "current";
   defaultSearchExpanded?: boolean;
   showCurrentSearch?: boolean;
+  showPrimaryNavigation?: boolean;
+  showTools?: boolean;
+  isHomePage?: boolean;
   currentUser?: UserProfile | null;
 }) {
   const siteName = getSiteName();
@@ -52,35 +58,44 @@ export async function SiteHeader({
     : enabledMediaKinds.filter((kind) => (
       kind === "video" ? isGuestVideoNavEnabled() : kind === "audio" ? isGuestAudioNavEnabled() : isGuestFileNavEnabled()
     ));
-  const showPrimaryNav = showLibraryNav || showTagNav || mediaKinds.length > 0;
+  const showPrimaryNav = showPrimaryNavigation && (showLibraryNav || showTagNav || mediaKinds.length > 0);
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
   const noticeStayVisibleAfterBlur = shouldNoticeStayVisibleAfterBlur();
 
+  const headerClassName = ["siteHeader", showPrimaryNav ? "hasPrimaryNav" : "", isHomePage ? "isHomeHeader" : ""]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <header className={showPrimaryNav ? "siteHeader hasPrimaryNav" : "siteHeader"}>
+    <header className={headerClassName}>
       <Link className="brand" href="/" aria-label="返回首页">
         <BookOpen size={24} aria-hidden="true" />
         <span>{siteName}</span>
       </Link>
       {showPrimaryNav ? <HeaderPrimaryNav mediaKinds={mediaKinds} showLibrary={showLibraryNav} showTags={showTagNav} /> : null}
-      <div className="headerTools">
-        <HeaderSearch
-          query={query}
-          defaultMode={defaultSearchMode}
-          defaultExpanded={defaultSearchExpanded}
-          showCurrentSearch={showCurrentSearch}
-          noticeDisplaySeconds={noticeDisplaySeconds}
-          noticeStayVisibleAfterBlur={noticeStayVisibleAfterBlur}
-        />
-        <div className="headerActions">
-          <ThemeToggle />
-          <HeaderUserMenu
-            user={user ? { displayName: user.displayName, avatarPath: user.avatarPath } : null}
-            loginEnabled={loginEnabled}
-            registrationEnabled={registrationEnabled}
+      {showTools ? (
+        <div className="headerTools">
+          <HeaderSearch
+            query={query}
+            defaultMode={defaultSearchMode}
+            defaultExpanded={defaultSearchExpanded}
+            showCurrentSearch={showCurrentSearch}
+            noticeDisplaySeconds={noticeDisplaySeconds}
+            noticeStayVisibleAfterBlur={noticeStayVisibleAfterBlur}
           />
+          <div className="headerActions">
+            <ThemeToggle />
+            <HeaderUserMenu
+              user={user ? { displayName: user.displayName, avatarPath: user.avatarPath } : null}
+              loginEnabled={loginEnabled}
+              registrationEnabled={registrationEnabled}
+              mediaKinds={mediaKinds}
+              showLibrary={showLibraryNav}
+              showTags={showTagNav}
+            />
+          </div>
         </div>
-      </div>
+      ) : null}
     </header>
   );
 }

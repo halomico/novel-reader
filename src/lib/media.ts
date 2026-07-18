@@ -13,7 +13,7 @@ import {
 import { getDb } from "./db";
 
 export type MediaKind = "video" | "audio" | "file";
-export type MediaSortBy = "name" | "size" | "updated";
+export type MediaSortBy = "name" | "size" | "updated" | "plays";
 export type MediaSortOrder = "asc" | "desc";
 
 export type MediaAsset = {
@@ -666,7 +666,6 @@ async function performMediaLibrarySync(state: MediaLibrarySyncState): Promise<Me
   const removedRows = missingRows.filter((row) => !renamedIds.has(row.id));
   let added = 0;
   let updated = 0;
-
   db.exec("BEGIN");
   try {
     const insert = db.prepare(
@@ -814,7 +813,7 @@ function addFolderFilter(filters: string[], values: Array<string | number>, kind
 }
 
 export function normalizeMediaSortBy(value: string | undefined): MediaSortBy {
-  return value === "name" || value === "size" ? value : "updated";
+  return value === "size" || value === "updated" || value === "plays" ? value : "name";
 }
 
 export function normalizeMediaSortOrder(value: string | undefined, sortBy: MediaSortBy): MediaSortOrder {
@@ -831,6 +830,9 @@ function mediaAssetOrderBy(sortBy: MediaSortBy, sortOrder: MediaSortOrder): stri
   }
   if (sortBy === "size") {
     return `size_bytes ${direction}, title COLLATE NOCASE ASC, id ASC`;
+  }
+  if (sortBy === "plays") {
+    return `play_count ${direction}, title COLLATE NOCASE ASC, id ASC`;
   }
   return `updated_at ${direction}, id ${direction}`;
 }

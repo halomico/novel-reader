@@ -1,4 +1,5 @@
 import { Tags } from "lucide-react";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { CatalogBookGrid } from "@/components/CatalogBookGrid";
@@ -6,6 +7,7 @@ import { Pagination } from "@/components/Pagination";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getCatalogPageSize, isGuestTagLibraryNavEnabled, isTagLibraryEnabled } from "@/lib/config";
 import { getTagBySlug, listNovelsByTag, listTagsForNovels } from "@/lib/tags";
+import { canonicalPagePath, NO_INDEX_ROBOTS } from "@/lib/seo";
 import { getCurrentUser } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +20,25 @@ type TagPageProps = {
     page?: string;
   }>;
 };
+
+export async function generateMetadata({ params, searchParams }: TagPageProps): Promise<Metadata> {
+  const tag = getTagBySlug((await params).slug);
+  if (!tag) {
+    return { title: "标签不存在", robots: NO_INDEX_ROBOTS };
+  }
+  const pageValue = Number((await searchParams).page || 1);
+  const page = Number.isInteger(pageValue) && pageValue > 1 ? pageValue : 1;
+  const canonical = canonicalPagePath(`/tags/${tag.slug}`, page);
+  const isPublic = isTagLibraryEnabled() && isGuestTagLibraryNavEnabled();
+  const description = tag.description || `浏览“${tag.name}”标签下的小说。`;
+  return {
+    title: page > 1 ? `${tag.name} 第 ${page} 页` : tag.name,
+    description,
+    alternates: { canonical },
+    robots: isPublic ? { index: true, follow: true } : NO_INDEX_ROBOTS,
+    openGraph: { title: tag.name, description, url: canonical },
+  };
+}
 
 function TagsLocked() {
   return (

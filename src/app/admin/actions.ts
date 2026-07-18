@@ -43,14 +43,24 @@ import {
 } from "@/lib/media";
 import { scheduleMissingMediaPreparation } from "@/lib/media-maintenance";
 import { clearMediaThumbnails } from "@/lib/media-thumbnail";
-import { deleteNovelIds } from "@/lib/novel-files";
+import { deleteNovelIds, renameNovelFile, updateNovelFile } from "@/lib/novel-files";
 import { hashPassword } from "@/lib/password";
+import { movePinnedNovel, togglePinnedNovel } from "@/lib/pinned-novels";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { validateSearchKeyword } from "@/lib/search";
 import { detectSiteIconFormat, MAX_SITE_ICON_BYTES, removeSiteIconFile, writeSiteIconFile } from "@/lib/site-icon";
 import { normalizeIpRateLimitRules, readSiteSettings, type SiteSettings, writeSiteSettings } from "@/lib/site-settings";
 import { isColorPalette } from "@/lib/ui-preferences";
-import { createTag, deleteTag, parseHotwordInput, setNovelHotwords, setNovelTags, updateTag } from "@/lib/tags";
+import {
+  createTag,
+  deleteTag,
+  listHotwordsForNovel,
+  listTagsForNovel,
+  parseHotwordInput,
+  setNovelHotwords,
+  setNovelTags,
+  updateTag,
+} from "@/lib/tags";
 import { deleteUserSessions, hashUserPassword } from "@/lib/user-auth";
 import {
   clearBrowseHistory,
@@ -96,8 +106,10 @@ function mediaOperationMessage(error: unknown): string {
     : "资源操作失败，请检查媒体目录和数据库状态";
 }
 
-function loginNotice(message: string): never {
-  redirect(`/admin/login?error=${encodeURIComponent(message)}`);
+function loginNotice(message: string, username = ""): never {
+  const params = new URLSearchParams({ error: message });
+  if (username) params.set("username", username);
+  redirect(`/admin/login?${params.toString()}`);
 }
 
 async function requireAdminRequest(path = "/admin/books") {
@@ -177,6 +189,8 @@ export async function loginAdminAction(formData: FormData) {
     notFound();
   }
 
+  const username = String(formData.get("username") || "").trim();
+  const password = String(formData.get("password") || "");
   if (isAdminLoginRateLimitEnabled()) {
     const limit = checkRateLimit({
       key: `admin-login:${access.clientIp}`,
@@ -185,14 +199,12 @@ export async function loginAdminAction(formData: FormData) {
     });
     if (!limit.allowed) {
       const blocked = shouldAdminLoginRateLimitBan() && persistBlockedIp(access.clientIp);
-      loginNotice(blocked ? "登录太频繁，当前 IP 已加入黑名单" : `登录太频繁，请 ${limit.retryAfterSeconds} 秒后再试`);
+      loginNotice(blocked ? "登录太频繁，当前 IP 已加入黑名单" : `登录太频繁，请 ${limit.retryAfterSeconds} 秒后再试`, username);
     }
   }
 
-  const username = String(formData.get("username") || "").trim();
-  const password = String(formData.get("password") || "");
   if (!verifyAdminCredentials(username, password)) {
-    loginNotice("用户名或密码不正确，或后台密钥尚未配置");
+    loginNotice("用户名或密码不正确，或后台密钥尚未配置", username);
   }
 
   await setAdminSession(username);
@@ -307,6 +319,30 @@ export async function deleteNovelsAction(formData: FormData) {
   adminNotice(`已删除 ${result.deleted} 本小说`, result.deleted ? "success" : "warning");
 }
 
+export async function togglePinnedNovelAction(formData: FormData) {
+  await requireAdminRequest("/admin/books");
+  const novelId = Number(formData.get("bookId"));
+  if (!Number.isInteger(novelId) || novelId < 1) {
+    return;
+  }
+  togglePinnedNovel(novelId);
+  revalidatePath("/");
+  revalidatePath(`/books/${novelId}`);
+  revalidatePath("/admin/books");
+}
+
+export async function movePinnedNovelAction(formData: FormData) {
+  await requireAdminRequest("/admin/books");
+  const novelId = Number(formData.get("bookId"));
+  const direction = formData.get("direction") === "down" ? "down" : "up";
+  if (!Number.isInteger(novelId) || novelId < 1) {
+    return;
+  }
+  movePinnedNovel(novelId, direction);
+  revalidatePath("/");
+  revalidatePath("/admin/books");
+}
+
 function tagOperationMessage(error: unknown): string {
   if (error instanceof Error && error.message.includes("UNIQUE constraint failed")) {
     return "标签名称或链接标识已存在";
@@ -395,6 +431,98 @@ export async function saveNovelTaggingAction(formData: FormData) {
   adminNotice("标签和热词已保存", "success", returnPath);
 }
 
+export async function saveNovelEditorAction(formData: FormData) {
+  const bookId = Number(formData.get("bookId") || 0);
+  const returnPath = Number.isInteger(bookId) && bookId > 0 ? `/admin/books/${bookId}/edit` : "/admin/books";
+  await requireAdminRequest(returnPath);
+  if (!Number.isInteger(bookId) || bookId < 1) {
+    adminNotice("小说不存在", "warning", "/admin/books");
+  }
+
+  const tagIds = formData
+    .getAll("tagIds")
+    .map(Number)
+    .filter((id) => Number.isInteger(id) && id > 0);
+  let hotwords: string[];
+  try {
+    hotwords = parseHotwordInput(String(formData.get("hotwords") || ""));
+    for (const term of hotwords) {
+      const validation = validateSearchKeyword(term);
+      if (!validation.ok) {
+        adminNotice(`热词“${term}”：${validation.message}`, "warning", returnPath);
+      }
+    }
+    if (formData.has("content")) {
+      updateNovelFile(bookId, String(formData.get("title") || ""), String(formData.get("content") || ""));
+    } else {
+      renameNovelFile(bookId, String(formData.get("title") || ""));
+    }
+    setNovelTags(bookId, tagIds);
+    setNovelHotwords(bookId, hotwords);
+  } catch (error) {
+    adminNotice(error instanceof Error ? error.message : "小说保存失败，请检查小说目录权限", "warning", returnPath);
+  }
+
+  revalidatePath("/");
+  revalidatePath("/search");
+  revalidatePath(`/books/${bookId}`);
+  revalidatePath("/tags");
+  revalidatePath("/admin/books");
+  revalidatePath(returnPath);
+  adminNotice("小说已保存", "success", returnPath);
+}
+
+export async function batchUpdateNovelsAction(formData: FormData) {
+  const ids = Array.from(new Set(
+    formData
+      .getAll("bookIds")
+      .map(Number)
+      .filter((id) => Number.isInteger(id) && id > 0),
+  )).slice(0, 100);
+  const returnPath = ids.length ? `/admin/books/batch?ids=${ids.join(",")}` : "/admin/books";
+  await requireAdminRequest(returnPath);
+  if (!ids.length) {
+    adminNotice("请选择要编辑的小说", "warning", "/admin/books");
+  }
+
+  const addedTagIds = Array.from(new Set(
+    formData
+      .getAll("tagIds")
+      .map(Number)
+      .filter((id) => Number.isInteger(id) && id > 0),
+  ));
+  let addedHotwords: string[];
+  try {
+    addedHotwords = parseHotwordInput(String(formData.get("hotwords") || ""));
+    for (const term of addedHotwords) {
+      const validation = validateSearchKeyword(term);
+      if (!validation.ok) {
+        adminNotice(`热词“${term}”：${validation.message}`, "warning", returnPath);
+      }
+    }
+
+    for (const id of ids) {
+      renameNovelFile(id, String(formData.get(`title-${id}`) || ""));
+      if (addedTagIds.length) {
+        const currentTagIds = listTagsForNovel(id, { includeHidden: true }).map((tag) => tag.id);
+        setNovelTags(id, [...currentTagIds, ...addedTagIds]);
+      }
+      if (addedHotwords.length) {
+        setNovelHotwords(id, [...listHotwordsForNovel(id), ...addedHotwords]);
+      }
+      revalidatePath(`/books/${id}`);
+    }
+  } catch (error) {
+    adminNotice(error instanceof Error ? error.message : "批量编辑失败，请检查小说目录权限", "warning", returnPath);
+  }
+
+  revalidatePath("/");
+  revalidatePath("/search");
+  revalidatePath("/tags");
+  revalidatePath("/admin/books");
+  adminNotice(`已更新 ${ids.length} 本小说`, "success", "/admin/books");
+}
+
 export async function saveAdminSettingsAction(formData: FormData) {
   await requireAdminRequest("/admin/settings");
   const previous = readSiteSettings();
@@ -452,16 +580,13 @@ export async function saveAdminSettingsAction(formData: FormData) {
     catalogPageSize: intField(formData, "catalogPageSize", previous.catalogPageSize || getCatalogPageSize(), 1, 100),
     searchResultsPageSize: intField(formData, "searchResultsPageSize", previous.searchResultsPageSize || getSearchResultsPageSize(), 1, 100),
     adminBookPageSize: intField(formData, "adminBookPageSize", previous.adminBookPageSize || getAdminBookPageSize(), 1, 200),
+    randomCatalogEnabled: formData.get("randomCatalogEnabled") === "on",
     noticeDisplaySeconds: intField(formData, "noticeDisplaySeconds", previous.noticeDisplaySeconds || getNoticeDisplaySeconds(), 0, 60),
     noticeStayVisibleAfterBlur: formData.get("noticeStayVisibleAfterBlur") === "on",
     globalSearchMaxResults: intField(formData, "globalSearchMaxResults", previous.globalSearchMaxResults || getGlobalSearchMaxResults(), 1, 1000),
     searchRateLimitRules,
     contentRateLimitRules,
     userLoginEnabled: formData.get("userLoginEnabled") === "on",
-    userLoginCaptchaMode:
-      formData.get("userLoginCaptchaMode") === "image" || formData.get("userLoginCaptchaMode") === "slider"
-        ? (formData.get("userLoginCaptchaMode") as SiteSettings["userLoginCaptchaMode"])
-        : "off",
     userRegistrationEnabled: formData.get("userRegistrationEnabled") === "on",
     userDailyRegistrationLimitPerIp: intField(
       formData,
@@ -567,6 +692,54 @@ export async function updateAdminMediaAction(formData: FormData) {
   revalidatePath(`/media/${id}`);
   revalidatePath("/admin/media");
   adminNotice("资源信息已更新", "success", returnPath);
+}
+
+export async function batchUpdateAdminMediaAction(formData: FormData) {
+  await requireAdminRequest("/admin/media");
+  const returnPath = mediaReturnPath(formData);
+  const ids = Array.from(new Set(
+    formData
+      .getAll("mediaIds")
+      .map(Number)
+      .filter((id) => Number.isInteger(id) && id > 0),
+  )).slice(0, 100);
+  if (!ids.length) {
+    adminNotice("请选择要编辑的资源", "warning", returnPath);
+  }
+
+  const applyArtist = formData.get("applyArtist") === "on";
+  const applyDescription = formData.get("applyDescription") === "on";
+  const artist = String(formData.get("artist") || "").trim();
+  const description = String(formData.get("description") || "").trim();
+  const targetFolder = String(formData.get("targetFolder") || "__keep__");
+  const categoryId = String(formData.get("categoryId") || "__keep__");
+  if (artist.length > 80 || description.length > 1000) {
+    adminNotice(artist.length > 80 ? "作者不能超过 80 个字符" : "简介不能超过 1000 个字符", "warning", returnPath);
+  }
+
+  let updated = 0;
+  try {
+    for (const id of ids) {
+      const asset = getMediaAsset(id);
+      if (!asset) continue;
+      const title = String(formData.get(`title-${id}`) || "").trim();
+      updateMediaAsset(
+        id,
+        title,
+        asset.kind === "file" ? "" : applyArtist ? artist : asset.artist,
+        applyDescription ? description : asset.description,
+        targetFolder === "__keep__" ? undefined : targetFolder,
+        asset.kind === "video" && categoryId !== "__keep__" ? categoryId : undefined,
+      );
+      updated += 1;
+      revalidatePath(`/media/${id}`);
+    }
+  } catch (error) {
+    adminNotice(mediaOperationMessage(error), "warning", returnPath);
+  }
+  revalidatePath("/media");
+  revalidatePath("/admin/media");
+  adminNotice(`已更新 ${updated} 个资源`, updated ? "success" : "warning", returnPath);
 }
 
 export async function createAdminVideoCategoryAction(formData: FormData) {

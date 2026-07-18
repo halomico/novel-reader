@@ -1,26 +1,31 @@
 import { KeyRound } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AuthCaptchaForm } from "@/components/AuthCaptchaForm";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
+import { HumanVerificationField } from "@/components/HumanVerificationField";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SiteHeader } from "@/components/SiteHeader";
 import {
   getNoticeDisplaySeconds,
-  getUserLoginCaptchaMode,
   isUserLoginEnabled,
   isUserRegistrationEnabled,
   shouldNoticeStayVisibleAfterBlur,
 } from "@/lib/config";
 import { getCurrentUser } from "@/lib/user-auth";
+import { getTurnstileSiteKey } from "@/lib/human-verification";
+import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { loginUserAction } from "../account/actions";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: "登录", robots: NO_INDEX_ROBOTS };
 
 type LoginPageProps = {
   searchParams: Promise<{
     notice?: string;
     tone?: "success" | "warning" | "error";
+    username?: string;
+    remember?: string;
   }>;
 };
 
@@ -33,7 +38,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
   const loginEnabled = isUserLoginEnabled();
   const registrationEnabled = isUserRegistrationEnabled();
-  const captchaMode = getUserLoginCaptchaMode();
+  const turnstileSiteKey = getTurnstileSiteKey();
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
   const noticeStayVisibleAfterBlur = shouldNoticeStayVisibleAfterBlur();
 
@@ -51,7 +56,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         />
       ) : null}
       <section className="authPage">
-        <AuthCaptchaForm action={loginUserAction} captchaMode={captchaMode} purpose="login">
+        <form className="userPanel authPanel" action={loginUserAction}>
           <div className="userPanelHeader">
             <KeyRound size={20} aria-hidden="true" />
             <div>
@@ -60,12 +65,17 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </div>
           <label>
             <span>用户名</span>
-            <input name="username" autoComplete="username" disabled={!loginEnabled} required />
+            <input name="username" autoComplete="username" defaultValue={String(params.username || "").slice(0, 32)} disabled={!loginEnabled} required />
           </label>
           <label>
             <span>密码</span>
             <input name="password" type="password" autoComplete="current-password" disabled={!loginEnabled} required />
           </label>
+          <label className="authRemember">
+            <input name="rememberLogin" type="checkbox" defaultChecked={params.remember !== "0"} />
+            <span>保持登录状态</span>
+          </label>
+          <HumanVerificationField siteKey={turnstileSiteKey} purpose="login" />
           <button className="authPrimaryButton" type="submit" disabled={!loginEnabled}>
             登录
           </button>
@@ -75,7 +85,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
               还没有账号？<Link href="/register">去注册</Link>
             </p>
           ) : null}
-        </AuthCaptchaForm>
+        </form>
       </section>
     </main>
   );

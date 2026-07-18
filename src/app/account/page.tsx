@@ -1,18 +1,21 @@
-import { KeyRound, Settings, Upload, UserRound } from "lucide-react";
+import { KeyRound, Save, Settings, UserRound } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
+import { AvatarUploadForm } from "@/components/AvatarUploadForm";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getNoticeDisplaySeconds, getUserAvatarMaxBytes, shouldNoticeStayVisibleAfterBlur } from "@/lib/config";
 import { getCurrentUser } from "@/lib/user-auth";
+import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import {
   updateAccountDisplayNameAction,
   updateAccountPasswordAction,
-  uploadAvatarAction,
 } from "./actions";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: "用户中心", robots: NO_INDEX_ROBOTS };
 
 type AccountPageProps = {
   searchParams: Promise<{
@@ -70,10 +73,11 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
               <div className="accountAvatar" aria-hidden="true">
                 {user.avatarPath ? <img src={user.avatarPath} alt="" /> : <UserRound size={34} />}
               </div>
-              <div>
+              <div className="accountIdentity">
                 <h1>{user.displayName}</h1>
                 <p>@{user.username}</p>
               </div>
+              <AvatarUploadForm maxAvatarMb={maxAvatarMb} />
             </div>
 
             <form className="accountProfileForm" action={updateAccountDisplayNameAction}>
@@ -81,17 +85,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
                 <span>显示名称</span>
                 <input name="displayName" defaultValue={user.displayName} maxLength={40} required />
               </label>
-              <button type="submit">保存显示名称</button>
-            </form>
-
-            <form className="avatarUploadForm" action={uploadAvatarAction}>
-              <label>
-                <Upload size={17} aria-hidden="true" />
-                <span>上传头像</span>
-                <input name="avatar" type="file" accept="image/png,image/jpeg,image/pjpeg,image/webp,image/gif,.jpg,.jpeg,.jpe,.png,.webp,.gif" required />
-              </label>
-              <small>最大 {maxAvatarMb} MB</small>
-              <button type="submit">更新头像</button>
+              <button className="accountActionButton" type="submit"><Save size={15} aria-hidden="true" />保存</button>
             </form>
           </article>
 
@@ -116,7 +110,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
                 <span>确认新密码</span>
                 <input name="confirmPassword" type="password" autoComplete="new-password" minLength={6} maxLength={72} required />
               </label>
-              <button type="submit">更新密码</button>
+              <button className="accountActionButton" type="submit"><Save size={15} aria-hidden="true" />更新</button>
             </form>
           </article>
 

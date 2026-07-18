@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     results = await saveUploadedNovels(files);
   } catch (error) {
     console.error("Failed to save uploaded novels", error);
-    return jsonError("小说文件保存失败，请检查书库权限和磁盘空间", 500);
+    return jsonError("小说文件保存失败，请检查小说目录权限和磁盘空间", 500);
   }
   const saved = results.filter((item) => item.status === "saved").length;
   const duplicates = results.filter((item) => item.status === "duplicate").length;

@@ -6,7 +6,13 @@ import {
   shouldShowProgressBars,
 } from "@/lib/config";
 import { getClientIp } from "@/lib/admin-access";
-import { cancelContentJob, countActiveContentJobs, getContentJob, startContentSearchJob } from "@/lib/content-jobs";
+import {
+  cancelContentJob,
+  countActiveContentJobs,
+  getContentJob,
+  hasCachedContentSearchResults,
+  startContentSearchJob,
+} from "@/lib/content-jobs";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { validateSearchKeyword } from "@/lib/search";
 import { countSearchChars } from "@/lib/search-query";
@@ -57,7 +63,7 @@ export async function POST(request: NextRequest) {
   }
 
   const concurrencyLimit = getFrontendSearchConcurrencyLimit();
-  if (countActiveContentJobs("search") >= concurrencyLimit) {
+  if (!hasCachedContentSearchResults(validation.query) && countActiveContentJobs("search") >= concurrencyLimit) {
     return jsonError(`当前全文搜索任务较多，请稍后再试（上限 ${concurrencyLimit} 个）`, 429);
   }
 

@@ -19,6 +19,7 @@ test("atomically replaces an existing settings file", () => {
     assert.equal(defaults.hotwordLinksEnabled, true);
     assert.equal(defaults.guestTagLibraryNavEnabled, false);
     assert.equal(defaults.guestHotwordLinksEnabled, false);
+    assert.equal(defaults.randomCatalogEnabled, true);
     assert.equal(defaults.defaultPalette, "default");
     writeSiteSettings({ ...defaults, siteName: "第一次" });
     writeSiteSettings({ ...readSiteSettings(), siteName: "第二次" });
@@ -40,8 +41,8 @@ test("normalizes the configured user default palette", () => {
   process.env.ADMIN_SETTINGS_PATH = path.join(tempDir, "admin-settings.json");
 
   try {
-    writeSiteSettings({ ...readSiteSettings(), defaultPalette: "journal" });
-    assert.equal(readSiteSettings().defaultPalette, "journal");
+    writeSiteSettings({ ...readSiteSettings(), defaultPalette: "sakura" });
+    assert.equal(readSiteSettings().defaultPalette, "sakura");
     fs.writeFileSync(process.env.ADMIN_SETTINGS_PATH, JSON.stringify({ defaultPalette: "invalid" }), "utf8");
     assert.equal(readSiteSettings().defaultPalette, "default");
   } finally {

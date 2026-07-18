@@ -4,7 +4,6 @@ import path from "node:path";
 import { isColorPalette, type ColorPalette } from "./ui-preferences";
 
 export type AdminTheme = "system" | "light" | "dark";
-export type UserLoginCaptchaMode = "off" | "image" | "slider";
 export type SiteIconMimeType = "" | "image/png" | "image/jpeg" | "image/webp" | "image/x-icon";
 export type VideoThumbnailMode = "single" | "carousel";
 export type RelatedVideoMode = "next" | "random";
@@ -54,6 +53,7 @@ export type SiteSettings = {
   catalogPageSize: number;
   searchResultsPageSize: number;
   adminBookPageSize: number;
+  randomCatalogEnabled: boolean;
   noticeDisplaySeconds: number;
   noticeStayVisibleAfterBlur: boolean;
   showProgressBars: boolean;
@@ -63,7 +63,6 @@ export type SiteSettings = {
   searchShortQueryRateLimitPerMinute: number;
   searchRateLimitRules: SearchRateLimitRule[];
   userLoginEnabled: boolean;
-  userLoginCaptchaMode: UserLoginCaptchaMode;
   userRegistrationEnabled: boolean;
   userDailyRegistrationLimitPerIp: number;
   userSearchRateLimitPerMinute: number;
@@ -139,6 +138,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   catalogPageSize: 0,
   searchResultsPageSize: 0,
   adminBookPageSize: 0,
+  randomCatalogEnabled: true,
   noticeDisplaySeconds: 0,
   noticeStayVisibleAfterBlur: false,
   showProgressBars: true,
@@ -148,7 +148,6 @@ const DEFAULT_SETTINGS: SiteSettings = {
   searchShortQueryRateLimitPerMinute: 0,
   searchRateLimitRules: [],
   userLoginEnabled: true,
-  userLoginCaptchaMode: "off",
   userRegistrationEnabled: true,
   userDailyRegistrationLimitPerIp: 0,
   userSearchRateLimitPerMinute: 0,
@@ -204,10 +203,6 @@ function cleanTheme(value: unknown): AdminTheme {
 
 function cleanColorPalette(value: unknown): ColorPalette {
   return typeof value === "string" && isColorPalette(value) ? value : "default";
-}
-
-function cleanCaptchaMode(value: unknown): UserLoginCaptchaMode {
-  return value === "image" || value === "slider" ? value : "off";
 }
 
 function cleanSiteIconMimeType(value: unknown): SiteIconMimeType {
@@ -353,6 +348,7 @@ function readSiteSettingsFromDisk(): SiteSettings {
       catalogPageSize: cleanInt(parsed.catalogPageSize, DEFAULT_SETTINGS.catalogPageSize, 0, 100),
       searchResultsPageSize: cleanInt(parsed.searchResultsPageSize, DEFAULT_SETTINGS.searchResultsPageSize, 0, 100),
       adminBookPageSize: cleanInt(parsed.adminBookPageSize, DEFAULT_SETTINGS.adminBookPageSize, 0, 200),
+      randomCatalogEnabled: cleanBool(parsed.randomCatalogEnabled, DEFAULT_SETTINGS.randomCatalogEnabled),
       noticeDisplaySeconds: cleanInt(parsed.noticeDisplaySeconds, DEFAULT_SETTINGS.noticeDisplaySeconds, 0, 60),
       noticeStayVisibleAfterBlur: cleanBool(parsed.noticeStayVisibleAfterBlur, DEFAULT_SETTINGS.noticeStayVisibleAfterBlur),
       showProgressBars: cleanBool(parsed.showProgressBars, DEFAULT_SETTINGS.showProgressBars),
@@ -367,7 +363,6 @@ function readSiteSettingsFromDisk(): SiteSettings {
       ),
       searchRateLimitRules: normalizeIpRateLimitRules(parsed.searchRateLimitRules),
       userLoginEnabled: cleanBool(parsed.userLoginEnabled, DEFAULT_SETTINGS.userLoginEnabled),
-      userLoginCaptchaMode: cleanCaptchaMode(parsed.userLoginCaptchaMode),
       userRegistrationEnabled: cleanBool(parsed.userRegistrationEnabled, DEFAULT_SETTINGS.userRegistrationEnabled),
       userDailyRegistrationLimitPerIp: cleanInt(
         parsed.userDailyRegistrationLimitPerIp,

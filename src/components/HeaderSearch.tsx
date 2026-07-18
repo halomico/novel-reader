@@ -14,12 +14,12 @@ type CurrentMatch = {
 };
 
 const options: Array<{ value: SearchMode; label: string; action: string; placeholder: string; ariaLabel?: string }> = [
-  { value: "title", label: "书名", action: "/", placeholder: "搜索小说名" },
+  { value: "title", label: "书名", action: "/novels", placeholder: "搜索小说名" },
   {
     value: "content",
     label: "正文",
     action: "/search",
-    placeholder: "多个词用空格分隔",
+    placeholder: "多个关键词用空格分隔",
     ariaLabel: "搜索全部小说正文，多个关键词用空格分隔",
   },
   { value: "current", label: "本文", action: "/search", placeholder: "搜索本文" },

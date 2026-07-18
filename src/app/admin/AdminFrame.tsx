@@ -1,8 +1,11 @@
 ﻿import { BookOpen, LogOut, Search, Settings, Users } from "lucide-react";
-import Link from "next/link";
-import { BarChart3, LibraryBig, Tags } from "lucide-react";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import {
+  AdminMobileNavigation,
+  AdminSidebarNavigation,
+  type AdminNavKey,
+} from "@/components/AdminNavigation";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
 import { Breadcrumbs, type BreadcrumbItem } from "@/components/Breadcrumbs";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -12,22 +15,12 @@ import { getNoticeDisplaySeconds, getSiteName, shouldNoticeStayVisibleAfterBlur 
 import { logoutAdminAction } from "./actions";
 
 type AdminFrameProps = {
-  active: "home" | "books" | "indexes" | "settings" | "users" | "analytics" | "media" | "tags";
+  active: AdminNavKey;
   notice?: string;
   tone?: "success" | "warning" | "error";
   breadcrumbs?: BreadcrumbItem[];
   children: React.ReactNode;
 };
-
-const navItems = [
-  { href: "/admin/books", label: "小说管理", value: "books", icon: BookOpen },
-  { href: "/admin/tags", label: "标签管理", value: "tags", icon: Tags },
-  { href: "/admin/media", label: "资源管理", value: "media", icon: LibraryBig },
-  { href: "/admin/indexes", label: "搜索索引", value: "indexes", icon: Search },
-  { href: "/admin/users", label: "用户管理", value: "users", icon: Users },
-  { href: "/admin/analytics", label: "数据分析", value: "analytics", icon: BarChart3 },
-  { href: "/admin/settings", label: "系统设置", value: "settings", icon: Settings },
-];
 
 function titleFor(active: AdminFrameProps["active"]): string {
   if (active === "home") {
@@ -71,33 +64,13 @@ export async function AdminFrame({ active, notice = "", tone, breadcrumbs, child
   const noticeStayVisibleAfterBlur = shouldNoticeStayVisibleAfterBlur();
   const trail = breadcrumbs ?? (active === "home" ? [] : [{ label: titleFor(active) }]);
   const breadcrumbItems: BreadcrumbItem[] = [
-    { label: "首页", href: "/" },
     trail.length ? { label: "后台", href: "/admin" } : { label: "后台" },
     ...trail,
   ];
 
   return (
     <main className="adminShell adminLayout">
-      <aside className="adminSidebar">
-        <Link className="adminBrandCompact" href="/admin">
-          <span className="adminLogo" aria-hidden="true">
-            <BookOpen size={22} />
-          </span>
-          <span>{siteName}</span>
-        </Link>
-        <nav className="adminSideNav" aria-label="后台导航">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const className = item.value === active ? "isActive" : "";
-            return (
-              <Link className={className} href={item.href} key={item.value}>
-                <Icon size={18} aria-hidden="true" />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-      </aside>
+      <AdminSidebarNavigation active={active} siteName={siteName} />
 
       <section className="adminMain">
         <Breadcrumbs className="adminBreadcrumbs" items={breadcrumbItems} />
@@ -112,6 +85,7 @@ export async function AdminFrame({ active, notice = "", tone, breadcrumbs, child
                 <LogOut size={20} aria-hidden="true" />
               </button>
             </form>
+            <AdminMobileNavigation active={active} />
           </div>
         </header>
         {notice ? (

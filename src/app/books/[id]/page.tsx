@@ -1,16 +1,21 @@
 import { BookOpenText } from "lucide-react";
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { AdminReaderActions } from "@/components/AdminReaderActions";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getClientIp } from "@/lib/admin-access";
+import { getAdminSession } from "@/lib/admin-auth";
 import { recordAnalyticsEvent } from "@/lib/analytics";
 import { getNovelById, readNovelSegments, type Novel } from "@/lib/books";
 import { areGuestHotwordLinksEnabled, areHotwordLinksEnabled, isGuestTagLibraryNavEnabled, isTagLibraryEnabled } from "@/lib/config";
 import { checkContentAccess } from "@/lib/content-access";
 import { listHotwordsForNovel, listTagsForNovel, type Tag } from "@/lib/tags";
+import { isNovelPinned } from "@/lib/pinned-novels";
+import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { getCurrentUser } from "@/lib/user-auth";
 import { recordNovelVisit, recordReadingHistory } from "@/lib/users";
 
@@ -26,10 +31,31 @@ type BookPageProps = {
   }>;
 };
 
+export async function generateMetadata({ params }: BookPageProps): Promise<Metadata> {
+  const bookId = Number((await params).id);
+  const book = Number.isInteger(bookId) && bookId > 0 ? getNovelById(bookId) : null;
+  if (!book) {
+    return { title: "小说不存在", robots: NO_INDEX_ROBOTS };
+  }
+  const canonical = `/books/${book.id}`;
+  const description = `在线阅读《${book.title}》。`;
+  return {
+    title: book.title,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      type: "article",
+      title: book.title,
+      description,
+      url: canonical,
+    },
+  };
+}
+
 type CurrentUser = Awaited<ReturnType<typeof getCurrentUser>>;
 
 function safeReturnHref(value: string | undefined): string {
-  return value?.startsWith("/") && !value.startsWith("//") && !value.includes("\\") ? value : "/";
+  return value?.startsWith("/") && !value.startsWith("//") && !value.includes("\\") ? value : "/novels";
 }
 
 function ReaderContentLoading() {
@@ -139,7 +165,7 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
   }
 
   const hitSegment = Number(query.hit);
-  const user = await getCurrentUser();
+  const [user, adminSession] = await Promise.all([getCurrentUser(), getAdminSession()]);
   const showTags = isTagLibraryEnabled() && (Boolean(user) || isGuestTagLibraryNavEnabled());
   const showHotwords = areHotwordLinksEnabled() && (Boolean(user) || areGuestHotwordLinksEnabled());
   const tags = showTags ? listTagsForNovel(book.id) : [];
@@ -154,13 +180,14 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
           className="readerBreadcrumbs"
           items={[
             { label: "首页", href: "/" },
-            { label: "书库", href: safeReturnHref(query.from) },
+            { label: "小说", href: safeReturnHref(query.from) },
             { label: book.title },
           ]}
         />
         <header className="readerTitle">
           <BookOpenText size={26} aria-hidden="true" />
           <h1>{book.title}</h1>
+          {adminSession ? <AdminReaderActions bookId={book.id} title={book.title} isPinned={isNovelPinned(book.id)} /> : null}
         </header>
         <ReaderTagLinks tags={tags} />
         <Suspense fallback={<ReaderContentLoading />}>

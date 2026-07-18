@@ -23,6 +23,7 @@ type AdminAnalyticsPageProps = {
     page?: string;
     realtimePage?: string;
     hotPage?: string;
+    contentPage?: string;
     notice?: string;
     tone?: "success" | "warning" | "error";
   }>;
@@ -69,12 +70,26 @@ function formatCount(value: number): string {
   return value.toLocaleString("zh-CN");
 }
 
-function MetricTable({ title, items }: { title: string; items: AnalyticsMetric[] }) {
+function MetricTable({
+  title,
+  items,
+  total = items.length,
+  page,
+  totalPages,
+  paginationParams,
+}: {
+  title: string;
+  items: AnalyticsMetric[];
+  total?: number;
+  page?: number;
+  totalPages?: number;
+  paginationParams?: Record<string, string | undefined>;
+}) {
   return (
     <details className="analyticsMetricPanel" open>
       <summary>
         <h3>{title}</h3>
-        <span>{items.length} 项</span>
+        <span>{total} 项</span>
       </summary>
       {items.length ? (
         <div className="analyticsMetricList">
@@ -88,6 +103,16 @@ function MetricTable({ title, items }: { title: string; items: AnalyticsMetric[]
       ) : (
         <p className="analyticsEmpty">暂无数据</p>
       )}
+      {page && totalPages && paginationParams ? (
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          query=""
+          basePath="/admin/analytics"
+          extraParams={paginationParams}
+          pageParam="contentPage"
+        />
+      ) : null}
     </details>
   );
 }
@@ -144,6 +169,8 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
     realtimePageSize: 30,
     searchQueryPage: params.hotPage,
     searchQueryPageSize: 100,
+    contentPage: params.contentPage,
+    contentPageSize: 50,
     customFrom: params.from,
     customTo: params.to,
   });
@@ -153,12 +180,21 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
     from: overview.range === "custom" ? overview.customFrom : undefined,
     to: overview.range === "custom" ? overview.customTo : undefined,
     hotPage: overview.searchQueryPage > 1 ? String(overview.searchQueryPage) : undefined,
+    contentPage: overview.contentPage > 1 ? String(overview.contentPage) : undefined,
   };
   const searchPaginationParams: Record<string, string | undefined> = {
     range: overview.range,
     from: overview.range === "custom" ? overview.customFrom : undefined,
     to: overview.range === "custom" ? overview.customTo : undefined,
     page: overview.realtimePage > 1 ? String(overview.realtimePage) : undefined,
+    contentPage: overview.contentPage > 1 ? String(overview.contentPage) : undefined,
+  };
+  const contentPaginationParams: Record<string, string | undefined> = {
+    range: overview.range,
+    from: overview.range === "custom" ? overview.customFrom : undefined,
+    to: overview.range === "custom" ? overview.customTo : undefined,
+    page: overview.realtimePage > 1 ? String(overview.realtimePage) : undefined,
+    hotPage: overview.searchQueryPage > 1 ? String(overview.searchQueryPage) : undefined,
   };
 
   return (
@@ -232,7 +268,14 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
             totalPages={overview.searchQueryTotalPages}
             paginationParams={searchPaginationParams}
           />
-          <MetricTable title="内容访问" items={overview.topContent} />
+          <MetricTable
+            title="内容访问"
+            items={overview.topContent}
+            total={overview.contentTotal}
+            page={overview.contentPage}
+            totalPages={overview.contentTotalPages}
+            paginationParams={contentPaginationParams}
+          />
           <MetricTable title="IP 地址" items={overview.topIps} />
           <MetricTable title="国家/地区" items={overview.topCountries} />
           <MetricTable title="来源网站" items={overview.topReferrers} />

@@ -3,7 +3,6 @@ import {
   readSiteSettings,
   type IpRateLimitRule,
   type RelatedVideoMode,
-  type UserLoginCaptchaMode,
   type VideoThumbnailMode,
 } from "./site-settings";
 
@@ -105,6 +104,10 @@ export function getAdminBookPageSize(): number {
   return readSettingInt(readSiteSettings().adminBookPageSize, "ADMIN_BOOK_PAGE_SIZE", 20, 1, 200);
 }
 
+export function isRandomCatalogEnabled(): boolean {
+  return readSiteSettings().randomCatalogEnabled;
+}
+
 export function getNoticeDisplaySeconds(): number {
   return readSettingInt(readSiteSettings().noticeDisplaySeconds, "NOTICE_DISPLAY_SECONDS", 5, 0, 60);
 }
@@ -157,10 +160,6 @@ export function getSearchRateLimitRules(): IpRateLimitRule[] {
 
 export function isUserLoginEnabled(): boolean {
   return readSiteSettings().userLoginEnabled && readBoolConfig("USER_LOGIN_ENABLED", true);
-}
-
-export function getUserLoginCaptchaMode(): UserLoginCaptchaMode {
-  return readSiteSettings().userLoginCaptchaMode;
 }
 
 export function isUserRegistrationEnabled(): boolean {

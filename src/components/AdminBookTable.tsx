@@ -9,14 +9,17 @@ import {
   Eye,
   EyeOff,
   GripVertical,
+  ListChecks,
   Maximize2,
   Minimize2,
+  Pencil,
+  Pin,
   SlidersHorizontal,
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { deleteNovelsAction } from "@/app/admin/actions";
+import { useEffect, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
+import { deleteNovelsAction, togglePinnedNovelAction } from "@/app/admin/actions";
 import { LocalDateTime } from "@/components/LocalDateTime";
 import type { AdminBookSortDir, AdminBookSortKey } from "@/lib/admin-books";
 import type { Novel } from "@/lib/books";
@@ -172,6 +175,7 @@ export function AdminBookTable({
   query,
   sort,
   dir,
+  pinnedIds,
 }: {
   books: Novel[];
   page: number;
@@ -180,6 +184,7 @@ export function AdminBookTable({
   query: string;
   sort: AdminBookSortKey;
   dir: AdminBookSortDir;
+  pinnedIds: number[];
 }) {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [columns, setColumns] = useState<BookColumn[]>(DEFAULT_BOOK_COLUMNS);
@@ -188,9 +193,11 @@ export function AdminBookTable({
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [columnPanelOpen, setColumnPanelOpen] = useState(false);
   const [resizingColumn, setResizingColumn] = useState<{ key: BookColumnKey; startX: number; startWidth: number } | null>(null);
+  const [pinActionPending, startPinActionTransition] = useTransition();
   const visibleIds = books.map((book) => book.id);
   const isAllSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
   const visibleColumns = columns.filter((column) => column.visible);
+  const pinnedSet = new Set(pinnedIds);
   const tableMinWidth =
     BOOK_SELECT_COLUMN_WIDTH + visibleColumns.reduce((total, column) => total + (columnWidths[column.key] || DEFAULT_BOOK_COLUMN_WIDTHS[column.key]), 0);
 
@@ -319,10 +326,29 @@ export function AdminBookTable({
 
   function renderCell(book: Novel, column: BookColumn) {
     if (column.key === "title") {
+      const isPinned = pinnedSet.has(book.id);
       return (
         <span className="adminBookTitleCell">
-          <strong>{book.title}</strong>
-          <Link href={`/admin/books/${book.id}/tags`}>标签/热词</Link>
+          <Link className="adminBookReadLink" href={`/books/${book.id}`} title={`阅读 ${book.title}`}>
+            {book.title}
+          </Link>
+          <Link className="adminBookEditLink" href={`/admin/books/${book.id}/edit`} aria-label={`编辑 ${book.title}`} title="编辑小说">
+            <Pencil size={15} aria-hidden="true" />
+          </Link>
+          <button
+            className={isPinned ? "adminBookPinButton isActive" : "adminBookPinButton"}
+            type="button"
+            disabled={pinActionPending}
+            aria-label={isPinned ? `取消置顶 ${book.title}` : `置顶 ${book.title}`}
+            title={isPinned ? "取消置顶" : "置顶小说"}
+            onClick={() => {
+              const formData = new FormData();
+              formData.set("bookId", String(book.id));
+              startPinActionTransition(() => togglePinnedNovelAction(formData));
+            }}
+          >
+            <Pin size={15} fill={isPinned ? "currentColor" : "none"} aria-hidden="true" />
+          </button>
         </span>
       );
     }
@@ -457,10 +483,23 @@ export function AdminBookTable({
         </table>
       </div>
       <div className="adminTableFooter">
-        <button className="adminDangerButton" type="submit" disabled={selectedIds.length === 0}>
-          <Trash2 size={17} aria-hidden="true" />
-          删除所选
-        </button>
+        <div className="adminBulkActionRow">
+          <Link
+            className={selectedIds.length ? "adminIconTextButton" : "adminIconTextButton isDisabled"}
+            href={selectedIds.length ? `/admin/books/batch?ids=${selectedIds.join(",")}` : "/admin/books"}
+            aria-disabled={!selectedIds.length}
+            onClick={(event) => {
+              if (!selectedIds.length) event.preventDefault();
+            }}
+          >
+            <ListChecks size={16} aria-hidden="true" />
+            批量编辑
+          </Link>
+          <button className="adminDangerButton" type="submit" disabled={selectedIds.length === 0}>
+            <Trash2 size={17} aria-hidden="true" />
+            删除所选
+          </button>
+        </div>
         <span>
           第 {page} / {totalPages} 页，共 {totalBooks} 本
         </span>

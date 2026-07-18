@@ -1,11 +1,14 @@
+import type { Metadata } from "next";
 import { ContentSearchClient } from "@/components/ContentSearchClient";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SiteHeader } from "@/components/SiteHeader";
 import { recordSearchQuery } from "@/lib/analytics";
 import { getGlobalSearchMaxResults, getSearchResultsPageSize, shouldShowProgressBars } from "@/lib/config";
 import { validateSearchKeyword } from "@/lib/search";
+import { NO_INDEX_ROBOTS } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: "全文搜索", robots: NO_INDEX_ROBOTS };
 
 type SearchPageProps = {
   searchParams: Promise<{

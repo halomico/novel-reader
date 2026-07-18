@@ -104,3 +104,73 @@ test("uses the full-text index for mixed encodings and safely includes changed b
     await fs.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 });
+
+test("updates a novel file, database metadata, and its title", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "novel-editor-flow-"));
+  const libraryDir = path.join(root, "library");
+  const previousLibraryDir = process.env.NOVEL_LIBRARY_DIR;
+  const previousDatabasePath = process.env.DATABASE_PATH;
+  const previousSearchPath = process.env.CONTENT_SEARCH_DB_PATH;
+  let mainDb: DatabaseSync | undefined;
+  let searchDb: DatabaseSync | undefined;
+
+  await fs.mkdir(libraryDir, { recursive: true });
+  process.env.NOVEL_LIBRARY_DIR = libraryDir;
+  process.env.DATABASE_PATH = path.join(root, "novels.db");
+  process.env.CONTENT_SEARCH_DB_PATH = path.join(root, "content-search.db");
+
+  try {
+    const { getDb } = await import("./db");
+    const { getContentSearchDb } = await import("./content-search-db");
+    const { renameNovelFile, updateNovelFile } = await import("./novel-files");
+    mainDb = getDb();
+    searchDb = getContentSearchDb();
+    await fs.writeFile(path.join(libraryDir, "旧书名.txt"), "旧正文", "utf8");
+    const insert = mainDb
+      .prepare(
+        `INSERT INTO novels (title, file_name, relative_path, size_bytes, mtime_ms, word_count)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run("旧书名", "旧书名.txt", "旧书名.txt", 9, 1, 3);
+
+    updateNovelFile(Number(insert.lastInsertRowid), "新书名", "第一章\r\n新的正文");
+
+    await assert.rejects(fs.access(path.join(libraryDir, "旧书名.txt")));
+    assert.equal(await fs.readFile(path.join(libraryDir, "新书名.txt"), "utf8"), "第一章\n新的正文");
+    assert.equal(renameNovelFile(Number(insert.lastInsertRowid), "最终书名"), true);
+    await assert.rejects(fs.access(path.join(libraryDir, "新书名.txt")));
+    assert.equal(await fs.readFile(path.join(libraryDir, "最终书名.txt"), "utf8"), "第一章\n新的正文");
+    assert.equal(renameNovelFile(Number(insert.lastInsertRowid), "最终书名"), false);
+    const updated = mainDb
+      .prepare("SELECT title, file_name, relative_path, word_count, content_hash FROM novels WHERE id = ?")
+      .get(Number(insert.lastInsertRowid)) as {
+        title: string;
+        file_name: string;
+        relative_path: string;
+        word_count: number;
+        content_hash: string | null;
+      };
+    assert.equal(updated.title, "最终书名");
+    assert.equal(updated.file_name, "最终书名.txt");
+    assert.equal(updated.relative_path, "最终书名.txt");
+    assert.equal(updated.word_count, 7);
+    assert.match(updated.content_hash || "", /^[a-f0-9]{64}$/);
+    assert.throws(
+      () => updateNovelFile(Number(insert.lastInsertRowid), "最终书名", "   \n"),
+      /正文不能为空/,
+    );
+    assert.equal(await fs.readFile(path.join(libraryDir, "最终书名.txt"), "utf8"), "第一章\n新的正文");
+  } finally {
+    mainDb?.close();
+    searchDb?.close();
+    delete (globalThis as typeof globalThis & { novelReaderDb?: DatabaseSync }).novelReaderDb;
+    delete (globalThis as typeof globalThis & { novelReaderContentSearchDb?: DatabaseSync }).novelReaderContentSearchDb;
+    if (previousLibraryDir === undefined) delete process.env.NOVEL_LIBRARY_DIR;
+    else process.env.NOVEL_LIBRARY_DIR = previousLibraryDir;
+    if (previousDatabasePath === undefined) delete process.env.DATABASE_PATH;
+    else process.env.DATABASE_PATH = previousDatabasePath;
+    if (previousSearchPath === undefined) delete process.env.CONTENT_SEARCH_DB_PATH;
+    else process.env.CONTENT_SEARCH_DB_PATH = previousSearchPath;
+    await fs.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  }
+});

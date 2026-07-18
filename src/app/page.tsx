@@ -1,10 +1,17 @@
-import { CatalogBookGrid } from "@/components/CatalogBookGrid";
-import { Pagination } from "@/components/Pagination";
+import type { Metadata } from "next";
+import { BookOpenText, ChevronRight, Clapperboard, File, Headphones, Tags, type LucideIcon } from "lucide-react";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { CatalogRandomCard } from "@/components/CatalogRandomButton";
 import { SiteHeader } from "@/components/SiteHeader";
-import { recordSearchQuery } from "@/lib/analytics";
-import { listNovels } from "@/lib/books";
-import { getCatalogPageSize, isGuestTagLibraryNavEnabled, isTagLibraryEnabled } from "@/lib/config";
-import { listTagsForNovels } from "@/lib/tags";
+import {
+  getSiteTitle,
+  isGuestLibraryNavEnabled,
+  isGuestTagLibraryNavEnabled,
+  isRandomCatalogEnabled,
+  isTagLibraryEnabled,
+} from "@/lib/config";
+import { getAccessibleMediaKinds, type MediaKind } from "@/lib/media";
 import { getCurrentUser } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
@@ -13,46 +20,81 @@ type HomeProps = {
   searchParams: Promise<{
     page?: string;
     q?: string;
+    random?: string;
   }>;
 };
 
+type PortalCard = {
+  href: string;
+  label: string;
+  kind: "novels" | "tags" | MediaKind;
+  icon: LucideIcon;
+};
+
+const MEDIA_CARDS: Record<MediaKind, Omit<PortalCard, "kind">> = {
+  video: { href: "/media?kind=video", label: "视频", icon: Clapperboard },
+  audio: { href: "/media?kind=audio", label: "音频", icon: Headphones },
+  file: { href: "/media?kind=file", label: "文件", icon: File },
+};
+
+export function generateMetadata(): Metadata {
+  const title = getSiteTitle();
+  return {
+    title: { absolute: title },
+    description: "浏览站内小说、标签与已开放的资源。",
+    alternates: { canonical: "/" },
+    robots: { index: true, follow: true },
+    openGraph: {
+      title,
+      description: "浏览站内小说、标签与已开放的资源。",
+      url: "/",
+    },
+  };
+}
+
 export default async function Home({ searchParams }: HomeProps) {
   const params = await searchParams;
-  const page = Number(params.page || "1");
-  const query = params.q || "";
-  const pageSize = getCatalogPageSize();
-  const result = listNovels({ page, q: query, pageSize });
+  const legacyParams = new URLSearchParams();
+  if (params.page) legacyParams.set("page", params.page);
+  if (params.q) legacyParams.set("q", params.q);
+  if (params.random) legacyParams.set("random", params.random);
+  if (legacyParams.size > 0) {
+    redirect(`/novels?${legacyParams.toString()}`);
+  }
+
   const user = await getCurrentUser();
-  const showTags = isTagLibraryEnabled() && (Boolean(user) || isGuestTagLibraryNavEnabled());
-  const tagsByNovel = showTags ? listTagsForNovels(result.books.map((book) => book.id)) : new Map();
-  if (result.query && !params.page) {
-    recordSearchQuery(result.query, "title");
+  const authenticated = Boolean(user);
+  const showNovels = authenticated || isGuestLibraryNavEnabled();
+  const cards: PortalCard[] = [];
+
+  if (showNovels) {
+    cards.push({ href: "/novels", label: "小说", kind: "novels", icon: BookOpenText });
   }
-  const returnParams = new URLSearchParams();
-  returnParams.set("page", String(result.page));
-  if (result.query) {
-    returnParams.set("q", result.query);
+  if (isTagLibraryEnabled() && (authenticated || isGuestTagLibraryNavEnabled())) {
+    cards.push({ href: "/tags", label: "标签", kind: "tags", icon: Tags });
   }
-  const returnHref = `/?${returnParams.toString()}`;
+  for (const kind of getAccessibleMediaKinds(authenticated)) {
+    cards.push({ ...MEDIA_CARDS[kind], kind });
+  }
 
   return (
-    <main className="appShell catalogShell">
-      <SiteHeader query={result.query} defaultSearchExpanded currentUser={user} />
-      <section className="catalogSummary">
-        <p>
-          共 <strong>{result.totalBooks}</strong> 本，每页 {result.pageSize} 本
-        </p>
+    <main className="appShell homePortalShell">
+      <SiteHeader showPrimaryNavigation={false} showTools={false} isHomePage currentUser={user} />
+      <section className="homePortalGrid" aria-label="内容导航">
+        {cards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <Link className={`homePortalCard is-${card.kind}`} href={card.href} key={card.kind}>
+              <span className="homePortalCardIcon" aria-hidden="true">
+                <Icon size={30} />
+              </span>
+              <strong>{card.label}</strong>
+              <ChevronRight className="homePortalCardArrow" size={19} aria-hidden="true" />
+            </Link>
+          );
+        })}
+        {showNovels && isRandomCatalogEnabled() ? <CatalogRandomCard /> : null}
       </section>
-
-      {result.books.length > 0 ? (
-        <CatalogBookGrid books={result.books} returnHref={returnHref} ariaLabel="小说列表" tagsByNovel={tagsByNovel} />
-      ) : (
-        <section className="emptyState">
-          <h2>{result.message || "未找到匹配内容"}</h2>
-        </section>
-      )}
-
-      <Pagination page={result.page} totalPages={result.totalPages} query={result.query} />
     </main>
   );
 }

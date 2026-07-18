@@ -108,7 +108,7 @@ export default async function AdminBookTagPage({ params, searchParams }: AdminBo
             <small>保存后阅读页底部展示为下划线链接，点击进入全文搜索。</small>
           </label>
 
-          <button type="submit">保存标签和热词</button>
+          <button type="submit">保存</button>
         </form>
       </article>
     </AdminFrame>

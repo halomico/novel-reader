@@ -3,8 +3,10 @@ import type { Metadata } from "next";
 import { Pagination } from "@/components/Pagination";
 import { AdminBookTable } from "@/components/AdminBookTable";
 import { AdminBookUpload } from "@/components/AdminBookUpload";
+import { AdminPinnedBooks } from "@/components/AdminPinnedBooks";
 import { listAdminBooks } from "@/lib/admin-books";
 import { getAdminBookPageSize } from "@/lib/config";
+import { listPinnedNovels } from "@/lib/pinned-novels";
 import { AdminFrame } from "../AdminFrame";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +37,7 @@ export default async function AdminBooksPage({ searchParams }: AdminBooksPagePro
     sort: params.sort,
     dir: params.dir,
   });
+  const pinnedBooks = listPinnedNovels();
 
   return (
     <AdminFrame active="books" notice={params.notice} tone={params.tone}>
@@ -42,7 +45,7 @@ export default async function AdminBooksPage({ searchParams }: AdminBooksPagePro
         <div className="adminPanelHeader">
           <div>
             <h2>小说管理</h2>
-            <p>添加、筛选和批量删除本地书库里的 `.txt` 小说。</p>
+            <p>添加、筛选和批量删除小说目录里的 `.txt` 文件。</p>
           </div>
           <form className="adminTitleSearchForm" action="/admin/books">
             <Search size={17} aria-hidden="true" />
@@ -55,6 +58,7 @@ export default async function AdminBooksPage({ searchParams }: AdminBooksPagePro
 
         {bookList.message ? <p className="adminInlineMessage">{bookList.message}</p> : null}
 
+        <AdminPinnedBooks books={pinnedBooks} />
         <AdminBookUpload />
 
         <AdminBookTable
@@ -65,6 +69,7 @@ export default async function AdminBooksPage({ searchParams }: AdminBooksPagePro
           query={bookList.query}
           sort={bookList.sort}
           dir={bookList.dir}
+          pinnedIds={pinnedBooks.map((book) => book.id)}
         />
         <Pagination
           page={bookList.page}

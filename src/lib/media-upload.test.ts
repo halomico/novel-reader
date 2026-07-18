@@ -89,6 +89,16 @@ test("uploads media in chunks, records it, and removes the stored file", async (
       media.listMediaAssets({ kind: "audio", folder: "测试专辑", sortBy: "size", sortOrder: "desc" }).assets.map((item) => item.id),
       [secondAsset.id, asset.id],
     );
+    assert.deepEqual(
+      media.listMediaAssets({ kind: "audio", folder: "测试专辑" }).assets.map((item) => item.id),
+      media.listMediaAssets({ kind: "audio", folder: "测试专辑", sortBy: "name", sortOrder: "asc" }).assets.map((item) => item.id),
+    );
+    assert.equal(media.incrementMediaPlayCount(secondAsset.id), true);
+    assert.equal(media.incrementMediaPlayCount(secondAsset.id), true);
+    assert.deepEqual(
+      media.listMediaAssets({ kind: "audio", folder: "测试专辑", sortBy: "plays", sortOrder: "desc" }).assets.map((item) => item.id),
+      [secondAsset.id, asset.id],
+    );
     const albumFolder = media.listMediaFolders("audio").find((item) => item.path === "测试专辑");
     assert.equal(albumFolder?.directAssets, 2);
     assert.equal(albumFolder?.totalSizeBytes, source.length + secondSource.length);

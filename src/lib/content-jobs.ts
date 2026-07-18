@@ -1,4 +1,10 @@
 import crypto from "node:crypto";
+import {
+  getCachedContentSearchResults,
+  getContentSearchCacheVersion,
+  hasCachedContentSearchResults as hasCachedSearchResults,
+  setCachedContentSearchResults,
+} from "./content-search-cache";
 import { getContentSearchDb } from "./content-search-db";
 import { buildContentSearchIndex, ContentSearchIndexCancelledError } from "./content-search-index";
 import { getDb } from "./db";
@@ -31,9 +37,12 @@ type ContentJob = ContentJobSnapshot;
 
 type JobGlobal = typeof globalThis & {
   novelReaderContentJobs?: Map<string, ContentJob>;
+  novelReaderContentJobTimers?: Map<string, ReturnType<typeof setTimeout>>;
 };
 
 const JOB_TTL_MS = 30 * 60 * 1000;
+const JOB_EXPIRY_GRACE_MS = 60 * 1000;
+const JOB_MAX_ENTRIES = 64;
 
 function getJobs(): Map<string, ContentJob> {
   const globalForJobs = globalThis as JobGlobal;
@@ -43,17 +52,74 @@ function getJobs(): Map<string, ContentJob> {
   return globalForJobs.novelReaderContentJobs;
 }
 
+function getJobTimers(): Map<string, ReturnType<typeof setTimeout>> {
+  const globalForJobs = globalThis as JobGlobal;
+  if (!globalForJobs.novelReaderContentJobTimers) {
+    globalForJobs.novelReaderContentJobTimers = new Map();
+  }
+  return globalForJobs.novelReaderContentJobTimers;
+}
+
+function deleteJob(id: string) {
+  getJobs().delete(id);
+  const timer = getJobTimers().get(id);
+  if (timer) clearTimeout(timer);
+  getJobTimers().delete(id);
+}
+
 function cleanupJobs() {
   const now = Date.now();
   for (const [id, job] of getJobs()) {
-    if (now - job.updatedAt > JOB_TTL_MS) {
-      getJobs().delete(id);
+    if (now - job.createdAt > JOB_TTL_MS) {
+      if (job.status === "queued" || job.status === "running") {
+        updateJob(job, { status: "cancelled", cancelRequested: true, message: "任务运行超过 30 分钟，已自动取消" });
+      }
+      deleteJob(id);
     }
   }
+
+  const jobs = getJobs();
+  if (jobs.size <= JOB_MAX_ENTRIES) {
+    return;
+  }
+  const completedJobs = Array.from(jobs.values())
+    .filter((job) => job.status !== "queued" && job.status !== "running")
+    .sort((left, right) => left.createdAt - right.createdAt);
+  for (const job of completedJobs) {
+    if (jobs.size <= JOB_MAX_ENTRIES) break;
+    deleteJob(job.id);
+  }
+}
+
+function scheduleJobExpiry(id: string) {
+  const timeout = setTimeout(() => {
+    getJobTimers().delete(id);
+    const job = getJobs().get(id);
+    if (!job) return;
+    if (job.status === "queued" || job.status === "running") {
+      updateJob(job, { status: "cancelled", cancelRequested: true, message: "任务运行超过 30 分钟，已自动取消" });
+      const removal = setTimeout(() => deleteJob(id), JOB_EXPIRY_GRACE_MS);
+      removal.unref?.();
+      getJobTimers().set(id, removal);
+      return;
+    }
+    deleteJob(id);
+  }, JOB_TTL_MS);
+  timeout.unref?.();
+  getJobTimers().set(id, timeout);
 }
 
 function createJob(kind: JobKind, message: string): ContentJob {
   cleanupJobs();
+  const jobs = getJobs();
+  if (jobs.size >= JOB_MAX_ENTRIES) {
+    const oldestCompletedJob = Array.from(jobs.values())
+      .filter((job) => job.status !== "queued" && job.status !== "running")
+      .sort((left, right) => left.createdAt - right.createdAt)[0];
+    if (oldestCompletedJob) {
+      deleteJob(oldestCompletedJob.id);
+    }
+  }
   const now = Date.now();
   const job: ContentJob = {
     id: crypto.randomUUID(),
@@ -70,7 +136,8 @@ function createJob(kind: JobKind, message: string): ContentJob {
     reusedBooks: 0,
     failedBooks: 0,
   };
-  getJobs().set(job.id, job);
+  jobs.set(job.id, job);
+  scheduleJobExpiry(job.id);
   return job;
 }
 
@@ -106,6 +173,10 @@ export function countActiveContentJobs(kind?: JobKind): number {
   ).length;
 }
 
+export function hasCachedContentSearchResults(query: ParsedSearchQuery): boolean {
+  return hasCachedSearchResults(query);
+}
+
 export function cancelContentJob(id: string): ContentJobSnapshot | null {
   cleanupJobs();
   const job = getJobs().get(id);
@@ -136,6 +207,18 @@ export function cancelContentJobs(kind?: JobKind) {
 
 export function startContentSearchJob(query: ParsedSearchQuery): ContentJobSnapshot {
   const job = createJob("search", "正在准备全文搜索");
+  const cachedResults = getCachedContentSearchResults(query);
+  if (cachedResults) {
+    updateJob(job, {
+      status: "done",
+      progress: 100,
+      resultCount: cachedResults.length,
+      results: cachedResults,
+      message: cachedResults.length ? `找到 ${cachedResults.length} 条匹配内容（缓存）` : "未找到匹配正文（缓存）",
+    });
+    return getContentJob(job.id) || job;
+  }
+  const cacheVersion = getContentSearchCacheVersion();
 
   scheduleJob(async () => {
     try {
@@ -169,6 +252,7 @@ export function startContentSearchJob(query: ParsedSearchQuery): ContentJobSnaps
         results: searchResult.results,
         message: searchResult.results.length ? `找到 ${searchResult.results.length} 条匹配内容` : "未找到匹配正文",
       });
+      setCachedContentSearchResults(query, searchResult.results, cacheVersion);
     } catch (error) {
       const cancelled = error instanceof ContentSearchCancelledError || job.cancelRequested;
       updateJob(job, {

@@ -43,6 +43,10 @@ export type AnalyticsOverview = {
   searchQueryTotal: number;
   searchQueryTotalPages: number;
   topContent: AnalyticsMetric[];
+  contentPage: number;
+  contentPageSize: number;
+  contentTotal: number;
+  contentTotalPages: number;
   topIps: AnalyticsMetric[];
   topCountries: AnalyticsMetric[];
   topReferrers: AnalyticsMetric[];
@@ -307,16 +311,20 @@ export function getAnalyticsOverview(
     realtimePageSize?: number;
     searchQueryPage?: number | string;
     searchQueryPageSize?: number;
+    contentPage?: number | string;
+    contentPageSize?: number;
     customFrom?: string;
     customTo?: string;
   } = {},
 ): AnalyticsOverview {
   const filter = resolveAnalyticsTimeFilter(rangeValue, options.customFrom, options.customTo);
   const eventWhere = contentTimeWhere(filter);
+  const contentWhere = contentTimeWhere(filter, "e.created_at", "e.novel_id", "e.media_id");
   const searchTime = timeCondition(filter, "created_at");
   const realtimeLimit = Math.min(Math.max(Math.floor(options.realtimeLimit || 300), 30), 2000);
   const realtimePageSize = Math.min(Math.max(Math.floor(options.realtimePageSize || 30), 1), 100);
   const searchQueryPageSize = Math.min(Math.max(Math.floor(options.searchQueryPageSize || 100), 1), 100);
+  const contentPageSize = Math.min(Math.max(Math.floor(options.contentPageSize || 50), 1), 100);
   const totalViews = oneCount(
     `SELECT COUNT(*) AS count FROM analytics_events WHERE ${eventWhere.sql}`,
     eventWhere.params,
@@ -351,6 +359,21 @@ export function getAnalyticsOverview(
   const searchQueryTotalPages = Math.max(1, Math.ceil(searchQueryTotal / searchQueryPageSize));
   const searchQueryPage = normalizePositivePage(options.searchQueryPage, searchQueryTotalPages);
   const searchQueryOffset = (searchQueryPage - 1) * searchQueryPageSize;
+  const contentTotal = oneCount(
+    `SELECT COUNT(*) AS count
+     FROM (
+       SELECT COALESCE(n.title, m.title, e.path)
+       FROM analytics_events e
+       LEFT JOIN novels n ON n.id = e.novel_id
+       LEFT JOIN media_assets m ON m.id = e.media_id
+       WHERE ${contentWhere.sql}
+       GROUP BY COALESCE(n.title, m.title, e.path)
+     )`,
+    contentWhere.params,
+  );
+  const contentTotalPages = Math.max(1, Math.ceil(contentTotal / contentPageSize));
+  const contentPage = normalizePositivePage(options.contentPage, contentTotalPages);
+  const contentOffset = (contentPage - 1) * contentPageSize;
 
   const realtimeRows = getDb()
     .prepare(
@@ -412,11 +435,16 @@ export function getAnalyticsOverview(
        FROM analytics_events e
        LEFT JOIN novels n ON n.id = e.novel_id
        LEFT JOIN media_assets m ON m.id = e.media_id
-       WHERE ${contentTimeWhere(filter, "e.created_at", "e.novel_id", "e.media_id").sql}
+       WHERE ${contentWhere.sql}
        GROUP BY COALESCE(n.title, m.title, e.path)
-       ORDER BY count DESC, label ASC`,
-      contentTimeWhere(filter, "e.created_at", "e.novel_id", "e.media_id").params,
+       ORDER BY count DESC, label ASC
+       LIMIT ? OFFSET ?`,
+      [...contentWhere.params, contentPageSize, contentOffset],
     ),
+    contentPage,
+    contentPageSize,
+    contentTotal,
+    contentTotalPages,
     topIps: topMetrics(
       `SELECT ip AS label, COUNT(*) AS count
        FROM analytics_events

@@ -20,6 +20,7 @@ export const metadata: Metadata = {
 type AdminLoginPageProps = {
   searchParams: Promise<{
     error?: string;
+    username?: string;
   }>;
 };
 
@@ -45,7 +46,7 @@ export default async function AdminLoginPage({ searchParams }: AdminLoginPagePro
   return (
     <main className="adminLoginShell">
       <section className="adminLoginPanel">
-        <Breadcrumbs className="adminBreadcrumbs" items={[{ label: "首页", href: "/" }, { label: "后台登录" }]} />
+        <Breadcrumbs className="adminBreadcrumbs" items={[{ label: "后台登录" }]} />
         <div className="adminLoginBrand">
           <span className="adminLogo" aria-hidden="true">
             <LockKeyhole size={24} />
@@ -78,7 +79,7 @@ export default async function AdminLoginPage({ searchParams }: AdminLoginPagePro
         <form className="adminLoginForm" action={loginAdminAction}>
           <label>
             <span>用户名</span>
-            <input name="username" autoComplete="username" disabled={!configured} />
+            <input name="username" autoComplete="username" defaultValue={String(params.username || "").slice(0, 64)} disabled={!configured} />
           </label>
           <label>
             <span>密码</span>

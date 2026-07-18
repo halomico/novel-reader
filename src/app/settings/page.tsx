@@ -1,11 +1,14 @@
+import type { Metadata } from "next";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getReaderDefaultFontSize, getSettingsPreviewText } from "@/lib/config";
 import { readSiteSettings } from "@/lib/site-settings";
+import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { getCurrentUser } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: "阅读设置", robots: NO_INDEX_ROBOTS };
 
 export default async function SettingsPage() {
   const settings = readSiteSettings();

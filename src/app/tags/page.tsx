@@ -1,13 +1,25 @@
 import { Tags } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SiteHeader } from "@/components/SiteHeader";
 import { isGuestTagLibraryNavEnabled, isTagLibraryEnabled } from "@/lib/config";
+import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { listTagGroups } from "@/lib/tags";
 import { getCurrentUser } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
+
+export function generateMetadata(): Metadata {
+  const isPublic = isTagLibraryEnabled() && isGuestTagLibraryNavEnabled();
+  return {
+    title: "所有标签",
+    description: "按标签浏览小说。",
+    alternates: { canonical: "/tags" },
+    robots: isPublic ? { index: true, follow: true } : NO_INDEX_ROBOTS,
+  };
+}
 
 function visibleGroupTags(group: ReturnType<typeof listTagGroups>[number]) {
   if (group.tags.length) {

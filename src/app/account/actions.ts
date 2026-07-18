@@ -10,11 +10,10 @@ import { getClientIp } from "@/lib/admin-access";
 import {
   getUserAvatarMaxBytes,
   getUserDailyRegistrationLimitPerIp,
-  getUserLoginCaptchaMode,
   isUserLoginEnabled,
   isUserRegistrationEnabled,
 } from "@/lib/config";
-import { verifyLoginCaptcha } from "@/lib/login-captcha";
+import { verifyHumanRequest } from "@/lib/human-verification";
 import {
   clearCurrentUserSession,
   createUserSession,
@@ -38,8 +37,14 @@ import {
   validateUsername,
 } from "@/lib/users";
 
-function authNotice(pathname: string, message: string, tone: "success" | "warning" | "error" = "success"): never {
-  redirect(`${pathname}?notice=${encodeURIComponent(message)}&tone=${tone}`);
+function authNotice(
+  pathname: string,
+  message: string,
+  tone: "success" | "warning" | "error" = "success",
+  values: Record<string, string> = {},
+): never {
+  const params = new URLSearchParams({ notice: message, tone, ...values });
+  redirect(`${pathname}?${params.toString()}`);
 }
 
 function cleanText(formData: FormData, name: string): string {
@@ -96,19 +101,6 @@ export async function registerUserAction(formData: FormData) {
     authNotice("/register", "注册暂未开放", "warning");
   }
 
-  const captchaMode = getUserLoginCaptchaMode();
-  if (
-    captchaMode !== "off" &&
-    !verifyLoginCaptcha({
-      id: cleanText(formData, "captchaId"),
-      mode: captchaMode,
-      purpose: "register",
-      answer: String(formData.get("captchaAnswer") || ""),
-    })
-  ) {
-    authNotice("/register", "验证码不正确或已过期，请重试", "warning");
-  }
-
   const headerStore = await headers();
   const clientIp = getClientIp(headerStore);
   const dailyLimit = getUserDailyRegistrationLimitPerIp();
@@ -135,6 +127,11 @@ export async function registerUserAction(formData: FormData) {
   }
   if (password !== confirmPassword) {
     authNotice("/register", "两次输入的密码不一致", "warning");
+  }
+
+  const verification = await verifyHumanRequest(formData, "register", clientIp);
+  if (!verification.ok) {
+    authNotice("/register", verification.message, "warning");
   }
 
   try {
@@ -169,24 +166,19 @@ export async function loginUserAction(formData: FormData) {
     authNotice("/login", "登录暂未开放", "warning");
   }
 
-  const captchaMode = getUserLoginCaptchaMode();
-  if (
-    captchaMode !== "off" &&
-    !verifyLoginCaptcha({
-      id: cleanText(formData, "captchaId"),
-      mode: captchaMode,
-      purpose: "login",
-      answer: String(formData.get("captchaAnswer") || ""),
-    })
-  ) {
-    authNotice("/login", "验证码不正确或已过期，请重试", "warning");
-  }
-
   const username = cleanText(formData, "username");
   const password = String(formData.get("password") || "");
-  const result = await loginUser(username, password);
+  const rememberLogin = formData.get("rememberLogin") === "on";
+  const loginValues = { username, remember: rememberLogin ? "1" : "0" };
+  const headerStore = await headers();
+  const verification = await verifyHumanRequest(formData, "login", getClientIp(headerStore));
+  if (!verification.ok) {
+    authNotice("/login", verification.message, "warning", loginValues);
+  }
+
+  const result = await loginUser(username, password, rememberLogin);
   if (!result.ok) {
-    authNotice("/login", result.message, "warning");
+    authNotice("/login", result.message, "warning", loginValues);
   }
   redirect("/account");
 }

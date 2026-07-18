@@ -1,4 +1,5 @@
 import { Clapperboard, Download, File, Headphones } from "lucide-react";
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { MediaAudioPlayer, type AudioQueueTrack } from "@/components/MediaAudioPlayer";
@@ -11,6 +12,7 @@ import { getRelatedVideoSettings, getVideoThumbnailSettings } from "@/lib/config
 import { getMediaAsset, isMediaKindAccessible, listMediaFolderAssets, listRelatedVideoAssets, type MediaKind } from "@/lib/media";
 import { scheduleMediaPreparation } from "@/lib/media-maintenance";
 import { getCurrentUser } from "@/lib/user-auth";
+import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { recordMediaHistory } from "@/lib/users";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +41,24 @@ function listHref(kind: MediaKind, folder: string): string {
   const params = new URLSearchParams({ kind });
   if (folder) params.set("folder", folder);
   return `/media?${params.toString()}`;
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const asset = getMediaAsset(Number((await params).id));
+  if (!asset) {
+    return { title: "资源不存在", robots: NO_INDEX_ROBOTS };
+  }
+  const title = displayTitle(asset.title, asset.fileName);
+  const canonical = `/media/${asset.id}`;
+  const isPublic = isMediaKindAccessible(asset.kind, false);
+  const description = asset.description || `${KIND_LABELS[asset.kind]}资源：${title}`;
+  return {
+    title,
+    description,
+    alternates: { canonical },
+    robots: isPublic ? { index: true, follow: true } : NO_INDEX_ROBOTS,
+    openGraph: { title, description, url: canonical },
+  };
 }
 
 export default async function MediaDetailPage({ params }: { params: Promise<{ id: string }> }) {

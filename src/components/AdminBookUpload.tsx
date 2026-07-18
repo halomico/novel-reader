@@ -28,33 +28,6 @@ export function AdminBookUpload() {
     setMessage(selectedFiles.length ? `已选择 ${selectedFiles.length} 个文件` : "");
   }
 
-  async function uploadBatch(batch: File[]) {
-    const formData = new FormData();
-    for (const file of batch) {
-      formData.append("files", file);
-    }
-
-    const response = await fetch("/admin/books/upload", {
-      method: "POST",
-      body: formData,
-    });
-    let data: Partial<UploadSummary> & { message?: string } = {};
-    try {
-      data = (await response.json()) as Partial<UploadSummary> & { message?: string };
-    } catch {
-      data = { message: "上传接口返回异常" };
-    }
-    if (!response.ok) {
-      throw new Error(data.message || "上传失败");
-    }
-    return {
-      saved: data.saved || 0,
-      duplicates: data.duplicates || 0,
-      skipped: data.skipped || 0,
-      processed: data.processed || batch.length,
-    };
-  }
-
   async function submitUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!files.length || isUploading) {
@@ -92,18 +65,46 @@ export function AdminBookUpload() {
     }
   }
 
+  async function uploadBatch(batch: File[]) {
+    const formData = new FormData();
+    for (const file of batch) {
+      formData.append("files", file);
+    }
+
+    const response = await fetch("/admin/books/upload", {
+      method: "POST",
+      body: formData,
+    });
+    let data: Partial<UploadSummary> & { message?: string } = {};
+    try {
+      data = (await response.json()) as Partial<UploadSummary> & { message?: string };
+    } catch {
+      data = { message: "上传接口返回异常" };
+    }
+    if (!response.ok) {
+      throw new Error(data.message || "上传失败");
+    }
+    return {
+      saved: data.saved || 0,
+      duplicates: data.duplicates || 0,
+      skipped: data.skipped || 0,
+      processed: data.processed || batch.length,
+    };
+  }
+
   return (
     <form className="adminUploadForm" onSubmit={submitUpload}>
-      <label>
-        <Upload size={18} aria-hidden="true" />
-        <span>添加小说</span>
+      <label className="siteIconFileField adminNovelFileField">
+        <span>小说文件</span>
         <input ref={inputRef} name="files" type="file" accept=".txt,text/plain" multiple onChange={chooseFiles} disabled={isUploading} />
+        <small>TXT，可多选；选择后点击上传</small>
       </label>
-      <button type="submit" disabled={!files.length || isUploading}>
+      <button className="adminMediaUploadButton" type="submit" disabled={!files.length || isUploading}>
+        <Upload size={16} aria-hidden="true" />
         {isUploading ? "上传中" : "上传"}
       </button>
       {message ? (
-        <p className="adminUploadStatus">
+        <p className="adminUploadStatus" aria-live="polite">
           {message}
           {isUploading ? `，已处理 ${summary.processed} 个` : ""}
         </p>

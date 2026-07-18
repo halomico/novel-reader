@@ -61,8 +61,10 @@ test("parses standard and suffix media ranges", () => {
 });
 
 test("normalizes media sorting and orders folders by name, size, or update time", () => {
+  assert.equal(normalizeMediaSortBy("manual"), "name");
   assert.equal(normalizeMediaSortBy("name"), "name");
-  assert.equal(normalizeMediaSortBy("invalid"), "updated");
+  assert.equal(normalizeMediaSortBy("plays"), "plays");
+  assert.equal(normalizeMediaSortBy("invalid"), "name");
   assert.equal(normalizeMediaSortOrder(undefined, "name"), "asc");
   assert.equal(normalizeMediaSortOrder(undefined, "updated"), "desc");
 

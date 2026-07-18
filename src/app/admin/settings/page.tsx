@@ -112,7 +112,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
             <small>{settings.siteIconFileName ? `${settings.siteIconFileName}，最大 15 MB` : "PNG、JPG、WebP 或 ICO，最大 15 MB"}</small>
           </label>
           <div className="siteIconActions">
-            <button className="siteIconUploadButton" type="submit">
+            <button className="adminMediaUploadButton" type="submit">
               <Upload size={15} aria-hidden="true" />
               上传
             </button>
@@ -250,6 +250,12 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
             </div>
             <label className="adminSwitchLabel">
               <span>
+                <strong>显示随便看看</strong>
+              </span>
+              <input name="randomCatalogEnabled" type="checkbox" defaultChecked={settings.randomCatalogEnabled} />
+            </label>
+            <label className="adminSwitchLabel">
+              <span>
                 <strong>失去焦点后继续显示提示</strong>
                 <small>关闭时，浏览器窗口失去焦点会立即隐藏提示消息。</small>
               </span>
@@ -290,14 +296,6 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 <span>单 IP 每日注册上限</span>
                 <input name="userDailyRegistrationLimitPerIp" type="number" min="0" max="100" defaultValue={userDailyRegistrationLimit} />
               </label>
-              <label>
-                <span>登录/注册验证码</span>
-                <select name="userLoginCaptchaMode" defaultValue={settings.userLoginCaptchaMode}>
-                  <option value="off">关闭</option>
-                  <option value="image">图形验证码</option>
-                  <option value="slider">滑块验证码</option>
-                </select>
-              </label>
             </div>
             <label className="adminSwitchLabel">
               <span>
@@ -324,7 +322,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               <h4>前台资源访问</h4>
               <div className="adminAccessModeGrid">
                 <label className="adminAccessModeRow">
-                  <span><BookOpen size={16} aria-hidden="true" /><strong>书库</strong></span>
+                  <span><BookOpen size={16} aria-hidden="true" /><strong>小说</strong></span>
                   <select name="libraryGuestAccess" defaultValue={settings.guestLibraryNavEnabled ? "public" : "hidden"}>
                     <option value="hidden">游客隐藏</option>
                     <option value="public">游客显示</option>
@@ -439,7 +437,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
 
         <div className="adminPaths">
           <p>
-            <strong>书库目录</strong>
+            <strong>小说目录</strong>
             <span>{stats.libraryDir}</span>
           </p>
           <p>

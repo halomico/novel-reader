@@ -10,6 +10,7 @@ import {
   PALETTE_STORAGE_KEY,
   READER_HOTWORDS_STORAGE_KEY,
   READER_TAGS_STORAGE_KEY,
+  TOP_MENU_STORAGE_KEY,
   type ColorPalette,
 } from "@/lib/ui-preferences";
 
@@ -105,6 +106,7 @@ export function SettingsPanel({
   const [fontSize, setFontSize] = useState(defaultFontSize);
   const [showReaderTags, setShowReaderTags] = useState(true);
   const [showReaderHotwords, setShowReaderHotwords] = useState(true);
+  const [showTopMenu, setShowTopMenu] = useState(true);
   const [hasHotwordPreference, setHasHotwordPreference] = useState(false);
 
   useEffect(() => {
@@ -114,6 +116,7 @@ export function SettingsPanel({
     const savedFontSize = Number(readLocalSetting("novel-font-size"));
     const savedTags = readLocalSetting(READER_TAGS_STORAGE_KEY);
     const savedHotwords = readLocalSetting(READER_HOTWORDS_STORAGE_KEY);
+    const savedTopMenu = readLocalSetting(TOP_MENU_STORAGE_KEY);
     const nextTheme = savedTheme === "light" || savedTheme === "dark" || savedTheme === "system" ? savedTheme : "system";
     const nextUiMode = savedUiMode === "minimal" || savedUiMode === "standard" ? savedUiMode : "standard";
     const nextPalette = isColorPalette(savedPalette) ? savedPalette : defaultPalette;
@@ -128,11 +131,13 @@ export function SettingsPanel({
     setFontSize(nextFontSize);
     setShowReaderTags(nextShowTags);
     setShowReaderHotwords(nextShowHotwords);
+    setShowTopMenu(savedTopMenu !== "hide");
     setHasHotwordPreference(nextHasHotwordPreference);
     removeLocalSetting("novel-palette");
     removeLocalSetting("novel-page-size");
     document.cookie = "novel-page-size=; Path=/; Max-Age=0; SameSite=Lax";
     applySettings(nextTheme, nextFontSize, nextUiMode, nextPalette, nextShowTags, nextShowHotwords);
+    document.documentElement.dataset.topMenu = savedTopMenu === "hide" ? "hide" : "show";
   }, [defaultFontSize, defaultPalette]);
 
   function changeTheme(value: ThemeChoice) {
@@ -169,6 +174,12 @@ export function SettingsPanel({
     setHasHotwordPreference(true);
     writeLocalSetting(READER_HOTWORDS_STORAGE_KEY, visible ? "show" : "hide");
     applySettings(theme, fontSize, uiMode, palette, showReaderTags, visible);
+  }
+
+  function changeTopMenu(visible: boolean) {
+    setShowTopMenu(visible);
+    writeLocalSetting(TOP_MENU_STORAGE_KEY, visible ? "show" : "hide");
+    document.documentElement.dataset.topMenu = visible ? "show" : "hide";
   }
 
   return (
@@ -269,6 +280,11 @@ export function SettingsPanel({
                     <input type="checkbox" checked={showReaderHotwords} onChange={(event) => changeReaderHotwords(event.target.checked)} />
                     <span className="settingToggleTrack" aria-hidden="true" />
                     <span>文末热词</span>
+                  </label>
+                  <label className="settingToggle">
+                    <input type="checkbox" checked={showTopMenu} onChange={(event) => changeTopMenu(event.target.checked)} />
+                    <span className="settingToggleTrack" aria-hidden="true" />
+                    <span>顶部导航</span>
                   </label>
                 </div>
               </div>

@@ -73,7 +73,69 @@ export function buildTitleSearchSql(query: ParsedSearchQuery): { whereSql: strin
   return { whereSql: clauses.join(" AND "), values: [...required.map((item) => item.value), ...expression.values] };
 }
 
-export function listNovels(params: { page?: number; q?: string; pageSize?: number }): NovelListResult {
+function seededRandom(seed: string): () => number {
+  let state = 2166136261;
+  for (let index = 0; index < seed.length; index += 1) {
+    state ^= seed.charCodeAt(index);
+    state = Math.imul(state, 16777619);
+  }
+  return () => {
+    state += 0x6d2b79f5;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function listRandomNovels(pageSize: number, seed: string, totalBooks: number): Novel[] {
+  if (totalBooks <= 0) {
+    return [];
+  }
+  const db = getDb();
+  const bounds = db.prepare("SELECT MIN(id) AS min_id, MAX(id) AS max_id FROM novels").get() as {
+    min_id: number;
+    max_id: number;
+  };
+  const target = Math.min(pageSize, totalBooks);
+  const random = seededRandom(seed);
+  const selectAtOrAfter = db.prepare(
+    `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
+     FROM novels
+     WHERE id >= ?
+     ORDER BY id ASC
+     LIMIT 1`,
+  );
+  const selected = new Map<number, Novel>();
+  const attempts = Math.max(32, target * 8);
+  for (let attempt = 0; attempt < attempts && selected.size < target; attempt += 1) {
+    const pivot = bounds.min_id + Math.floor(random() * (bounds.max_id - bounds.min_id + 1));
+    const book = selectAtOrAfter.get(pivot) as Novel | undefined;
+    if (book) {
+      selected.set(book.id, book);
+    }
+  }
+
+  if (selected.size < target) {
+    const excludedIds = Array.from(selected.keys());
+    const placeholders = excludedIds.map(() => "?").join(", ");
+    const where = placeholders ? `WHERE id NOT IN (${placeholders})` : "";
+    const remaining = db
+      .prepare(
+        `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
+         FROM novels
+         ${where}
+         ORDER BY id ASC
+         LIMIT ?`,
+      )
+      .all(...excludedIds, target - selected.size) as Novel[];
+    remaining.forEach((book) => selected.set(book.id, book));
+  }
+
+  return Array.from(selected.values());
+}
+
+export function listNovels(params: { page?: number; q?: string; pageSize?: number; randomSeed?: string }): NovelListResult {
   const db = getDb();
   const pageSize = normalizePageSize(params.pageSize);
   const query = (params.q || "").trim();
@@ -126,15 +188,27 @@ export function listNovels(params: { page?: number; q?: string; pageSize?: numbe
   const totalBooks = db
     .prepare("SELECT COUNT(*) AS count FROM novels")
     .get() as { count: number };
+  const randomSeed = (params.randomSeed || "").trim().slice(0, 64);
+  if (randomSeed) {
+    return {
+      books: listRandomNovels(pageSize, randomSeed, totalBooks.count),
+      page: 1,
+      pageSize,
+      totalBooks: totalBooks.count,
+      totalPages: 1,
+      query,
+    };
+  }
   const totalPages = Math.ceil(totalBooks.count / pageSize);
   const page = normalizePage(params.page || 1, totalPages);
   const offset = (page - 1) * pageSize;
 
   const books = db
     .prepare(
-      `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
-       FROM novels
-       ORDER BY title COLLATE NOCASE ASC, id ASC
+      `SELECT n.id, n.title, n.file_name, n.relative_path, n.content_hash, n.size_bytes, n.mtime_ms, n.word_count, n.visit_count, n.last_accessed_at, n.last_accessed_ip, n.last_accessed_user_agent, n.created_at, n.updated_at
+       FROM novels n
+       LEFT JOIN pinned_novels p ON p.novel_id = n.id
+       ORDER BY CASE WHEN p.novel_id IS NULL THEN 1 ELSE 0 END ASC, p.sort_order ASC, n.title COLLATE NOCASE ASC, n.id ASC
        LIMIT ? OFFSET ?`,
     )
     .all(pageSize, offset) as Novel[];
@@ -168,7 +242,7 @@ export async function readNovelContent(book: Pick<Novel, "relative_path">): Prom
   const libraryRoot = path.resolve(libraryDir);
 
   if (filePath !== libraryRoot && !filePath.startsWith(`${libraryRoot}${path.sep}`)) {
-    throw new Error("小说文件路径不在书库目录内");
+    throw new Error("小说文件路径不在小说目录内");
   }
 
   const buffer = await fs.readFile(filePath);

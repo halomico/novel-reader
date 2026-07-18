@@ -96,3 +96,38 @@ export function listAdminLoginRecords(limit = MAX_ADMIN_LOGIN_RECORDS): AdminLog
     loggedAt: row.logged_at,
   }));
 }
+
+export function listAdminLoginRecordPage(pageValue: number, pageSizeValue = 15) {
+  migrateSettingsLoginRecords();
+  const db = getDb();
+  const pageSize = Math.min(Math.max(Math.floor(pageSizeValue) || 15, 1), 100);
+  const total = (db.prepare("SELECT COUNT(*) AS count FROM admin_login_records").get() as { count: number }).count;
+  const totalPages = Math.max(Math.ceil(total / pageSize), 1);
+  const page = Math.min(Math.max(Math.floor(pageValue) || 1, 1), totalPages);
+  const rows = db
+    .prepare(
+      `SELECT username, ip, user_agent, logged_at
+       FROM admin_login_records
+       ORDER BY logged_at DESC, id DESC
+       LIMIT ? OFFSET ?`,
+    )
+    .all(pageSize, (page - 1) * pageSize) as Array<{
+    username: string;
+    ip: string;
+    user_agent: string;
+    logged_at: string;
+  }>;
+
+  return {
+    records: rows.map((row) => ({
+      username: row.username,
+      ip: row.ip,
+      userAgent: row.user_agent,
+      loggedAt: row.logged_at,
+    })),
+    page,
+    pageSize,
+    total,
+    totalPages,
+  };
+}

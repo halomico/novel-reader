@@ -16,6 +16,10 @@ export type AdminSession = {
   expiresAt: number;
 };
 
+function getAdminSiteCookieName(): string {
+  return `${getAdminCookieName()}_site`;
+}
+
 function sha256(value: string): string {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
@@ -100,7 +104,7 @@ export async function getAdminSession(): Promise<AdminSession | null> {
   }
 
   const cookieStore = await cookies();
-  const token = cookieStore.get(getAdminCookieName())?.value;
+  const token = cookieStore.get(getAdminCookieName())?.value || cookieStore.get(getAdminSiteCookieName())?.value;
   if (!token) {
     return null;
   }
@@ -111,22 +115,31 @@ export async function setAdminSession(username: string) {
   const cookieStore = await cookies();
   const maxAge = getAdminSessionTtlHours() * 60 * 60;
   const expiresAt = Date.now() + maxAge * 1000;
-  cookieStore.set(getAdminCookieName(), createSessionToken(username, expiresAt), {
+  const token = createSessionToken(username, expiresAt);
+  cookieStore.set(getAdminCookieName(), token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/admin",
     maxAge,
   });
+  cookieStore.set(getAdminSiteCookieName(), token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge,
+  });
 }
 
 export async function clearAdminSession() {
   const cookieStore = await cookies();
-  cookieStore.set(getAdminCookieName(), "", {
+  const options = {
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
-    path: "/admin",
     maxAge: 0,
-  });
+  };
+  cookieStore.set(getAdminCookieName(), "", { ...options, path: "/admin" });
+  cookieStore.set(getAdminSiteCookieName(), "", { ...options, path: "/" });
 }

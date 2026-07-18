@@ -85,7 +85,7 @@ export function verifyUserPassword(password: string, storedHash: string): boolea
   return verifyPassword(password, storedHash);
 }
 
-export async function createUserSession(userId: number, ip: string, userAgent: string) {
+export async function createUserSession(userId: number, ip: string, userAgent: string, persistent = true) {
   deleteExpiredUserSessions();
   const sessionId = crypto.randomBytes(18).toString("base64url");
   const token = crypto.randomBytes(32).toString("base64url");
@@ -99,16 +99,21 @@ export async function createUserSession(userId: number, ip: string, userAgent: s
     .run(sessionId, userId, hashSessionToken(token), expiresAt, ip, userAgent.slice(0, 240));
 
   const cookieStore = await cookies();
-  cookieStore.set(USER_SESSION_COOKIE, `${sessionId}.${token}`, {
+  const cookieOptions = {
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: SESSION_TTL_SECONDS,
-  });
+    ...(persistent ? { maxAge: SESSION_TTL_SECONDS } : {}),
+  };
+  cookieStore.set(USER_SESSION_COOKIE, `${sessionId}.${token}`, cookieOptions);
 }
 
-export async function loginUser(username: string, password: string): Promise<{ ok: true; user: UserProfile } | { ok: false; message: string }> {
+export async function loginUser(
+  username: string,
+  password: string,
+  persistent = true,
+): Promise<{ ok: true; user: UserProfile } | { ok: false; message: string }> {
   const row = getUserPasswordRow(username);
   if (!row || row.status === "disabled" || !verifyUserPassword(password, row.password_hash)) {
     return { ok: false, message: "用户名或密码不正确" };
@@ -118,7 +123,7 @@ export async function loginUser(username: string, password: string): Promise<{ o
   const ip = getClientIp(headerStore);
   const userAgent = headerStore.get("user-agent") || "";
   recordUserLogin(row.id, ip, userAgent);
-  await createUserSession(row.id, ip, userAgent);
+  await createUserSession(row.id, ip, userAgent, persistent);
   return { ok: true, user: toUserProfile({ ...row, last_login_at: new Date().toISOString(), last_login_ip: ip }) };
 }
 

@@ -52,6 +52,40 @@ test("removes legacy search tables and the retired content index database", asyn
     assert.equal(mediaColumns.some((column) => column.name === "category_id"), true);
     const mediaIndexes = db.prepare("PRAGMA index_list(media_assets)").all() as Array<{ name: string }>;
     assert.equal(mediaIndexes.some((index) => index.name === "idx_media_assets_video_category"), true);
+    const pinnedTable = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'pinned_novels'")
+      .get() as { name: string } | undefined;
+    assert.equal(pinnedTable?.name, "pinned_novels");
+    const pinnedIndexes = db.prepare("PRAGMA index_list(pinned_novels)").all() as Array<{ name: string }>;
+    assert.equal(pinnedIndexes.some((index) => index.name === "idx_pinned_novels_sort"), true);
+
+    const insertNovel = db.prepare(
+      "INSERT INTO novels (title, file_name, relative_path, size_bytes, mtime_ms) VALUES (?, ?, ?, ?, ?)",
+    );
+    for (let index = 1; index <= 40; index += 1) {
+      const suffix = String(index).padStart(2, "0");
+      insertNovel.run(`小说 ${suffix}`, `${suffix}.txt`, `${suffix}.txt`, index * 100, index);
+    }
+    const { listNovels } = await import("./books");
+    const { listPinnedNovels, movePinnedNovel, pinNovel } = await import("./pinned-novels");
+    assert.equal(pinNovel(2), true);
+    assert.equal(pinNovel(1), true);
+    assert.deepEqual(listPinnedNovels().map((book) => book.id), [2, 1]);
+    assert.equal(movePinnedNovel(1, "up"), true);
+    assert.deepEqual(listPinnedNovels().map((book) => book.id), [1, 2]);
+    assert.deepEqual(listNovels({ pageSize: 5 }).books.slice(0, 2).map((book) => book.id), [1, 2]);
+
+    const randomA = listNovels({ pageSize: 12, randomSeed: "stable-seed" });
+    const randomARepeat = listNovels({ pageSize: 12, randomSeed: "stable-seed" });
+    const randomB = listNovels({ pageSize: 12, randomSeed: "different-seed" });
+    assert.equal(randomA.books.length, 12);
+    assert.equal(new Set(randomA.books.map((book) => book.id)).size, 12);
+    assert.deepEqual(randomA.books.map((book) => book.id), randomARepeat.books.map((book) => book.id));
+    assert.notDeepEqual(randomA.books.map((book) => book.id), randomB.books.map((book) => book.id));
+    assert.equal(randomA.totalPages, 1);
+
+    db.prepare("DELETE FROM novels WHERE id = 1").run();
+    assert.deepEqual(listPinnedNovels().map((book) => book.id), [2]);
 
     db.close();
     delete (globalThis as typeof globalThis & { novelReaderDb?: DatabaseSync }).novelReaderDb;

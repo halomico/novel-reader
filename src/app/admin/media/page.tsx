@@ -89,7 +89,8 @@ function withMediaParam(pathValue: string, name: string, value: string): string 
 export default async function AdminMediaPage({ searchParams }: AdminMediaPageProps) {
   const params = await searchParams;
   const kind = isMediaKind(params.kind) ? params.kind : undefined;
-  const sortBy = normalizeMediaSortBy(params.sort);
+  const requestedSortBy = normalizeMediaSortBy(params.sort);
+  const sortBy = requestedSortBy === "plays" && kind !== "video" && kind !== "audio" ? "name" : requestedSortBy;
   const sortOrder = normalizeMediaSortOrder(params.order, sortBy);
   const categories = listVideoCategories({ includeHidden: true });
   const requestedCategoryId = /^\d+$/.test(params.category || "") ? Number(params.category) : undefined;

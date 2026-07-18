@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { MediaKind, MediaSortBy, MediaSortOrder } from "@/lib/media";
@@ -39,8 +39,16 @@ export function AdminMediaSort({
 
   return (
     <div className="adminMediaSort" aria-label="资源排序">
+      <button
+        className="adminMediaSortDirection"
+        type="button"
+        aria-label={sortOrder === "asc" ? "切换为降序" : "切换为升序"}
+        title={sortOrder === "asc" ? "当前升序，点击切换为降序" : "当前降序，点击切换为升序"}
+        onClick={() => navigate(selectedSort, sortOrder === "asc" ? "desc" : "asc")}
+      >
+        {sortOrder === "asc" ? <ArrowUp size={15} aria-hidden="true" /> : <ArrowDown size={15} aria-hidden="true" />}
+      </button>
       <label className="adminMediaSortField">
-        <ArrowUpDown size={15} aria-hidden="true" />
         <select
           aria-label="排序字段"
           value={selectedSort}
@@ -53,31 +61,10 @@ export function AdminMediaSort({
         >
           <option value="name">名称</option>
           <option value="size">大小</option>
+          {kind === "video" || kind === "audio" ? <option value="plays">播放次数</option> : null}
           <option value="updated">更新时间</option>
         </select>
       </label>
-      <div className="adminMediaSortDirection" role="group" aria-label="排序方向">
-        <button
-          className={sortOrder === "asc" ? "isActive" : ""}
-          type="button"
-          aria-label="升序"
-          aria-pressed={sortOrder === "asc"}
-          title="升序"
-          onClick={() => navigate(selectedSort, "asc")}
-        >
-          <ArrowUp size={15} aria-hidden="true" />
-        </button>
-        <button
-          className={sortOrder === "desc" ? "isActive" : ""}
-          type="button"
-          aria-label="降序"
-          aria-pressed={sortOrder === "desc"}
-          title="降序"
-          onClick={() => navigate(selectedSort, "desc")}
-        >
-          <ArrowDown size={15} aria-hidden="true" />
-        </button>
-      </div>
     </div>
   );
 }
