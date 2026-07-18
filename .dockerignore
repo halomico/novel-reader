@@ -16,7 +16,6 @@ public/avatars
 *.sqlite
 *.sqlite-*
 *.txt
-!public/robots.txt
 *.log
 *.tmp
 *.tsbuildinfo

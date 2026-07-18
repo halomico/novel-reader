@@ -7,6 +7,7 @@ FROM node:24-bookworm-slim AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN mkdir -p public
 RUN npm test
 RUN npm run build
 RUN ./node_modules/.bin/esbuild scripts/*.ts \
