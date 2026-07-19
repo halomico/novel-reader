@@ -8,10 +8,12 @@ import {
   assignAdminVideoCategoryAction,
   batchUpdateAdminMediaAction,
   deleteAdminMediaAction,
+  loadAdminMediaSelectionAction,
   updateAdminMediaAction,
 } from "@/app/admin/actions";
 import { LocalDateTime } from "@/components/LocalDateTime";
 import { MediaVideoPreview } from "@/components/MediaVideoPreview";
+import { usePersistentSelection } from "@/components/usePersistentSelection";
 import type { MediaAsset, MediaFolder, MediaKind, MediaSortBy, MediaSortOrder, VideoCategory } from "@/lib/media";
 
 const KIND_LABELS: Record<MediaKind, string> = { video: "视频", audio: "音频", file: "文件" };
@@ -155,21 +157,27 @@ export function AdminMediaManager({
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState("");
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const { selectedIds, toggleOne, togglePage, clearSelection } = usePersistentSelection(
+    `novel-reader-admin-media-selection:${kind || "all"}`,
+  );
   const [editingAsset, setEditingAsset] = useState<MediaAsset | null>(null);
   const [batchEditing, setBatchEditing] = useState(false);
+  const [batchAssets, setBatchAssets] = useState<MediaAsset[]>([]);
+  const [batchLoading, setBatchLoading] = useState(false);
+  const [batchError, setBatchError] = useState("");
   const visibleIds = assets.map((asset) => asset.id);
   const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
   const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories]);
-  const selectedAssets = useMemo(() => assets.filter((asset) => selectedIds.includes(asset.id)), [assets, selectedIds]);
+  const selectedAssets = batchAssets;
   const selectedKind = selectedAssets.length && selectedAssets.every((asset) => asset.kind === selectedAssets[0].kind)
     ? selectedAssets[0].kind
     : undefined;
 
   useEffect(() => {
-    setSelectedIds([]);
     setEditingAsset(null);
     setBatchEditing(false);
+    setBatchAssets([]);
+    setBatchError("");
   }, [assets]);
 
   useEffect(() => {
@@ -287,11 +295,31 @@ export function AdminMediaManager({
   }
 
   function toggleAll() {
-    setSelectedIds(allSelected ? [] : visibleIds);
+    togglePage(visibleIds);
   }
 
-  function toggleOne(id: number) {
-    setSelectedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+  async function openBatchEditor() {
+    setBatchEditing(true);
+    setBatchAssets([]);
+    setBatchLoading(false);
+    setBatchError("");
+    if (selectedIds.length > 100) {
+      setBatchError("批量编辑每次最多选择 100 个资源；删除和视频归类不受此限制。");
+      return;
+    }
+    setBatchLoading(true);
+    try {
+      const selected = await loadAdminMediaSelectionAction(selectedIds);
+      if (!selected.length) {
+        setBatchError("所选资源已不存在，请清除选择后重试。");
+      } else {
+        setBatchAssets(selected);
+      }
+    } catch {
+      setBatchError("无法读取所选资源，请稍后重试。");
+    } finally {
+      setBatchLoading(false);
+    }
   }
 
   return (
@@ -480,9 +508,14 @@ export function AdminMediaManager({
           )}
           <div className="adminTableFooter adminMediaFooter">
             <div className="adminMediaBulkActions">
-              <button className="adminIconTextButton" type="button" disabled={!selectedIds.length} onClick={() => setBatchEditing(true)}>
+              <button className="adminIconTextButton" type="button" disabled={!selectedIds.length} onClick={() => void openBatchEditor()}>
                 <ListChecks size={15} aria-hidden="true" />批量编辑
               </button>
+              {selectedIds.length ? (
+                <button className="adminTableIconButton" type="button" onClick={clearSelection} aria-label="清除全部选择" title="清除选择">
+                  <X size={16} aria-hidden="true" />
+                </button>
+              ) : null}
               {kind === "video" ? (
                 <form className="adminMediaCategoryBulkForm" action={assignAdminVideoCategoryAction}>
                   <input name="returnPath" type="hidden" value={returnPath} />
@@ -496,7 +529,7 @@ export function AdminMediaManager({
                   </button>
                 </form>
               ) : null}
-              <form action={deleteAdminMediaAction}>
+              <form action={deleteAdminMediaAction} onSubmit={clearSelection}>
                 <input name="returnPath" type="hidden" value={returnPath} />
                 {selectedIds.map((id) => <input name="mediaIds" type="hidden" value={id} key={id} />)}
                 <button className="adminDangerButton" type="submit" disabled={!selectedIds.length}>
@@ -505,65 +538,74 @@ export function AdminMediaManager({
                 </button>
               </form>
             </div>
-            <span>当前显示 {directFolders.length} 个文件夹、{assets.length} 个资源，共 {totalAssets} 个资源</span>
+            <span>
+              当前显示 {directFolders.length} 个文件夹、{assets.length} 个资源，共 {totalAssets} 个资源
+              {selectedIds.length ? `；已选 ${selectedIds.length} 个` : ""}
+            </span>
           </div>
         </>
       ) : null}
 
-      {batchEditing && selectedAssets.length ? (
+      {batchEditing ? (
         <div className="adminMediaEditBackdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setBatchEditing(false)}>
           <form className="adminMediaEditDialog adminMediaBatchDialog" action={batchUpdateAdminMediaAction} role="dialog" aria-modal="true" aria-labelledby="admin-media-batch-title">
             <header>
               <div>
                 <h3 id="admin-media-batch-title">批量编辑资源</h3>
-                <p>已选择 {selectedAssets.length} 项</p>
+                <p>已选择 {selectedIds.length} 项</p>
               </div>
               <button type="button" onClick={() => setBatchEditing(false)} aria-label="关闭批量编辑" title="关闭"><X size={18} aria-hidden="true" /></button>
             </header>
             <input name="returnPath" type="hidden" value={returnPath} />
-            <div className="adminMediaBatchTitles">
-              {selectedAssets.map((asset, index) => (
-                <label key={asset.id}>
-                  <span>{asset.fileName}</span>
-                  <input name={`title-${asset.id}`} defaultValue={asset.title} maxLength={120} required autoFocus={index === 0} />
-                  <input name="mediaIds" type="hidden" value={asset.id} />
+            {batchLoading ? <p className="adminInlineMessage">正在读取所选资源...</p> : null}
+            {batchError ? <p className="adminInlineMessage isWarning">{batchError}</p> : null}
+            {selectedAssets.length ? (
+              <>
+                {selectedAssets.map((asset) => <input name="mediaIds" type="hidden" value={asset.id} key={asset.id} />)}
+                <div className="adminMediaBatchTitles">
+                  {selectedAssets.map((asset, index) => (
+                    <label key={asset.id}>
+                      <span>{asset.fileName}</span>
+                      <input name={`title-${asset.id}`} defaultValue={asset.title} maxLength={120} required autoFocus={index === 0} />
+                    </label>
+                  ))}
+                </div>
+                {selectedAssets.some((asset) => asset.kind !== "file") ? (
+                  <label className="adminMediaBatchApplyField">
+                    <span><input name="applyArtist" type="checkbox" />统一作者</span>
+                    <input name="artist" maxLength={80} placeholder="勾选后应用；留空可清除" />
+                  </label>
+                ) : null}
+                <label className="adminMediaBatchApplyField">
+                  <span><input name="applyDescription" type="checkbox" />统一简介</span>
+                  <textarea name="description" maxLength={1000} rows={3} placeholder="勾选后应用；留空可清除" />
                 </label>
-              ))}
-            </div>
-            {selectedAssets.some((asset) => asset.kind !== "file") ? (
-              <label className="adminMediaBatchApplyField">
-                <span><input name="applyArtist" type="checkbox" />统一作者</span>
-                <input name="artist" maxLength={80} placeholder="勾选后应用；留空可清除" />
-              </label>
+                {selectedKind ? (
+                  <label>
+                    <span>移动到</span>
+                    <select name="targetFolder" defaultValue="__keep__">
+                      <option value="__keep__">保持原目录</option>
+                      <option value="">根目录</option>
+                      {folders[selectedKind].map((item) => <option value={item.path} key={item.path}>{item.path}</option>)}
+                    </select>
+                  </label>
+                ) : null}
+                {selectedKind === "video" ? (
+                  <label>
+                    <span>视频分类</span>
+                    <select name="categoryId" defaultValue="__keep__">
+                      <option value="__keep__">保持原分类</option>
+                      <option value="">未分类</option>
+                      {categories.map((category) => <option value={category.id} key={category.id}>{category.name}{category.visible ? "" : "（隐藏）"}</option>)}
+                    </select>
+                  </label>
+                ) : null}
+                <footer>
+                  <button className="adminSecondaryButton" type="button" onClick={() => setBatchEditing(false)}>取消</button>
+                  <button type="submit"><Save size={16} aria-hidden="true" />保存</button>
+                </footer>
+              </>
             ) : null}
-            <label className="adminMediaBatchApplyField">
-              <span><input name="applyDescription" type="checkbox" />统一简介</span>
-              <textarea name="description" maxLength={1000} rows={3} placeholder="勾选后应用；留空可清除" />
-            </label>
-            {selectedKind ? (
-              <label>
-                <span>移动到</span>
-                <select name="targetFolder" defaultValue="__keep__">
-                  <option value="__keep__">保持原目录</option>
-                  <option value="">根目录</option>
-                  {folders[selectedKind].map((item) => <option value={item.path} key={item.path}>{item.path}</option>)}
-                </select>
-              </label>
-            ) : null}
-            {selectedKind === "video" ? (
-              <label>
-                <span>视频分类</span>
-                <select name="categoryId" defaultValue="__keep__">
-                  <option value="__keep__">保持原分类</option>
-                  <option value="">未分类</option>
-                  {categories.map((category) => <option value={category.id} key={category.id}>{category.name}{category.visible ? "" : "（隐藏）"}</option>)}
-                </select>
-              </label>
-            ) : null}
-            <footer>
-              <button className="adminSecondaryButton" type="button" onClick={() => setBatchEditing(false)}>取消</button>
-              <button type="submit"><Save size={16} aria-hidden="true" />保存</button>
-            </footer>
           </form>
         </div>
       ) : null}

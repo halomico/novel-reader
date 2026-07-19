@@ -108,6 +108,21 @@ export function isRandomCatalogEnabled(): boolean {
   return readSiteSettings().randomCatalogEnabled;
 }
 
+export function getCatalogFeatureSettings(): {
+  manualPinnedEnabled: boolean;
+  randomRecommendationsEnabled: boolean;
+  randomRecommendationCount: number;
+  randomRecommendationIntervalMinutes: number;
+} {
+  const settings = readSiteSettings();
+  return {
+    manualPinnedEnabled: settings.manualPinnedNovelsEnabled,
+    randomRecommendationsEnabled: settings.randomRecommendationsEnabled,
+    randomRecommendationCount: settings.randomRecommendationCount,
+    randomRecommendationIntervalMinutes: settings.randomRecommendationIntervalMinutes,
+  };
+}
+
 export function getNoticeDisplaySeconds(): number {
   return readSettingInt(readSiteSettings().noticeDisplaySeconds, "NOTICE_DISPLAY_SECONDS", 5, 0, 60);
 }
@@ -180,6 +195,20 @@ export function isAnalyticsEnabled(): boolean {
 
 export function getAnalyticsRealtimeLimit(): number {
   return readSettingInt(readSiteSettings().analyticsRealtimeLimit, "ANALYTICS_REALTIME_LIMIT", 300, 30, 2000);
+}
+
+export function isNovelLibraryEnabled(): boolean {
+  return readSiteSettings().novelLibraryEnabled;
+}
+
+export function canAccessNovelLibrary(authenticated: boolean): boolean {
+  const settings = readSiteSettings();
+  return settings.novelLibraryEnabled && (authenticated || settings.guestLibraryNavEnabled);
+}
+
+export function isNovelLibraryPublic(): boolean {
+  const settings = readSiteSettings();
+  return settings.novelLibraryEnabled && settings.guestLibraryNavEnabled;
 }
 
 export function isVideoLibraryEnabled(): boolean {

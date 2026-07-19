@@ -38,6 +38,15 @@ export default async function AdminBooksPage({ searchParams }: AdminBooksPagePro
     dir: params.dir,
   });
   const pinnedBooks = listPinnedNovels();
+  const returnParams = new URLSearchParams({
+    page: String(bookList.page),
+    sort: bookList.sort,
+    dir: bookList.dir,
+  });
+  if (bookList.query) {
+    returnParams.set("q", bookList.query);
+  }
+  const returnPath = `/admin/books?${returnParams.toString()}`;
 
   return (
     <AdminFrame active="books" notice={params.notice} tone={params.tone}>
@@ -58,7 +67,7 @@ export default async function AdminBooksPage({ searchParams }: AdminBooksPagePro
 
         {bookList.message ? <p className="adminInlineMessage">{bookList.message}</p> : null}
 
-        <AdminPinnedBooks books={pinnedBooks} />
+        <AdminPinnedBooks books={pinnedBooks} returnPath={returnPath} />
         <AdminBookUpload />
 
         <AdminBookTable
@@ -70,6 +79,7 @@ export default async function AdminBooksPage({ searchParams }: AdminBooksPagePro
           sort={bookList.sort}
           dir={bookList.dir}
           pinnedIds={pinnedBooks.map((book) => book.id)}
+          returnPath={returnPath}
         />
         <Pagination
           page={bookList.page}

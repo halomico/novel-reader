@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { buildTitleSearchSql, normalizePageSize } from "./books";
+import { sampleNovelIdsFromList } from "./novel-id-sampler";
 import { parseSearchQuery } from "./search-query";
 
 test("honors the configured catalog range up to 100 books", () => {
@@ -24,4 +25,18 @@ test("pushes compound title matching into SQLite", () => {
   } finally {
     db.close();
   }
+});
+
+test("samples sparse novel IDs uniformly without depending on ID gaps", () => {
+  const ids = [1, 2, 50_000, 900_000, 2_000_000];
+  const first = sampleNovelIdsFromList(ids, 4, "stable-seed");
+  const repeated = sampleNovelIdsFromList(ids, 4, "stable-seed");
+  const excluded = sampleNovelIdsFromList(ids, 4, "stable-seed", new Set([2, 900_000]));
+
+  assert.deepEqual(first, repeated);
+  assert.equal(first.length, 4);
+  assert.equal(new Set(first).size, 4);
+  assert.equal(first.every((id) => ids.includes(id)), true);
+  assert.equal(excluded.some((id) => id === 2 || id === 900_000), false);
+  assert.equal(excluded.length, 3);
 });

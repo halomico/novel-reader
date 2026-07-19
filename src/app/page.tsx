@@ -9,6 +9,7 @@ import {
   isGuestLibraryNavEnabled,
   isGuestTagLibraryNavEnabled,
   isRandomCatalogEnabled,
+  isNovelLibraryEnabled,
   isTagLibraryEnabled,
 } from "@/lib/config";
 import { getAccessibleMediaKinds, type MediaKind } from "@/lib/media";
@@ -64,7 +65,7 @@ export default async function Home({ searchParams }: HomeProps) {
 
   const user = await getCurrentUser();
   const authenticated = Boolean(user);
-  const showNovels = authenticated || isGuestLibraryNavEnabled();
+  const showNovels = isNovelLibraryEnabled() && (authenticated || isGuestLibraryNavEnabled());
   const cards: PortalCard[] = [];
 
   if (showNovels) {

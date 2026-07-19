@@ -293,6 +293,11 @@ input {
   width: 100%;
 }
 
+.headerTools.hasNoSearch {
+  grid-template-columns: auto;
+  width: auto;
+}
+
 .siteHeader.hasPrimaryNav,
 :root[data-ui-mode="minimal"] .siteHeader.hasPrimaryNav {
   grid-template-columns: auto minmax(220px, 1fr) minmax(320px, 500px);
@@ -1653,6 +1658,30 @@ mark {
   align-items: start;
 }
 
+.settingPaletteValue {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.settingPaletteRandomButton {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  padding: 0;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.settingPaletteRandomButton:hover,
+.settingPaletteRandomButton:focus-visible {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
 .rangeRow {
   display: grid;
   grid-template-columns: auto minmax(120px, 220px) auto;
@@ -2336,12 +2365,7 @@ mark {
 }
 
 .mediaVideoPreviewImage img {
-  opacity: 0;
-  transition: opacity 140ms ease;
-}
-
-.mediaVideoPreviewImage img.isReady {
-  opacity: 1;
+  background: transparent;
 }
 
 .mediaVideoFallback {
@@ -3000,6 +3024,79 @@ mark {
   gap: 6px;
   color: var(--muted);
   font-size: 13px;
+}
+
+.adminPaletteField {
+  display: grid;
+  width: 100%;
+  max-width: 360px;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.adminPaletteSelectRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.adminSelectControl {
+  position: relative;
+  display: block;
+  min-width: 0;
+  width: 100%;
+}
+
+.adminSelectControl select {
+  appearance: none;
+  padding-right: 34px !important;
+}
+
+.adminSettingsForm .adminSelectControl select {
+  min-height: 34px;
+  padding-block: 7px;
+}
+
+.adminSelectControl > svg {
+  position: absolute;
+  top: 50%;
+  right: 11px;
+  color: var(--muted);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.adminSelectControl:focus-within > svg {
+  color: var(--accent);
+}
+
+.adminSettingsForm .adminCompactField {
+  width: 100%;
+  max-width: 360px;
+}
+
+.adminSettingsForm .adminCompactField.isNarrow {
+  max-width: 220px;
+}
+
+.adminSettingsForm .adminPaletteDiceButton {
+  display: grid;
+  width: 36px;
+  min-height: 36px;
+  place-items: center;
+  justify-self: auto;
+  border: 1px solid var(--border);
+  padding: 0;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  color: var(--accent);
+}
+
+.adminSettingsForm .adminPaletteDiceButton:hover,
+.adminSettingsForm .adminPaletteDiceButton:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
 }
 
 .adminLoginForm input,
@@ -3899,6 +3996,53 @@ mark {
 .adminPinnedActions button:disabled {
   cursor: default;
   opacity: 0.28;
+}
+
+.adminPinnedBooks > form > p {
+  margin: 0;
+  padding: 2px 4px 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.adminPinnedFooter {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  padding: 7px 3px;
+}
+
+.adminPinnedFooter > small {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.adminPinnedFooter .adminPinnedResetButton {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.adminPinnedFooter .adminPinnedResetButton:hover,
+.adminPinnedFooter .adminPinnedResetButton:focus-visible {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--accent);
+}
+
+.adminPinnedFooter button:disabled {
+  cursor: default;
+  opacity: 0.38;
 }
 
 .adminBookTagForm {
@@ -5359,7 +5503,7 @@ mark {
   border-top: 1px solid var(--border);
 }
 
-.adminAccessModeRow > span {
+.adminAccessModeRow > span:first-child {
   display: inline-flex;
   min-width: 0;
   align-items: center;
@@ -5368,9 +5512,13 @@ mark {
   font-size: 13px;
 }
 
-.adminAccessModeRow > span svg {
+.adminAccessModeRow > span:first-child svg {
   flex: 0 0 auto;
   color: var(--accent);
+}
+
+.adminAccessModeRow > .adminSelectControl {
+  display: block;
 }
 
 .adminAccessModeRow select {
@@ -6374,6 +6522,17 @@ mark {
     justify-self: end;
   }
 
+  .headerTools.hasNoSearch {
+    grid-column: 2;
+    grid-row: 1;
+    grid-template-columns: auto;
+    width: auto;
+  }
+
+  .headerTools.hasNoSearch .headerActions {
+    grid-column: 1;
+  }
+
   .siteHeader.hasPrimaryNav .headerPrimaryNav,
   :root[data-ui-mode="minimal"] .siteHeader.hasPrimaryNav .headerPrimaryNav {
     grid-column: 1 / -1;
@@ -6730,6 +6889,12 @@ mark {
   .adminFieldGrid,
   .adminHomeGrid {
     grid-template-columns: 1fr;
+  }
+
+  .adminPaletteField,
+  .adminSettingsForm .adminCompactField,
+  .adminSettingsForm .adminCompactField.isNarrow {
+    max-width: none;
   }
 
   .adminSearchForm {

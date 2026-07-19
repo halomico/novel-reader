@@ -19,10 +19,20 @@ type AdminUserDetailPageProps = {
   params: Promise<{
     id: string;
   }>;
+  searchParams: Promise<{
+    returnPath?: string;
+  }>;
 };
 
-export default async function AdminUserDetailPage({ params }: AdminUserDetailPageProps) {
+function safeReturnPath(value: string | undefined): string {
+  return value && (value === "/admin/users" || value.startsWith("/admin/users?")) && !/[\r\n#\\]/.test(value)
+    ? value
+    : "/admin/users";
+}
+
+export default async function AdminUserDetailPage({ params, searchParams }: AdminUserDetailPageProps) {
   const { id } = await params;
+  const query = await searchParams;
   const userId = Number(id);
   if (!Number.isInteger(userId) || userId < 1) {
     notFound();
@@ -35,9 +45,10 @@ export default async function AdminUserDetailPage({ params }: AdminUserDetailPag
 
   const history = listBrowseHistory(user.id);
   const loginRecords = listUserLoginRecords(user.id);
+  const returnPath = safeReturnPath(query.returnPath);
 
   return (
-    <AdminFrame active="users" breadcrumbs={[{ label: "用户管理", href: "/admin/users" }, { label: user.displayName }]}>
+    <AdminFrame active="users" breadcrumbs={[{ label: "用户管理", href: returnPath }, { label: user.displayName }]}>
       <section className="adminHome adminUserDetailPage">
         <article className="adminPanel">
           <div className="adminPanelHeader">

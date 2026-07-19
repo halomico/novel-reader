@@ -14,10 +14,17 @@ export const metadata: Metadata = {
 type AdminBookBatchPageProps = {
   searchParams: Promise<{
     ids?: string;
+    returnPath?: string;
     notice?: string;
     tone?: "success" | "warning" | "error";
   }>;
 };
+
+function safeReturnPath(value: string | undefined): string {
+  return value && (value === "/admin/books" || value.startsWith("/admin/books?")) && !/[\r\n#\\]/.test(value)
+    ? value
+    : "/admin/books";
+}
 
 function groupTags(group: TagGroup): TagWithCount[] {
   return group.tags.length ? group.tags : group.group ? [group.group] : [];
@@ -36,13 +43,14 @@ export default async function AdminBookBatchPage({ searchParams }: AdminBookBatc
     notFound();
   }
   const groups = listTagGroups({ includeHidden: true });
+  const returnPath = safeReturnPath(query.returnPath);
 
   return (
     <AdminFrame
       active="books"
       notice={query.notice}
       tone={query.tone}
-      breadcrumbs={[{ label: "小说管理", href: "/admin/books" }, { label: "批量编辑" }]}
+      breadcrumbs={[{ label: "小说管理", href: returnPath }, { label: "批量编辑" }]}
     >
       <article className="adminPanel adminBookBatchPanel">
         <div className="adminPanelHeader">
@@ -53,6 +61,7 @@ export default async function AdminBookBatchPage({ searchParams }: AdminBookBatc
         </div>
 
         <form className="adminBookBatchForm" action={batchUpdateNovelsAction}>
+          <input name="returnPath" type="hidden" value={returnPath} />
           <section className="adminBookEditorSection">
             <h3><PencilLine size={16} aria-hidden="true" />小说名称</h3>
             <div className="adminBatchTitleList">

@@ -1,6 +1,8 @@
 ﻿import { Settings } from "lucide-react";
 import type { Metadata } from "next";
 import { BookOpen, Clapperboard, File, Globe2, Headphones, Search, Tags, Trash2, Upload } from "lucide-react";
+import { AdminPaletteField } from "@/components/AdminPaletteField";
+import { AdminSelect } from "@/components/AdminSelect";
 import { RateLimitBanTable } from "@/components/RateLimitBanTable";
 import { RateLimitRulesEditor } from "@/components/RateLimitRulesEditor";
 import { getAdminBookStats } from "@/lib/admin-books";
@@ -26,7 +28,6 @@ import {
   shouldBlockHeadlessBrowsers,
 } from "@/lib/config";
 import { readSiteSettings } from "@/lib/site-settings";
-import { COLOR_PALETTES } from "@/lib/ui-preferences";
 import { listIpRateLimitBans } from "@/lib/ip-rate-limit";
 import {
   cancelFrontendSearchJobsAction,
@@ -147,26 +148,35 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               <span>设置页底部文案</span>
               <textarea name="settingsPreviewText" rows={3} defaultValue={settings.settingsPreviewText} />
             </label>
-            <label>
+            <label className="adminCompactField isNarrow">
               <span>默认正文字号 / px</span>
               <input name="readerDefaultFontSize" type="number" min="8" max="25" defaultValue={readerDefaultFontSize} />
             </label>
-            <label>
+            <label className="adminCompactField">
               <span>后台主题默认值</span>
-              <select name="adminTheme" defaultValue={settings.adminTheme}>
+              <AdminSelect name="adminTheme" defaultValue={settings.adminTheme}>
                 <option value="system">跟随系统</option>
                 <option value="light">浅色</option>
                 <option value="dark">深色</option>
-              </select>
+              </AdminSelect>
             </label>
-            <label>
-              <span>用户默认配色</span>
-              <select name="defaultPalette" defaultValue={settings.defaultPalette}>
-                {COLOR_PALETTES.map((palette) => (
-                  <option value={palette.value} key={palette.value}>{palette.label}</option>
-                ))}
-              </select>
-              <small>仅在浏览器没有保存个人配色时生效。</small>
+            <AdminPaletteField defaultValue={settings.defaultPalette} />
+            <label className="adminSwitchLabel">
+              <span>
+                <strong>定时随机切换默认配色</strong>
+                <small>只影响没有保存个人配色的浏览器，周期内所有页面保持一致。</small>
+              </span>
+              <input name="defaultPaletteRandomEnabled" type="checkbox" defaultChecked={settings.defaultPaletteRandomEnabled} />
+            </label>
+            <label className="adminCompactField isNarrow">
+              <span>配色切换周期 / 分钟</span>
+              <input
+                name="defaultPaletteRotationMinutes"
+                type="number"
+                min="1"
+                max="10080"
+                defaultValue={settings.defaultPaletteRotationMinutes}
+              />
             </label>
           </details>
 
@@ -256,6 +266,36 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
             </label>
             <label className="adminSwitchLabel">
               <span>
+                <strong>启用手动置顶</strong>
+                <small>关闭后保留置顶列表，但前台暂不提升这些小说的排序。</small>
+              </span>
+              <input name="manualPinnedNovelsEnabled" type="checkbox" defaultChecked={settings.manualPinnedNovelsEnabled} />
+            </label>
+            <label className="adminSwitchLabel">
+              <span>
+                <strong>启用随机推荐</strong>
+                <small>每个周期等权抽取一批小说，排列在手动置顶之后。</small>
+              </span>
+              <input name="randomRecommendationsEnabled" type="checkbox" defaultChecked={settings.randomRecommendationsEnabled} />
+            </label>
+            <div className="adminFieldGrid">
+              <label>
+                <span>随机推荐数量 / 本</span>
+                <input name="randomRecommendationCount" type="number" min="1" max="50" defaultValue={settings.randomRecommendationCount} />
+              </label>
+              <label>
+                <span>推荐切换周期 / 分钟</span>
+                <input
+                  name="randomRecommendationIntervalMinutes"
+                  type="number"
+                  min="1"
+                  max="10080"
+                  defaultValue={settings.randomRecommendationIntervalMinutes}
+                />
+              </label>
+            </div>
+            <label className="adminSwitchLabel">
+              <span>
                 <strong>失去焦点后继续显示提示</strong>
                 <small>关闭时，浏览器窗口失去焦点会立即隐藏提示消息。</small>
               </span>
@@ -323,50 +363,51 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               <div className="adminAccessModeGrid">
                 <label className="adminAccessModeRow">
                   <span><BookOpen size={16} aria-hidden="true" /><strong>小说</strong></span>
-                  <select name="libraryGuestAccess" defaultValue={settings.guestLibraryNavEnabled ? "public" : "hidden"}>
-                    <option value="hidden">游客隐藏</option>
-                    <option value="public">游客显示</option>
-                  </select>
+                  <AdminSelect name="novelAccessMode" defaultValue={mediaAccessMode(settings.novelLibraryEnabled, settings.guestLibraryNavEnabled)}>
+                    <option value="off">关闭</option>
+                    <option value="public">公开访问</option>
+                    <option value="user">登录可用</option>
+                  </AdminSelect>
                 </label>
                 <label className="adminAccessModeRow">
                   <span><Clapperboard size={16} aria-hidden="true" /><strong>视频</strong></span>
-                  <select name="videoAccessMode" defaultValue={mediaAccessMode(settings.videoLibraryEnabled, settings.guestVideoNavEnabled)}>
+                  <AdminSelect name="videoAccessMode" defaultValue={mediaAccessMode(settings.videoLibraryEnabled, settings.guestVideoNavEnabled)}>
                     <option value="off">关闭</option>
-                    <option value="user">登录可用</option>
                     <option value="public">公开访问</option>
-                  </select>
+                    <option value="user">登录可用</option>
+                  </AdminSelect>
                 </label>
                 <label className="adminAccessModeRow">
                   <span><Headphones size={16} aria-hidden="true" /><strong>音频</strong></span>
-                  <select name="audioAccessMode" defaultValue={mediaAccessMode(settings.audioLibraryEnabled, settings.guestAudioNavEnabled)}>
+                  <AdminSelect name="audioAccessMode" defaultValue={mediaAccessMode(settings.audioLibraryEnabled, settings.guestAudioNavEnabled)}>
                     <option value="off">关闭</option>
-                    <option value="user">登录可用</option>
                     <option value="public">公开访问</option>
-                  </select>
+                    <option value="user">登录可用</option>
+                  </AdminSelect>
                 </label>
                 <label className="adminAccessModeRow">
                   <span><File size={16} aria-hidden="true" /><strong>文件</strong></span>
-                  <select name="fileAccessMode" defaultValue={mediaAccessMode(settings.fileLibraryEnabled, settings.guestFileNavEnabled)}>
+                  <AdminSelect name="fileAccessMode" defaultValue={mediaAccessMode(settings.fileLibraryEnabled, settings.guestFileNavEnabled)}>
                     <option value="off">关闭</option>
-                    <option value="user">登录可用</option>
                     <option value="public">公开访问</option>
-                  </select>
+                    <option value="user">登录可用</option>
+                  </AdminSelect>
                 </label>
                 <label className="adminAccessModeRow">
                   <span><Tags size={16} aria-hidden="true" /><strong>标签</strong></span>
-                  <select name="tagAccessMode" defaultValue={mediaAccessMode(settings.tagLibraryEnabled, settings.guestTagLibraryNavEnabled)}>
+                  <AdminSelect name="tagAccessMode" defaultValue={mediaAccessMode(settings.tagLibraryEnabled, settings.guestTagLibraryNavEnabled)}>
                     <option value="off">关闭</option>
-                    <option value="user">登录可见</option>
-                    <option value="public">公开显示</option>
-                  </select>
+                    <option value="public">公开访问</option>
+                    <option value="user">登录可用</option>
+                  </AdminSelect>
                 </label>
                 <label className="adminAccessModeRow">
                   <span><Search size={16} aria-hidden="true" /><strong>文末热词</strong></span>
-                  <select name="hotwordAccessMode" defaultValue={mediaAccessMode(settings.hotwordLinksEnabled, settings.guestHotwordLinksEnabled)}>
+                  <AdminSelect name="hotwordAccessMode" defaultValue={mediaAccessMode(settings.hotwordLinksEnabled, settings.guestHotwordLinksEnabled)}>
                     <option value="off">关闭</option>
-                    <option value="user">登录可见</option>
-                    <option value="public">公开显示</option>
-                  </select>
+                    <option value="public">公开访问</option>
+                    <option value="user">登录可用</option>
+                  </AdminSelect>
                 </label>
               </div>
             </div>

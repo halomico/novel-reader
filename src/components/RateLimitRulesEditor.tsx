@@ -2,6 +2,7 @@
 
 import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { AdminSelect } from "@/components/AdminSelect";
 import type { IpRateLimitRule } from "@/lib/site-settings";
 
 type RateLimitRulesEditorProps = {
@@ -81,24 +82,24 @@ export function RateLimitRulesEditor({
               <>
                 <label>
                   <span>适用对象</span>
-                  <select
+                  <AdminSelect
                     value={rule.scope}
                     onChange={(event) => updateRule(rule.id, { scope: event.target.value as IpRateLimitRule["scope"] })}
                   >
                     <option value="all">全部用户</option>
                     <option value="guest">未登录访客</option>
                     <option value="user">登录用户</option>
-                  </select>
+                  </AdminSelect>
                 </label>
                 <label>
                   <span>搜索类型</span>
-                  <select
+                  <AdminSelect
                     value={rule.queryType}
                     onChange={(event) => updateRule(rule.id, { queryType: event.target.value as IpRateLimitRule["queryType"] })}
                   >
                     <option value="all">全部搜索</option>
                     <option value="short">仅双字短词</option>
-                  </select>
+                  </AdminSelect>
                 </label>
               </>
             ) : null}
@@ -124,14 +125,14 @@ export function RateLimitRulesEditor({
             </label>
             <label>
               <span>超限处理</span>
-              <select
+              <AdminSelect
                 value={rule.banMode}
                 onChange={(event) => updateRule(rule.id, { banMode: event.target.value as IpRateLimitRule["banMode"] })}
               >
                 <option value="none">仅等待窗口</option>
                 <option value="temporary">临时封禁</option>
                 <option value="permanent">永久封禁</option>
-              </select>
+              </AdminSelect>
             </label>
             {rule.banMode === "temporary" ? (
               <label>

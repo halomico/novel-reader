@@ -11,7 +11,14 @@ import { getClientIp } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
 import { recordAnalyticsEvent } from "@/lib/analytics";
 import { getNovelById, readNovelSegments, type Novel } from "@/lib/books";
-import { areGuestHotwordLinksEnabled, areHotwordLinksEnabled, isGuestTagLibraryNavEnabled, isTagLibraryEnabled } from "@/lib/config";
+import {
+  areGuestHotwordLinksEnabled,
+  areHotwordLinksEnabled,
+  canAccessNovelLibrary,
+  isGuestTagLibraryNavEnabled,
+  isNovelLibraryPublic,
+  isTagLibraryEnabled,
+} from "@/lib/config";
 import { checkContentAccess } from "@/lib/content-access";
 import { listHotwordsForNovel, listTagsForNovel, type Tag } from "@/lib/tags";
 import { isNovelPinned } from "@/lib/pinned-novels";
@@ -49,6 +56,7 @@ export async function generateMetadata({ params }: BookPageProps): Promise<Metad
       description,
       url: canonical,
     },
+    robots: isNovelLibraryPublic() ? { index: true, follow: true } : NO_INDEX_ROBOTS,
   };
 }
 
@@ -151,6 +159,12 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
     notFound();
   }
 
+  const [user, adminSession] = await Promise.all([getCurrentUser(), getAdminSession()]);
+  const authenticated = Boolean(user || adminSession);
+  if (!adminSession && !canAccessNovelLibrary(Boolean(user))) {
+    notFound();
+  }
+
   const headerStore = await headers();
   const access = checkContentAccess(headerStore);
   if (!access.allowed) {
@@ -165,9 +179,8 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
   }
 
   const hitSegment = Number(query.hit);
-  const [user, adminSession] = await Promise.all([getCurrentUser(), getAdminSession()]);
-  const showTags = isTagLibraryEnabled() && (Boolean(user) || isGuestTagLibraryNavEnabled());
-  const showHotwords = areHotwordLinksEnabled() && (Boolean(user) || areGuestHotwordLinksEnabled());
+  const showTags = isTagLibraryEnabled() && (authenticated || isGuestTagLibraryNavEnabled());
+  const showHotwords = areHotwordLinksEnabled() && (authenticated || areGuestHotwordLinksEnabled());
   const tags = showTags ? listTagsForNovel(book.id) : [];
   const hotwords = showHotwords ? listHotwordsForNovel(book.id) : [];
 

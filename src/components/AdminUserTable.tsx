@@ -5,25 +5,21 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { deleteAdminUsersAction, updateAdminUserAction, updateAdminUserStatusAction } from "@/app/admin/actions";
 import { LocalDateTime } from "@/components/LocalDateTime";
+import { usePersistentSelection } from "@/components/usePersistentSelection";
 import type { UserProfile } from "@/lib/users";
 
-export function AdminUserTable({ users }: { users: UserProfile[] }) {
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; returnPath: string }) {
+  const { selectedIds, toggleOne, togglePage, clearSelection } = usePersistentSelection("novel-reader-admin-user-selection");
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const visibleIds = users.map((user) => user.id);
   const isAllSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
 
   useEffect(() => {
-    setSelectedIds([]);
     setEditingUser(null);
   }, [users]);
 
   function toggleAll() {
-    setSelectedIds(isAllSelected ? [] : visibleIds);
-  }
-
-  function toggleOne(id: number) {
-    setSelectedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+    togglePage(visibleIds);
   }
 
   return (
@@ -57,7 +53,7 @@ export function AdminUserTable({ users }: { users: UserProfile[] }) {
                   </td>
                   <td>
                     <span className="adminUserIdentity">
-                      <Link className="adminUserNameLink" href={`/admin/users/${user.id}`}>
+                      <Link className="adminUserNameLink" href={`/admin/users/${user.id}?returnPath=${encodeURIComponent(returnPath)}`}>
                         {user.username}
                       </Link>
                       <small>{user.displayName}</small>
@@ -89,6 +85,7 @@ export function AdminUserTable({ users }: { users: UserProfile[] }) {
                   <td>
                     <form className="adminUserStatusForm" action={updateAdminUserStatusAction}>
                       <input name="userId" type="hidden" value={user.id} />
+                      <input name="returnPath" type="hidden" value={returnPath} />
                       <select
                         className={`adminUserStatusSelect is-${user.status}`}
                         name="status"
@@ -114,15 +111,23 @@ export function AdminUserTable({ users }: { users: UserProfile[] }) {
       </div>
 
       <div className="adminTableFooter adminUserTableFooter">
-        <form action={deleteAdminUsersAction}>
-          {selectedIds.map((id) => (
-            <input name="userIds" type="hidden" value={id} key={id} />
-          ))}
-          <button className="adminDangerButton" type="submit" disabled={selectedIds.length === 0}>
-            <Trash2 size={16} aria-hidden="true" />
-            删除所选{selectedIds.length ? ` (${selectedIds.length})` : ""}
-          </button>
-        </form>
+        <div className="adminBulkActionRow">
+          {selectedIds.length ? (
+            <button className="adminTableIconButton" type="button" onClick={clearSelection} aria-label="清除全部选择" title="清除选择">
+              <X size={16} aria-hidden="true" />
+            </button>
+          ) : null}
+          <form action={deleteAdminUsersAction} onSubmit={clearSelection}>
+            <input name="returnPath" type="hidden" value={returnPath} />
+            {selectedIds.map((id) => (
+              <input name="userIds" type="hidden" value={id} key={id} />
+            ))}
+            <button className="adminDangerButton" type="submit" disabled={selectedIds.length === 0}>
+              <Trash2 size={16} aria-hidden="true" />
+              删除所选{selectedIds.length ? ` (${selectedIds.length})` : ""}
+            </button>
+          </form>
+        </div>
       </div>
 
       {editingUser ? (
@@ -143,6 +148,7 @@ export function AdminUserTable({ users }: { users: UserProfile[] }) {
             </header>
             <input name="userId" type="hidden" value={editingUser.id} />
             <input name="status" type="hidden" value={editingUser.status} />
+            <input name="returnPath" type="hidden" value={returnPath} />
             <label>
               <span>显示名称</span>
               <input name="displayName" defaultValue={editingUser.displayName} maxLength={40} required autoFocus />

@@ -37,3 +37,24 @@ export function isColorPalette(value: string | null | undefined): value is Color
 export function getColorPalette(value: ColorPalette): ColorPaletteOption {
   return COLOR_PALETTES.find((palette) => palette.value === value) || COLOR_PALETTES[0];
 }
+
+function paletteIndexForBucket(bucket: number): number {
+  let value = Math.floor(bucket) | 0;
+  value = Math.imul(value ^ (value >>> 16), 0x45d9f3b);
+  value = Math.imul(value ^ (value >>> 16), 0x45d9f3b);
+  value ^= value >>> 16;
+  return (value >>> 0) % COLOR_PALETTES.length;
+}
+
+export function resolveDefaultPalette(
+  fallback: ColorPalette,
+  randomEnabled: boolean,
+  intervalMinutes: number,
+  now = Date.now(),
+): ColorPalette {
+  if (!randomEnabled) {
+    return fallback;
+  }
+  const intervalMs = Math.max(1, Math.floor(intervalMinutes)) * 60_000;
+  return COLOR_PALETTES[paletteIndexForBucket(Math.floor(now / intervalMs))].value;
+}

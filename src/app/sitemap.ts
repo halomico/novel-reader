@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { isGuestTagLibraryNavEnabled, isTagLibraryEnabled } from "@/lib/config";
+import { isGuestTagLibraryNavEnabled, isNovelLibraryPublic, isTagLibraryEnabled } from "@/lib/config";
 import { getDb } from "@/lib/db";
 import {
   isMediaKindPublic,
@@ -23,27 +23,27 @@ function mediaListUrl(kind: MediaKind, extra: Record<string, string> = {}): stri
 }
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const entries: MetadataRoute.Sitemap = [
-    {
-      url: absoluteSiteUrl("/"),
-      changeFrequency: "daily",
-      priority: 1,
-    },
-    {
+  const entries: MetadataRoute.Sitemap = [{
+    url: absoluteSiteUrl("/"),
+    changeFrequency: "daily",
+    priority: 1,
+  }];
+
+  if (isNovelLibraryPublic()) {
+    entries.push({
       url: absoluteSiteUrl("/novels"),
       changeFrequency: "daily",
       priority: 0.9,
-    },
-  ];
-
-  const novels = getDb().prepare("SELECT id, updated_at FROM novels ORDER BY id ASC").all() as UpdatedRow[];
-  for (const novel of novels) {
-    entries.push({
-      url: absoluteSiteUrl(`/books/${novel.id}`),
-      lastModified: novel.updated_at,
-      changeFrequency: "weekly",
-      priority: 0.8,
     });
+    const novels = getDb().prepare("SELECT id, updated_at FROM novels ORDER BY id ASC").all() as UpdatedRow[];
+    for (const novel of novels) {
+      entries.push({
+        url: absoluteSiteUrl(`/books/${novel.id}`),
+        lastModified: novel.updated_at,
+        changeFrequency: "weekly",
+        priority: 0.8,
+      });
+    }
   }
 
   if (isTagLibraryEnabled() && isGuestTagLibraryNavEnabled()) {

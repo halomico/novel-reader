@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { ContentSearchClient } from "@/components/ContentSearchClient";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SiteHeader } from "@/components/SiteHeader";
 import { recordSearchQuery } from "@/lib/analytics";
-import { getGlobalSearchMaxResults, getSearchResultsPageSize, shouldShowProgressBars } from "@/lib/config";
+import { getAdminSession } from "@/lib/admin-auth";
+import { canAccessNovelLibrary, getGlobalSearchMaxResults, getSearchResultsPageSize, shouldShowProgressBars } from "@/lib/config";
 import { validateSearchKeyword } from "@/lib/search";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
+import { getCurrentUser } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "全文搜索", robots: NO_INDEX_ROBOTS };
@@ -18,6 +21,10 @@ type SearchPageProps = {
 };
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
+  const [user, adminSession] = await Promise.all([getCurrentUser(), getAdminSession()]);
+  if (!adminSession && !canAccessNovelLibrary(Boolean(user))) {
+    notFound();
+  }
   const params = await searchParams;
   const validation = validateSearchKeyword(params.q);
   const pageSize = getSearchResultsPageSize();
@@ -31,7 +38,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   return (
     <main className="appShell">
-      <SiteHeader query={validation.keyword} defaultSearchMode="content" />
+      <SiteHeader query={validation.keyword} defaultSearchMode="content" currentUser={user} />
       <Breadcrumbs items={[{ label: "首页", href: "/" }, { label: "全文搜索" }]} />
       {validation.ok ? (
         <ContentSearchClient

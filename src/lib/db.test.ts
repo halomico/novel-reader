@@ -11,7 +11,9 @@ test("removes legacy search tables and the retired content index database", asyn
   const legacyPath = path.join(root, "content-index.db");
   const previousDatabasePath = process.env.DATABASE_PATH;
   const previousSearchPath = process.env.CONTENT_SEARCH_DB_PATH;
+  const previousSettingsPath = process.env.ADMIN_SETTINGS_PATH;
   process.env.DATABASE_PATH = databasePath;
+  process.env.ADMIN_SETTINGS_PATH = path.join(root, "admin-settings.json");
 
   const seed = new DatabaseSync(databasePath);
   seed.exec(`
@@ -67,13 +69,27 @@ test("removes legacy search tables and the retired content index database", asyn
       insertNovel.run(`小说 ${suffix}`, `${suffix}.txt`, `${suffix}.txt`, index * 100, index);
     }
     const { listNovels } = await import("./books");
-    const { listPinnedNovels, movePinnedNovel, pinNovel } = await import("./pinned-novels");
+    const { listPinnedNovels, pinNovel, replacePinnedNovels } = await import("./pinned-novels");
     assert.equal(pinNovel(2), true);
     assert.equal(pinNovel(1), true);
     assert.deepEqual(listPinnedNovels().map((book) => book.id), [2, 1]);
-    assert.equal(movePinnedNovel(1, "up"), true);
+    assert.equal(replacePinnedNovels([1, 2]), 2);
+    assert.deepEqual(listPinnedNovels().map((book) => book.id), [1, 2]);
+    assert.throws(() => replacePinnedNovels([2, 999]), /不存在/);
     assert.deepEqual(listPinnedNovels().map((book) => book.id), [1, 2]);
     assert.deepEqual(listNovels({ pageSize: 5 }).books.slice(0, 2).map((book) => book.id), [1, 2]);
+
+    const { readSiteSettings, writeSiteSettings } = await import("./site-settings");
+    writeSiteSettings({
+      ...readSiteSettings(),
+      randomRecommendationsEnabled: true,
+      randomRecommendationCount: 4,
+      randomRecommendationIntervalMinutes: 60,
+    });
+    const promoted = listNovels({ pageSize: 8 }).books.map((book) => book.id);
+    assert.deepEqual(promoted.slice(0, 2), [1, 2]);
+    assert.equal(new Set(promoted.slice(2, 6)).size, 4);
+    assert.equal(promoted.slice(2, 6).some((id) => id === 1 || id === 2), false);
 
     const randomA = listNovels({ pageSize: 12, randomSeed: "stable-seed" });
     const randomARepeat = listNovels({ pageSize: 12, randomSeed: "stable-seed" });
@@ -105,6 +121,11 @@ test("removes legacy search tables and the retired content index database", asyn
       delete process.env.CONTENT_SEARCH_DB_PATH;
     } else {
       process.env.CONTENT_SEARCH_DB_PATH = previousSearchPath;
+    }
+    if (previousSettingsPath === undefined) {
+      delete process.env.ADMIN_SETTINGS_PATH;
+    } else {
+      process.env.ADMIN_SETTINGS_PATH = previousSettingsPath;
     }
     fs.rmSync(root, { recursive: true, force: true });
   }

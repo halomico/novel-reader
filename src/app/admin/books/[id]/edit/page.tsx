@@ -23,6 +23,7 @@ type AdminBookEditPageProps = {
   searchParams: Promise<{
     notice?: string;
     tone?: "success" | "warning" | "error";
+    returnPath?: string;
   }>;
 };
 
@@ -31,6 +32,16 @@ function groupTags(group: TagGroup): TagWithCount[] {
     return group.tags;
   }
   return group.group ? [group.group] : [];
+}
+
+function safeReturnPath(value: string | undefined, bookId: number): string {
+  if (!value || /[\r\n#\\]/.test(value)) {
+    return "/admin/books";
+  }
+  if (value === "/admin/books" || value.startsWith("/admin/books?")) {
+    return value;
+  }
+  return value === `/books/${bookId}` || value.startsWith(`/books/${bookId}?`) ? value : "/admin/books";
 }
 
 export default async function AdminBookEditPage({ params, searchParams }: AdminBookEditPageProps) {
@@ -49,6 +60,7 @@ export default async function AdminBookEditPage({ params, searchParams }: AdminB
   const groups = listTagGroups({ includeHidden: true });
   const selectedTagIds = new Set(listTagsForNovel(book.id, { includeHidden: true }).map((tag) => tag.id));
   const hotwords = listHotwordsForNovel(book.id);
+  const returnPath = safeReturnPath(query.returnPath, book.id);
 
   return (
     <AdminFrame
@@ -71,6 +83,7 @@ export default async function AdminBookEditPage({ params, searchParams }: AdminB
 
         <form className="adminBookEditorForm" action={saveNovelEditorAction}>
           <input name="bookId" type="hidden" value={book.id} />
+          <input name="returnPath" type="hidden" value={returnPath} />
 
           <section className="adminBookEditorSection">
             <h3><PencilLine size={16} aria-hidden="true" />基本信息</h3>

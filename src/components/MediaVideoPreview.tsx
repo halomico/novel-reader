@@ -20,38 +20,36 @@ export function MediaVideoPreview({
   sourceVersion: number;
   admin?: boolean;
 }) {
-  const [failed, setFailed] = useState(false);
-  const [ready, setReady] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const [frame, setFrame] = useState(0);
   const [isCarouselActive, setIsCarouselActive] = useState(false);
   const frames = mode === "carousel" ? Math.max(2, frameCount) : 1;
 
   useEffect(() => {
-    setFailed(false);
-    setReady(false);
     setFrame(0);
     setIsCarouselActive(false);
   }, [id, mode, frames, singlePercent, sourceVersion]);
 
+  const version = `${mode === "carousel" ? `carousel-${frames}` : `single-${singlePercent}`}-${Math.floor(sourceVersion)}`;
+  const src = `${admin ? "/admin/media" : "/media"}/${id}/thumbnail?frame=${frame}&v=${version}`;
+  const failed = failedSrc === src;
+
   useEffect(() => {
-    if (mode !== "carousel" || !isCarouselActive || failed || !ready) {
+    if (mode !== "carousel" || !isCarouselActive || failed) {
       return;
     }
     const timer = window.setTimeout(() => {
-      setReady(false);
       setFrame((current) => (current + 1) % frames);
     }, Math.max(1, intervalSeconds) * 1_000);
     return () => window.clearTimeout(timer);
-  }, [failed, frames, intervalSeconds, isCarouselActive, mode, ready]);
+  }, [failed, frames, intervalSeconds, isCarouselActive, mode]);
 
   useEffect(() => {
     if (!isCarouselActive && frame !== 0) {
-      setReady(false);
       setFrame(0);
     }
   }, [frame, isCarouselActive]);
 
-  const version = `${mode === "carousel" ? `carousel-${frames}` : `single-${singlePercent}`}-${Math.floor(sourceVersion)}`;
   return (
     <span
       className="mediaVideoPreviewImage"
@@ -63,15 +61,14 @@ export function MediaVideoPreview({
       </span>
       {!failed ? (
         <img
-          className={ready ? "isReady" : undefined}
-          src={`${admin ? "/admin/media" : "/media"}/${id}/thumbnail?frame=${frame}&v=${version}`}
+          key={src}
+          src={src}
           alt=""
           decoding="async"
           height="360"
           loading="lazy"
           width="640"
-          onLoad={() => setReady(true)}
-          onError={() => setFailed(true)}
+          onError={() => setFailedSrc(src)}
         />
       ) : null}
     </span>

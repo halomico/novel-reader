@@ -1,12 +1,22 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { CatalogBookGrid } from "@/components/CatalogBookGrid";
 import { CatalogRandomButton } from "@/components/CatalogRandomButton";
 import { Pagination } from "@/components/Pagination";
 import { SiteHeader } from "@/components/SiteHeader";
 import { recordSearchQuery } from "@/lib/analytics";
+import { getAdminSession } from "@/lib/admin-auth";
 import { listNovels } from "@/lib/books";
-import { getCatalogPageSize, getSiteTitle, isGuestTagLibraryNavEnabled, isRandomCatalogEnabled, isTagLibraryEnabled } from "@/lib/config";
+import {
+  canAccessNovelLibrary,
+  getCatalogPageSize,
+  getSiteTitle,
+  isGuestTagLibraryNavEnabled,
+  isNovelLibraryPublic,
+  isRandomCatalogEnabled,
+  isTagLibraryEnabled,
+} from "@/lib/config";
 import { canonicalPagePath, NO_INDEX_ROBOTS } from "@/lib/seo";
 import { listTagsForNovels } from "@/lib/tags";
 import { getCurrentUser } from "@/lib/user-auth";
@@ -26,6 +36,7 @@ export async function generateMetadata({ searchParams }: NovelsPageProps): Promi
   const pageValue = Number(params.page || 1);
   const page = Number.isInteger(pageValue) && pageValue > 1 ? pageValue : 1;
   const isSearchOrRandom = Boolean(params.q?.trim() || params.random?.trim());
+  const isPublic = isNovelLibraryPublic();
   const canonical = isSearchOrRandom ? "/novels" : canonicalPagePath("/novels", page);
   const title = params.random?.trim()
     ? "随便看看"
@@ -38,7 +49,7 @@ export async function generateMetadata({ searchParams }: NovelsPageProps): Promi
     title,
     description: "浏览并在线阅读站内小说。",
     alternates: { canonical },
-    robots: isSearchOrRandom ? NO_INDEX_ROBOTS : { index: true, follow: true },
+    robots: isPublic && !isSearchOrRandom ? { index: true, follow: true } : NO_INDEX_ROBOTS,
     openGraph: {
       title: page === 1 && !isSearchOrRandom ? getSiteTitle() : title,
       description: "浏览并在线阅读站内小说。",
@@ -49,13 +60,17 @@ export async function generateMetadata({ searchParams }: NovelsPageProps): Promi
 
 export default async function NovelsPage({ searchParams }: NovelsPageProps) {
   const params = await searchParams;
+  const [user, adminSession] = await Promise.all([getCurrentUser(), getAdminSession()]);
+  const authenticated = Boolean(user || adminSession);
+  if (!adminSession && !canAccessNovelLibrary(Boolean(user))) {
+    notFound();
+  }
   const page = Number(params.page || "1");
   const query = params.q || "";
   const pageSize = getCatalogPageSize();
   const randomSeed = query ? "" : params.random || "";
   const result = listNovels({ page, q: query, pageSize, randomSeed });
-  const user = await getCurrentUser();
-  const showTags = isTagLibraryEnabled() && (Boolean(user) || isGuestTagLibraryNavEnabled());
+  const showTags = isTagLibraryEnabled() && (authenticated || isGuestTagLibraryNavEnabled());
   const tagsByNovel = showTags ? listTagsForNovels(result.books.map((book) => book.id)) : new Map();
   if (result.query && !params.page) {
     recordSearchQuery(result.query, "title");

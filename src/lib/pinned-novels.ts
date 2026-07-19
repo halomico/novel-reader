@@ -78,25 +78,37 @@ export function togglePinnedNovel(novelId: number): boolean {
   return pinNovel(novelId);
 }
 
-export function movePinnedNovel(novelId: number, direction: "up" | "down"): boolean {
+export function replacePinnedNovels(novelIds: number[]): number {
+  const ids = Array.from(new Set(novelIds.filter((id) => Number.isInteger(id) && id > 0)));
   const db = getDb();
-  const rows = db
-    .prepare("SELECT novel_id FROM pinned_novels ORDER BY sort_order ASC, novel_id ASC")
-    .all() as Array<{ novel_id: number }>;
-  const ids = rows.map((row) => row.novel_id);
-  const index = ids.indexOf(novelId);
-  const targetIndex = direction === "up" ? index - 1 : index + 1;
-  if (index < 0 || targetIndex < 0 || targetIndex >= ids.length) {
-    return false;
+  if (ids.length) {
+    const placeholders = ids.map(() => "?").join(", ");
+    const existing = db
+      .prepare(`SELECT id FROM novels WHERE id IN (${placeholders})`)
+      .all(...ids) as Array<{ id: number }>;
+    if (existing.length !== ids.length) {
+      throw new Error("置顶列表中包含不存在的小说");
+    }
   }
 
-  [ids[index], ids[targetIndex]] = [ids[targetIndex], ids[index]];
-  const update = db.prepare("UPDATE pinned_novels SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE novel_id = ?");
+  const upsert = db.prepare(
+    `INSERT INTO pinned_novels (novel_id, sort_order)
+     VALUES (?, ?)
+     ON CONFLICT(novel_id) DO UPDATE SET
+       sort_order = excluded.sort_order,
+       updated_at = CURRENT_TIMESTAMP`,
+  );
   db.exec("BEGIN");
   try {
-    ids.forEach((id, orderIndex) => update.run((orderIndex + 1) * 10, id));
+    if (ids.length) {
+      const placeholders = ids.map(() => "?").join(", ");
+      db.prepare(`DELETE FROM pinned_novels WHERE novel_id NOT IN (${placeholders})`).run(...ids);
+    } else {
+      db.prepare("DELETE FROM pinned_novels").run();
+    }
+    ids.forEach((id, index) => upsert.run(id, (index + 1) * 10));
     db.exec("COMMIT");
-    return true;
+    return ids.length;
   } catch (error) {
     db.exec("ROLLBACK");
     throw error;

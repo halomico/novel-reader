@@ -37,6 +37,8 @@ export type SiteSettings = {
   siteIconUpdatedAt: string;
   readerDefaultFontSize: number;
   defaultPalette: ColorPalette;
+  defaultPaletteRandomEnabled: boolean;
+  defaultPaletteRotationMinutes: number;
   adminUsername: string;
   adminPasswordHash: string;
   adminPasswordSha256: string;
@@ -54,6 +56,10 @@ export type SiteSettings = {
   searchResultsPageSize: number;
   adminBookPageSize: number;
   randomCatalogEnabled: boolean;
+  manualPinnedNovelsEnabled: boolean;
+  randomRecommendationsEnabled: boolean;
+  randomRecommendationCount: number;
+  randomRecommendationIntervalMinutes: number;
   noticeDisplaySeconds: number;
   noticeStayVisibleAfterBlur: boolean;
   showProgressBars: boolean;
@@ -69,6 +75,7 @@ export type SiteSettings = {
   userAvatarMaxBytes: number;
   analyticsEnabled: boolean;
   analyticsRealtimeLimit: number;
+  novelLibraryEnabled: boolean;
   videoLibraryEnabled: boolean;
   audioLibraryEnabled: boolean;
   fileLibraryEnabled: boolean;
@@ -122,6 +129,8 @@ const DEFAULT_SETTINGS: SiteSettings = {
   siteIconUpdatedAt: "",
   readerDefaultFontSize: 17,
   defaultPalette: "default",
+  defaultPaletteRandomEnabled: false,
+  defaultPaletteRotationMinutes: 1_440,
   adminUsername: "",
   adminPasswordHash: "",
   adminPasswordSha256: "",
@@ -139,6 +148,10 @@ const DEFAULT_SETTINGS: SiteSettings = {
   searchResultsPageSize: 0,
   adminBookPageSize: 0,
   randomCatalogEnabled: true,
+  manualPinnedNovelsEnabled: true,
+  randomRecommendationsEnabled: false,
+  randomRecommendationCount: 8,
+  randomRecommendationIntervalMinutes: 360,
   noticeDisplaySeconds: 0,
   noticeStayVisibleAfterBlur: false,
   showProgressBars: true,
@@ -154,6 +167,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   userAvatarMaxBytes: 0,
   analyticsEnabled: false,
   analyticsRealtimeLimit: 0,
+  novelLibraryEnabled: true,
   videoLibraryEnabled: true,
   audioLibraryEnabled: true,
   fileLibraryEnabled: true,
@@ -327,6 +341,13 @@ function readSiteSettingsFromDisk(): SiteSettings {
       siteIconUpdatedAt: cleanText(parsed.siteIconUpdatedAt),
       readerDefaultFontSize: cleanInt(parsed.readerDefaultFontSize, DEFAULT_SETTINGS.readerDefaultFontSize, 8, 25),
       defaultPalette: cleanColorPalette(parsed.defaultPalette),
+      defaultPaletteRandomEnabled: cleanBool(parsed.defaultPaletteRandomEnabled, DEFAULT_SETTINGS.defaultPaletteRandomEnabled),
+      defaultPaletteRotationMinutes: cleanInt(
+        parsed.defaultPaletteRotationMinutes,
+        DEFAULT_SETTINGS.defaultPaletteRotationMinutes,
+        1,
+        10_080,
+      ),
       adminUsername: cleanText(parsed.adminUsername),
       adminPasswordHash: cleanText(parsed.adminPasswordHash),
       adminPasswordSha256: cleanText(parsed.adminPasswordSha256),
@@ -349,6 +370,20 @@ function readSiteSettingsFromDisk(): SiteSettings {
       searchResultsPageSize: cleanInt(parsed.searchResultsPageSize, DEFAULT_SETTINGS.searchResultsPageSize, 0, 100),
       adminBookPageSize: cleanInt(parsed.adminBookPageSize, DEFAULT_SETTINGS.adminBookPageSize, 0, 200),
       randomCatalogEnabled: cleanBool(parsed.randomCatalogEnabled, DEFAULT_SETTINGS.randomCatalogEnabled),
+      manualPinnedNovelsEnabled: cleanBool(parsed.manualPinnedNovelsEnabled, DEFAULT_SETTINGS.manualPinnedNovelsEnabled),
+      randomRecommendationsEnabled: cleanBool(parsed.randomRecommendationsEnabled, DEFAULT_SETTINGS.randomRecommendationsEnabled),
+      randomRecommendationCount: cleanInt(
+        parsed.randomRecommendationCount,
+        DEFAULT_SETTINGS.randomRecommendationCount,
+        1,
+        50,
+      ),
+      randomRecommendationIntervalMinutes: cleanInt(
+        parsed.randomRecommendationIntervalMinutes,
+        DEFAULT_SETTINGS.randomRecommendationIntervalMinutes,
+        1,
+        10_080,
+      ),
       noticeDisplaySeconds: cleanInt(parsed.noticeDisplaySeconds, DEFAULT_SETTINGS.noticeDisplaySeconds, 0, 60),
       noticeStayVisibleAfterBlur: cleanBool(parsed.noticeStayVisibleAfterBlur, DEFAULT_SETTINGS.noticeStayVisibleAfterBlur),
       showProgressBars: cleanBool(parsed.showProgressBars, DEFAULT_SETTINGS.showProgressBars),
@@ -379,6 +414,7 @@ function readSiteSettingsFromDisk(): SiteSettings {
       userAvatarMaxBytes: cleanInt(parsed.userAvatarMaxBytes, DEFAULT_SETTINGS.userAvatarMaxBytes, 0, 10 * 1024 ** 2),
       analyticsEnabled: cleanBool(parsed.analyticsEnabled, DEFAULT_SETTINGS.analyticsEnabled),
       analyticsRealtimeLimit: cleanInt(parsed.analyticsRealtimeLimit, DEFAULT_SETTINGS.analyticsRealtimeLimit, 0, 2000),
+      novelLibraryEnabled: cleanBool(parsed.novelLibraryEnabled, DEFAULT_SETTINGS.novelLibraryEnabled),
       videoLibraryEnabled: cleanBool(parsed.videoLibraryEnabled, DEFAULT_SETTINGS.videoLibraryEnabled),
       audioLibraryEnabled: cleanBool(parsed.audioLibraryEnabled, DEFAULT_SETTINGS.audioLibraryEnabled),
       fileLibraryEnabled: cleanBool(parsed.fileLibraryEnabled, DEFAULT_SETTINGS.fileLibraryEnabled),

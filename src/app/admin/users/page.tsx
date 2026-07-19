@@ -30,6 +30,11 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
     q: params.q || "",
     pageSize: 30,
   });
+  const returnParams = new URLSearchParams({ page: String(userList.page) });
+  if (userList.query) {
+    returnParams.set("q", userList.query);
+  }
+  const returnPath = `/admin/users?${returnParams.toString()}`;
 
   return (
     <AdminFrame active="users" notice={params.notice} tone={params.tone}>
@@ -52,6 +57,7 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
             <ChevronDown size={16} aria-hidden="true" />
           </summary>
           <form className="adminCreateUserForm" action={createAdminUserAction}>
+            <input name="returnPath" type="hidden" value={returnPath} />
             <label>
               <span>用户名</span>
               <input name="username" minLength={3} maxLength={32} required />
@@ -86,7 +92,7 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
           </span>
         </div>
 
-        <AdminUserTable users={userList.users} />
+        <AdminUserTable users={userList.users} returnPath={returnPath} />
         <Pagination page={userList.page} totalPages={userList.totalPages} query={userList.query} basePath="/admin/users" />
       </article>
     </AdminFrame>

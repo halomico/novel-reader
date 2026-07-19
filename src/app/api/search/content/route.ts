@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  canAccessNovelLibrary,
   getFrontendSearchConcurrencyLimit,
   getSearchRateLimitRules,
   getUserSearchRateLimitPerMinute,
   shouldShowProgressBars,
 } from "@/lib/config";
 import { getClientIp } from "@/lib/admin-access";
+import { getAdminSession } from "@/lib/admin-auth";
 import {
   cancelContentJob,
   countActiveContentJobs,
@@ -26,6 +28,12 @@ function jsonError(message: string, status: number) {
   return NextResponse.json({ ok: false, message }, { status });
 }
 
+async function getSearchAccess(request: NextRequest) {
+  const user = getCurrentUserFromRequest(request);
+  const adminSession = user ? null : await getAdminSession();
+  return { user, allowed: Boolean(adminSession) || canAccessNovelLibrary(Boolean(user)) };
+}
+
 export async function POST(request: NextRequest) {
   let body: { q?: unknown } = {};
   try {
@@ -39,7 +47,10 @@ export async function POST(request: NextRequest) {
     return jsonError(validation.message, 400);
   }
 
-  const user = getCurrentUserFromRequest(request);
+  const { user, allowed } = await getSearchAccess(request);
+  if (!allowed) {
+    return jsonError("搜索不可用", 404);
+  }
   const ipLimit = checkIpRateLimit({
     category: "search",
     ip: getClientIp(request.headers),
@@ -72,6 +83,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  if (!(await getSearchAccess(request)).allowed) {
+    return jsonError("搜索不可用", 404);
+  }
   const id = request.nextUrl.searchParams.get("id") || "";
   const job = getContentJob(id);
   if (!job || job.kind !== "search") {
@@ -82,6 +96,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  if (!(await getSearchAccess(request)).allowed) {
+    return jsonError("搜索不可用", 404);
+  }
   const id = request.nextUrl.searchParams.get("id") || "";
   const job = cancelContentJob(id);
   if (!job || job.kind !== "search") {

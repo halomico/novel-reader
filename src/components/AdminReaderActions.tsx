@@ -18,7 +18,11 @@ export function AdminReaderActions({ bookId, title, isPinned }: { bookId: number
           <Pin size={16} fill={isPinned ? "currentColor" : "none"} aria-hidden="true" />
         </button>
       </form>
-      <Link href={`/admin/books/${bookId}/edit`} aria-label={`编辑 ${title}`} title="编辑小说">
+      <Link
+        href={`/admin/books/${bookId}/edit?returnPath=${encodeURIComponent(`/books/${bookId}`)}`}
+        aria-label={`编辑 ${title}`}
+        title="编辑小说"
+      >
         <Pencil size={16} aria-hidden="true" />
       </Link>
       <form
@@ -30,6 +34,7 @@ export function AdminReaderActions({ bookId, title, isPinned }: { bookId: number
         }}
       >
         <input name="bookIds" type="hidden" value={bookId} />
+        <input name="returnPath" type="hidden" value="/admin/books" />
         <button className="adminReaderDeleteButton" type="submit" aria-label={`删除 ${title}`} title="删除小说">
           <Trash2 size={16} aria-hidden="true" />
         </button>

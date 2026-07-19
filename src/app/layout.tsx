@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import Script from "next/script";
+import { DefaultPaletteRotation } from "@/components/DefaultPaletteRotation";
 import { ThemeScript } from "@/components/ThemeScript";
 import { getReaderDefaultFontSize, getSiteTitle } from "@/lib/config";
 import { getSiteUrl, getUmamiConfig } from "@/lib/seo";
 import { getSiteIconHref } from "@/lib/site-icon";
 import { readSiteSettings } from "@/lib/site-settings";
+import { resolveDefaultPalette } from "@/lib/ui-preferences";
 import "./globals.css";
 
 export const dynamic = "force-dynamic";
@@ -39,15 +41,28 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   const settings = readSiteSettings();
   const defaultFontSize = getReaderDefaultFontSize();
   const umami = getUmamiConfig();
+  const defaultPalette = resolveDefaultPalette(
+    settings.defaultPalette,
+    settings.defaultPaletteRandomEnabled,
+    settings.defaultPaletteRotationMinutes,
+  );
 
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
-        <ThemeScript defaultTheme={settings.adminTheme} defaultFontSize={defaultFontSize} defaultPalette={settings.defaultPalette} />
+        <ThemeScript defaultTheme={settings.adminTheme} defaultFontSize={defaultFontSize} defaultPalette={defaultPalette} />
       </head>
       <body>
+        <DefaultPaletteRotation
+          fallback={settings.defaultPalette}
+          enabled={settings.defaultPaletteRandomEnabled}
+          intervalMinutes={settings.defaultPaletteRotationMinutes}
+        />
         {umami ? (
           <Script src={umami.scriptUrl} data-website-id={umami.websiteId} strategy="afterInteractive" />
+        ) : null}
+        {umami?.recorderUrl ? (
+          <Script src={umami.recorderUrl} data-website-id={umami.websiteId} strategy="lazyOnload" />
         ) : null}
         {children}
       </body>

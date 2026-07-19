@@ -10,6 +10,7 @@ import {
   isAudioLibraryEnabled,
   isFileLibraryEnabled,
   isGuestTagLibraryNavEnabled,
+  isNovelLibraryEnabled,
   isUserLoginEnabled,
   isUserRegistrationEnabled,
   isTagLibraryEnabled,
@@ -51,7 +52,7 @@ export async function SiteHeader({
     isAudioLibraryEnabled() ? "audio" : null,
     isFileLibraryEnabled() ? "file" : null,
   ].filter((kind): kind is "video" | "audio" | "file" => kind !== null);
-  const showLibraryNav = Boolean(user) || isGuestLibraryNavEnabled();
+  const showLibraryNav = isNovelLibraryEnabled() && (Boolean(user) || isGuestLibraryNavEnabled());
   const showTagNav = isTagLibraryEnabled() && (Boolean(user) || isGuestTagLibraryNavEnabled());
   const mediaKinds = user
     ? enabledMediaKinds
@@ -74,15 +75,17 @@ export async function SiteHeader({
       </Link>
       {showPrimaryNav ? <HeaderPrimaryNav mediaKinds={mediaKinds} showLibrary={showLibraryNav} showTags={showTagNav} /> : null}
       {showTools ? (
-        <div className="headerTools">
-          <HeaderSearch
-            query={query}
-            defaultMode={defaultSearchMode}
-            defaultExpanded={defaultSearchExpanded}
-            showCurrentSearch={showCurrentSearch}
-            noticeDisplaySeconds={noticeDisplaySeconds}
-            noticeStayVisibleAfterBlur={noticeStayVisibleAfterBlur}
-          />
+        <div className={showLibraryNav ? "headerTools" : "headerTools hasNoSearch"}>
+          {showLibraryNav ? (
+            <HeaderSearch
+              query={query}
+              defaultMode={defaultSearchMode}
+              defaultExpanded={defaultSearchExpanded}
+              showCurrentSearch={showCurrentSearch}
+              noticeDisplaySeconds={noticeDisplaySeconds}
+              noticeStayVisibleAfterBlur={noticeStayVisibleAfterBlur}
+            />
+          ) : null}
           <div className="headerActions">
             <ThemeToggle />
             <HeaderUserMenu

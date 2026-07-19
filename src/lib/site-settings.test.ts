@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { canAccessNovelLibrary, isNovelLibraryPublic } from "./config";
 import { readSiteSettings, writeSiteSettings } from "./site-settings";
 
 test("atomically replaces an existing settings file", () => {
@@ -12,6 +13,7 @@ test("atomically replaces an existing settings file", () => {
 
   try {
     const defaults = readSiteSettings();
+    assert.equal(defaults.novelLibraryEnabled, true);
     assert.equal(defaults.videoLibraryEnabled, true);
     assert.equal(defaults.audioLibraryEnabled, true);
     assert.equal(defaults.fileLibraryEnabled, true);
@@ -21,6 +23,9 @@ test("atomically replaces an existing settings file", () => {
     assert.equal(defaults.guestHotwordLinksEnabled, false);
     assert.equal(defaults.randomCatalogEnabled, true);
     assert.equal(defaults.defaultPalette, "default");
+    assert.equal(defaults.defaultPaletteRandomEnabled, false);
+    assert.equal(defaults.manualPinnedNovelsEnabled, true);
+    assert.equal(defaults.randomRecommendationsEnabled, false);
     writeSiteSettings({ ...defaults, siteName: "第一次" });
     writeSiteSettings({ ...readSiteSettings(), siteName: "第二次" });
     assert.equal(readSiteSettings().siteName, "第二次");
@@ -65,6 +70,68 @@ test("clamps the configured reader font size to 8 through 25", () => {
     assert.equal(readSiteSettings().readerDefaultFontSize, 25);
     writeSiteSettings({ ...readSiteSettings(), readerDefaultFontSize: 5 });
     assert.equal(readSiteSettings().readerDefaultFontSize, 8);
+  } finally {
+    if (previousPath === undefined) {
+      delete process.env.ADMIN_SETTINGS_PATH;
+    } else {
+      process.env.ADMIN_SETTINGS_PATH = previousPath;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("normalizes palette rotation and random recommendation settings", () => {
+  const previousPath = process.env.ADMIN_SETTINGS_PATH;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-random-settings-"));
+  process.env.ADMIN_SETTINGS_PATH = path.join(tempDir, "admin-settings.json");
+
+  try {
+    writeSiteSettings({
+      ...readSiteSettings(),
+      defaultPaletteRandomEnabled: true,
+      defaultPaletteRotationMinutes: 0,
+      manualPinnedNovelsEnabled: false,
+      randomRecommendationsEnabled: true,
+      randomRecommendationCount: 500,
+      randomRecommendationIntervalMinutes: 20_000,
+    });
+    const settings = readSiteSettings();
+    assert.equal(settings.defaultPaletteRandomEnabled, true);
+    assert.equal(settings.defaultPaletteRotationMinutes, 1);
+    assert.equal(settings.manualPinnedNovelsEnabled, false);
+    assert.equal(settings.randomRecommendationsEnabled, true);
+    assert.equal(settings.randomRecommendationCount, 50);
+    assert.equal(settings.randomRecommendationIntervalMinutes, 10_080);
+  } finally {
+    if (previousPath === undefined) {
+      delete process.env.ADMIN_SETTINGS_PATH;
+    } else {
+      process.env.ADMIN_SETTINGS_PATH = previousPath;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("applies disabled, signed-in, and public novel access modes", () => {
+  const previousPath = process.env.ADMIN_SETTINGS_PATH;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-access-mode-"));
+  process.env.ADMIN_SETTINGS_PATH = path.join(tempDir, "admin-settings.json");
+
+  try {
+    const defaults = readSiteSettings();
+    writeSiteSettings({ ...defaults, novelLibraryEnabled: false, guestLibraryNavEnabled: true });
+    assert.equal(canAccessNovelLibrary(false), false);
+    assert.equal(canAccessNovelLibrary(true), false);
+    assert.equal(isNovelLibraryPublic(), false);
+
+    writeSiteSettings({ ...readSiteSettings(), novelLibraryEnabled: true, guestLibraryNavEnabled: false });
+    assert.equal(canAccessNovelLibrary(false), false);
+    assert.equal(canAccessNovelLibrary(true), true);
+    assert.equal(isNovelLibraryPublic(), false);
+
+    writeSiteSettings({ ...readSiteSettings(), guestLibraryNavEnabled: true });
+    assert.equal(canAccessNovelLibrary(false), true);
+    assert.equal(isNovelLibraryPublic(), true);
   } finally {
     if (previousPath === undefined) {
       delete process.env.ADMIN_SETTINGS_PATH;

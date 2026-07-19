@@ -1,6 +1,6 @@
 "use client";
 
-import { Monitor, Moon, Sun } from "lucide-react";
+import { Dices, Monitor, Moon, Sun } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -163,6 +163,14 @@ export function SettingsPanel({
     applySettings(theme, fontSize, uiMode, value, showReaderTags, showReaderHotwords);
   }
 
+  function chooseRandomPalette() {
+    const choices = COLOR_PALETTES.filter((item) => item.value !== palette);
+    const next = choices[Math.floor(Math.random() * choices.length)];
+    if (next) {
+      changePalette(next.value);
+    }
+  }
+
   function changeReaderTags(visible: boolean) {
     setShowReaderTags(visible);
     writeLocalSetting(READER_TAGS_STORAGE_KEY, visible ? "show" : "hide");
@@ -225,7 +233,18 @@ export function SettingsPanel({
             <div className="settingRow settingPaletteRow">
               <div className="settingRowTitle">
                 <span>配色</span>
-                <strong>{getColorPalette(palette).label}</strong>
+                <span className="settingPaletteValue">
+                  <strong>{getColorPalette(palette).label}</strong>
+                  <button
+                    className="settingPaletteRandomButton"
+                    type="button"
+                    onClick={chooseRandomPalette}
+                    aria-label="随机选择配色"
+                    title="随机选择配色"
+                  >
+                    <Dices size={16} aria-hidden="true" />
+                  </button>
+                </span>
               </div>
               <div className="paletteOptions" role="group" aria-label="配色风格">
                 {COLOR_PALETTES.map((item) => (

@@ -19,6 +19,49 @@ test("Umami stays disabled unless both safe values are configured", () => {
   );
   assert.deepEqual(
     getUmamiConfig({ UMAMI_WEBSITE_ID: "site-id", SCRIPT_URL: "https://stats.example.com/script.js" }),
-    { websiteId: "site-id", scriptUrl: "https://stats.example.com/script.js" },
+    { websiteId: "site-id", scriptUrl: "https://stats.example.com/script.js", recorderUrl: null },
+  );
+});
+
+test("Umami recorder uses an explicit safe URL or derives recorder.js when enabled", () => {
+  assert.deepEqual(
+    getUmamiConfig({
+      UMAMI_WEBSITE_ID: "site-id",
+      SCRIPT_URL: "https://stats.example.com/app/script.js?token=abc",
+      UMAMI_RECORDER_ENABLED: "true",
+    }),
+    {
+      websiteId: "site-id",
+      scriptUrl: "https://stats.example.com/app/script.js?token=abc",
+      recorderUrl: "https://stats.example.com/app/recorder.js?token=abc",
+    },
+  );
+  assert.deepEqual(
+    getUmamiConfig({
+      UMAMI_WEBSITE_ID: "site-id",
+      SCRIPT_URL: "https://stats.example.com/custom.js",
+      UMAMI_RECORDER_URL: "https://replay.example.com/recorder.js",
+    }),
+    {
+      websiteId: "site-id",
+      scriptUrl: "https://stats.example.com/custom.js",
+      recorderUrl: "https://replay.example.com/recorder.js",
+    },
+  );
+  assert.equal(
+    getUmamiConfig({
+      UMAMI_WEBSITE_ID: "site-id",
+      SCRIPT_URL: "https://stats.example.com/custom.js",
+      UMAMI_RECORDER_ENABLED: "true",
+    })?.recorderUrl,
+    null,
+  );
+  assert.equal(
+    getUmamiConfig({
+      UMAMI_WEBSITE_ID: "site-id",
+      SCRIPT_URL: "https://stats.example.com/script.js",
+      UMAMI_RECORDER_URL: "javascript:alert(1)",
+    })?.recorderUrl,
+    null,
   );
 });

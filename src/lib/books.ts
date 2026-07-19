@@ -1,7 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { getLibraryDir } from "./config";
+import { getCatalogFeatureSettings, getLibraryDir } from "./config";
 import { getDb } from "./db";
+import { sampleNovelIds } from "./novel-id-sampler";
 import { createNovelSegments, NovelSegment } from "./segments";
 import { parseSearchQuery, type ParsedSearchQuery, type SearchExpression } from "./search-query";
 import { decodeNovelBuffer } from "./text";
@@ -73,66 +74,75 @@ export function buildTitleSearchSql(query: ParsedSearchQuery): { whereSql: strin
   return { whereSql: clauses.join(" AND "), values: [...required.map((item) => item.value), ...expression.values] };
 }
 
-function seededRandom(seed: string): () => number {
-  let state = 2166136261;
-  for (let index = 0; index < seed.length; index += 1) {
-    state ^= seed.charCodeAt(index);
-    state = Math.imul(state, 16777619);
-  }
-  return () => {
-    state += 0x6d2b79f5;
-    let value = state;
-    value = Math.imul(value ^ (value >>> 15), value | 1);
-    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function listRandomNovels(pageSize: number, seed: string, totalBooks: number): Novel[] {
-  if (totalBooks <= 0) {
+function listRandomNovels(pageSize: number, seed: string): Novel[] {
+  const db = getDb();
+  const selectedIds = sampleNovelIds(db, pageSize, seed);
+  if (!selectedIds.length) {
     return [];
   }
+  const placeholders = selectedIds.map(() => "?").join(", ");
+  const rows = db
+    .prepare(
+      `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
+       FROM novels
+       WHERE id IN (${placeholders})`,
+    )
+    .all(...selectedIds) as Novel[];
+  const byId = new Map(rows.map((book) => [book.id, book]));
+  return selectedIds.flatMap((id) => {
+    const book = byId.get(id);
+    return book ? [book] : [];
+  });
+}
+
+function listCatalogNovels(pageSize: number, offset: number): Novel[] {
   const db = getDb();
-  const bounds = db.prepare("SELECT MIN(id) AS min_id, MAX(id) AS max_id FROM novels").get() as {
-    min_id: number;
-    max_id: number;
-  };
-  const target = Math.min(pageSize, totalBooks);
-  const random = seededRandom(seed);
-  const selectAtOrAfter = db.prepare(
-    `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
-     FROM novels
-     WHERE id >= ?
-     ORDER BY id ASC
-     LIMIT 1`,
-  );
-  const selected = new Map<number, Novel>();
-  const attempts = Math.max(32, target * 8);
-  for (let attempt = 0; attempt < attempts && selected.size < target; attempt += 1) {
-    const pivot = bounds.min_id + Math.floor(random() * (bounds.max_id - bounds.min_id + 1));
-    const book = selectAtOrAfter.get(pivot) as Novel | undefined;
-    if (book) {
-      selected.set(book.id, book);
-    }
-  }
-
-  if (selected.size < target) {
-    const excludedIds = Array.from(selected.keys());
-    const placeholders = excludedIds.map(() => "?").join(", ");
-    const where = placeholders ? `WHERE id NOT IN (${placeholders})` : "";
-    const remaining = db
-      .prepare(
-        `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
-         FROM novels
-         ${where}
-         ORDER BY id ASC
-         LIMIT ?`,
+  const settings = getCatalogFeatureSettings();
+  const pinnedIds = settings.manualPinnedEnabled && settings.randomRecommendationsEnabled
+    ? new Set((db.prepare("SELECT novel_id FROM pinned_novels").all() as Array<{ novel_id: number }>).map((row) => row.novel_id))
+    : new Set<number>();
+  const intervalMs = settings.randomRecommendationIntervalMinutes * 60_000;
+  const recommendationIds = settings.randomRecommendationsEnabled
+    ? sampleNovelIds(
+        db,
+        settings.randomRecommendationCount,
+        `catalog-recommendations:${Math.floor(Date.now() / intervalMs)}`,
+        pinnedIds,
       )
-      .all(...excludedIds, target - selected.size) as Novel[];
-    remaining.forEach((book) => selected.set(book.id, book));
-  }
+    : [];
+  const recommendationValues = recommendationIds.length
+    ? `VALUES ${recommendationIds.map(() => "(?, ?)").join(", ")}`
+    : "SELECT NULL, NULL WHERE 0";
+  const recommendationParams = recommendationIds.flatMap((id, index) => [id, index]);
+  const pinnedJoin = settings.manualPinnedEnabled
+    ? "LEFT JOIN pinned_novels p ON p.novel_id = n.id"
+    : "";
+  const pinnedPriority = settings.manualPinnedEnabled
+    ? "WHEN p.novel_id IS NOT NULL THEN 0"
+    : "";
+  const recommendationPriority = settings.manualPinnedEnabled ? 1 : 0;
+  const defaultPriority = recommendationPriority + 1;
+  const pinnedOrder = settings.manualPinnedEnabled ? "p.sort_order ASC," : "";
 
-  return Array.from(selected.values());
+  return db
+    .prepare(
+      `WITH recommended(novel_id, sort_order) AS (${recommendationValues})
+       SELECT n.id, n.title, n.file_name, n.relative_path, n.content_hash, n.size_bytes, n.mtime_ms, n.word_count, n.visit_count, n.last_accessed_at, n.last_accessed_ip, n.last_accessed_user_agent, n.created_at, n.updated_at
+       FROM novels n
+       ${pinnedJoin}
+       LEFT JOIN recommended r ON r.novel_id = n.id
+       ORDER BY CASE
+         ${pinnedPriority}
+         WHEN r.novel_id IS NOT NULL THEN ${recommendationPriority}
+         ELSE ${defaultPriority}
+       END ASC,
+       ${pinnedOrder}
+       r.sort_order ASC,
+       n.title COLLATE NOCASE ASC,
+       n.id ASC
+       LIMIT ? OFFSET ?`,
+    )
+    .all(...recommendationParams, pageSize, offset) as Novel[];
 }
 
 export function listNovels(params: { page?: number; q?: string; pageSize?: number; randomSeed?: string }): NovelListResult {
@@ -191,7 +201,7 @@ export function listNovels(params: { page?: number; q?: string; pageSize?: numbe
   const randomSeed = (params.randomSeed || "").trim().slice(0, 64);
   if (randomSeed) {
     return {
-      books: listRandomNovels(pageSize, randomSeed, totalBooks.count),
+      books: listRandomNovels(pageSize, randomSeed),
       page: 1,
       pageSize,
       totalBooks: totalBooks.count,
@@ -203,15 +213,7 @@ export function listNovels(params: { page?: number; q?: string; pageSize?: numbe
   const page = normalizePage(params.page || 1, totalPages);
   const offset = (page - 1) * pageSize;
 
-  const books = db
-    .prepare(
-      `SELECT n.id, n.title, n.file_name, n.relative_path, n.content_hash, n.size_bytes, n.mtime_ms, n.word_count, n.visit_count, n.last_accessed_at, n.last_accessed_ip, n.last_accessed_user_agent, n.created_at, n.updated_at
-       FROM novels n
-       LEFT JOIN pinned_novels p ON p.novel_id = n.id
-       ORDER BY CASE WHEN p.novel_id IS NULL THEN 1 ELSE 0 END ASC, p.sort_order ASC, n.title COLLATE NOCASE ASC, n.id ASC
-       LIMIT ? OFFSET ?`,
-    )
-    .all(pageSize, offset) as Novel[];
+  const books = listCatalogNovels(pageSize, offset);
 
   return {
     books,

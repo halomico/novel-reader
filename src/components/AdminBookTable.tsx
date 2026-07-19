@@ -16,11 +16,13 @@ import {
   Pin,
   SlidersHorizontal,
   Trash2,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
 import { deleteNovelsAction, togglePinnedNovelAction } from "@/app/admin/actions";
 import { LocalDateTime } from "@/components/LocalDateTime";
+import { usePersistentSelection } from "@/components/usePersistentSelection";
 import type { AdminBookSortDir, AdminBookSortKey } from "@/lib/admin-books";
 import type { Novel } from "@/lib/books";
 
@@ -176,6 +178,7 @@ export function AdminBookTable({
   sort,
   dir,
   pinnedIds,
+  returnPath,
 }: {
   books: Novel[];
   page: number;
@@ -185,8 +188,9 @@ export function AdminBookTable({
   sort: AdminBookSortKey;
   dir: AdminBookSortDir;
   pinnedIds: number[];
+  returnPath: string;
 }) {
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const { selectedIds, toggleOne, togglePage, clearSelection } = usePersistentSelection("novel-reader-admin-book-selection");
   const [columns, setColumns] = useState<BookColumn[]>(DEFAULT_BOOK_COLUMNS);
   const [columnWidths, setColumnWidths] = useState<Record<BookColumnKey, number>>(DEFAULT_BOOK_COLUMN_WIDTHS);
   const [textMode, setTextMode] = useState<BookTextMode>("full");
@@ -200,10 +204,6 @@ export function AdminBookTable({
   const pinnedSet = new Set(pinnedIds);
   const tableMinWidth =
     BOOK_SELECT_COLUMN_WIDTH + visibleColumns.reduce((total, column) => total + (columnWidths[column.key] || DEFAULT_BOOK_COLUMN_WIDTHS[column.key]), 0);
-
-  useEffect(() => {
-    setSelectedIds([]);
-  }, [books]);
 
   useEffect(() => {
     try {
@@ -257,11 +257,7 @@ export function AdminBookTable({
   }, [resizingColumn]);
 
   function toggleAll() {
-    setSelectedIds(isAllSelected ? [] : visibleIds);
-  }
-
-  function toggleOne(id: number) {
-    setSelectedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+    togglePage(visibleIds);
   }
 
   function toggleColumn(key: BookColumnKey) {
@@ -332,7 +328,12 @@ export function AdminBookTable({
           <Link className="adminBookReadLink" href={`/books/${book.id}`} title={`阅读 ${book.title}`}>
             {book.title}
           </Link>
-          <Link className="adminBookEditLink" href={`/admin/books/${book.id}/edit`} aria-label={`编辑 ${book.title}`} title="编辑小说">
+          <Link
+            className="adminBookEditLink"
+            href={`/admin/books/${book.id}/edit?returnPath=${encodeURIComponent(returnPath)}`}
+            aria-label={`编辑 ${book.title}`}
+            title="编辑小说"
+          >
             <Pencil size={15} aria-hidden="true" />
           </Link>
           <button
@@ -377,7 +378,13 @@ export function AdminBookTable({
   }
 
   return (
-    <form className={resizingColumn ? "adminBookTableForm isResizing" : "adminBookTableForm"} action={deleteNovelsAction}>
+    <form
+      className={resizingColumn ? "adminBookTableForm isResizing" : "adminBookTableForm"}
+      action={deleteNovelsAction}
+      onSubmit={clearSelection}
+    >
+      <input name="returnPath" type="hidden" value={returnPath} />
+      {selectedIds.map((id) => <input name="bookIds" type="hidden" value={id} key={id} />)}
       <div className="adminTableToolbar adminBookTableToolbar">
         <span>共 {totalBooks} 本小说</span>
         <div className="tableColumnControl">
@@ -456,8 +463,6 @@ export function AdminBookTable({
                     <input
                       className="adminCheckbox"
                       type="checkbox"
-                      name="bookIds"
-                      value={book.id}
                       checked={selectedIds.includes(book.id)}
                       onChange={() => toggleOne(book.id)}
                       aria-label={`选择 ${book.title}`}
@@ -486,7 +491,9 @@ export function AdminBookTable({
         <div className="adminBulkActionRow">
           <Link
             className={selectedIds.length ? "adminIconTextButton" : "adminIconTextButton isDisabled"}
-            href={selectedIds.length ? `/admin/books/batch?ids=${selectedIds.join(",")}` : "/admin/books"}
+            href={selectedIds.length
+              ? `/admin/books/batch?ids=${selectedIds.slice(0, 100).join(",")}&returnPath=${encodeURIComponent(returnPath)}`
+              : returnPath}
             aria-disabled={!selectedIds.length}
             onClick={(event) => {
               if (!selectedIds.length) event.preventDefault();
@@ -495,9 +502,14 @@ export function AdminBookTable({
             <ListChecks size={16} aria-hidden="true" />
             批量编辑
           </Link>
+          {selectedIds.length ? (
+            <button className="adminTableIconButton" type="button" onClick={clearSelection} aria-label="清除全部选择" title="清除选择">
+              <X size={16} aria-hidden="true" />
+            </button>
+          ) : null}
           <button className="adminDangerButton" type="submit" disabled={selectedIds.length === 0}>
             <Trash2 size={17} aria-hidden="true" />
-            删除所选
+            删除所选{selectedIds.length ? ` (${selectedIds.length})` : ""}
           </button>
         </div>
         <span>

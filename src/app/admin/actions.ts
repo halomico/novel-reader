@@ -37,6 +37,7 @@ import {
   renameMediaFolder,
   setVideoCategoryForAssets,
   syncMediaLibrary,
+  type MediaAsset,
   type MediaKind,
   updateVideoCategory,
   updateMediaAsset,
@@ -45,7 +46,7 @@ import { scheduleMissingMediaPreparation } from "@/lib/media-maintenance";
 import { clearMediaThumbnails } from "@/lib/media-thumbnail";
 import { deleteNovelIds, renameNovelFile, updateNovelFile } from "@/lib/novel-files";
 import { hashPassword } from "@/lib/password";
-import { movePinnedNovel, togglePinnedNovel } from "@/lib/pinned-novels";
+import { replacePinnedNovels, togglePinnedNovel } from "@/lib/pinned-novels";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { validateSearchKeyword } from "@/lib/search";
 import { detectSiteIconFormat, MAX_SITE_ICON_BYTES, removeSiteIconFile, writeSiteIconFile } from "@/lib/site-icon";
@@ -77,6 +78,21 @@ import {
 function adminNotice(message: string, tone: "success" | "warning" | "error" = "success", path = "/admin/books"): never {
   const separator = path.includes("?") ? "&" : "?";
   redirect(`${path}${separator}notice=${encodeURIComponent(message)}&tone=${tone}`);
+}
+
+function listReturnPath(formData: FormData, basePath: "/admin/books" | "/admin/users"): string {
+  const requested = String(formData.get("returnPath") || "");
+  return requested === basePath || (requested.startsWith(`${basePath}?`) && !/[\r\n#\\]/.test(requested))
+    ? requested
+    : basePath;
+}
+
+function novelEditorReturnPath(formData: FormData, bookId: number): string {
+  const requested = String(formData.get("returnPath") || "");
+  if (requested === `/books/${bookId}` || requested.startsWith(`/books/${bookId}?`)) {
+    return /[\r\n#\\]/.test(requested) ? "/admin/books" : requested;
+  }
+  return listReturnPath(formData, "/admin/books");
 }
 
 function mediaReturnPath(formData: FormData): string {
@@ -112,7 +128,7 @@ function loginNotice(message: string, username = ""): never {
   redirect(`/admin/login?${params.toString()}`);
 }
 
-async function requireAdminRequest(path = "/admin/books") {
+async function requireAdminRequest(path = "/admin/books", checkOperationRate = true) {
   const headerStore = await headers();
   const access = getAdminAccessState(headerStore);
   if (!access.allowed) {
@@ -124,9 +140,11 @@ async function requireAdminRequest(path = "/admin/books") {
     redirect("/admin/login");
   }
 
-  const limitedMessage = checkAdminOperationLimit(access.clientIp, path);
-  if (limitedMessage) {
-    adminNotice(limitedMessage, "warning", path);
+  if (checkOperationRate) {
+    const limitedMessage = checkAdminOperationLimit(access.clientIp, path);
+    if (limitedMessage) {
+      adminNotice(limitedMessage, "warning", path);
+    }
   }
 
   return session;
@@ -297,14 +315,15 @@ export async function deleteSiteIconAction() {
 }
 
 export async function deleteNovelsAction(formData: FormData) {
-  await requireAdminRequest();
+  const returnPath = listReturnPath(formData, "/admin/books");
+  await requireAdminRequest(returnPath);
   const ids = formData
     .getAll("bookIds")
     .map((value) => Number(value))
     .filter((value) => Number.isInteger(value) && value > 0);
 
   if (ids.length === 0) {
-    adminNotice("请选择要删除的小说", "warning");
+    adminNotice("请选择要删除的小说", "warning", returnPath);
   }
 
   const result = deleteNovelIds(ids);
@@ -314,9 +333,10 @@ export async function deleteNovelsAction(formData: FormData) {
     adminNotice(
       `已删除 ${result.deleted} 条记录，但有 ${result.fileDeleteFailures.length} 个原文件未能删除，下次扫描可能重新出现`,
       "warning",
+      returnPath,
     );
   }
-  adminNotice(`已删除 ${result.deleted} 本小说`, result.deleted ? "success" : "warning");
+  adminNotice(`已删除 ${result.deleted} 本小说`, result.deleted ? "success" : "warning", returnPath);
 }
 
 export async function togglePinnedNovelAction(formData: FormData) {
@@ -331,16 +351,21 @@ export async function togglePinnedNovelAction(formData: FormData) {
   revalidatePath("/admin/books");
 }
 
-export async function movePinnedNovelAction(formData: FormData) {
-  await requireAdminRequest("/admin/books");
-  const novelId = Number(formData.get("bookId"));
-  const direction = formData.get("direction") === "down" ? "down" : "up";
-  if (!Number.isInteger(novelId) || novelId < 1) {
-    return;
+export async function savePinnedNovelsAction(formData: FormData) {
+  const returnPath = listReturnPath(formData, "/admin/books");
+  await requireAdminRequest(returnPath);
+  const novelIds = formData
+    .getAll("bookIds")
+    .map(Number)
+    .filter((id) => Number.isInteger(id) && id > 0);
+  try {
+    replacePinnedNovels(novelIds);
+  } catch (error) {
+    adminNotice(error instanceof Error ? error.message : "置顶列表保存失败", "warning", returnPath);
   }
-  movePinnedNovel(novelId, direction);
   revalidatePath("/");
   revalidatePath("/admin/books");
+  adminNotice("置顶列表已保存", "success", returnPath);
 }
 
 function tagOperationMessage(error: unknown): string {
@@ -433,8 +458,15 @@ export async function saveNovelTaggingAction(formData: FormData) {
 
 export async function saveNovelEditorAction(formData: FormData) {
   const bookId = Number(formData.get("bookId") || 0);
-  const returnPath = Number.isInteger(bookId) && bookId > 0 ? `/admin/books/${bookId}/edit` : "/admin/books";
-  await requireAdminRequest(returnPath);
+  const successPath = Number.isInteger(bookId) && bookId > 0 ? novelEditorReturnPath(formData, bookId) : "/admin/books";
+  const editorParams = new URLSearchParams();
+  if (successPath !== "/admin/books") {
+    editorParams.set("returnPath", successPath);
+  }
+  const editorPath = Number.isInteger(bookId) && bookId > 0
+    ? `/admin/books/${bookId}/edit${editorParams.size ? `?${editorParams.toString()}` : ""}`
+    : "/admin/books";
+  await requireAdminRequest(editorPath);
   if (!Number.isInteger(bookId) || bookId < 1) {
     adminNotice("小说不存在", "warning", "/admin/books");
   }
@@ -449,7 +481,7 @@ export async function saveNovelEditorAction(formData: FormData) {
     for (const term of hotwords) {
       const validation = validateSearchKeyword(term);
       if (!validation.ok) {
-        adminNotice(`热词“${term}”：${validation.message}`, "warning", returnPath);
+        adminNotice(`热词“${term}”：${validation.message}`, "warning", editorPath);
       }
     }
     if (formData.has("content")) {
@@ -460,7 +492,7 @@ export async function saveNovelEditorAction(formData: FormData) {
     setNovelTags(bookId, tagIds);
     setNovelHotwords(bookId, hotwords);
   } catch (error) {
-    adminNotice(error instanceof Error ? error.message : "小说保存失败，请检查小说目录权限", "warning", returnPath);
+    adminNotice(error instanceof Error ? error.message : "小说保存失败，请检查小说目录权限", "warning", editorPath);
   }
 
   revalidatePath("/");
@@ -468,8 +500,8 @@ export async function saveNovelEditorAction(formData: FormData) {
   revalidatePath(`/books/${bookId}`);
   revalidatePath("/tags");
   revalidatePath("/admin/books");
-  revalidatePath(returnPath);
-  adminNotice("小说已保存", "success", returnPath);
+  revalidatePath(successPath);
+  adminNotice("小说已保存", "success", successPath);
 }
 
 export async function batchUpdateNovelsAction(formData: FormData) {
@@ -479,8 +511,13 @@ export async function batchUpdateNovelsAction(formData: FormData) {
       .map(Number)
       .filter((id) => Number.isInteger(id) && id > 0),
   )).slice(0, 100);
-  const returnPath = ids.length ? `/admin/books/batch?ids=${ids.join(",")}` : "/admin/books";
-  await requireAdminRequest(returnPath);
+  const successPath = listReturnPath(formData, "/admin/books");
+  const editorParams = new URLSearchParams({ ids: ids.join(",") });
+  if (successPath !== "/admin/books") {
+    editorParams.set("returnPath", successPath);
+  }
+  const editorPath = ids.length ? `/admin/books/batch?${editorParams.toString()}` : "/admin/books";
+  await requireAdminRequest(editorPath);
   if (!ids.length) {
     adminNotice("请选择要编辑的小说", "warning", "/admin/books");
   }
@@ -497,7 +534,7 @@ export async function batchUpdateNovelsAction(formData: FormData) {
     for (const term of addedHotwords) {
       const validation = validateSearchKeyword(term);
       if (!validation.ok) {
-        adminNotice(`热词“${term}”：${validation.message}`, "warning", returnPath);
+        adminNotice(`热词“${term}”：${validation.message}`, "warning", editorPath);
       }
     }
 
@@ -513,14 +550,14 @@ export async function batchUpdateNovelsAction(formData: FormData) {
       revalidatePath(`/books/${id}`);
     }
   } catch (error) {
-    adminNotice(error instanceof Error ? error.message : "批量编辑失败，请检查小说目录权限", "warning", returnPath);
+    adminNotice(error instanceof Error ? error.message : "批量编辑失败，请检查小说目录权限", "warning", editorPath);
   }
 
   revalidatePath("/");
   revalidatePath("/search");
   revalidatePath("/tags");
   revalidatePath("/admin/books");
-  adminNotice(`已更新 ${ids.length} 本小说`, "success", "/admin/books");
+  adminNotice(`已更新 ${ids.length} 本小说`, "success", successPath);
 }
 
 export async function saveAdminSettingsAction(formData: FormData) {
@@ -547,6 +584,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
     scope: "all" as const,
     queryType: "all" as const,
   }));
+  const novelAccessMode = mediaAccessModeField(formData, "novelAccessMode");
   const videoAccessMode = mediaAccessModeField(formData, "videoAccessMode");
   const audioAccessMode = mediaAccessModeField(formData, "audioAccessMode");
   const fileAccessMode = mediaAccessModeField(formData, "fileAccessMode");
@@ -560,6 +598,14 @@ export async function saveAdminSettingsAction(formData: FormData) {
     settingsPreviewText: String(formData.get("settingsPreviewText") || "").trim(),
     readerDefaultFontSize: intField(formData, "readerDefaultFontSize", previous.readerDefaultFontSize || 17, 8, 25),
     defaultPalette: isColorPalette(defaultPalette) ? defaultPalette : "default",
+    defaultPaletteRandomEnabled: formData.get("defaultPaletteRandomEnabled") === "on",
+    defaultPaletteRotationMinutes: intField(
+      formData,
+      "defaultPaletteRotationMinutes",
+      previous.defaultPaletteRotationMinutes || 1_440,
+      1,
+      10_080,
+    ),
     adminUsername,
     adminPasswordHash: newPassword ? hashPassword(newPassword) : previous.adminPasswordHash,
     adminPasswordSha256: newPassword ? "" : previous.adminPasswordSha256,
@@ -581,6 +627,22 @@ export async function saveAdminSettingsAction(formData: FormData) {
     searchResultsPageSize: intField(formData, "searchResultsPageSize", previous.searchResultsPageSize || getSearchResultsPageSize(), 1, 100),
     adminBookPageSize: intField(formData, "adminBookPageSize", previous.adminBookPageSize || getAdminBookPageSize(), 1, 200),
     randomCatalogEnabled: formData.get("randomCatalogEnabled") === "on",
+    manualPinnedNovelsEnabled: formData.get("manualPinnedNovelsEnabled") === "on",
+    randomRecommendationsEnabled: formData.get("randomRecommendationsEnabled") === "on",
+    randomRecommendationCount: intField(
+      formData,
+      "randomRecommendationCount",
+      previous.randomRecommendationCount || 8,
+      1,
+      50,
+    ),
+    randomRecommendationIntervalMinutes: intField(
+      formData,
+      "randomRecommendationIntervalMinutes",
+      previous.randomRecommendationIntervalMinutes || 360,
+      1,
+      10_080,
+    ),
     noticeDisplaySeconds: intField(formData, "noticeDisplaySeconds", previous.noticeDisplaySeconds || getNoticeDisplaySeconds(), 0, 60),
     noticeStayVisibleAfterBlur: formData.get("noticeStayVisibleAfterBlur") === "on",
     globalSearchMaxResults: intField(formData, "globalSearchMaxResults", previous.globalSearchMaxResults || getGlobalSearchMaxResults(), 1, 1000),
@@ -605,12 +667,13 @@ export async function saveAdminSettingsAction(formData: FormData) {
     userAvatarMaxBytes: Math.floor(userAvatarMaxMb * 1024 ** 2),
     analyticsEnabled: formData.get("analyticsEnabled") === "on",
     analyticsRealtimeLimit: intField(formData, "analyticsRealtimeLimit", previous.analyticsRealtimeLimit || 300, 30, 2000),
+    novelLibraryEnabled: novelAccessMode !== "off",
     videoLibraryEnabled: videoAccessMode !== "off",
     audioLibraryEnabled: audioAccessMode !== "off",
     fileLibraryEnabled: fileAccessMode !== "off",
     tagLibraryEnabled: tagAccessMode !== "off",
     hotwordLinksEnabled: hotwordAccessMode !== "off",
-    guestLibraryNavEnabled: formData.get("libraryGuestAccess") === "public",
+    guestLibraryNavEnabled: novelAccessMode === "public",
     guestVideoNavEnabled: videoAccessMode === "public",
     guestAudioNavEnabled: audioAccessMode === "public",
     guestFileNavEnabled: fileAccessMode === "public",
@@ -640,6 +703,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
   revalidatePath("/login");
   revalidatePath("/register");
   revalidatePath("/account");
+  revalidatePath("/novels");
   revalidatePath("/media");
   revalidatePath("/tags");
   revalidatePath("/search");
@@ -650,10 +714,21 @@ export async function saveAdminSettingsAction(formData: FormData) {
   revalidatePath("/admin/indexes");
   revalidatePath("/admin/analytics");
   revalidatePath("/admin/users");
+  revalidatePath("/sitemap.xml");
   if (adminUsername) {
     await setAdminSession(adminUsername);
   }
   adminNotice("后台设置已保存", "success", "/admin/settings");
+}
+
+export async function loadAdminMediaSelectionAction(requestedIds: number[]) {
+  await requireAdminRequest("/admin/media", false);
+  const ids = Array.from(new Set(
+    requestedIds.filter((id) => Number.isInteger(id) && id > 0),
+  )).slice(0, 100);
+  return ids
+    .map((id) => getMediaAsset(id))
+    .filter((asset): asset is MediaAsset => Boolean(asset));
 }
 
 export async function updateAdminMediaAction(formData: FormData) {
@@ -956,7 +1031,8 @@ export async function deleteIpRateLimitBanAction(formData: FormData) {
 }
 
 export async function createAdminUserAction(formData: FormData) {
-  await requireAdminRequest("/admin/users");
+  const returnPath = listReturnPath(formData, "/admin/users");
+  await requireAdminRequest(returnPath);
   const username = String(formData.get("username") || "").trim();
   const displayName = String(formData.get("displayName") || "").trim() || username;
   const password = String(formData.get("password") || "");
@@ -965,15 +1041,15 @@ export async function createAdminUserAction(formData: FormData) {
 
   const usernameError = validateUsername(username);
   if (usernameError) {
-    adminNotice(usernameError, "warning", "/admin/users");
+    adminNotice(usernameError, "warning", returnPath);
   }
   const displayNameError = validateDisplayName(displayName);
   if (displayNameError) {
-    adminNotice(displayNameError, "warning", "/admin/users");
+    adminNotice(displayNameError, "warning", returnPath);
   }
   const passwordError = validatePassword(password);
   if (passwordError) {
-    adminNotice(passwordError, "warning", "/admin/users");
+    adminNotice(passwordError, "warning", returnPath);
   }
 
   try {
@@ -986,18 +1062,19 @@ export async function createAdminUserAction(formData: FormData) {
     });
   } catch (error) {
     if (isUsernameConflict(error)) {
-      adminNotice("用户名已存在", "warning", "/admin/users");
+      adminNotice("用户名已存在", "warning", returnPath);
     }
     console.error("Failed to create admin-managed user", error);
-    adminNotice("用户创建失败，请检查数据库状态", "error", "/admin/users");
+    adminNotice("用户创建失败，请检查数据库状态", "error", returnPath);
   }
 
   revalidatePath("/admin/users");
-  adminNotice("用户已创建", "success", "/admin/users");
+  adminNotice("用户已创建", "success", returnPath);
 }
 
 export async function updateAdminUserAction(formData: FormData) {
-  await requireAdminRequest("/admin/users");
+  const returnPath = listReturnPath(formData, "/admin/users");
+  await requireAdminRequest(returnPath);
   const userId = Number(formData.get("userId"));
   const displayName = String(formData.get("displayName") || "").trim();
   const status = formData.get("status") === "disabled" ? "disabled" : "active";
@@ -1005,15 +1082,15 @@ export async function updateAdminUserAction(formData: FormData) {
   const searchRateLimitPerMinute = optionalIntField(formData, "searchRateLimitPerMinute", 1, 600);
 
   if (!Number.isInteger(userId) || userId < 1) {
-    adminNotice("用户不存在", "warning", "/admin/users");
+    adminNotice("用户不存在", "warning", returnPath);
   }
   const displayNameError = validateDisplayName(displayName);
   if (displayNameError) {
-    adminNotice(displayNameError, "warning", "/admin/users");
+    adminNotice(displayNameError, "warning", returnPath);
   }
   const passwordError = newPassword ? validatePassword(newPassword) : null;
   if (passwordError) {
-    adminNotice(passwordError, "warning", "/admin/users");
+    adminNotice(passwordError, "warning", returnPath);
   }
 
   const updated = updateUserRecord({
@@ -1024,46 +1101,48 @@ export async function updateAdminUserAction(formData: FormData) {
     passwordHash: newPassword ? hashUserPassword(newPassword) : undefined,
   });
   if (!updated) {
-    adminNotice("用户不存在", "warning", "/admin/users");
+    adminNotice("用户不存在", "warning", returnPath);
   }
   if (newPassword || status === "disabled") {
     deleteUserSessions(userId);
   }
   revalidatePath("/admin/users");
   revalidatePath(`/admin/users/${userId}`);
-  adminNotice("用户已更新", "success", "/admin/users");
+  adminNotice("用户已更新", "success", returnPath);
 }
 
 export async function updateAdminUserStatusAction(formData: FormData) {
-  await requireAdminRequest("/admin/users");
+  const returnPath = listReturnPath(formData, "/admin/users");
+  await requireAdminRequest(returnPath);
   const userId = Number(formData.get("userId"));
   const status = formData.get("status") === "disabled" ? "disabled" : "active";
 
   if (!Number.isInteger(userId) || userId < 1 || !updateUserStatus(userId, status)) {
-    adminNotice("用户不存在", "warning", "/admin/users");
+    adminNotice("用户不存在", "warning", returnPath);
   }
   if (status === "disabled") {
     deleteUserSessions(userId);
   }
   revalidatePath("/admin/users");
   revalidatePath(`/admin/users/${userId}`);
-  adminNotice(status === "active" ? "用户已启用" : "用户已停用", "success", "/admin/users");
+  adminNotice(status === "active" ? "用户已启用" : "用户已停用", "success", returnPath);
 }
 
 export async function deleteAdminUsersAction(formData: FormData) {
-  await requireAdminRequest("/admin/users");
+  const returnPath = listReturnPath(formData, "/admin/users");
+  await requireAdminRequest(returnPath);
   const ids = formData
     .getAll("userIds")
     .map((value) => Number(value))
     .filter((value) => Number.isInteger(value) && value > 0);
 
   if (!ids.length) {
-    adminNotice("请选择要删除的用户", "warning", "/admin/users");
+    adminNotice("请选择要删除的用户", "warning", returnPath);
   }
 
   const deleted = deleteUserIds(ids);
   revalidatePath("/admin/users");
-  adminNotice(`已删除 ${deleted} 个用户`, deleted ? "success" : "warning", "/admin/users");
+  adminNotice(`已删除 ${deleted} 个用户`, deleted ? "success" : "warning", returnPath);
 }
 
 export async function deleteAdminUserHistoryAction(formData: FormData) {

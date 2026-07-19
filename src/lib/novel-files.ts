@@ -10,6 +10,7 @@ import { invalidateContentSearchResultCache } from "./content-search-cache";
 import { deleteContentSearchIndexNovel } from "./content-search-index";
 import { getDb } from "./db";
 import { isNovelTextFile, parseNovelTitle } from "./filename";
+import { invalidateNovelIdCache } from "./novel-id-sampler";
 import { decodeNovelBuffer } from "./text";
 
 export type NovelFileRecord = {
@@ -336,6 +337,7 @@ export function upsertNovelRecord(db: DatabaseSync, record: NovelFileRecord): nu
   ).run(record);
   if (result.changes > 0) {
     invalidateContentSearchResultCache();
+    invalidateNovelIdCache();
   }
 
   const row = db.prepare("SELECT id FROM novels WHERE relative_path = ?").get(record.relativePath) as { id: number } | undefined;
@@ -354,6 +356,7 @@ export function deleteNovelByRelativePath(db: DatabaseSync, relativePath: string
   deleteContentSearchIndexNovel(getContentSearchDb(), row.id);
   db.prepare("DELETE FROM novels WHERE id = ?").run(row.id);
   invalidateContentSearchResultCache();
+  invalidateNovelIdCache();
   return true;
 }
 
@@ -387,6 +390,7 @@ export function deleteNovelById(db: DatabaseSync, id: number): DeletedNovel | nu
   }
 
   invalidateContentSearchResultCache();
+  invalidateNovelIdCache();
 
   return { ...novel, fileDeleteFailed };
 }

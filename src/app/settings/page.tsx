@@ -5,6 +5,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { getReaderDefaultFontSize, getSettingsPreviewText } from "@/lib/config";
 import { readSiteSettings } from "@/lib/site-settings";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
+import { resolveDefaultPalette } from "@/lib/ui-preferences";
 import { getCurrentUser } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,11 @@ export default async function SettingsPage() {
   const settings = readSiteSettings();
   const previewText = getSettingsPreviewText();
   const defaultFontSize = getReaderDefaultFontSize();
+  const defaultPalette = resolveDefaultPalette(
+    settings.defaultPalette,
+    settings.defaultPaletteRandomEnabled,
+    settings.defaultPaletteRotationMinutes,
+  );
   const user = await getCurrentUser();
 
   return (
@@ -26,7 +32,7 @@ export default async function SettingsPage() {
       <SettingsPanel
         previewText={previewText}
         defaultFontSize={defaultFontSize}
-        defaultPalette={settings.defaultPalette}
+        defaultPalette={defaultPalette}
         canConfigureContentMeta={Boolean(user)}
       />
     </main>

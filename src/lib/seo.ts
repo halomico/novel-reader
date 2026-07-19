@@ -37,7 +37,21 @@ export function canonicalPagePath(pathname: string, page: number, pageParam = "p
 export type UmamiConfig = {
   websiteId: string;
   scriptUrl: string;
+  recorderUrl: string | null;
 };
+
+function safeHttpUrl(value: string): URL | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+function enabledEnvironmentValue(value: string | undefined): boolean {
+  return ["1", "true", "yes", "on"].includes(value?.trim().toLowerCase() || "");
+}
 
 export function getUmamiConfig(env: SeoEnvironment = process.env): UmamiConfig | null {
   const websiteId = env.UMAMI_WEBSITE_ID?.trim() || "";
@@ -46,13 +60,23 @@ export function getUmamiConfig(env: SeoEnvironment = process.env): UmamiConfig |
     return null;
   }
 
-  try {
-    const scriptUrl = new URL(rawScriptUrl);
-    if (scriptUrl.protocol !== "http:" && scriptUrl.protocol !== "https:") {
-      return null;
-    }
-    return { websiteId, scriptUrl: scriptUrl.toString() };
-  } catch {
+  const scriptUrl = safeHttpUrl(rawScriptUrl);
+  if (!scriptUrl) {
     return null;
   }
+
+  const rawRecorderUrl = env.UMAMI_RECORDER_URL?.trim() || "";
+  let recorderUrl: URL | null = null;
+  if (rawRecorderUrl) {
+    recorderUrl = safeHttpUrl(rawRecorderUrl);
+  } else if (enabledEnvironmentValue(env.UMAMI_RECORDER_ENABLED) && /script\.js$/i.test(scriptUrl.pathname)) {
+    recorderUrl = new URL(scriptUrl);
+    recorderUrl.pathname = recorderUrl.pathname.replace(/script\.js$/i, "recorder.js");
+  }
+
+  return {
+    websiteId,
+    scriptUrl: scriptUrl.toString(),
+    recorderUrl: recorderUrl?.toString() || null,
+  };
 }
