@@ -15,6 +15,7 @@ import {
   listMediaAssets,
   listMediaFolders,
   listVideoCategories,
+  sortMediaFolders,
   type MediaAsset,
   type MediaKind,
 } from "@/lib/media";
@@ -149,7 +150,13 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
   const folders = kind === "video" ? [] : listMediaFolders(kind);
   const EmptyIcon = KIND_ICONS[kind];
   const segments = result.folder ? result.folder.split("/") : [];
-  const childFolders = result.query ? [] : folders.filter((folder) => folder.path.split("/").slice(0, -1).join("/") === result.folder);
+  const childFolders = result.query
+    ? []
+    : sortMediaFolders(
+        folders.filter((folder) => folder.path.split("/").slice(0, -1).join("/") === result.folder),
+        sortBy,
+        sortOrder,
+      );
   const folderPageSize = 36;
   const folderTotalPages = Math.max(1, Math.ceil(childFolders.length / folderPageSize));
   const folderPage = Math.min(Math.max(Math.floor(Number(params.folderPage || 1)), 1), folderTotalPages);
@@ -240,7 +247,12 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
               ) : (
                 <div className="mediaResourceList">
                   {visibleChildFolders.map((folder) => (
-                    <MediaFolderRow href={mediaHref(kind, folder.path, "", "", sortBy, sortOrder)} name={folder.name} key={folder.path} />
+                    <MediaFolderRow
+                      href={mediaHref(kind, folder.path, "", "", sortBy, sortOrder)}
+                      name={folder.name}
+                      sizeLabel={formatBytes(folder.totalSizeBytes)}
+                      key={folder.path}
+                    />
                   ))}
                   {result.assets.map((asset) => <MediaResourceRow asset={asset} showFolder={Boolean(result.query)} key={asset.id} />)}
                 </div>

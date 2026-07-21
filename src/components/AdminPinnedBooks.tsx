@@ -34,7 +34,7 @@ export function AdminPinnedBooks({ books, returnPath }: { books: PinnedNovel[]; 
   }
 
   return (
-    <details className="adminPinnedBooks" open={books.length > 0}>
+    <details className="adminPinnedBooks">
       <summary>
         <Pin size={16} aria-hidden="true" />
         <span>置顶小说</span>

@@ -62,12 +62,14 @@ import {
   setNovelTags,
   updateTag,
 } from "@/lib/tags";
-import { deleteUserSessions, hashUserPassword } from "@/lib/user-auth";
+import { clearCurrentUserSession, deleteUserSessions, hashUserPassword } from "@/lib/user-auth";
+import { setContentReportStatus } from "@/lib/reports";
 import {
   clearBrowseHistory,
   createUserRecord,
   deleteBrowseHistoryItem,
   deleteUserIds,
+  getUserById,
   updateUserRecord,
   updateUserStatus,
   validateDisplayName,
@@ -98,6 +100,27 @@ function novelEditorReturnPath(formData: FormData, bookId: number): string {
 function mediaReturnPath(formData: FormData): string {
   const requested = String(formData.get("returnPath") || "");
   return requested === "/admin/media" || (requested.startsWith("/admin/media?") && !/[\r\n#]/.test(requested)) ? requested : "/admin/media";
+}
+
+function userDetailReturnPath(formData: FormData, userId: number): string {
+  const requested = String(formData.get("returnPath") || "");
+  const basePath = `/admin/users/${userId}`;
+  return requested === basePath || (requested.startsWith(`${basePath}?`) && !/[\r\n#\\]/.test(requested))
+    ? requested
+    : basePath;
+}
+
+function tagManagerReturnPath(formData: FormData, editId?: number | null): string {
+  const requested = String(formData.get("returnPath") || "");
+  const safe = requested === "/admin/tags" || (requested.startsWith("/admin/tags?") && !/[\r\n#\\]/.test(requested))
+    ? requested
+    : "/admin/tags";
+  const params = new URLSearchParams(safe.split("?", 2)[1] || "");
+  params.delete("notice");
+  params.delete("tone");
+  if (editId === null) params.delete("edit");
+  else if (editId) params.set("edit", String(editId));
+  return `/admin/tags${params.size ? `?${params.toString()}` : ""}`;
 }
 
 function mediaFolderReturnPath(formData: FormData, kind: MediaKind, folder: string): string {
@@ -236,7 +259,21 @@ export async function loginAdminAction(formData: FormData) {
 
 export async function logoutAdminAction() {
   await clearAdminSession();
+  await clearCurrentUserSession();
   redirect("/admin/login");
+}
+
+export async function updateContentReportStatusAction(formData: FormData) {
+  const requestedReturnPath = String(formData.get("returnPath") || "");
+  const returnPath = requestedReturnPath.startsWith("/admin/reports") ? requestedReturnPath : "/admin/reports";
+  const session = await requireAdminRequest(returnPath);
+  const reportId = Number(formData.get("reportId"));
+  const status = formData.get("status") === "open" ? "open" : "resolved";
+  if (!Number.isInteger(reportId) || reportId < 1 || !setContentReportStatus(reportId, status, session.username)) {
+    adminNotice("举报记录不存在", "warning", returnPath);
+  }
+  revalidatePath("/admin/reports");
+  adminNotice(status === "resolved" ? "举报已处理" : "举报已重新打开", "success", returnPath);
 }
 
 export async function cancelFrontendSearchJobsAction() {
@@ -376,8 +413,9 @@ function tagOperationMessage(error: unknown): string {
 }
 
 export async function saveAdminTagAction(formData: FormData) {
-  await requireAdminRequest("/admin/tags");
   const tagId = Number(formData.get("tagId") || 0);
+  let returnPath = tagManagerReturnPath(formData, Number.isInteger(tagId) && tagId > 0 ? tagId : undefined);
+  await requireAdminRequest(returnPath);
   try {
     if (Number.isInteger(tagId) && tagId > 0) {
       const updated = updateTag({
@@ -386,42 +424,46 @@ export async function saveAdminTagAction(formData: FormData) {
         name: String(formData.get("name") || ""),
         slug: String(formData.get("slug") || ""),
         description: String(formData.get("description") || ""),
+        aliases: String(formData.get("aliases") || ""),
         sortOrder: String(formData.get("sortOrder") || "0"),
         isVisible: formData.get("isVisible") === "on",
       });
       if (!updated) {
-        adminNotice("标签不存在", "warning", "/admin/tags");
+        adminNotice("标签不存在", "warning", returnPath);
       }
     } else {
-      createTag({
+      const created = createTag({
         parentId: String(formData.get("parentId") || ""),
         name: String(formData.get("name") || ""),
         slug: String(formData.get("slug") || ""),
         description: String(formData.get("description") || ""),
+        aliases: String(formData.get("aliases") || ""),
         sortOrder: String(formData.get("sortOrder") || "0"),
         isVisible: formData.get("isVisible") === "on",
       });
+      returnPath = tagManagerReturnPath(formData, created.id);
     }
   } catch (error) {
-    adminNotice(tagOperationMessage(error), "warning", "/admin/tags");
+    adminNotice(tagOperationMessage(error), "warning", returnPath);
   }
   revalidatePath("/", "layout");
   revalidatePath("/tags");
   revalidatePath("/admin/tags");
-  adminNotice(tagId ? "标签已更新" : "标签已创建", "success", "/admin/tags");
+  adminNotice(tagId ? "标签已更新" : "标签已创建", "success", returnPath);
 }
 
 export async function deleteAdminTagAction(formData: FormData) {
-  await requireAdminRequest("/admin/tags");
   const tagId = Number(formData.get("tagId") || 0);
+  const returnPath = tagManagerReturnPath(formData, null);
+  await requireAdminRequest(returnPath);
   if (!Number.isInteger(tagId) || tagId < 1) {
-    adminNotice("标签不存在", "warning", "/admin/tags");
+    adminNotice("标签不存在", "warning", returnPath);
   }
   const deleted = deleteTag(tagId);
   revalidatePath("/", "layout");
   revalidatePath("/tags");
   revalidatePath("/admin/tags");
-  adminNotice(deleted ? "标签已删除" : "标签不存在", deleted ? "success" : "warning", "/admin/tags");
+  adminNotice(deleted ? "标签已删除" : "标签不存在", deleted ? "success" : "warning", returnPath);
 }
 
 export async function saveNovelTaggingAction(formData: FormData) {
@@ -589,6 +631,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
   const audioAccessMode = mediaAccessModeField(formData, "audioAccessMode");
   const fileAccessMode = mediaAccessModeField(formData, "fileAccessMode");
   const tagAccessMode = mediaAccessModeField(formData, "tagAccessMode");
+  const advancedTagAccessMode = mediaAccessModeField(formData, "advancedTagAccessMode");
   const hotwordAccessMode = mediaAccessModeField(formData, "hotwordAccessMode");
   const defaultPalette = String(formData.get("defaultPalette") || "default");
   const next: SiteSettings = {
@@ -644,7 +687,10 @@ export async function saveAdminSettingsAction(formData: FormData) {
       10_080,
     ),
     noticeDisplaySeconds: intField(formData, "noticeDisplaySeconds", previous.noticeDisplaySeconds || getNoticeDisplaySeconds(), 0, 60),
-    noticeStayVisibleAfterBlur: formData.get("noticeStayVisibleAfterBlur") === "on",
+    audioDefaultPlaybackMode:
+      formData.get("audioDefaultPlaybackMode") === "stop" || formData.get("audioDefaultPlaybackMode") === "repeat-one"
+        ? formData.get("audioDefaultPlaybackMode") as "stop" | "repeat-one"
+        : "next",
     globalSearchMaxResults: intField(formData, "globalSearchMaxResults", previous.globalSearchMaxResults || getGlobalSearchMaxResults(), 1, 1000),
     searchRateLimitRules,
     contentRateLimitRules,
@@ -657,6 +703,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
       0,
       100,
     ),
+    userDailyReportLimit: intField(formData, "userDailyReportLimit", previous.userDailyReportLimit || 50, 1, 500),
     userSearchRateLimitPerMinute: intField(
       formData,
       "userSearchRateLimitPerMinute",
@@ -672,12 +719,14 @@ export async function saveAdminSettingsAction(formData: FormData) {
     audioLibraryEnabled: audioAccessMode !== "off",
     fileLibraryEnabled: fileAccessMode !== "off",
     tagLibraryEnabled: tagAccessMode !== "off",
+    advancedTagSearchEnabled: advancedTagAccessMode !== "off",
     hotwordLinksEnabled: hotwordAccessMode !== "off",
     guestLibraryNavEnabled: novelAccessMode === "public",
     guestVideoNavEnabled: videoAccessMode === "public",
     guestAudioNavEnabled: audioAccessMode === "public",
     guestFileNavEnabled: fileAccessMode === "public",
     guestTagLibraryNavEnabled: tagAccessMode === "public",
+    guestAdvancedTagSearchEnabled: advancedTagAccessMode === "public",
     guestHotwordLinksEnabled: hotwordAccessMode === "public",
     contentBlockHeadlessBrowsers: formData.get("contentBlockHeadlessBrowsers") === "on",
     frontendSearchConcurrencyLimit: intField(
@@ -706,6 +755,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
   revalidatePath("/novels");
   revalidatePath("/media");
   revalidatePath("/tags");
+  revalidatePath("/tags/search");
   revalidatePath("/search");
   revalidatePath("/settings");
   revalidatePath("/admin");
@@ -1037,6 +1087,7 @@ export async function createAdminUserAction(formData: FormData) {
   const displayName = String(formData.get("displayName") || "").trim() || username;
   const password = String(formData.get("password") || "");
   const status = formData.get("status") === "disabled" ? "disabled" : "active";
+  const role = formData.get("role") === "admin" ? "admin" : "user";
   const searchRateLimitPerMinute = optionalIntField(formData, "searchRateLimitPerMinute", 1, 600);
 
   const usernameError = validateUsername(username);
@@ -1058,6 +1109,7 @@ export async function createAdminUserAction(formData: FormData) {
       displayName,
       passwordHash: hashUserPassword(password),
       status,
+      role,
       searchRateLimitPerMinute,
     });
   } catch (error) {
@@ -1078,6 +1130,7 @@ export async function updateAdminUserAction(formData: FormData) {
   const userId = Number(formData.get("userId"));
   const displayName = String(formData.get("displayName") || "").trim();
   const status = formData.get("status") === "disabled" ? "disabled" : "active";
+  const role = formData.get("role") === "admin" ? "admin" : "user";
   const newPassword = String(formData.get("newPassword") || "");
   const searchRateLimitPerMinute = optionalIntField(formData, "searchRateLimitPerMinute", 1, 600);
 
@@ -1093,17 +1146,19 @@ export async function updateAdminUserAction(formData: FormData) {
     adminNotice(passwordError, "warning", returnPath);
   }
 
+  const previousUser = getUserById(userId);
   const updated = updateUserRecord({
     id: userId,
     displayName,
     status,
+    role,
     searchRateLimitPerMinute,
     passwordHash: newPassword ? hashUserPassword(newPassword) : undefined,
   });
   if (!updated) {
     adminNotice("用户不存在", "warning", returnPath);
   }
-  if (newPassword || status === "disabled") {
+  if (newPassword || status === "disabled" || previousUser?.role !== role) {
     deleteUserSessions(userId);
   }
   revalidatePath("/admin/users");
@@ -1146,9 +1201,9 @@ export async function deleteAdminUsersAction(formData: FormData) {
 }
 
 export async function deleteAdminUserHistoryAction(formData: FormData) {
-  await requireAdminRequest("/admin/users");
   const userId = Number(formData.get("userId"));
-  const returnPath = Number.isInteger(userId) && userId > 0 ? `/admin/users/${userId}` : "/admin/users";
+  const returnPath = Number.isInteger(userId) && userId > 0 ? userDetailReturnPath(formData, userId) : "/admin/users";
+  await requireAdminRequest(returnPath);
   const historyKeys = Array.from(
     new Set(
       formData
@@ -1161,18 +1216,18 @@ export async function deleteAdminUserHistoryAction(formData: FormData) {
     adminNotice("请选择要删除的浏览记录", "warning", returnPath);
   }
   const deleted = historyKeys.reduce((count, key) => count + Number(deleteBrowseHistoryItem(userId, key)), 0);
-  revalidatePath(returnPath);
+  revalidatePath(`/admin/users/${userId}`);
   adminNotice(`已删除 ${deleted} 条浏览记录`, deleted ? "success" : "warning", returnPath);
 }
 
 export async function clearAdminUserHistoryAction(formData: FormData) {
-  await requireAdminRequest("/admin/users");
   const userId = Number(formData.get("userId"));
-  const returnPath = Number.isInteger(userId) && userId > 0 ? `/admin/users/${userId}` : "/admin/users";
+  const returnPath = Number.isInteger(userId) && userId > 0 ? userDetailReturnPath(formData, userId) : "/admin/users";
+  await requireAdminRequest(returnPath);
   if (!Number.isInteger(userId) || userId < 1) {
     adminNotice("用户不存在", "warning", "/admin/users");
   }
   const deleted = clearBrowseHistory(userId);
-  revalidatePath(returnPath);
+  revalidatePath(`/admin/users/${userId}`);
   adminNotice(`已删除 ${deleted} 条浏览记录`, deleted ? "success" : "warning", returnPath);
 }

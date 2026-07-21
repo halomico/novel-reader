@@ -6,7 +6,7 @@ import { DismissibleNotice } from "@/components/DismissibleNotice";
 import { AvatarUploadForm } from "@/components/AvatarUploadForm";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SiteHeader } from "@/components/SiteHeader";
-import { getNoticeDisplaySeconds, getUserAvatarMaxBytes, shouldNoticeStayVisibleAfterBlur } from "@/lib/config";
+import { getNoticeDisplaySeconds, getUserAvatarMaxBytes } from "@/lib/config";
 import { getCurrentUser } from "@/lib/user-auth";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import {
@@ -33,7 +33,6 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
   const params = await searchParams;
   const maxAvatarMb = (getUserAvatarMaxBytes() / 1024 / 1024).toFixed(1);
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
-  const noticeStayVisibleAfterBlur = shouldNoticeStayVisibleAfterBlur();
 
   return (
     <main className="appShell">
@@ -45,7 +44,6 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
           tone={params.tone}
           variant="search"
           displaySeconds={noticeDisplaySeconds}
-          stayVisibleAfterBlur={noticeStayVisibleAfterBlur}
         />
       ) : null}
 

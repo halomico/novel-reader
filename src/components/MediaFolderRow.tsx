@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef } from "react";
 
-export function MediaFolderRow({ href, name }: { href: string; name: string }) {
+export function MediaFolderRow({ href, name, sizeLabel }: { href: string; name: string; sizeLabel?: string }) {
   const router = useRouter();
   const pointerType = useRef("");
 
@@ -32,7 +32,7 @@ export function MediaFolderRow({ href, name }: { href: string; name: string }) {
         <strong title={name}>{name}</strong>
         <small>文件夹</small>
       </span>
-      <span />
+      <span className="mediaCardSize">{sizeLabel}</span>
       <ChevronRight size={17} aria-hidden="true" />
     </Link>
   );

@@ -11,7 +11,7 @@ import { Breadcrumbs, type BreadcrumbItem } from "@/components/Breadcrumbs";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
-import { getNoticeDisplaySeconds, getSiteName, shouldNoticeStayVisibleAfterBlur } from "@/lib/config";
+import { getNoticeDisplaySeconds, getSiteName } from "@/lib/config";
 import { logoutAdminAction } from "./actions";
 
 type AdminFrameProps = {
@@ -34,6 +34,9 @@ function titleFor(active: AdminFrameProps["active"]): string {
   }
   if (active === "tags") {
     return "标签管理";
+  }
+  if (active === "reports") {
+    return "内容举报";
   }
   if (active === "users") {
     return "用户管理";
@@ -61,7 +64,6 @@ export async function AdminFrame({ active, notice = "", tone, breadcrumbs, child
 
   const siteName = getSiteName();
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
-  const noticeStayVisibleAfterBlur = shouldNoticeStayVisibleAfterBlur();
   const trail = breadcrumbs ?? (active === "home" ? [] : [{ label: titleFor(active) }]);
   const breadcrumbItems: BreadcrumbItem[] = [
     trail.length ? { label: "后台", href: "/admin" } : { label: "后台" },
@@ -94,7 +96,6 @@ export async function AdminFrame({ active, notice = "", tone, breadcrumbs, child
             tone={tone}
             variant="admin"
             displaySeconds={noticeDisplaySeconds}
-            stayVisibleAfterBlur={noticeStayVisibleAfterBlur}
           />
         ) : null}
         {children}

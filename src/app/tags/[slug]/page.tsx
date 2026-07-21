@@ -83,7 +83,16 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
         </span>
         <div>
           <h1>{tag.name}</h1>
-          <p>共 {result.totalBooks} 本小说</p>
+          {tag.description ? <p className="tagDetailDescription">{tag.description}</p> : null}
+          <div className="tagDetailMeta">
+            {tag.aliases.length ? (
+              <span>
+                <small>别名</small>
+                <strong>{tag.aliases.join("、")}</strong>
+              </span>
+            ) : null}
+            <span>共 {result.totalBooks} 本小说</span>
+          </div>
         </div>
       </section>
 

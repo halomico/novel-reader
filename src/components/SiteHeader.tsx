@@ -15,7 +15,6 @@ import {
   isUserRegistrationEnabled,
   isTagLibraryEnabled,
   isVideoLibraryEnabled,
-  shouldNoticeStayVisibleAfterBlur,
 } from "@/lib/config";
 import { getCurrentUser } from "@/lib/user-auth";
 import type { UserProfile } from "@/lib/users";
@@ -61,7 +60,6 @@ export async function SiteHeader({
     ));
   const showPrimaryNav = showPrimaryNavigation && (showLibraryNav || showTagNav || mediaKinds.length > 0);
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
-  const noticeStayVisibleAfterBlur = shouldNoticeStayVisibleAfterBlur();
 
   const headerClassName = ["siteHeader", showPrimaryNav ? "hasPrimaryNav" : "", isHomePage ? "isHomeHeader" : ""]
     .filter(Boolean)
@@ -83,7 +81,6 @@ export async function SiteHeader({
               defaultExpanded={defaultSearchExpanded}
               showCurrentSearch={showCurrentSearch}
               noticeDisplaySeconds={noticeDisplaySeconds}
-              noticeStayVisibleAfterBlur={noticeStayVisibleAfterBlur}
             />
           ) : null}
           <div className="headerActions">

@@ -2,6 +2,7 @@
 
 import { Disc3, ListMusic, Play, Repeat1, SkipBack, SkipForward, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import type { AudioPlaybackMode } from "@/lib/site-settings";
 
 export type AudioQueueTrack = {
   id: number;
@@ -10,11 +11,9 @@ export type AudioQueueTrack = {
   version: number;
 };
 
-type PlaybackMode = "stop" | "next" | "repeat-one";
-
-const MODE_LABELS: Record<PlaybackMode, string> = {
+const MODE_LABELS: Record<AudioPlaybackMode, string> = {
   stop: "播完暂停",
-  next: "连续播放",
+  next: "自动连播",
   "repeat-one": "单曲循环",
 };
 
@@ -26,14 +25,16 @@ export function MediaAudioPlayer({
   initialId,
   tracks,
   basePathPrefix = "/media",
+  defaultPlaybackMode = "next",
 }: {
   initialId: number;
   tracks: AudioQueueTrack[];
   basePathPrefix?: string;
+  defaultPlaybackMode?: AudioPlaybackMode;
 }) {
   const initialTrack = tracks.find((track) => track.id === initialId) || tracks[0];
   const [activeTrack, setActiveTrack] = useState(initialTrack);
-  const [mode, setMode] = useState<PlaybackMode>("stop");
+  const [mode, setMode] = useState<AudioPlaybackMode>(defaultPlaybackMode);
   const audioRef = useRef<HTMLAudioElement>(null);
   const queueRef = useRef<HTMLDivElement>(null);
   const autoPlayRef = useRef(false);
@@ -71,7 +72,7 @@ export function MediaAudioPlayer({
     }
   }, [activeIndex]);
 
-  function chooseMode(nextMode: PlaybackMode) {
+  function chooseMode(nextMode: AudioPlaybackMode) {
     setMode(nextMode);
     window.localStorage.setItem("media-audio-playback-mode", nextMode);
   }
@@ -114,7 +115,7 @@ export function MediaAudioPlayer({
         </div>
       </div>
       <div className="mediaAudioPlayerPanel">
-        <audio ref={audioRef} className="mediaAudioPlayer" controls preload="metadata" onPlay={recordPlay} onEnded={handleEnded} aria-label={`播放 ${activeTrack.title}`}>
+        <audio ref={audioRef} className="mediaAudioPlayer" controls autoPlay preload="metadata" onPlay={recordPlay} onEnded={handleEnded} aria-label={`播放 ${activeTrack.title}`}>
           <source src={`${basePathPrefix}/${activeTrack.id}/stream?v=${Math.floor(activeTrack.version)}`} />
           当前浏览器无法播放这个音频。
         </audio>

@@ -41,6 +41,14 @@ test("bounds, expires, clones, and invalidates cached content search results", a
     const firstRead = getCachedContentSearchResults(parsed.query)!;
     firstRead[0].title = "外部修改";
     assert.equal(getCachedContentSearchResults(parsed.query)?.[0].title, "原始标题");
+    setCachedContentSearchResults(
+      parsed.query,
+      [{ novelId: 2, title: "标签范围", segmentIndex: 0, snippet: "缓存正文" }],
+      undefined,
+      "advanced:scope-a",
+    );
+    assert.equal(getCachedContentSearchResults(parsed.query, "advanced:scope-a")?.[0].title, "标签范围");
+    assert.equal(getCachedContentSearchResults(parsed.query)?.[0].title, "原始标题");
 
     now += SEARCH_RESULT_CACHE_TTL_MS + 1;
     assert.equal(getCachedContentSearchResults(parsed.query), null);

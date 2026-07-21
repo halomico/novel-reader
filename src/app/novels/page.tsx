@@ -4,8 +4,14 @@ import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { CatalogBookGrid } from "@/components/CatalogBookGrid";
 import { CatalogRandomButton } from "@/components/CatalogRandomButton";
 import { Pagination } from "@/components/Pagination";
+import { SearchEventUrlSync } from "@/components/SearchEventUrlSync";
 import { SiteHeader } from "@/components/SiteHeader";
-import { recordSearchQuery } from "@/lib/analytics";
+import {
+  normalizeSearchQuerySource,
+  recordSearchQuery,
+  resolveSearchQueryEventKey,
+  updateSearchQueryResults,
+} from "@/lib/analytics";
 import { getAdminSession } from "@/lib/admin-auth";
 import { listNovels } from "@/lib/books";
 import {
@@ -28,6 +34,9 @@ type NovelsPageProps = {
     page?: string;
     q?: string;
     random?: string;
+    source?: string;
+    origin?: string;
+    searchEvent?: string;
   }>;
 };
 
@@ -70,15 +79,29 @@ export default async function NovelsPage({ searchParams }: NovelsPageProps) {
   const pageSize = getCatalogPageSize();
   const randomSeed = query ? "" : params.random || "";
   const result = listNovels({ page, q: query, pageSize, randomSeed });
+  const searchSource = normalizeSearchQuerySource(params.source);
+  const originNovelId = Number(params.origin || 0);
+  let searchEventKey = result.query ? resolveSearchQueryEventKey(params.searchEvent, result.query) : null;
+  if (result.query && !searchEventKey) {
+    searchEventKey = recordSearchQuery(result.query, "title", {
+      source: searchSource,
+      userId: user?.id ?? null,
+      originNovelId,
+      resultCount: result.totalBooks,
+      resultNovelCount: result.totalBooks,
+    });
+  } else if (searchEventKey) {
+    updateSearchQueryResults(searchEventKey, result.totalBooks, result.totalBooks);
+  }
   const showTags = isTagLibraryEnabled() && (authenticated || isGuestTagLibraryNavEnabled());
   const tagsByNovel = showTags ? listTagsForNovels(result.books.map((book) => book.id)) : new Map();
-  if (result.query && !params.page) {
-    recordSearchQuery(result.query, "title");
-  }
   const returnParams = new URLSearchParams();
   returnParams.set("page", String(result.page));
   if (result.query) {
     returnParams.set("q", result.query);
+    if (searchSource !== "direct") returnParams.set("source", searchSource);
+    if (Number.isInteger(originNovelId) && originNovelId > 0) returnParams.set("origin", String(originNovelId));
+    if (searchEventKey) returnParams.set("searchEvent", searchEventKey);
   }
   if (randomSeed) {
     returnParams.set("random", randomSeed);
@@ -87,6 +110,7 @@ export default async function NovelsPage({ searchParams }: NovelsPageProps) {
 
   return (
     <main className="appShell catalogShell">
+      <SearchEventUrlSync eventKey={searchEventKey} />
       <SiteHeader query={result.query} defaultSearchExpanded currentUser={user} />
       <section className="catalogToolbar">
         <Breadcrumbs items={[{ label: "首页", href: "/" }, { label: randomSeed ? "随便看看" : "小说" }]} />
@@ -99,14 +123,30 @@ export default async function NovelsPage({ searchParams }: NovelsPageProps) {
       </section>
 
       {result.books.length > 0 ? (
-        <CatalogBookGrid books={result.books} returnHref={returnHref} ariaLabel="小说列表" tagsByNovel={tagsByNovel} />
+        <CatalogBookGrid
+          books={result.books}
+          returnHref={returnHref}
+          ariaLabel="小说列表"
+          tagsByNovel={tagsByNovel}
+          searchEventKey={searchEventKey}
+        />
       ) : (
         <section className="emptyState">
           <h2>{result.message || "未找到匹配内容"}</h2>
         </section>
       )}
 
-      <Pagination page={result.page} totalPages={result.totalPages} query={result.query} basePath="/novels" />
+      <Pagination
+        page={result.page}
+        totalPages={result.totalPages}
+        query={result.query}
+        basePath="/novels"
+        extraParams={result.query ? {
+          source: searchSource === "direct" ? undefined : searchSource,
+          origin: Number.isInteger(originNovelId) && originNovelId > 0 ? String(originNovelId) : undefined,
+          searchEvent: searchEventKey || undefined,
+        } : undefined}
+      />
     </main>
   );
 }

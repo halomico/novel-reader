@@ -60,13 +60,43 @@ test("records media analytics and unified user browse history", async () => {
     assert.equal(history.length, 1);
     assert.equal(history[0].source, "audio");
     assert.equal(history[0].visitCount, 2);
-    assert.equal(users.getUserById(userId)?.historyVisible, true);
-    assert.equal(users.updateUserHistoryVisibility(userId, false), true);
-    assert.equal(users.listBrowseHistory(userId).length, 1);
-    assert.equal(users.hideBrowseHistoryItem(userId, history[0].key), true);
-    assert.equal(users.listBrowseHistory(userId, { includeHidden: false }).length, 0);
-    assert.equal(users.listBrowseHistory(userId).length, 1);
+
+    const insertNovel = db.prepare(
+      "INSERT INTO novels (title, file_name, relative_path, size_bytes, mtime_ms) VALUES (?, ?, ?, 10, 1)",
+    );
+    const insertHistory = db.prepare(
+      `INSERT INTO user_reading_history (user_id, novel_id, title, visit_count, last_read_at)
+       VALUES (?, ?, ?, 1, ?)`,
+    );
+    for (let index = 1; index <= 21; index += 1) {
+      const title = `分页小说 ${String(index).padStart(2, "0")}`;
+      const novel = insertNovel.run(title, `${index}.txt`, `${index}.txt`);
+      insertHistory.run(userId, Number(novel.lastInsertRowid), title, `2099-01-01 00:00:${String(index).padStart(2, "0")}`);
+    }
+    const firstHistoryPage = users.listBrowseHistoryPage(userId, { page: 1, pageSize: 10 });
+    const secondHistoryPage = users.listBrowseHistoryPage(userId, { page: 2, pageSize: 10 });
+    assert.equal(firstHistoryPage.totalItems, 22);
+    assert.equal(firstHistoryPage.totalPages, 3);
+    assert.equal(firstHistoryPage.items.length, 10);
+    assert.equal(secondHistoryPage.items.length, 10);
+    assert.equal(firstHistoryPage.items.some((item) => secondHistoryPage.items.some((other) => other.key === item.key)), false);
+
+    const insertLogin = db.prepare(
+      "INSERT INTO user_login_records (user_id, username, ip, user_agent, logged_at) VALUES (?, 'media-user', ?, 'test', ?)",
+    );
+    for (let index = 1; index <= 25; index += 1) {
+      insertLogin.run(userId, `203.0.113.${index}`, `2099-01-02 00:00:${String(index).padStart(2, "0")}`);
+    }
+    const firstLoginPage = users.listUserLoginRecordPage(userId, { page: 1, pageSize: 10 });
+    const secondLoginPage = users.listUserLoginRecordPage(userId, { page: 2, pageSize: 10 });
+    assert.equal(firstLoginPage.totalItems, 25);
+    assert.equal(firstLoginPage.totalPages, 3);
+    assert.equal(firstLoginPage.items.length, 10);
+    assert.equal(secondLoginPage.items.length, 10);
+    assert.equal(firstLoginPage.items.some((item) => secondLoginPage.items.some((other) => other.id === item.id)), false);
+
     assert.equal(users.deleteBrowseHistoryItem(userId, history[0].key), true);
+    assert.equal(users.clearBrowseHistory(userId), 21);
     assert.equal(users.listBrowseHistory(userId).length, 0);
   } finally {
     closeDatabase?.();

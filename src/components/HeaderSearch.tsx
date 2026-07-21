@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { FormEvent, useEffect, useId, useRef, useState } from "react";
 
 type SearchMode = "title" | "content" | "current";
@@ -14,7 +15,7 @@ type CurrentMatch = {
 };
 
 const options: Array<{ value: SearchMode; label: string; action: string; placeholder: string; ariaLabel?: string }> = [
-  { value: "title", label: "书名", action: "/novels", placeholder: "搜索小说名" },
+  { value: "title", label: "标题", action: "/novels", placeholder: "搜索小说名" },
   {
     value: "content",
     label: "正文",
@@ -91,15 +92,14 @@ export function HeaderSearch({
   defaultExpanded = false,
   showCurrentSearch = false,
   noticeDisplaySeconds = 5,
-  noticeStayVisibleAfterBlur = false,
 }: {
   query?: string;
   defaultMode?: SearchMode;
   defaultExpanded?: boolean;
   showCurrentSearch?: boolean;
   noticeDisplaySeconds?: number;
-  noticeStayVisibleAfterBlur?: boolean;
 }) {
+  const pathname = usePathname();
   const [mode, setMode] = useState<SearchMode>(defaultMode);
   const [keyword, setKeyword] = useState(query);
   const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
@@ -119,6 +119,8 @@ export function HeaderSearch({
   const searchInputId = useId();
   const visibleOptions = showCurrentSearch ? options : options.filter((option) => option.value !== "current");
   const activeOption = visibleOptions.find((option) => option.value === mode) || visibleOptions[0];
+  const originNovelId = Number(/^\/books\/(\d+)/.exec(pathname)?.[1] || 0);
+  const searchSource = mode === "title" ? "header_title" : mode === "content" ? "header_content" : "reader_current";
   const isPinnedOpen = visibility === "open" || (visibility === "default" && uiMode === "standard");
   const formClassName = [
     "searchForm",
@@ -158,91 +160,33 @@ export function HeaderSearch({
       return;
     }
 
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    function clearTimer() {
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
+    if (noticeDisplaySeconds <= 0) {
+      return;
     }
 
-    function hideAfterDelay() {
-      clearTimer();
-      if (noticeDisplaySeconds > 0) {
-        timer = setTimeout(() => setIsMessageVisible(false), noticeDisplaySeconds * 1000);
-      } else {
-        setIsMessageVisible(false);
-      }
-    }
-
-    if (noticeDisplaySeconds > 0) {
-      timer = setTimeout(() => setIsMessageVisible(false), noticeDisplaySeconds * 1000);
-    }
-
-    function hideOnWindowBlur() {
-      if (!noticeStayVisibleAfterBlur) {
-        hideAfterDelay();
-      }
-    }
-
-    window.addEventListener("blur", hideOnWindowBlur);
-    return () => {
-      clearTimer();
-      window.removeEventListener("blur", hideOnWindowBlur);
-    };
-  }, [isMessageVisible, message, noticeDisplaySeconds, noticeStayVisibleAfterBlur]);
+    const timer = setTimeout(() => setIsMessageVisible(false), noticeDisplaySeconds * 1000);
+    return () => clearTimeout(timer);
+  }, [isMessageVisible, message, noticeDisplaySeconds]);
 
   useEffect(() => {
     if (!showCurrentSearch) {
       return;
     }
 
-    let activeSegment: HTMLElement | null = null;
-    let previousTabIndex: string | null = null;
-    let cleared = false;
     let observer: MutationObserver | null = null;
     let scrollFrame: number | null = null;
 
-    function clearInitialHighlight() {
-      if (cleared || !activeSegment) {
-        return;
-      }
-
-      cleared = true;
-      activeSegment.classList.remove("isHit");
-      if (previousTabIndex === null) {
-        activeSegment.removeAttribute("tabindex");
-      } else {
-        activeSegment.setAttribute("tabindex", previousTabIndex);
-      }
-      activeSegment.removeEventListener("blur", clearInitialHighlight);
-      document.removeEventListener("pointerdown", clearOnOutsidePointer);
-    }
-
-    function clearOnOutsidePointer(event: PointerEvent) {
-      if (activeSegment && !activeSegment.contains(event.target as Node)) {
-        clearInitialHighlight();
-      }
-    }
-
-    function activateInitialHighlight(): boolean {
-      const highlightedSegment = document.querySelector<HTMLElement>(".readerSegment.isHit");
-      if (!highlightedSegment) {
+    function scrollToInitialPosition(): boolean {
+      const target = document.querySelector<HTMLElement>('.readerSegment[data-search-target="true"]');
+      if (!target) {
         return false;
       }
 
-      activeSegment = highlightedSegment;
-      previousTabIndex = highlightedSegment.getAttribute("tabindex");
-      highlightedSegment.tabIndex = -1;
-      highlightedSegment.focus({ preventScroll: true });
-      highlightedSegment.addEventListener("blur", clearInitialHighlight);
-      document.addEventListener("pointerdown", clearOnOutsidePointer);
-
-      if (window.location.hash === `#${highlightedSegment.id}`) {
+      if (window.location.hash === `#${target.id}`) {
         scrollFrame = window.requestAnimationFrame(() => {
-          const bounds = highlightedSegment.getBoundingClientRect();
+          const bounds = target.getBoundingClientRect();
           if (bounds.bottom < 0 || bounds.top > window.innerHeight) {
-            highlightedSegment.scrollIntoView({ block: "center" });
+            target.scrollIntoView({ block: "center" });
           }
         });
       }
@@ -250,9 +194,9 @@ export function HeaderSearch({
       return true;
     }
 
-    if (!activateInitialHighlight()) {
+    if (!scrollToInitialPosition()) {
       observer = new MutationObserver(() => {
-        if (activateInitialHighlight()) {
+        if (scrollToInitialPosition()) {
           observer?.disconnect();
           observer = null;
         }
@@ -265,8 +209,6 @@ export function HeaderSearch({
       if (scrollFrame !== null) {
         window.cancelAnimationFrame(scrollFrame);
       }
-      activeSegment?.removeEventListener("blur", clearInitialHighlight);
-      document.removeEventListener("pointerdown", clearOnOutsidePointer);
     };
   }, [showCurrentSearch]);
 
@@ -363,6 +305,17 @@ export function HeaderSearch({
     currentMatchesRef.current = nextMatches;
     setCurrentMatchCount(nextMatches.length);
     setIsModeMenuOpen(false);
+    void fetch("/api/search/analytics", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "current",
+        query: nextKeyword,
+        resultCount: nextMatches.length,
+        originNovelId,
+      }),
+      keepalive: true,
+    }).catch(() => undefined);
     if (nextMatches.length) {
       setMessage("");
       setIsMessageVisible(false);
@@ -411,9 +364,6 @@ export function HeaderSearch({
         const nextTarget = event.relatedTarget as Node | null;
         if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
           setIsModeMenuOpen(false);
-          if (!noticeStayVisibleAfterBlur) {
-            window.setTimeout(() => setIsMessageVisible(false), Math.max(noticeDisplaySeconds, 0) * 1000);
-          }
         }
       }}
     >
@@ -444,6 +394,8 @@ export function HeaderSearch({
         }}
         onClick={() => setIsModeMenuOpen(true)}
       />
+      <input name="source" type="hidden" value={searchSource} />
+      {originNovelId ? <input name="origin" type="hidden" value={originNovelId} /> : null}
       <button className="searchSubmit" type="submit" aria-label={`按${activeOption.label}搜索`} title={`按${activeOption.label}搜索`} disabled={isCurrentSearching}>
         <Search className="searchSubmitIcon" size={16} aria-hidden="true" />
         <span>搜索</span>

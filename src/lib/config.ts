@@ -1,6 +1,7 @@
 ﻿import path from "node:path";
 import {
   readSiteSettings,
+  type AudioPlaybackMode,
   type IpRateLimitRule,
   type RelatedVideoMode,
   type VideoThumbnailMode,
@@ -127,8 +128,8 @@ export function getNoticeDisplaySeconds(): number {
   return readSettingInt(readSiteSettings().noticeDisplaySeconds, "NOTICE_DISPLAY_SECONDS", 5, 0, 60);
 }
 
-export function shouldNoticeStayVisibleAfterBlur(): boolean {
-  return readSiteSettings().noticeStayVisibleAfterBlur || readBoolConfig("NOTICE_STAY_VISIBLE_AFTER_BLUR", false);
+export function getAudioDefaultPlaybackMode(): AudioPlaybackMode {
+  return readSiteSettings().audioDefaultPlaybackMode;
 }
 
 export function getSearchRateLimitPerMinute(): number {
@@ -185,6 +186,10 @@ export function getUserDailyRegistrationLimitPerIp(): number {
   return readSettingInt(readSiteSettings().userDailyRegistrationLimitPerIp, "USER_DAILY_REGISTRATION_LIMIT_PER_IP", 2, 0, 100);
 }
 
+export function getUserDailyReportLimit(): number {
+  return readSettingInt(readSiteSettings().userDailyReportLimit, "USER_DAILY_REPORT_LIMIT", 50, 1, 500);
+}
+
 export function getUserAvatarMaxBytes(): number {
   return readSettingInt(readSiteSettings().userAvatarMaxBytes, "USER_AVATAR_MAX_BYTES", 1048576, 1, 10 * 1024 ** 2);
 }
@@ -225,6 +230,21 @@ export function isFileLibraryEnabled(): boolean {
 
 export function isTagLibraryEnabled(): boolean {
   return readSiteSettings().tagLibraryEnabled;
+}
+
+export function isAdvancedTagSearchEnabled(): boolean {
+  const settings = readSiteSettings();
+  return settings.tagLibraryEnabled && settings.advancedTagSearchEnabled;
+}
+
+export function canAccessAdvancedTagSearch(authenticated: boolean): boolean {
+  const settings = readSiteSettings();
+  return settings.novelLibraryEnabled && settings.tagLibraryEnabled && settings.advancedTagSearchEnabled &&
+    (authenticated || (settings.guestLibraryNavEnabled && settings.guestAdvancedTagSearchEnabled));
+}
+
+export function isAdvancedTagSearchPublic(): boolean {
+  return canAccessAdvancedTagSearch(false);
 }
 
 export function areHotwordLinksEnabled(): boolean {

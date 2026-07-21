@@ -6,6 +6,8 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { AdminReaderActions } from "@/components/AdminReaderActions";
+import { ReaderTagLinks } from "@/components/ReaderTagLinks";
+import { ReportNovelButton } from "@/components/ReportNovelButton";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getClientIp } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
@@ -20,7 +22,7 @@ import {
   isTagLibraryEnabled,
 } from "@/lib/config";
 import { checkContentAccess } from "@/lib/content-access";
-import { listHotwordsForNovel, listTagsForNovel, type Tag } from "@/lib/tags";
+import { listHotwordsForNovel, listTagsForNovel } from "@/lib/tags";
 import { isNovelPinned } from "@/lib/pinned-novels";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { getCurrentUser } from "@/lib/user-auth";
@@ -74,29 +76,14 @@ function ReaderContentLoading() {
   );
 }
 
-function ReaderTagLinks({ tags }: { tags: Tag[] }) {
-  if (!tags.length) {
-    return null;
-  }
-  return (
-    <nav className="readerTagLinks" aria-label="文章标签">
-      {tags.map((tag) => (
-        <Link href={`/tags/${tag.slug}`} key={tag.id}>
-          {tag.name}
-        </Link>
-      ))}
-    </nav>
-  );
-}
-
-function ReaderHotwordLinks({ hotwords }: { hotwords: string[] }) {
+function ReaderHotwordLinks({ hotwords, novelId }: { hotwords: string[]; novelId: number }) {
   if (!hotwords.length) {
     return null;
   }
   return (
     <nav className="readerHotwordLinks" aria-label="文末热词">
       {hotwords.map((term) => (
-        <Link href={`/search?q=${encodeURIComponent(term)}`} key={term}>
+        <Link href={`/search?q=${encodeURIComponent(term)}&source=reader_hotword&origin=${novelId}`} key={term}>
           {term}
         </Link>
       ))}
@@ -133,8 +120,9 @@ async function ReaderContent({
     <div className="readerText">
       {segments.map((segment) => (
         <section
-          className={segment.segmentIndex === hitSegment ? "readerSegment isHit" : "readerSegment"}
+          className="readerSegment"
           data-segment-index={segment.segmentIndex}
+          data-search-target={segment.segmentIndex === hitSegment ? "true" : undefined}
           id={`seg-${segment.segmentIndex}`}
           key={segment.segmentIndex}
         >
@@ -188,7 +176,7 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
     <main className="readerShell">
       <SiteHeader defaultSearchMode="current" showCurrentSearch currentUser={user} />
 
-      <article className={user ? "readerPage hasReaderPreferences" : "readerPage"}>
+      <article className="readerPage hasReaderPreferences">
         <Breadcrumbs
           className="readerBreadcrumbs"
           items={[
@@ -200,13 +188,17 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
         <header className="readerTitle">
           <BookOpenText size={26} aria-hidden="true" />
           <h1>{book.title}</h1>
-          {adminSession ? <AdminReaderActions bookId={book.id} title={book.title} isPinned={isNovelPinned(book.id)} /> : null}
+          {adminSession ? (
+            <AdminReaderActions bookId={book.id} title={book.title} isPinned={isNovelPinned(book.id)} />
+          ) : user ? (
+            <ReportNovelButton novelId={book.id} title={book.title} />
+          ) : null}
         </header>
-        <ReaderTagLinks tags={tags} />
+        <ReaderTagLinks tags={tags.map(({ id: tagId, name, slug }) => ({ id: tagId, name, slug }))} />
         <Suspense fallback={<ReaderContentLoading />}>
           <ReaderContent book={book} hitSegment={hitSegment} requestHeaders={headerStore} user={user} />
         </Suspense>
-        <ReaderHotwordLinks hotwords={hotwords} />
+        <ReaderHotwordLinks hotwords={hotwords} novelId={book.id} />
       </article>
     </main>
   );

@@ -5,6 +5,7 @@ import { getDb } from "./db";
 import type { MediaAsset, MediaKind } from "./media";
 
 export type UserStatus = "active" | "disabled";
+export type UserRole = "user" | "admin";
 
 export type UserProfile = {
   id: number;
@@ -12,8 +13,8 @@ export type UserProfile = {
   displayName: string;
   avatarPath: string | null;
   status: UserStatus;
+  role: UserRole;
   searchRateLimitPerMinute: number | null;
-  historyVisible: boolean;
   registrationIp: string | null;
   createdAt: string;
   updatedAt: string;
@@ -28,16 +29,6 @@ export type UserListResult = {
   totalUsers: number;
   totalPages: number;
   query: string;
-};
-
-export type ReadingHistoryItem = {
-  id: number;
-  novelId: number;
-  title: string;
-  segmentIndex: number;
-  visitCount: number;
-  lastReadAt: string;
-  novelExists: boolean;
 };
 
 export type BrowseHistoryItem = {
@@ -60,14 +51,30 @@ export type UserLoginRecord = {
   loggedAt: string;
 };
 
+export type UserBrowseHistoryPage = {
+  items: BrowseHistoryItem[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+};
+
+export type UserLoginRecordPage = {
+  items: UserLoginRecord[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+};
+
 type UserRow = {
   id: number;
   username: string;
   display_name: string;
   avatar_path: string | null;
   status: string;
+  role: string;
   search_rate_limit_per_minute: number | null;
-  history_visible: number;
   registration_ip: string | null;
   created_at: string;
   updated_at: string;
@@ -119,8 +126,8 @@ function toUserProfile(row: UserRow): UserProfile {
     displayName: row.display_name,
     avatarPath: row.avatar_path,
     status: row.status === "disabled" ? "disabled" : "active",
+    role: row.role === "admin" ? "admin" : "user",
     searchRateLimitPerMinute: row.search_rate_limit_per_minute,
-    historyVisible: row.history_visible === 1,
     registrationIp: row.registration_ip,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -132,7 +139,7 @@ function toUserProfile(row: UserRow): UserProfile {
 export function getUserById(id: number): UserProfile | null {
   const row = getDb()
     .prepare(
-      `SELECT id, username, display_name, avatar_path, status, search_rate_limit_per_minute, history_visible, registration_ip, created_at, updated_at, last_login_at, last_login_ip
+      `SELECT id, username, display_name, avatar_path, status, role, search_rate_limit_per_minute, registration_ip, created_at, updated_at, last_login_at, last_login_ip
        FROM users
        WHERE id = ?`,
     )
@@ -144,7 +151,7 @@ export function getUserById(id: number): UserProfile | null {
 export function getUserPasswordRow(username: string): (UserRow & { password_hash: string }) | null {
   const row = getDb()
     .prepare(
-      `SELECT id, username, display_name, password_hash, avatar_path, status, search_rate_limit_per_minute, history_visible, registration_ip, created_at, updated_at, last_login_at, last_login_ip
+      `SELECT id, username, display_name, password_hash, avatar_path, status, role, search_rate_limit_per_minute, registration_ip, created_at, updated_at, last_login_at, last_login_ip
        FROM users
        WHERE username = ?`,
     )
@@ -158,24 +165,48 @@ export function createUserRecord(params: {
   displayName: string;
   passwordHash: string;
   status?: UserStatus;
+  role?: UserRole;
   searchRateLimitPerMinute?: number | null;
   registrationIp?: string | null;
 }): number {
   const info = getDb()
     .prepare(
-      `INSERT INTO users (username, display_name, password_hash, status, search_rate_limit_per_minute, registration_ip, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      `INSERT INTO users (username, display_name, password_hash, status, role, search_rate_limit_per_minute, registration_ip, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
     )
     .run(
       normalizeUsername(params.username),
       params.displayName.trim(),
       params.passwordHash,
       params.status || "active",
+      params.role || "user",
       params.searchRateLimitPerMinute ?? null,
       params.registrationIp || null,
     );
 
   return Number(info.lastInsertRowid);
+}
+
+export function upsertLegacyAdminUser(username: string, passwordHash: string): number {
+  const normalizedUsername = normalizeUsername(username);
+  const existing = getDb().prepare("SELECT id FROM users WHERE username = ?").get(normalizedUsername) as { id: number } | undefined;
+  if (existing) {
+    getDb()
+      .prepare(
+        `UPDATE users
+         SET password_hash = ?, role = 'admin', status = 'active', updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+      )
+      .run(passwordHash, existing.id);
+    return existing.id;
+  }
+  return createUserRecord({
+    username: normalizedUsername,
+    displayName: username.trim() || normalizedUsername,
+    passwordHash,
+    status: "active",
+    role: "admin",
+  });
 }
 
 export function countTodayRegistrationsForIp(ip: string): number {
@@ -199,7 +230,7 @@ export function listUsers(params: { page?: number; q?: string; pageSize?: number
   const offset = (page - 1) * pageSize;
   const users = db
     .prepare(
-      `SELECT id, username, display_name, avatar_path, status, search_rate_limit_per_minute, history_visible, registration_ip, created_at, updated_at, last_login_at, last_login_ip
+      `SELECT id, username, display_name, avatar_path, status, role, search_rate_limit_per_minute, registration_ip, created_at, updated_at, last_login_at, last_login_ip
        FROM users
        ${where}
        ORDER BY updated_at DESC, id DESC
@@ -221,6 +252,7 @@ export function updateUserRecord(params: {
   id: number;
   displayName: string;
   status: UserStatus;
+  role: UserRole;
   searchRateLimitPerMinute: number | null;
   passwordHash?: string;
 }): boolean {
@@ -228,20 +260,20 @@ export function updateUserRecord(params: {
     const info = getDb()
       .prepare(
         `UPDATE users
-         SET display_name = ?, status = ?, search_rate_limit_per_minute = ?, password_hash = ?, updated_at = CURRENT_TIMESTAMP
+         SET display_name = ?, status = ?, role = ?, search_rate_limit_per_minute = ?, password_hash = ?, updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`,
       )
-      .run(params.displayName.trim(), params.status, params.searchRateLimitPerMinute, params.passwordHash, params.id);
+      .run(params.displayName.trim(), params.status, params.role, params.searchRateLimitPerMinute, params.passwordHash, params.id);
     return Number(info.changes) > 0;
   }
 
   const info = getDb()
     .prepare(
       `UPDATE users
-       SET display_name = ?, status = ?, search_rate_limit_per_minute = ?, updated_at = CURRENT_TIMESTAMP
+       SET display_name = ?, status = ?, role = ?, search_rate_limit_per_minute = ?, updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
     )
-    .run(params.displayName.trim(), params.status, params.searchRateLimitPerMinute, params.id);
+    .run(params.displayName.trim(), params.status, params.role, params.searchRateLimitPerMinute, params.id);
   return Number(info.changes) > 0;
 }
 
@@ -262,13 +294,6 @@ export function updateUserDisplayName(userId: number, displayName: string) {
   getDb()
     .prepare("UPDATE users SET display_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
     .run(displayName.trim(), userId);
-}
-
-export function updateUserHistoryVisibility(userId: number, visible: boolean): boolean {
-  const info = getDb()
-    .prepare("UPDATE users SET history_visible = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-    .run(visible ? 1 : 0, userId);
-  return Number(info.changes) > 0;
 }
 
 export function getUserPasswordHashById(userId: number): string | null {
@@ -391,9 +416,22 @@ export function recordMediaHistory(userId: number, asset: Pick<MediaAsset, "id" 
     .run(userId, asset.id, asset.kind, asset.title);
 }
 
-export function listBrowseHistory(userId: number, options: { includeHidden?: boolean } = {}): BrowseHistoryItem[] {
-  const visibleOnly = options.includeHidden === false ? 1 : 0;
-  const rows = getDb()
+export function listBrowseHistoryPage(
+  userId: number,
+  params: { page?: number; pageSize?: number } = {},
+): UserBrowseHistoryPage {
+  const db = getDb();
+  const pageSize = Math.min(Math.max(Math.floor(params.pageSize || 20), 1), 100);
+  const total = db
+    .prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM user_reading_history WHERE user_id = ?) +
+         (SELECT COUNT(*) FROM user_media_history WHERE user_id = ?) AS count`,
+    )
+    .get(userId, userId) as { count: number };
+  const totalPages = Math.max(1, Math.ceil(total.count / pageSize));
+  const page = normalizePage(params.page || 1, totalPages);
+  const rows = db
     .prepare(
       `SELECT source, history_id, item_id, title, segment_index, visit_count, last_accessed_at, item_exists
        FROM (
@@ -407,7 +445,7 @@ export function listBrowseHistory(userId: number, options: { includeHidden?: boo
                 CASE WHEN n.id IS NULL THEN 0 ELSE 1 END AS item_exists
          FROM user_reading_history h
          LEFT JOIN novels n ON n.id = h.novel_id
-         WHERE h.user_id = ? AND (? = 0 OR h.hidden_by_user = 0)
+         WHERE h.user_id = ?
          UNION ALL
          SELECT h.kind AS source,
                 h.id AS history_id,
@@ -419,12 +457,12 @@ export function listBrowseHistory(userId: number, options: { includeHidden?: boo
                 CASE WHEN m.id IS NULL THEN 0 ELSE 1 END AS item_exists
          FROM user_media_history h
          LEFT JOIN media_assets m ON m.id = h.media_id
-         WHERE h.user_id = ? AND (? = 0 OR h.hidden_by_user = 0)
+         WHERE h.user_id = ?
        )
-       ORDER BY last_accessed_at DESC, history_id DESC
-       LIMIT 200`,
+       ORDER BY last_accessed_at DESC, source ASC, history_id DESC
+       LIMIT ? OFFSET ?`,
     )
-    .all(userId, visibleOnly, userId, visibleOnly) as Array<{
+    .all(userId, userId, pageSize, (page - 1) * pageSize) as Array<{
     source: "novel" | MediaKind;
     history_id: number;
     item_id: number;
@@ -435,59 +473,48 @@ export function listBrowseHistory(userId: number, options: { includeHidden?: boo
     item_exists: number;
   }>;
 
-  return rows.map((row) => ({
-    key: `${row.source === "novel" ? "novel" : "media"}:${row.history_id}`,
-    source: row.source,
-    itemId: row.item_id,
-    title: row.title,
-    segmentIndex: row.segment_index,
-    visitCount: row.visit_count,
-    lastAccessedAt: row.last_accessed_at,
-    itemExists: row.item_exists === 1,
-  }));
+  return {
+    items: rows.map((row) => ({
+      key: `${row.source === "novel" ? "novel" : "media"}:${row.history_id}`,
+      source: row.source,
+      itemId: row.item_id,
+      title: row.title,
+      segmentIndex: row.segment_index,
+      visitCount: row.visit_count,
+      lastAccessedAt: row.last_accessed_at,
+      itemExists: row.item_exists === 1,
+    })),
+    page,
+    pageSize,
+    totalItems: total.count,
+    totalPages,
+  };
 }
 
-export function listReadingHistory(userId: number): ReadingHistoryItem[] {
-  const rows = getDb()
-    .prepare(
-      `SELECT h.id, h.novel_id, h.title, h.segment_index, h.visit_count, h.last_read_at, n.id AS existing_novel_id
-       FROM user_reading_history h
-       LEFT JOIN novels n ON n.id = h.novel_id
-       WHERE h.user_id = ?
-       ORDER BY h.last_read_at DESC, h.id DESC
-       LIMIT 200`,
-    )
-    .all(userId) as Array<{
-    id: number;
-    novel_id: number;
-    title: string;
-    segment_index: number;
-    visit_count: number;
-    last_read_at: string;
-    existing_novel_id: number | null;
-  }>;
-
-  return rows.map((row) => ({
-    id: row.id,
-    novelId: row.novel_id,
-    title: row.title,
-    segmentIndex: row.segment_index,
-    visitCount: row.visit_count,
-    lastReadAt: row.last_read_at,
-    novelExists: row.existing_novel_id !== null,
-  }));
+export function listBrowseHistory(userId: number): BrowseHistoryItem[] {
+  return listBrowseHistoryPage(userId, { pageSize: 100 }).items;
 }
 
-export function listUserLoginRecords(userId: number, limit = 100): UserLoginRecord[] {
-  const rows = getDb()
+export function listUserLoginRecordPage(
+  userId: number,
+  params: { page?: number; pageSize?: number } = {},
+): UserLoginRecordPage {
+  const db = getDb();
+  const pageSize = Math.min(Math.max(Math.floor(params.pageSize || 20), 1), 100);
+  const total = db
+    .prepare("SELECT COUNT(*) AS count FROM user_login_records WHERE user_id = ?")
+    .get(userId) as { count: number };
+  const totalPages = Math.max(1, Math.ceil(total.count / pageSize));
+  const page = normalizePage(params.page || 1, totalPages);
+  const rows = db
     .prepare(
       `SELECT id, user_id, username, ip, user_agent, logged_at
        FROM user_login_records
        WHERE user_id = ?
        ORDER BY logged_at DESC, id DESC
-       LIMIT ?`,
+       LIMIT ? OFFSET ?`,
     )
-    .all(userId, Math.min(Math.max(Math.floor(limit), 1), 200)) as Array<{
+    .all(userId, pageSize, (page - 1) * pageSize) as Array<{
     id: number;
     user_id: number | null;
     username: string;
@@ -496,14 +523,24 @@ export function listUserLoginRecords(userId: number, limit = 100): UserLoginReco
     logged_at: string;
   }>;
 
-  return rows.map((row) => ({
-    id: row.id,
-    userId: row.user_id,
-    username: row.username,
-    ip: row.ip,
-    userAgent: row.user_agent,
-    loggedAt: row.logged_at,
-  }));
+  return {
+    items: rows.map((row) => ({
+      id: row.id,
+      userId: row.user_id,
+      username: row.username,
+      ip: row.ip,
+      userAgent: row.user_agent,
+      loggedAt: row.logged_at,
+    })),
+    page,
+    pageSize,
+    totalItems: total.count,
+    totalPages,
+  };
+}
+
+export function listUserLoginRecords(userId: number, limit = 100): UserLoginRecord[] {
+  return listUserLoginRecordPage(userId, { pageSize: limit }).items;
 }
 
 export function deleteReadingHistoryItem(userId: number, historyId: number): boolean {
@@ -524,30 +561,6 @@ export function deleteBrowseHistoryItem(userId: number, key: string): boolean {
   const table = match[1] === "novel" ? "user_reading_history" : "user_media_history";
   const info = getDb().prepare(`DELETE FROM ${table} WHERE id = ? AND user_id = ?`).run(Number(match[2]), userId);
   return Number(info.changes) > 0;
-}
-
-export function hideBrowseHistoryItem(userId: number, key: string): boolean {
-  const match = /^(novel|media):(\d+)$/.exec(key);
-  if (!match) {
-    return false;
-  }
-  const table = match[1] === "novel" ? "user_reading_history" : "user_media_history";
-  const info = getDb().prepare(`UPDATE ${table} SET hidden_by_user = 1 WHERE id = ? AND user_id = ?`).run(Number(match[2]), userId);
-  return Number(info.changes) > 0;
-}
-
-export function hideBrowseHistory(userId: number): number {
-  const db = getDb();
-  db.exec("BEGIN");
-  try {
-    const novels = Number(db.prepare("UPDATE user_reading_history SET hidden_by_user = 1 WHERE user_id = ? AND hidden_by_user = 0").run(userId).changes);
-    const media = Number(db.prepare("UPDATE user_media_history SET hidden_by_user = 1 WHERE user_id = ? AND hidden_by_user = 0").run(userId).changes);
-    db.exec("COMMIT");
-    return novels + media;
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
-  }
 }
 
 export function clearBrowseHistory(userId: number): number {

@@ -1,6 +1,6 @@
 ﻿import { Settings } from "lucide-react";
 import type { Metadata } from "next";
-import { BookOpen, Clapperboard, File, Globe2, Headphones, Search, Tags, Trash2, Upload } from "lucide-react";
+import { BookOpen, Clapperboard, File, Globe2, Headphones, ListFilter, Search, Tags, Trash2, Upload } from "lucide-react";
 import { AdminPaletteField } from "@/components/AdminPaletteField";
 import { AdminSelect } from "@/components/AdminSelect";
 import { RateLimitBanTable } from "@/components/RateLimitBanTable";
@@ -21,6 +21,7 @@ import {
   getSearchRateLimitRules,
   getSearchResultsPageSize,
   getUserDailyRegistrationLimitPerIp,
+  getUserDailyReportLimit,
   getUserAvatarMaxBytes,
   getUserSearchRateLimitPerMinute,
   getSiteName,
@@ -77,6 +78,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
   const searchRateLimitBans = listIpRateLimitBans("search", 500);
   const contentRateLimitBans = listIpRateLimitBans("content", 500);
   const userDailyRegistrationLimit = settings.userDailyRegistrationLimitPerIp || getUserDailyRegistrationLimitPerIp();
+  const userDailyReportLimit = settings.userDailyReportLimit || getUserDailyReportLimit();
   const userSearchRateLimit = settings.userSearchRateLimitPerMinute || getUserSearchRateLimitPerMinute();
   const userAvatarMaxMb = ((settings.userAvatarMaxBytes || getUserAvatarMaxBytes()) / 1024 ** 2).toFixed(1);
   const analyticsRealtimeLimit = settings.analyticsRealtimeLimit || getAnalyticsRealtimeLimit();
@@ -254,8 +256,16 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 <input name="adminBookPageSize" type="number" min="1" max="200" defaultValue={adminBookPageSize} />
               </label>
               <label>
-                <span>提示显示秒数</span>
+                <span>提示显示秒数（0 为持续显示）</span>
                 <input name="noticeDisplaySeconds" type="number" min="0" max="60" defaultValue={noticeDisplaySeconds} />
+              </label>
+              <label>
+                <span>音频默认播放</span>
+                <AdminSelect name="audioDefaultPlaybackMode" defaultValue={settings.audioDefaultPlaybackMode}>
+                  <option value="next">自动连播</option>
+                  <option value="stop">播完暂停</option>
+                  <option value="repeat-one">单曲循环</option>
+                </AdminSelect>
               </label>
             </div>
             <label className="adminSwitchLabel">
@@ -294,13 +304,6 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 />
               </label>
             </div>
-            <label className="adminSwitchLabel">
-              <span>
-                <strong>失去焦点后继续显示提示</strong>
-                <small>关闭时，浏览器窗口失去焦点会立即隐藏提示消息。</small>
-              </span>
-              <input name="noticeStayVisibleAfterBlur" type="checkbox" defaultChecked={settings.noticeStayVisibleAfterBlur} />
-            </label>
           </details>
 
           <details className="adminSettingsSection adminSettingsDisclosure">
@@ -335,6 +338,10 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               <label>
                 <span>单 IP 每日注册上限</span>
                 <input name="userDailyRegistrationLimitPerIp" type="number" min="0" max="100" defaultValue={userDailyRegistrationLimit} />
+              </label>
+              <label>
+                <span>单用户每日举报上限</span>
+                <input name="userDailyReportLimit" type="number" min="1" max="500" defaultValue={userDailyReportLimit} />
               </label>
             </div>
             <label className="adminSwitchLabel">
@@ -396,6 +403,14 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 <label className="adminAccessModeRow">
                   <span><Tags size={16} aria-hidden="true" /><strong>标签</strong></span>
                   <AdminSelect name="tagAccessMode" defaultValue={mediaAccessMode(settings.tagLibraryEnabled, settings.guestTagLibraryNavEnabled)}>
+                    <option value="off">关闭</option>
+                    <option value="public">公开访问</option>
+                    <option value="user">登录可用</option>
+                  </AdminSelect>
+                </label>
+                <label className="adminAccessModeRow">
+                  <span><ListFilter size={16} aria-hidden="true" /><strong>高级搜索</strong></span>
+                  <AdminSelect name="advancedTagAccessMode" defaultValue={mediaAccessMode(settings.advancedTagSearchEnabled, settings.guestAdvancedTagSearchEnabled)}>
                     <option value="off">关闭</option>
                     <option value="public">公开访问</option>
                     <option value="user">登录可用</option>

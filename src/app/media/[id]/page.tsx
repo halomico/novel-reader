@@ -8,7 +8,7 @@ import { MediaPlayer } from "@/components/MediaPlayer";
 import { MediaVideoCard } from "@/components/MediaVideoCard";
 import { SiteHeader } from "@/components/SiteHeader";
 import { recordAnalyticsEvent } from "@/lib/analytics";
-import { getRelatedVideoSettings, getVideoThumbnailSettings } from "@/lib/config";
+import { getAudioDefaultPlaybackMode, getRelatedVideoSettings, getVideoThumbnailSettings } from "@/lib/config";
 import { getMediaAsset, isMediaKindAccessible, listMediaFolderAssets, listRelatedVideoAssets, type MediaKind } from "@/lib/media";
 import { scheduleMediaPreparation } from "@/lib/media-maintenance";
 import { getCurrentUser } from "@/lib/user-auth";
@@ -122,7 +122,7 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
             <MediaPlayer id={asset.id} posterVersion={posterVersion} sourceVersion={asset.mtimeMs} />
           </div>
         ) : asset.kind === "audio" ? (
-          <MediaAudioPlayer initialId={asset.id} tracks={audioQueue} />
+          <MediaAudioPlayer initialId={asset.id} tracks={audioQueue} defaultPlaybackMode={getAudioDefaultPlaybackMode()} />
         ) : (
           <a className="mediaDownloadButton" href={`/media/${asset.id}/download`}>
             <Download size={18} aria-hidden="true" />

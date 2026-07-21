@@ -41,6 +41,7 @@ export type SearchNovelContentProgress = {
 
 export type SearchNovelContentOptions = {
   isCancelled?: () => boolean;
+  candidateNovelIds?: number[];
 };
 
 type SearchCandidate = Pick<Novel, "id" | "title" | "relative_path">;
@@ -138,7 +139,22 @@ export async function searchNovelContent(
     return results.length >= maxResults;
   }
 
-  const novelRecords = listSearchIndexRecords(db);
+  const allowedNovelIds = options.candidateNovelIds === undefined
+    ? null
+    : new Set(options.candidateNovelIds.filter((id) => Number.isInteger(id) && id > 0));
+  const novelRecords = listSearchIndexRecords(db).filter((novel) => !allowedNovelIds || allowedNovelIds.has(novel.id));
+  if (!novelRecords.length) {
+    onProgress?.({
+      totalBooks: 0,
+      searchedBooks: 0,
+      resultCount: 0,
+      scanEngine: "node",
+      scanPhase: "verify",
+      cacheSegmentCount: 0,
+      results: [],
+    });
+    return { results: [], searchedBooks: 0 };
+  }
   const requiredIndexTerms = query.requiredTerms
     .filter((term) => !term.phrase && Array.from(term.normalized).length >= 2)
     .map((term) => term.normalized);
@@ -193,7 +209,9 @@ export async function searchNovelContent(
     candidates = listSearchCandidatesByIds(db, fullTextPlan.candidateIds);
   } else {
     scanEngine = "node";
-    candidates = listAllSearchCandidates(db);
+    candidates = allowedNovelIds
+      ? listSearchCandidatesByIds(db, novelRecords.map((novel) => novel.id))
+      : listAllSearchCandidates(db);
   }
 
   emitProgress();

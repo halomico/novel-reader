@@ -1,25 +1,33 @@
 import { BookText } from "lucide-react";
-import Link from "next/link";
 import type { Novel } from "@/lib/books";
 import type { Tag } from "@/lib/tags";
+import { SearchTrackedLink } from "@/components/SearchTrackedLink";
 
 export function CatalogBookGrid({
   books,
   returnHref,
   ariaLabel,
   tagsByNovel = new Map(),
+  searchEventKey,
 }: {
   books: Novel[];
   returnHref: string;
   ariaLabel: string;
   tagsByNovel?: ReadonlyMap<number, Tag[]>;
+  searchEventKey?: string | null;
 }) {
   return (
     <section className="bookGrid" aria-label={ariaLabel}>
       {books.map((book) => {
         const tags = tagsByNovel.get(book.id) || [];
         return (
-          <Link className="bookCard" href={`/books/${book.id}?from=${encodeURIComponent(returnHref)}`} key={book.id}>
+          <SearchTrackedLink
+            className="bookCard"
+            eventKey={searchEventKey}
+            href={`/books/${book.id}?from=${encodeURIComponent(returnHref)}`}
+            novelId={book.id}
+            key={book.id}
+          >
             <span className="bookMark" aria-hidden="true">
               <BookText size={20} />
             </span>
@@ -31,7 +39,7 @@ export function CatalogBookGrid({
                 </span>
               ) : null}
             </span>
-          </Link>
+          </SearchTrackedLink>
         );
       })}
     </section>

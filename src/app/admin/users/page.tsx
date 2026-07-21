@@ -78,6 +78,13 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
               </select>
             </label>
             <label>
+              <span>权限组</span>
+              <select name="role" defaultValue="user">
+                <option value="user">普通用户</option>
+                <option value="admin">管理员</option>
+              </select>
+            </label>
+            <label>
               <span>搜索限速（次/分钟）</span>
               <input name="searchRateLimitPerMinute" type="number" min="1" max="600" placeholder="跟随全局" />
             </label>

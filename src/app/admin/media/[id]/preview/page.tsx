@@ -5,7 +5,7 @@ import { MediaAudioPlayer, type AudioQueueTrack } from "@/components/MediaAudioP
 import { MediaPlayer } from "@/components/MediaPlayer";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
-import { getVideoThumbnailSettings } from "@/lib/config";
+import { getAudioDefaultPlaybackMode, getVideoThumbnailSettings } from "@/lib/config";
 import { getMediaAsset, listMediaFolderAssets, type MediaKind } from "@/lib/media";
 import { scheduleMediaPreparation } from "@/lib/media-maintenance";
 import { headers } from "next/headers";
@@ -85,6 +85,7 @@ export default async function AdminMediaPreviewPage({ params }: { params: Promis
             initialId={asset.id}
             tracks={audioQueue}
             basePathPrefix="/admin/media"
+            defaultPlaybackMode={getAudioDefaultPlaybackMode()}
           />
         )}
       </article>

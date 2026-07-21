@@ -1,5 +1,7 @@
+import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import {
+  canAccessAdvancedTagSearch,
   canAccessNovelLibrary,
   getFrontendSearchConcurrencyLimit,
   getSearchRateLimitRules,
@@ -20,6 +22,7 @@ import { validateSearchKeyword } from "@/lib/search";
 import { countSearchChars } from "@/lib/search-query";
 import { checkIpRateLimit } from "@/lib/ip-rate-limit";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
+import { listNovelIdsByTagFilters, listVisibleTagsBySlugs } from "@/lib/tags";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -30,14 +33,19 @@ function jsonError(message: string, status: number) {
 
 async function getSearchAccess(request: NextRequest) {
   const user = getCurrentUserFromRequest(request);
-  const adminSession = user ? null : await getAdminSession();
-  return { user, allowed: Boolean(adminSession) || canAccessNovelLibrary(Boolean(user)) };
+  const adminSession = await getAdminSession();
+  return { user, adminSession, allowed: Boolean(adminSession) || canAccessNovelLibrary(Boolean(user)) };
+}
+
+function cleanSlugList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value.map((item) => String(item).trim()).filter((item) => item.length > 0 && item.length <= 64))).slice(0, 20);
 }
 
 export async function POST(request: NextRequest) {
-  let body: { q?: unknown } = {};
+  let body: { q?: unknown; filters?: unknown } = {};
   try {
-    body = (await request.json()) as { q?: unknown };
+    body = (await request.json()) as { q?: unknown; filters?: unknown };
   } catch {
     return jsonError("搜索请求格式有误", 400);
   }
@@ -47,7 +55,7 @@ export async function POST(request: NextRequest) {
     return jsonError(validation.message, 400);
   }
 
-  const { user, allowed } = await getSearchAccess(request);
+  const { user, adminSession, allowed } = await getSearchAccess(request);
   if (!allowed) {
     return jsonError("搜索不可用", 404);
   }
@@ -73,12 +81,32 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  let candidateNovelIds: number[] | undefined;
+  let cacheScope = "";
+  if (body.filters && typeof body.filters === "object") {
+    if (!adminSession && !canAccessAdvancedTagSearch(Boolean(user))) {
+      return jsonError("高级搜索不可用", 404);
+    }
+    const filters = body.filters as Record<string, unknown>;
+    const includedTags = listVisibleTagsBySlugs(cleanSlugList(filters.includeTags));
+    if (!includedTags.length) {
+      return jsonError("请至少选择一个包含标签", 400);
+    }
+    const includedIds = includedTags.map((tag) => tag.id);
+    const excludedIds = listVisibleTagsBySlugs(cleanSlugList(filters.excludeTags))
+      .map((tag) => tag.id)
+      .filter((id) => !includedIds.includes(id));
+    const titleQuery = String(filters.titleQuery || "").normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, 80);
+    candidateNovelIds = listNovelIdsByTagFilters(includedIds, { excludeTagIds: excludedIds, q: titleQuery });
+    cacheScope = `advanced:${crypto.createHash("sha256").update(candidateNovelIds.join(",")).digest("base64url").slice(0, 20)}`;
+  }
+
   const concurrencyLimit = getFrontendSearchConcurrencyLimit();
-  if (!hasCachedContentSearchResults(validation.query) && countActiveContentJobs("search") >= concurrencyLimit) {
+  if (!hasCachedContentSearchResults(validation.query, cacheScope) && countActiveContentJobs("search") >= concurrencyLimit) {
     return jsonError(`当前全文搜索任务较多，请稍后再试（上限 ${concurrencyLimit} 个）`, 429);
   }
 
-  const job = startContentSearchJob(validation.query);
+  const job = startContentSearchJob(validation.query, { candidateNovelIds, cacheScope });
   return NextResponse.json({ ok: true, jobId: job.id, job, showProgressBars: shouldShowProgressBars() });
 }
 

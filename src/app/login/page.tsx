@@ -10,7 +10,6 @@ import {
   getNoticeDisplaySeconds,
   isUserLoginEnabled,
   isUserRegistrationEnabled,
-  shouldNoticeStayVisibleAfterBlur,
 } from "@/lib/config";
 import { getCurrentUser } from "@/lib/user-auth";
 import { getTurnstileSiteKey } from "@/lib/human-verification";
@@ -40,7 +39,6 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const registrationEnabled = isUserRegistrationEnabled();
   const turnstileSiteKey = getTurnstileSiteKey();
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
-  const noticeStayVisibleAfterBlur = shouldNoticeStayVisibleAfterBlur();
 
   return (
     <main className="appShell">
@@ -52,7 +50,6 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           tone={params.tone}
           variant="search"
           displaySeconds={noticeDisplaySeconds}
-          stayVisibleAfterBlur={noticeStayVisibleAfterBlur}
         />
       ) : null}
       <section className="authPage">

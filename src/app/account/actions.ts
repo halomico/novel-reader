@@ -7,7 +7,9 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getClientIp } from "@/lib/admin-access";
+import { verifyAdminCredentials } from "@/lib/admin-auth";
 import {
+  getAdminUsername,
   getUserAvatarMaxBytes,
   getUserDailyRegistrationLimitPerIp,
   isUserLoginEnabled,
@@ -29,9 +31,11 @@ import {
   getUserPasswordHashById,
   removeAvatarFile,
   normalizeUsername,
+  recordUserLogin,
   updateUserDisplayName,
   updateUserPasswordHash,
   updateUserAvatar,
+  upsertLegacyAdminUser,
   validateDisplayName,
   validatePassword,
   validateUsername,
@@ -171,9 +175,24 @@ export async function loginUserAction(formData: FormData) {
   const rememberLogin = formData.get("rememberLogin") === "on";
   const loginValues = { username, remember: rememberLogin ? "1" : "0" };
   const headerStore = await headers();
-  const verification = await verifyHumanRequest(formData, "login", getClientIp(headerStore));
+  const clientIp = getClientIp(headerStore);
+  const verification = await verifyHumanRequest(formData, "login", clientIp);
   if (!verification.ok) {
     authNotice("/login", verification.message, "warning", loginValues);
+  }
+
+  const configuredAdminUsername = getAdminUsername();
+  if (configuredAdminUsername && normalizeUsername(username) === normalizeUsername(configuredAdminUsername)) {
+    if (!verifyAdminCredentials(configuredAdminUsername, password)) {
+      authNotice("/login", "用户名或密码不正确", "warning", loginValues);
+    }
+    const adminUserId = upsertLegacyAdminUser(
+      configuredAdminUsername,
+      hashUserPassword(crypto.randomBytes(48).toString("base64url")),
+    );
+    recordUserLogin(adminUserId, clientIp, headerStore.get("user-agent") || "");
+    await createUserSession(adminUserId, clientIp, headerStore.get("user-agent") || "", rememberLogin);
+    redirect("/account");
   }
 
   const result = await loginUser(username, password, rememberLogin);
@@ -272,6 +291,9 @@ export async function updateAccountPasswordAction(formData: FormData) {
   const newPassword = String(formData.get("newPassword") || "");
   const confirmPassword = String(formData.get("confirmPassword") || "");
   const passwordError = validatePassword(newPassword);
+  if (normalizeUsername(user.username) === normalizeUsername(getAdminUsername())) {
+    authNotice("/account", "请在后台系统设置中修改管理员密码", "warning");
+  }
   if (passwordError) {
     authNotice("/account", passwordError, "warning");
   }

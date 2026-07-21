@@ -61,6 +61,11 @@ test("uses the full-text index for mixed encodings and safely includes changed b
       ["GB18030 小说", "UTF8 小说"],
     );
     assert.ok(engines.includes("fts5"));
+    const scopedResult = await searchNovelContent(matching.query, undefined, { candidateNovelIds: [2] });
+    assert.deepEqual(scopedResult.results.map((result) => result.title), ["GB18030 小说"]);
+    const emptyScopeResult = await searchNovelContent(matching.query, undefined, { candidateNovelIds: [] });
+    assert.deepEqual(emptyScopeResult.results, []);
+    assert.equal(emptyScopeResult.searchedBooks, 0);
 
     const twoCharacter = parseSearchQuery("三丰");
     assert.equal(twoCharacter.ok, true);
@@ -96,6 +101,17 @@ test("uses the full-text index for mixed encodings and safely includes changed b
     const missingResult = await searchNovelContent(missing.query);
     assert.deepEqual(missingResult.results, []);
     assert.equal(missingResult.searchedBooks, 0);
+
+    searchDb.exec("DROP TABLE content_trigram_fts; DROP TABLE content_bigram_fts;");
+    const previousRipgrepPath = process.env.RIPGREP_PATH;
+    process.env.RIPGREP_PATH = path.join(root, "missing-ripgrep");
+    try {
+      const fallbackScopedResult = await searchNovelContent(matching.query, undefined, { candidateNovelIds: [2] });
+      assert.deepEqual(fallbackScopedResult.results.map((result) => result.novelId), [2]);
+    } finally {
+      if (previousRipgrepPath === undefined) delete process.env.RIPGREP_PATH;
+      else process.env.RIPGREP_PATH = previousRipgrepPath;
+    }
   } finally {
     mainDb?.close();
     searchDb?.close();

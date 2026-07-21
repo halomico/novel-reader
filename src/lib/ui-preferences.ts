@@ -29,6 +29,17 @@ export const COLOR_PALETTES = [
 
 export type ColorPalette = (typeof COLOR_PALETTES)[number]["value"];
 export type ColorPaletteOption = (typeof COLOR_PALETTES)[number];
+export type ReaderTagsMode = "expanded" | "collapsed" | "hidden";
+
+export function normalizeReaderTagsMode(value: string | null | undefined): ReaderTagsMode {
+  if (value === "collapsed") {
+    return "collapsed";
+  }
+  if (value === "hidden" || value === "hide") {
+    return "hidden";
+  }
+  return "expanded";
+}
 
 export function isColorPalette(value: string | null | undefined): value is ColorPalette {
   return COLOR_PALETTES.some((palette) => palette.value === value);

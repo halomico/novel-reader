@@ -56,7 +56,7 @@ export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; re
                       <Link className="adminUserNameLink" href={`/admin/users/${user.id}?returnPath=${encodeURIComponent(returnPath)}`}>
                         {user.username}
                       </Link>
-                      <small>{user.displayName}</small>
+                      <small>{user.displayName}{user.role === "admin" ? " · 管理员" : ""}</small>
                     </span>
                   </td>
                   <td>
@@ -163,6 +163,13 @@ export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; re
                 defaultValue={editingUser.searchRateLimitPerMinute ?? ""}
                 placeholder="跟随系统全局值"
               />
+            </label>
+            <label>
+              <span>权限组</span>
+              <select name="role" defaultValue={editingUser.role}>
+                <option value="user">普通用户</option>
+                <option value="admin">管理员</option>
+              </select>
             </label>
             <label>
               <span>重置密码</span>

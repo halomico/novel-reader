@@ -20,6 +20,38 @@ test("removes legacy search tables and the retired content index database", asyn
     CREATE TABLE search_index_state (novel_id INTEGER PRIMARY KEY);
     CREATE TABLE content_search_terms (term TEXT NOT NULL, novel_id INTEGER NOT NULL);
     CREATE TABLE content_index_jobs (id TEXT PRIMARY KEY);
+    CREATE TABLE search_rate_limit_bans (
+      ip TEXT PRIMARY KEY,
+      rule_id TEXT NOT NULL,
+      is_permanent INTEGER NOT NULL DEFAULT 0,
+      banned_until INTEGER,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE novels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      relative_path TEXT NOT NULL UNIQUE,
+      size_bytes INTEGER NOT NULL,
+      mtime_ms INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      avatar_path TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      search_rate_limit_per_minute INTEGER,
+      history_visible INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      last_login_at TEXT,
+      last_login_ip TEXT
+    );
     CREATE TABLE media_assets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       kind TEXT NOT NULL,
@@ -34,6 +66,42 @@ test("removes legacy search tables and the retired content index database", asyn
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE user_reading_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      novel_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      segment_index INTEGER NOT NULL DEFAULT 0,
+      visit_count INTEGER NOT NULL DEFAULT 0,
+      hidden_by_user INTEGER NOT NULL DEFAULT 0,
+      last_read_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, novel_id)
+    );
+    CREATE TABLE user_media_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      media_id INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      title TEXT NOT NULL,
+      visit_count INTEGER NOT NULL DEFAULT 0,
+      hidden_by_user INTEGER NOT NULL DEFAULT 0,
+      last_accessed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, media_id)
+    );
+    INSERT INTO novels (title, file_name, relative_path, size_bytes, mtime_ms)
+    VALUES ('legacy novel', 'legacy.txt', 'legacy.txt', 10, 1);
+    INSERT INTO users (username, display_name, password_hash, history_visible)
+    VALUES ('legacy-user', 'Legacy User', 'test-hash', 0);
+    INSERT INTO media_assets (kind, title, file_name, stored_name, mime_type, size_bytes)
+    VALUES ('audio', 'legacy audio', 'legacy.mp3', 'legacy.mp3', 'audio/mpeg', 10);
+    INSERT INTO user_reading_history (user_id, novel_id, title, visit_count, hidden_by_user)
+    VALUES (1, 1, 'legacy novel', 2, 1);
+    INSERT INTO user_media_history (user_id, media_id, kind, title, visit_count, hidden_by_user)
+    VALUES (1, 1, 'audio', 'legacy audio', 3, 1);
+    INSERT INTO search_rate_limit_bans (ip, rule_id, is_permanent, banned_until)
+    VALUES ('203.0.113.9', 'legacy-search-rule', 1, NULL);
   `);
   seed.close();
   fs.writeFileSync(legacyPath, "retired derived database", "utf8");
@@ -49,7 +117,34 @@ test("removes legacy search tables and the retired content index database", asyn
       )
       .all();
     assert.deepEqual(legacyTables, []);
+    const legacyRateLimitTable = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'search_rate_limit_bans'")
+      .get();
+    assert.equal(legacyRateLimitTable, undefined);
+    const migratedBan = db
+      .prepare("SELECT category, rule_id, is_permanent FROM rate_limit_bans WHERE ip = '203.0.113.9'")
+      .get() as { category: string; rule_id: string; is_permanent: number };
+    assert.deepEqual({ ...migratedBan }, { category: "search", rule_id: "legacy-search-rule", is_permanent: 1 });
     assert.equal(fs.existsSync(legacyPath), false);
+    const obsoleteColumns = [
+      ["users", "history_visible"],
+      ["user_reading_history", "hidden_by_user"],
+      ["user_media_history", "hidden_by_user"],
+    ] as const;
+    for (const [tableName, columnName] of obsoleteColumns) {
+      const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+      assert.equal(columns.some((column) => column.name === columnName), false);
+    }
+    assert.equal((db.prepare("SELECT COUNT(*) AS count FROM users").get() as { count: number }).count, 1);
+    const userColumns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+    assert.equal(userColumns.some((column) => column.name === "role"), true);
+    assert.equal((db.prepare("SELECT role FROM users").get() as { role: string }).role, "user");
+    assert.equal(
+      (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'content_reports'").get() as { name: string }).name,
+      "content_reports",
+    );
+    assert.equal((db.prepare("SELECT visit_count FROM user_reading_history").get() as { visit_count: number }).visit_count, 2);
+    assert.equal((db.prepare("SELECT visit_count FROM user_media_history").get() as { visit_count: number }).visit_count, 3);
     const mediaColumns = db.prepare("PRAGMA table_info(media_assets)").all() as Array<{ name: string }>;
     assert.equal(mediaColumns.some((column) => column.name === "category_id"), true);
     const mediaIndexes = db.prepare("PRAGMA index_list(media_assets)").all() as Array<{ name: string }>;
@@ -60,6 +155,15 @@ test("removes legacy search tables and the retired content index database", asyn
     assert.equal(pinnedTable?.name, "pinned_novels");
     const pinnedIndexes = db.prepare("PRAGMA index_list(pinned_novels)").all() as Array<{ name: string }>;
     assert.equal(pinnedIndexes.some((index) => index.name === "idx_pinned_novels_sort"), true);
+
+    db.exec(`
+      DELETE FROM user_reading_history;
+      DELETE FROM user_media_history;
+      DELETE FROM users;
+      DELETE FROM novels;
+      DELETE FROM media_assets;
+      DELETE FROM sqlite_sequence WHERE name IN ('user_reading_history', 'user_media_history', 'users', 'novels', 'media_assets');
+    `);
 
     const insertNovel = db.prepare(
       "INSERT INTO novels (title, file_name, relative_path, size_bytes, mtime_ms) VALUES (?, ?, ?, ?, ?)",

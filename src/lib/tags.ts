@@ -7,6 +7,7 @@ export type Tag = {
   name: string;
   slug: string;
   description: string;
+  aliases: string[];
   sortOrder: number;
   isVisible: boolean;
   createdAt: string;
@@ -21,6 +22,12 @@ export type TaggedNovelListResult = {
   totalPages: number;
 };
 
+export type TagIntersectionListResult = TaggedNovelListResult & {
+  tagIds: number[];
+  excludedTagIds: number[];
+  query: string;
+};
+
 export type TagWithCount = Tag & {
   directCount: number;
 };
@@ -32,6 +39,7 @@ export type TagGroup = {
 
 const MAX_TAG_NAME_LENGTH = 40;
 const MAX_TAG_DESCRIPTION_LENGTH = 240;
+const MAX_TAG_ALIAS_COUNT = 20;
 const MAX_TAG_SLUG_LENGTH = 64;
 const MAX_HOTWORD_COUNT = 24;
 const MAX_HOTWORD_CHARS = 15;
@@ -42,6 +50,7 @@ type TagRow = {
   name: string;
   slug: string;
   description: string;
+  aliases: string;
   sort_order: number;
   is_visible: number;
   created_at: string;
@@ -55,11 +64,37 @@ function toTag(row: TagRow): Tag {
     name: row.name,
     slug: row.slug,
     description: row.description,
+    aliases: parseStoredAliases(row.aliases),
     sortOrder: row.sort_order,
     isVisible: row.is_visible === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function parseStoredAliases(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+export function parseTagAliases(value: string | string[] | null | undefined, tagName = ""): string[] {
+  const source = Array.isArray(value) ? value : String(value || "").split(/[\n,，、]+/u);
+  const canonical = normalizeTagName(tagName).toLocaleLowerCase();
+  const seen = new Set<string>();
+  const aliases: string[] = [];
+  for (const item of source) {
+    const alias = normalizeTagName(item);
+    const normalized = alias.toLocaleLowerCase();
+    if (!alias || normalized === canonical || seen.has(normalized)) continue;
+    seen.add(normalized);
+    aliases.push(alias);
+    if (aliases.length >= MAX_TAG_ALIAS_COUNT) break;
+  }
+  return aliases;
 }
 
 function normalizeParentId(value: number | string | null | undefined, currentId = 0): number | null {
@@ -114,7 +149,7 @@ function ensureUniqueSlug(base: string, exceptId = 0): string {
 export function listTags(options: { includeHidden?: boolean } = {}): Tag[] {
   const rows = getDb()
     .prepare(
-      `SELECT id, parent_id, name, slug, description, sort_order, is_visible, created_at, updated_at
+      `SELECT id, parent_id, name, slug, description, aliases, sort_order, is_visible, created_at, updated_at
        FROM tags
        ${options.includeHidden ? "" : "WHERE is_visible = 1"}
        ORDER BY sort_order ASC, name COLLATE NOCASE ASC, id ASC`,
@@ -126,7 +161,7 @@ export function listTags(options: { includeHidden?: boolean } = {}): Tag[] {
 export function getTagBySlug(slug: string): Tag | null {
   const row = getDb()
     .prepare(
-      `SELECT id, parent_id, name, slug, description, sort_order, is_visible, created_at, updated_at
+      `SELECT id, parent_id, name, slug, description, aliases, sort_order, is_visible, created_at, updated_at
        FROM tags
        WHERE slug = ? AND is_visible = 1`,
     )
@@ -134,11 +169,26 @@ export function getTagBySlug(slug: string): Tag | null {
   return row ? toTag(row) : null;
 }
 
+export function listVisibleTagsBySlugs(slugs: string[]): Tag[] {
+  const requested = Array.from(new Set(slugs.map((slug) => slug.trim()).filter(Boolean))).slice(0, 40);
+  if (!requested.length) return [];
+  const rows = getDb()
+    .prepare(
+      `SELECT id, parent_id, name, slug, description, aliases, sort_order, is_visible, created_at, updated_at
+       FROM tags
+       WHERE is_visible = 1 AND slug IN (${requested.map(() => "?").join(",")})`,
+    )
+    .all(...requested) as TagRow[];
+  const bySlug = new Map(rows.map((row) => [row.slug, toTag(row)]));
+  return requested.flatMap((slug) => bySlug.get(slug) || []);
+}
+
 export function createTag(input: {
   name: string;
   parentId?: number | string | null;
   slug?: string;
   description?: string;
+  aliases?: string | string[];
   sortOrder?: number | string;
   isVisible?: boolean;
 }): Tag {
@@ -149,17 +199,18 @@ export function createTag(input: {
   const slug = ensureUniqueSlug(input.slug || name);
   const parentId = normalizeParentId(input.parentId);
   const description = (input.description || "").trim().slice(0, MAX_TAG_DESCRIPTION_LENGTH);
+  const aliases = JSON.stringify(parseTagAliases(input.aliases, name));
   const sortOrder = normalizeSortOrder(input.sortOrder);
   const visible = input.isVisible === false ? 0 : 1;
   const result = getDb()
     .prepare(
-      `INSERT INTO tags (parent_id, name, slug, description, sort_order, is_visible)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO tags (parent_id, name, slug, description, aliases, sort_order, is_visible)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(parentId, name, slug, description, sortOrder, visible);
+    .run(parentId, name, slug, description, aliases, sortOrder, visible);
   const created = getDb()
     .prepare(
-      `SELECT id, parent_id, name, slug, description, sort_order, is_visible, created_at, updated_at
+      `SELECT id, parent_id, name, slug, description, aliases, sort_order, is_visible, created_at, updated_at
        FROM tags
        WHERE id = ?`,
     )
@@ -173,6 +224,7 @@ export function updateTag(input: {
   parentId?: number | string | null;
   slug?: string;
   description?: string;
+  aliases?: string | string[];
   sortOrder?: number | string;
   isVisible?: boolean;
 }): boolean {
@@ -187,15 +239,16 @@ export function updateTag(input: {
   const slug = ensureUniqueSlug(input.slug || name, id);
   const parentId = normalizeParentId(input.parentId, id);
   const description = (input.description || "").trim().slice(0, MAX_TAG_DESCRIPTION_LENGTH);
+  const aliases = JSON.stringify(parseTagAliases(input.aliases, name));
   const sortOrder = normalizeSortOrder(input.sortOrder);
   const visible = input.isVisible === false ? 0 : 1;
   const result = getDb()
     .prepare(
       `UPDATE tags
-       SET parent_id = ?, name = ?, slug = ?, description = ?, sort_order = ?, is_visible = ?, updated_at = CURRENT_TIMESTAMP
+       SET parent_id = ?, name = ?, slug = ?, description = ?, aliases = ?, sort_order = ?, is_visible = ?, updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
     )
-    .run(parentId, name, slug, description, sortOrder, visible, id);
+    .run(parentId, name, slug, description, aliases, sortOrder, visible, id);
   return result.changes > 0;
 }
 
@@ -207,7 +260,7 @@ export function deleteTag(id: number): boolean {
 export function listTagsForNovel(novelId: number, options: { includeHidden?: boolean } = {}): Tag[] {
   const rows = getDb()
     .prepare(
-      `SELECT t.id, t.parent_id, t.name, t.slug, t.description, t.sort_order, t.is_visible, t.created_at, t.updated_at
+      `SELECT t.id, t.parent_id, t.name, t.slug, t.description, t.aliases, t.sort_order, t.is_visible, t.created_at, t.updated_at
        FROM tags t
        INNER JOIN novel_tags nt ON nt.tag_id = t.id
        WHERE nt.novel_id = ? ${options.includeHidden ? "" : "AND t.is_visible = 1"}
@@ -225,7 +278,7 @@ export function listTagsForNovels(novelIds: number[], options: { includeHidden?:
 
   const rows = getDb()
     .prepare(
-      `SELECT nt.novel_id, t.id, t.parent_id, t.name, t.slug, t.description, t.sort_order, t.is_visible, t.created_at, t.updated_at
+      `SELECT nt.novel_id, t.id, t.parent_id, t.name, t.slug, t.description, t.aliases, t.sort_order, t.is_visible, t.created_at, t.updated_at
        FROM novel_tags nt
        INNER JOIN tags t ON t.id = nt.tag_id
        WHERE nt.novel_id IN (${uniqueIds.map(() => "?").join(",")}) ${options.includeHidden ? "" : "AND t.is_visible = 1"}
@@ -388,4 +441,126 @@ export function listNovelsByTag(tagId: number, params: { page?: number; pageSize
     totalBooks: totalBooks.count,
     totalPages,
   };
+}
+
+function resolveVisibleTagFilterIds(tagIds: number[], excludeTagIds: number[] = []) {
+  const db = getDb();
+  const requestedIds = Array.from(new Set(tagIds.filter((id) => Number.isInteger(id) && id > 0))).slice(0, 20);
+  const validIds = requestedIds.length
+    ? (db
+        .prepare(`SELECT id FROM tags WHERE is_visible = 1 AND id IN (${requestedIds.map(() => "?").join(",")})`)
+        .all(...requestedIds) as Array<{ id: number }>).map((row) => row.id)
+    : [];
+  const requestedExcludedIds = Array.from(new Set(
+    excludeTagIds.filter((id) => Number.isInteger(id) && id > 0 && !validIds.includes(id)),
+  )).slice(0, 20);
+  const validExcludedIds = requestedExcludedIds.length
+    ? (db
+        .prepare(`SELECT id FROM tags WHERE is_visible = 1 AND id IN (${requestedExcludedIds.map(() => "?").join(",")})`)
+        .all(...requestedExcludedIds) as Array<{ id: number }>).map((row) => row.id)
+    : [];
+  return { validIds, validExcludedIds, hasInvalidIncluded: requestedIds.length !== validIds.length };
+}
+
+export function listNovelsByTagIntersection(
+  tagIds: number[],
+  params: { page?: number; pageSize?: number; q?: string; excludeTagIds?: number[] } = {},
+): TagIntersectionListResult {
+  const db = getDb();
+  const { validIds, validExcludedIds, hasInvalidIncluded } = resolveVisibleTagFilterIds(tagIds, params.excludeTagIds);
+  const query = (params.q || "").normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, 80);
+  const pageSize = Math.min(Math.max(Math.floor(params.pageSize || 15), 1), 100);
+  if (!validIds.length || hasInvalidIncluded) {
+    return { books: [], page: 1, pageSize, totalBooks: 0, totalPages: 1, tagIds: validIds, excludedTagIds: validExcludedIds, query };
+  }
+
+  const placeholders = validIds.map(() => "?").join(",");
+  const titleFilter = query ? "AND instr(lower(n.title), lower(?)) > 0" : "";
+  const excludedFilter = validExcludedIds.length
+    ? `AND NOT EXISTS (
+         SELECT 1 FROM novel_tags excluded
+         WHERE excluded.novel_id = n.id AND excluded.tag_id IN (${validExcludedIds.map(() => "?").join(",")})
+       )`
+    : "";
+  const filterParams: Array<string | number> = [
+    ...validIds,
+    ...(query ? [query] : []),
+    ...validExcludedIds,
+    validIds.length,
+  ];
+  const total = db
+    .prepare(
+      `SELECT COUNT(*) AS count
+       FROM (
+         SELECT n.id
+         FROM novels n
+         INNER JOIN novel_tags nt ON nt.novel_id = n.id
+         WHERE nt.tag_id IN (${placeholders}) ${titleFilter} ${excludedFilter}
+         GROUP BY n.id
+         HAVING COUNT(DISTINCT nt.tag_id) = ?
+       )`,
+    )
+    .get(...filterParams) as { count: number };
+  const totalPages = Math.max(1, Math.ceil(total.count / pageSize));
+  const page = normalizePage(params.page || 1, totalPages);
+  const books = db
+    .prepare(
+      `SELECT n.id, n.title, n.file_name, n.relative_path, n.content_hash, n.size_bytes, n.mtime_ms, n.word_count, n.visit_count,
+              n.last_accessed_at, n.last_accessed_ip, n.last_accessed_user_agent, n.created_at, n.updated_at
+       FROM novels n
+       INNER JOIN novel_tags nt ON nt.novel_id = n.id
+       WHERE nt.tag_id IN (${placeholders}) ${titleFilter} ${excludedFilter}
+       GROUP BY n.id
+       HAVING COUNT(DISTINCT nt.tag_id) = ?
+       ORDER BY n.title COLLATE NOCASE ASC, n.id ASC
+       LIMIT ? OFFSET ?`,
+    )
+    .all(...filterParams, pageSize, (page - 1) * pageSize) as Novel[];
+
+  return {
+    books,
+    page,
+    pageSize,
+    totalBooks: total.count,
+    totalPages,
+    tagIds: validIds,
+    excludedTagIds: validExcludedIds,
+    query,
+  };
+}
+
+export function listNovelIdsByTagFilters(
+  tagIds: number[],
+  params: { q?: string; excludeTagIds?: number[] } = {},
+): number[] {
+  const { validIds, validExcludedIds, hasInvalidIncluded } = resolveVisibleTagFilterIds(tagIds, params.excludeTagIds);
+  if (!validIds.length || hasInvalidIncluded) return [];
+  const query = (params.q || "").normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, 80);
+
+  const includePlaceholders = validIds.map(() => "?").join(",");
+  const titleFilter = query ? "AND instr(lower(n.title), lower(?)) > 0" : "";
+  const excludedFilter = validExcludedIds.length
+    ? `AND NOT EXISTS (
+         SELECT 1 FROM novel_tags excluded
+         WHERE excluded.novel_id = n.id AND excluded.tag_id IN (${validExcludedIds.map(() => "?").join(",")})
+       )`
+    : "";
+  const paramsList: Array<string | number> = [
+    ...validIds,
+    ...(query ? [query] : []),
+    ...validExcludedIds,
+    validIds.length,
+  ];
+  const rows = getDb()
+    .prepare(
+      `SELECT n.id
+       FROM novels n
+       INNER JOIN novel_tags nt ON nt.novel_id = n.id
+       WHERE nt.tag_id IN (${includePlaceholders}) ${titleFilter} ${excludedFilter}
+       GROUP BY n.id
+       HAVING COUNT(DISTINCT nt.tag_id) = ?
+       ORDER BY n.id ASC`,
+    )
+    .all(...paramsList) as Array<{ id: number }>;
+  return rows.map((row) => row.id);
 }

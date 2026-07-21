@@ -3,7 +3,11 @@ import { notFound } from "next/navigation";
 import { ContentSearchClient } from "@/components/ContentSearchClient";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SiteHeader } from "@/components/SiteHeader";
-import { recordSearchQuery } from "@/lib/analytics";
+import {
+  normalizeSearchQuerySource,
+  recordSearchQuery,
+  resolveSearchQueryEventKey,
+} from "@/lib/analytics";
 import { getAdminSession } from "@/lib/admin-auth";
 import { canAccessNovelLibrary, getGlobalSearchMaxResults, getSearchResultsPageSize, shouldShowProgressBars } from "@/lib/config";
 import { validateSearchKeyword } from "@/lib/search";
@@ -17,6 +21,9 @@ type SearchPageProps = {
   searchParams: Promise<{
     page?: string;
     q?: string;
+    source?: string;
+    origin?: string;
+    searchEvent?: string;
   }>;
 };
 
@@ -30,8 +37,15 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const pageSize = getSearchResultsPageSize();
   const maxResults = getGlobalSearchMaxResults();
   const hasExplicitPage = Boolean(params.page);
-  if (validation.ok && !hasExplicitPage) {
-    recordSearchQuery(validation.keyword, "content");
+  const source = normalizeSearchQuerySource(params.source);
+  const originNovelId = Number(params.origin || 0);
+  let searchEventKey = validation.ok ? resolveSearchQueryEventKey(params.searchEvent, validation.keyword) : null;
+  if (validation.ok && !searchEventKey) {
+    searchEventKey = recordSearchQuery(validation.keyword, "content", {
+      source,
+      userId: user?.id ?? null,
+      originNovelId,
+    });
   }
   const pageValue = Number(params.page || 1);
   const page = Number.isFinite(pageValue) && pageValue > 0 ? Math.floor(pageValue) : 1;
@@ -49,6 +63,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           maxResults={maxResults}
           highlightTerms={validation.query.highlightTerms}
           showProgressBars={shouldShowProgressBars()}
+          searchEventKey={searchEventKey}
+          searchSource={source}
+          originNovelId={Number.isInteger(originNovelId) && originNovelId > 0 ? originNovelId : null}
         />
       ) : (
         <section className="searchHero">

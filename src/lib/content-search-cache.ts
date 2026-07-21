@@ -41,8 +41,8 @@ function getCache() {
   return globalForCache.novelReaderSearchResultCache;
 }
 
-function queryKey(query: ParsedSearchQuery): string {
-  return JSON.stringify([query.mode, query.expression, getGlobalSearchMaxResults()]);
+function queryKey(query: ParsedSearchQuery, scopeKey = ""): string {
+  return JSON.stringify([query.mode, query.expression, getGlobalSearchMaxResults(), scopeKey]);
 }
 
 function clearEntries() {
@@ -85,11 +85,11 @@ export function getContentSearchCacheVersion(): string {
   return `${cache.dataVersion}:${cache.mutationVersion}`;
 }
 
-function getCacheEntry(query: ParsedSearchQuery): CacheEntry | null {
+function getCacheEntry(query: ParsedSearchQuery, scopeKey = ""): CacheEntry | null {
   refreshExternalVersion();
   cleanupExpired();
   const cache = getCache();
-  const key = `${cache.mutationVersion}:${queryKey(query)}`;
+  const key = `${cache.mutationVersion}:${queryKey(query, scopeKey)}`;
   const entry = cache.entries.get(key);
   if (!entry) {
     return null;
@@ -100,12 +100,12 @@ function getCacheEntry(query: ParsedSearchQuery): CacheEntry | null {
   return entry;
 }
 
-export function hasCachedContentSearchResults(query: ParsedSearchQuery): boolean {
-  return getCacheEntry(query) !== null;
+export function hasCachedContentSearchResults(query: ParsedSearchQuery, scopeKey = ""): boolean {
+  return getCacheEntry(query, scopeKey) !== null;
 }
 
-export function getCachedContentSearchResults(query: ParsedSearchQuery): SearchResult[] | null {
-  const entry = getCacheEntry(query);
+export function getCachedContentSearchResults(query: ParsedSearchQuery, scopeKey = ""): SearchResult[] | null {
+  const entry = getCacheEntry(query, scopeKey);
   if (!entry) {
     return null;
   }
@@ -116,6 +116,7 @@ export function setCachedContentSearchResults(
   query: ParsedSearchQuery,
   results: SearchResult[],
   expectedVersion?: string,
+  scopeKey = "",
 ) {
   refreshExternalVersion();
   cleanupExpired();
@@ -129,7 +130,7 @@ export function setCachedContentSearchResults(
     return;
   }
 
-  const key = `${cache.mutationVersion}:${queryKey(query)}`;
+  const key = `${cache.mutationVersion}:${queryKey(query, scopeKey)}`;
   const previous = cache.entries.get(key);
   if (previous) {
     cache.bytes -= previous.bytes;

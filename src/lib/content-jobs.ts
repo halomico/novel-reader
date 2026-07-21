@@ -35,6 +35,11 @@ export type ContentJobSnapshot = {
 
 type ContentJob = ContentJobSnapshot;
 
+type ContentSearchJobOptions = {
+  candidateNovelIds?: number[];
+  cacheScope?: string;
+};
+
 type JobGlobal = typeof globalThis & {
   novelReaderContentJobs?: Map<string, ContentJob>;
   novelReaderContentJobTimers?: Map<string, ReturnType<typeof setTimeout>>;
@@ -173,8 +178,8 @@ export function countActiveContentJobs(kind?: JobKind): number {
   ).length;
 }
 
-export function hasCachedContentSearchResults(query: ParsedSearchQuery): boolean {
-  return hasCachedSearchResults(query);
+export function hasCachedContentSearchResults(query: ParsedSearchQuery, cacheScope = ""): boolean {
+  return hasCachedSearchResults(query, cacheScope);
 }
 
 export function cancelContentJob(id: string): ContentJobSnapshot | null {
@@ -205,9 +210,9 @@ export function cancelContentJobs(kind?: JobKind) {
   }
 }
 
-export function startContentSearchJob(query: ParsedSearchQuery): ContentJobSnapshot {
+export function startContentSearchJob(query: ParsedSearchQuery, options: ContentSearchJobOptions = {}): ContentJobSnapshot {
   const job = createJob("search", "正在准备全文搜索");
-  const cachedResults = getCachedContentSearchResults(query);
+  const cachedResults = getCachedContentSearchResults(query, options.cacheScope);
   if (cachedResults) {
     updateJob(job, {
       status: "done",
@@ -242,7 +247,7 @@ export function startContentSearchJob(query: ParsedSearchQuery): ContentJobSnaps
                     : "正在扫描小说正文",
           });
         },
-        { isCancelled: () => Boolean(job.cancelRequested) },
+        { isCancelled: () => Boolean(job.cancelRequested), candidateNovelIds: options.candidateNovelIds },
       );
 
       updateJob(job, {
@@ -252,7 +257,7 @@ export function startContentSearchJob(query: ParsedSearchQuery): ContentJobSnaps
         results: searchResult.results,
         message: searchResult.results.length ? `找到 ${searchResult.results.length} 条匹配内容` : "未找到匹配正文",
       });
-      setCachedContentSearchResults(query, searchResult.results, cacheVersion);
+      setCachedContentSearchResults(query, searchResult.results, cacheVersion, options.cacheScope);
     } catch (error) {
       const cancelled = error instanceof ContentSearchCancelledError || job.cancelRequested;
       updateJob(job, {

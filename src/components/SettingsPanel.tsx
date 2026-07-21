@@ -7,11 +7,13 @@ import {
   COLOR_PALETTES,
   getColorPalette,
   isColorPalette,
+  normalizeReaderTagsMode,
   PALETTE_STORAGE_KEY,
   READER_HOTWORDS_STORAGE_KEY,
   READER_TAGS_STORAGE_KEY,
   TOP_MENU_STORAGE_KEY,
   type ColorPalette,
+  type ReaderTagsMode,
 } from "@/lib/ui-preferences";
 
 type ThemeChoice = "system" | "light" | "dark";
@@ -69,7 +71,7 @@ function applySettings(
   fontSize: number,
   uiMode: UiMode,
   palette: ColorPalette,
-  showReaderTags: boolean,
+  readerTagsMode: ReaderTagsMode,
   showReaderHotwords: boolean,
 ) {
   const root = document.documentElement;
@@ -80,7 +82,7 @@ function applySettings(
   }
 
   root.dataset.uiMode = uiMode;
-  root.dataset.readerTags = showReaderTags ? "show" : "hide";
+  root.dataset.readerTags = readerTagsMode;
   root.dataset.readerHotwords = showReaderHotwords ? "show" : "hide";
   root.style.setProperty("--reader-font-size", `${fontSize}px`);
   applyPalette(palette);
@@ -93,18 +95,20 @@ export function SettingsPanel({
   previewText,
   defaultFontSize,
   defaultPalette,
-  canConfigureContentMeta,
+  canConfigureReaderTags,
+  canConfigureReaderHotwords,
 }: {
   previewText: string;
   defaultFontSize: number;
   defaultPalette: ColorPalette;
-  canConfigureContentMeta: boolean;
+  canConfigureReaderTags: boolean;
+  canConfigureReaderHotwords: boolean;
 }) {
   const [theme, setTheme] = useState<ThemeChoice>("system");
   const [uiMode, setUiMode] = useState<UiMode>("standard");
   const [palette, setPalette] = useState<ColorPalette>(defaultPalette);
   const [fontSize, setFontSize] = useState(defaultFontSize);
-  const [showReaderTags, setShowReaderTags] = useState(true);
+  const [readerTagsMode, setReaderTagsMode] = useState<ReaderTagsMode>("expanded");
   const [showReaderHotwords, setShowReaderHotwords] = useState(true);
   const [showTopMenu, setShowTopMenu] = useState(true);
   const [hasHotwordPreference, setHasHotwordPreference] = useState(false);
@@ -121,7 +125,7 @@ export function SettingsPanel({
     const nextUiMode = savedUiMode === "minimal" || savedUiMode === "standard" ? savedUiMode : "standard";
     const nextPalette = isColorPalette(savedPalette) ? savedPalette : defaultPalette;
     const nextFontSize = Number.isFinite(savedFontSize) && savedFontSize >= 8 && savedFontSize <= 25 ? savedFontSize : defaultFontSize;
-    const nextShowTags = savedTags !== "hide";
+    const nextReaderTagsMode = normalizeReaderTagsMode(savedTags);
     const nextHasHotwordPreference = savedHotwords === "show" || savedHotwords === "hide";
     const nextShowHotwords = nextHasHotwordPreference ? savedHotwords === "show" : nextUiMode !== "minimal";
 
@@ -129,38 +133,38 @@ export function SettingsPanel({
     setUiMode(nextUiMode);
     setPalette(nextPalette);
     setFontSize(nextFontSize);
-    setShowReaderTags(nextShowTags);
+    setReaderTagsMode(nextReaderTagsMode);
     setShowReaderHotwords(nextShowHotwords);
     setShowTopMenu(savedTopMenu !== "hide");
     setHasHotwordPreference(nextHasHotwordPreference);
     removeLocalSetting("novel-palette");
     removeLocalSetting("novel-page-size");
     document.cookie = "novel-page-size=; Path=/; Max-Age=0; SameSite=Lax";
-    applySettings(nextTheme, nextFontSize, nextUiMode, nextPalette, nextShowTags, nextShowHotwords);
+    applySettings(nextTheme, nextFontSize, nextUiMode, nextPalette, nextReaderTagsMode, nextShowHotwords);
     document.documentElement.dataset.topMenu = savedTopMenu === "hide" ? "hide" : "show";
   }, [defaultFontSize, defaultPalette]);
 
   function changeTheme(value: ThemeChoice) {
     setTheme(value);
-    applySettings(value, fontSize, uiMode, palette, showReaderTags, showReaderHotwords);
+    applySettings(value, fontSize, uiMode, palette, readerTagsMode, showReaderHotwords);
   }
 
   function changeUiMode(value: UiMode) {
     const nextShowHotwords = hasHotwordPreference ? showReaderHotwords : value !== "minimal";
     setUiMode(value);
     setShowReaderHotwords(nextShowHotwords);
-    applySettings(theme, fontSize, value, palette, showReaderTags, nextShowHotwords);
+    applySettings(theme, fontSize, value, palette, readerTagsMode, nextShowHotwords);
   }
 
   function changeFontSize(value: number) {
     setFontSize(value);
-    applySettings(theme, value, uiMode, palette, showReaderTags, showReaderHotwords);
+    applySettings(theme, value, uiMode, palette, readerTagsMode, showReaderHotwords);
   }
 
   function changePalette(value: ColorPalette) {
     setPalette(value);
     writeLocalSetting(PALETTE_STORAGE_KEY, value);
-    applySettings(theme, fontSize, uiMode, value, showReaderTags, showReaderHotwords);
+    applySettings(theme, fontSize, uiMode, value, readerTagsMode, showReaderHotwords);
   }
 
   function chooseRandomPalette() {
@@ -171,17 +175,17 @@ export function SettingsPanel({
     }
   }
 
-  function changeReaderTags(visible: boolean) {
-    setShowReaderTags(visible);
-    writeLocalSetting(READER_TAGS_STORAGE_KEY, visible ? "show" : "hide");
-    applySettings(theme, fontSize, uiMode, palette, visible, showReaderHotwords);
+  function changeReaderTags(mode: ReaderTagsMode) {
+    setReaderTagsMode(mode);
+    writeLocalSetting(READER_TAGS_STORAGE_KEY, mode);
+    applySettings(theme, fontSize, uiMode, palette, mode, showReaderHotwords);
   }
 
   function changeReaderHotwords(visible: boolean) {
     setShowReaderHotwords(visible);
     setHasHotwordPreference(true);
     writeLocalSetting(READER_HOTWORDS_STORAGE_KEY, visible ? "show" : "hide");
-    applySettings(theme, fontSize, uiMode, palette, showReaderTags, visible);
+    applySettings(theme, fontSize, uiMode, palette, readerTagsMode, visible);
   }
 
   function changeTopMenu(visible: boolean) {
@@ -284,30 +288,47 @@ export function SettingsPanel({
               </div>
             </div>
 
-            {canConfigureContentMeta ? (
-              <div className="settingRow">
-                <div className="settingRowTitle">
-                  <span>内容信息</span>
-                </div>
-                <div className="settingMetaToggles">
-                  <label className="settingToggle">
-                    <input type="checkbox" checked={showReaderTags} onChange={(event) => changeReaderTags(event.target.checked)} />
-                    <span className="settingToggleTrack" aria-hidden="true" />
+            <div className="settingRow">
+              <div className="settingRowTitle">
+                <span>布局</span>
+              </div>
+              <div className="settingMetaToggles">
+                {canConfigureReaderTags ? (
+                  <div className="settingReaderTagsMode">
                     <span>文章标签</span>
-                  </label>
+                    <div className="segmentedControl settingCompactSegments" role="group" aria-label="文章标签显示方式">
+                      {([
+                        ["expanded", "展开"],
+                        ["collapsed", "收起"],
+                        ["hidden", "关闭"],
+                      ] as const).map(([value, label]) => (
+                        <button
+                          className={readerTagsMode === value ? "isActive" : ""}
+                          type="button"
+                          aria-pressed={readerTagsMode === value}
+                          key={value}
+                          onClick={() => changeReaderTags(value)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {canConfigureReaderHotwords ? (
                   <label className="settingToggle">
                     <input type="checkbox" checked={showReaderHotwords} onChange={(event) => changeReaderHotwords(event.target.checked)} />
                     <span className="settingToggleTrack" aria-hidden="true" />
                     <span>文末热词</span>
                   </label>
-                  <label className="settingToggle">
-                    <input type="checkbox" checked={showTopMenu} onChange={(event) => changeTopMenu(event.target.checked)} />
-                    <span className="settingToggleTrack" aria-hidden="true" />
-                    <span>顶部导航</span>
-                  </label>
-                </div>
+                ) : null}
+                <label className="settingToggle">
+                  <input type="checkbox" checked={showTopMenu} onChange={(event) => changeTopMenu(event.target.checked)} />
+                  <span className="settingToggleTrack" aria-hidden="true" />
+                  <span>顶部导航</span>
+                </label>
               </div>
-            ) : null}
+            </div>
           </div>
         </section>
       </div>

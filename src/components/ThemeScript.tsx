@@ -43,7 +43,9 @@ export function ThemeScript({
         uiMode = uiMode === "minimal" ? "minimal" : "standard";
         root.dataset.uiMode = uiMode;
         root.dataset.palette = palette.value;
-        root.dataset.readerTags = readerTags === "hide" ? "hide" : "show";
+        root.dataset.readerTags = readerTags === "collapsed"
+          ? "collapsed"
+          : (readerTags === "hidden" || readerTags === "hide" ? "hidden" : "expanded");
         root.dataset.readerHotwords = readerHotwords === "show" || readerHotwords === "hide" ? readerHotwords : (uiMode === "minimal" ? "hide" : "show");
         root.dataset.topMenu = topMenu === "hide" ? "hide" : "show";
         root.dataset.adminSidebar = adminSidebarCollapsed ? "collapsed" : "expanded";

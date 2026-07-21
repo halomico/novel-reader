@@ -1,9 +1,9 @@
 ﻿"use client";
 
 import { BookText } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pagination } from "@/components/Pagination";
+import { SearchTrackedLink } from "@/components/SearchTrackedLink";
 import type { ContentJobSnapshot } from "@/lib/content-jobs";
 import type { SearchResult } from "@/lib/search";
 import { findSearchTermRanges, type SearchTermPattern } from "@/lib/search-query";
@@ -16,6 +16,16 @@ type ContentSearchClientProps = {
   maxResults: number;
   highlightTerms: SearchTermPattern[];
   showProgressBars: boolean;
+  searchEventKey: string | null;
+  searchSource: string;
+  originNovelId: number | null;
+  requestFilters?: {
+    includeTags: string[];
+    excludeTags: string[];
+    titleQuery: string;
+  };
+  resultReturnPath?: string;
+  resultReturnParams?: Record<string, string>;
 };
 
 type SearchApiResponse = {
@@ -152,19 +162,46 @@ export function ContentSearchClient({
   maxResults,
   highlightTerms,
   showProgressBars,
+  searchEventKey,
+  searchSource,
+  originNovelId,
+  requestFilters,
+  resultReturnPath = "/search",
+  resultReturnParams = {},
 }: ContentSearchClientProps) {
   const [job, setJob] = useState<ContentJobSnapshot | null>(null);
   const [message, setMessage] = useState("");
   const [page, setPage] = useState(initialPage);
   const [displayProgress, setDisplayProgress] = useState(showProgressBars);
-  const pageStateKey = useMemo(() => `content-search-page:${keyword}`, [keyword]);
-  const resultCacheKey = useMemo(() => `content-search-results:${keyword}`, [keyword]);
+  const requestFiltersKey = useMemo(() => JSON.stringify(requestFilters || null), [requestFilters]);
+  const searchIdentity = `${keyword}:${requestFiltersKey}`;
+  const pageStateKey = useMemo(() => `content-search-page:${searchIdentity}`, [searchIdentity]);
+  const resultCacheKey = useMemo(() => `content-search-results:${searchIdentity}`, [searchIdentity]);
   const currentPageRef = useRef(initialPage);
   const activeJobIdRef = useRef("");
   const activeJobStatusRef = useRef<ContentJobSnapshot["status"] | "">("");
   const keepJobOnUnmountRef = useRef(false);
-  const pendingCancelRef = useRef<{ keyword: string; jobId: string } | null>(null);
+  const pendingCancelRef = useRef<{ searchIdentity: string; jobId: string } | null>(null);
   const pendingCancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reportedAnalyticsRef = useRef("");
+
+  function reportSearchResults(nextJob: ContentJobSnapshot) {
+    if (!searchEventKey || nextJob.status !== "done") return;
+    const completedResults = nextJob.results || [];
+    const resultCount = completedResults.length;
+    const resultNovelCount = new Set(completedResults.map((result) => result.novelId)).size;
+    const signature = `${searchEventKey}:${resultCount}:${resultNovelCount}`;
+    if (reportedAnalyticsRef.current === signature) return;
+    reportedAnalyticsRef.current = signature;
+    void fetch("/api/search/analytics", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "results", eventKey: searchEventKey, resultCount, resultNovelCount }),
+      keepalive: true,
+    }).catch(() => {
+      if (reportedAnalyticsRef.current === signature) reportedAnalyticsRef.current = "";
+    });
+  }
 
   function rememberPage(nextPage: number) {
     currentPageRef.current = nextPage;
@@ -175,6 +212,7 @@ export function ContentSearchClient({
     activeJobIdRef.current = nextJob.id;
     activeJobStatusRef.current = nextJob.status;
     writeCachedSearch(resultCacheKey, nextJob, nextPage, nextShowProgressBars);
+    reportSearchResults(nextJob);
   }
 
   function clearPendingCancel() {
@@ -198,7 +236,7 @@ export function ContentSearchClient({
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     keepJobOnUnmountRef.current = false;
-    if (pendingCancelRef.current?.keyword === keyword) {
+    if (pendingCancelRef.current?.searchIdentity === searchIdentity) {
       clearPendingCancel();
     }
 
@@ -228,11 +266,17 @@ export function ContentSearchClient({
       const cached = readCachedSearch(resultCacheKey);
       currentPageRef.current = nextPage;
       setPage(nextPage);
+      const url = new URL(window.location.href);
+      let replaceUrl = false;
       if (nextPage !== initialPage) {
-        const url = new URL(window.location.href);
         url.searchParams.set("page", String(nextPage));
-        window.history.replaceState(null, "", url.toString());
+        replaceUrl = true;
       }
+      if (searchEventKey && url.searchParams.get("searchEvent") !== searchEventKey) {
+        url.searchParams.set("searchEvent", searchEventKey);
+        replaceUrl = true;
+      }
+      if (replaceUrl) window.history.replaceState(null, "", url.toString());
 
       if (cached?.job) {
         const cachedResultCount = cached.job.results?.length || 0;
@@ -256,7 +300,10 @@ export function ContentSearchClient({
       const response = await fetch("/api/search/content", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ q: keyword }),
+        body: JSON.stringify({
+          q: keyword,
+          ...(requestFiltersKey === "null" ? {} : { filters: JSON.parse(requestFiltersKey) }),
+        }),
       });
       const data = (await response.json()) as SearchApiResponse;
       if (cancelled) {
@@ -285,7 +332,7 @@ export function ContentSearchClient({
       if (!jobId || (status !== "running" && status !== "queued")) {
         return;
       }
-      pendingCancelRef.current = { keyword, jobId };
+      pendingCancelRef.current = { searchIdentity, jobId };
       pendingCancelTimerRef.current = setTimeout(() => {
         if (pendingCancelRef.current?.jobId === jobId) {
           cancelSearchJob(jobId);
@@ -317,7 +364,7 @@ export function ContentSearchClient({
         scheduleCancelActiveJob();
       }
     };
-  }, [keyword, initialPage, hasExplicitPage, pageStateKey, resultCacheKey, pageSize, showProgressBars]);
+  }, [keyword, initialPage, hasExplicitPage, pageStateKey, requestFiltersKey, resultCacheKey, pageSize, searchIdentity, showProgressBars, searchEventKey]);
 
   const results = job?.results || [];
   const totalPages = Math.max(1, Math.ceil(results.length / pageSize));
@@ -363,11 +410,20 @@ export function ContentSearchClient({
       {pagedResults.length > 0 ? (
         <section className="searchResults">
           {pagedResults.map((result: SearchResult) => {
-            const from = `/search?q=${encodeURIComponent(keyword)}&page=${currentPage}`;
+            const fromParams = new URLSearchParams(resultReturnParams);
+            if (resultReturnPath === "/search") fromParams.set("q", keyword);
+            fromParams.set("page", String(currentPage));
+            if (searchSource !== "direct") fromParams.set("source", searchSource);
+            if (originNovelId) fromParams.set("origin", String(originNovelId));
+            if (searchEventKey) fromParams.set("searchEvent", searchEventKey);
+            const from = `${resultReturnPath}?${fromParams.toString()}`;
             return (
-              <Link
+              <SearchTrackedLink
                 className="searchResultCard"
+                eventKey={searchEventKey}
                 href={`/books/${result.novelId}?from=${encodeURIComponent(from)}&hit=${result.segmentIndex}#seg-${result.segmentIndex}`}
+                novelId={result.novelId}
+                segmentIndex={result.segmentIndex}
                 key={`${result.novelId}-${result.segmentIndex}`}
                 onClick={() => {
                   keepJobOnUnmountRef.current = true;
@@ -384,14 +440,14 @@ export function ContentSearchClient({
                   <strong>{result.title}</strong>
                   <span>{highlightSnippet(result.snippet, highlightTerms)}</span>
                 </span>
-              </Link>
+              </SearchTrackedLink>
             );
           })}
         </section>
       ) : null}
 
       {results.length > pageSize ? (
-        <Pagination page={currentPage} totalPages={totalPages} query={keyword} basePath="/search" onPageChange={changePage} />
+        <Pagination page={currentPage} totalPages={totalPages} query={keyword} basePath={resultReturnPath} onPageChange={changePage} />
       ) : null}
     </>
   );

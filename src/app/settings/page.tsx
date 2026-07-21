@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { SiteHeader } from "@/components/SiteHeader";
+import { getAdminSession } from "@/lib/admin-auth";
 import { getReaderDefaultFontSize, getSettingsPreviewText } from "@/lib/config";
 import { readSiteSettings } from "@/lib/site-settings";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
@@ -20,7 +21,8 @@ export default async function SettingsPage() {
     settings.defaultPaletteRandomEnabled,
     settings.defaultPaletteRotationMinutes,
   );
-  const user = await getCurrentUser();
+  const [user, adminSession] = await Promise.all([getCurrentUser(), getAdminSession()]);
+  const authenticated = Boolean(user || adminSession);
 
   return (
     <main className="appShell">
@@ -33,7 +35,8 @@ export default async function SettingsPage() {
         previewText={previewText}
         defaultFontSize={defaultFontSize}
         defaultPalette={defaultPalette}
-        canConfigureContentMeta={Boolean(user)}
+        canConfigureReaderTags={authenticated || (settings.tagLibraryEnabled && settings.guestTagLibraryNavEnabled)}
+        canConfigureReaderHotwords={authenticated || (settings.hotwordLinksEnabled && settings.guestHotwordLinksEnabled)}
       />
     </main>
   );

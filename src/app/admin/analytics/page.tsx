@@ -123,12 +123,14 @@ function SearchTagPanel({
   total,
   totalPages,
   paginationParams,
+  detailParams,
 }: {
   items: AnalyticsMetric[];
   page: number;
   total: number;
   totalPages: number;
   paginationParams: Record<string, string | undefined>;
+  detailParams: Record<string, string | undefined>;
 }) {
   return (
     <details className="analyticsMetricPanel analyticsSearchPanel" open>
@@ -138,12 +140,18 @@ function SearchTagPanel({
       </summary>
       {items.length ? (
         <div className="analyticsSearchTags">
-          {items.map((item) => (
-            <span className="analyticsSearchTag" title={`${item.label} · ${formatCount(item.count)} 次`} key={item.label}>
-              <span>{item.label}</span>
-              <strong>{formatCount(item.count)}</strong>
-            </span>
-          ))}
+          {items.map((item) => {
+            const query = new URLSearchParams({ q: item.label });
+            Object.entries(detailParams).forEach(([key, value]) => {
+              if (value) query.set(key, value);
+            });
+            return (
+              <Link className="analyticsSearchTag" href={`/admin/analytics/search?${query.toString()}`} title={`查看“${item.label}”的搜索明细`} key={item.label}>
+                <span>{item.label}</span>
+                <strong>{formatCount(item.count)}</strong>
+              </Link>
+            );
+          })}
         </div>
       ) : (
         <p className="analyticsEmpty">暂无搜索记录</p>
@@ -267,6 +275,11 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
             total={overview.searchQueryTotal}
             totalPages={overview.searchQueryTotalPages}
             paginationParams={searchPaginationParams}
+            detailParams={{
+              range: overview.range,
+              from: overview.range === "custom" ? overview.customFrom : undefined,
+              to: overview.range === "custom" ? overview.customTo : undefined,
+            }}
           />
           <MetricTable
             title="内容访问"

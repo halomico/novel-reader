@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { COLOR_PALETTES, getColorPalette, isColorPalette, resolveDefaultPalette } from "./ui-preferences";
+import {
+  COLOR_PALETTES,
+  getColorPalette,
+  isColorPalette,
+  normalizeReaderTagsMode,
+  resolveDefaultPalette,
+} from "./ui-preferences";
 
 test("ships 20 unique local palettes with Default first", () => {
   const values = COLOR_PALETTES.map((palette) => palette.value);
@@ -28,4 +34,13 @@ test("resolves a stable default palette for each configured time bucket", () => 
   assert.equal(first, sameBucket);
   assert.equal(rotating.size > 10, true);
   assert.equal(resolveDefaultPalette("sakura", false, intervalMinutes, Date.now()), "sakura");
+});
+
+test("normalizes current and legacy reader tag preferences", () => {
+  assert.equal(normalizeReaderTagsMode("expanded"), "expanded");
+  assert.equal(normalizeReaderTagsMode("collapsed"), "collapsed");
+  assert.equal(normalizeReaderTagsMode("hidden"), "hidden");
+  assert.equal(normalizeReaderTagsMode("hide"), "hidden");
+  assert.equal(normalizeReaderTagsMode("show"), "expanded");
+  assert.equal(normalizeReaderTagsMode(null), "expanded");
 });

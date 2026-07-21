@@ -41,6 +41,38 @@ test("records normalized search queries and aggregates hot terms by range", asyn
       ],
     );
 
+    const novel = db
+      .prepare(
+        `INSERT INTO novels (title, file_name, relative_path, size_bytes, mtime_ms)
+         VALUES ('测试小说', 'test.txt', 'test.txt', 10, 1)`,
+      )
+      .run();
+    const secondNovel = db
+      .prepare(
+        `INSERT INTO novels (title, file_name, relative_path, size_bytes, mtime_ms)
+         VALUES ('第二本小说', 'second.txt', 'second.txt', 10, 1)`,
+      )
+      .run();
+    const eventKey = analytics.recordSearchQuery("修仙 系统", "title", {
+      source: "header_title",
+      originNovelId: Number(novel.lastInsertRowid),
+    });
+    assert.ok(eventKey);
+    assert.equal(analytics.updateSearchQueryResults(eventKey, 12, 7), true);
+    assert.equal(analytics.recordSearchResultClick(eventKey, Number(novel.lastInsertRowid)), true);
+    assert.equal(analytics.recordSearchResultClick(eventKey, Number(secondNovel.lastInsertRowid)), true);
+    const details = analytics.getSearchQueryDetails("修仙 系统", "24h");
+    assert.ok(details);
+    assert.equal(details.totalSearches, 3);
+    assert.equal(details.totalResults, 12);
+    assert.equal(details.totalResultNovels, 7);
+    assert.equal(details.clickedSearches, 1);
+    assert.equal(details.totalClicks, 2);
+    assert.deepEqual(details.terms, ["修仙", "系统"]);
+    assert.equal(details.events[0].source, "header_title");
+    assert.equal(details.events[0].clickCount, 2);
+    assert.equal(details.events[0].lastClickedNovelTitle, "第二本小说");
+
     const insertTerm = db.prepare("INSERT INTO search_query_events (query, mode) VALUES (?, 'content')");
     for (let index = 0; index < 105; index += 1) {
       insertTerm.run(`分页热词 ${String(index).padStart(3, "0")}`);
@@ -57,7 +89,7 @@ test("records normalized search queries and aggregates hot terms by range", asyn
     fs.writeFileSync(process.env.ADMIN_SETTINGS_PATH, JSON.stringify({ analyticsEnabled: false }));
     analytics.recordSearchQuery("不会写入", "content");
     const count = db.prepare("SELECT COUNT(*) AS count FROM search_query_events").get() as { count: number };
-    assert.equal(count.count, 108);
+    assert.equal(count.count, 109);
   } finally {
     closeDatabase?.();
     if (previousDatabasePath === undefined) delete process.env.DATABASE_PATH;

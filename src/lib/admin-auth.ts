@@ -99,16 +99,18 @@ export function verifyAdminCredentials(username: string, password: string): bool
 }
 
 export async function getAdminSession(): Promise<AdminSession | null> {
-  if (!isAdminSecurityConfigured()) {
-    return null;
+  const cookieStore = await cookies();
+  if (isAdminSecurityConfigured()) {
+    const token = cookieStore.get(getAdminCookieName())?.value || cookieStore.get(getAdminSiteCookieName())?.value;
+    const legacySession = token ? parseSessionToken(token) : null;
+    if (legacySession) {
+      return legacySession;
+    }
   }
 
-  const cookieStore = await cookies();
-  const token = cookieStore.get(getAdminCookieName())?.value || cookieStore.get(getAdminSiteCookieName())?.value;
-  if (!token) {
-    return null;
-  }
-  return parseSessionToken(token);
+  const { getCurrentUser } = await import("./user-auth");
+  const user = await getCurrentUser();
+  return user?.role === "admin" ? { username: user.username, expiresAt: Date.now() + 60_000 } : null;
 }
 
 export async function setAdminSession(username: string) {

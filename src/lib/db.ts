@@ -96,6 +96,26 @@ function addColumnIfMissing(db: DatabaseSync, tableName: string, columnName: str
   }
 }
 
+function dropColumnIfPresent(db: DatabaseSync, tableName: string, columnName: string) {
+  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  if (columns.some((column) => column.name === columnName)) {
+    db.exec(`ALTER TABLE ${tableName} DROP COLUMN ${columnName}`);
+  }
+}
+
+function cleanupObsoleteHistoryColumns(db: DatabaseSync) {
+  db.exec("BEGIN");
+  try {
+    dropColumnIfPresent(db, "users", "history_visible");
+    dropColumnIfPresent(db, "user_reading_history", "hidden_by_user");
+    dropColumnIfPresent(db, "user_media_history", "hidden_by_user");
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
 function migrateLegacySearchRateLimitBans(db: DatabaseSync) {
   const legacy = db
     .prepare("SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'search_rate_limit_bans'")
@@ -104,11 +124,19 @@ function migrateLegacySearchRateLimitBans(db: DatabaseSync) {
     return;
   }
 
-  db.exec(`
-    INSERT OR IGNORE INTO rate_limit_bans (category, ip, rule_id, is_permanent, banned_until, created_at, updated_at)
-    SELECT 'search', ip, rule_id, is_permanent, banned_until, created_at, updated_at
-    FROM search_rate_limit_bans;
-  `);
+  db.exec("BEGIN");
+  try {
+    db.exec(`
+      INSERT OR IGNORE INTO rate_limit_bans (category, ip, rule_id, is_permanent, banned_until, created_at, updated_at)
+      SELECT 'search', ip, rule_id, is_permanent, banned_until, created_at, updated_at
+      FROM search_rate_limit_bans;
+      DROP TABLE search_rate_limit_bans;
+    `);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 }
 
 function initialize(db: DatabaseSync) {
@@ -143,6 +171,7 @@ function initialize(db: DatabaseSync) {
       name TEXT NOT NULL COLLATE NOCASE UNIQUE,
       slug TEXT NOT NULL UNIQUE,
       description TEXT NOT NULL DEFAULT '',
+      aliases TEXT NOT NULL DEFAULT '[]',
       sort_order INTEGER NOT NULL DEFAULT 0,
       is_visible INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -191,8 +220,8 @@ function initialize(db: DatabaseSync) {
       password_hash TEXT NOT NULL,
       avatar_path TEXT,
       status TEXT NOT NULL DEFAULT 'active',
+      role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user', 'admin')),
       search_rate_limit_per_minute INTEGER,
-      history_visible INTEGER NOT NULL DEFAULT 1,
       registration_ip TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -202,7 +231,6 @@ function initialize(db: DatabaseSync) {
 
     CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
     CREATE INDEX IF NOT EXISTS idx_users_last_login ON users(last_login_at);
-
     CREATE TABLE IF NOT EXISTS user_sessions (
       id TEXT PRIMARY KEY,
       user_id INTEGER NOT NULL,
@@ -225,7 +253,6 @@ function initialize(db: DatabaseSync) {
       title TEXT NOT NULL,
       segment_index INTEGER NOT NULL DEFAULT 0,
       visit_count INTEGER NOT NULL DEFAULT 0,
-      hidden_by_user INTEGER NOT NULL DEFAULT 0,
       last_read_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(user_id, novel_id),
@@ -286,13 +313,63 @@ function initialize(db: DatabaseSync) {
 
     CREATE TABLE IF NOT EXISTS search_query_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_key TEXT UNIQUE,
       query TEXT NOT NULL,
       mode TEXT NOT NULL CHECK(mode IN ('title', 'content')),
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      source TEXT NOT NULL DEFAULT 'direct',
+      user_id INTEGER,
+      origin_novel_id INTEGER,
+      result_count INTEGER,
+      result_novel_count INTEGER,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL,
+      FOREIGN KEY(origin_novel_id) REFERENCES novels(id) ON DELETE SET NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_search_query_events_time ON search_query_events(created_at);
     CREATE INDEX IF NOT EXISTS idx_search_query_events_query_time ON search_query_events(query, created_at);
+
+    CREATE TABLE IF NOT EXISTS search_query_terms (
+      search_event_id INTEGER NOT NULL,
+      term TEXT NOT NULL,
+      position INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY(search_event_id, position),
+      FOREIGN KEY(search_event_id) REFERENCES search_query_events(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_search_query_terms_term_event ON search_query_terms(term, search_event_id);
+
+    CREATE TABLE IF NOT EXISTS search_result_clicks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      search_event_id INTEGER NOT NULL,
+      novel_id INTEGER NOT NULL,
+      segment_index INTEGER,
+      clicked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(search_event_id) REFERENCES search_query_events(id) ON DELETE CASCADE,
+      FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_search_result_clicks_event_time ON search_result_clicks(search_event_id, clicked_at);
+    CREATE INDEX IF NOT EXISTS idx_search_result_clicks_novel_time ON search_result_clicks(novel_id, clicked_at);
+
+    CREATE TABLE IF NOT EXISTS content_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      novel_id INTEGER NOT NULL,
+      category TEXT NOT NULL CHECK(category IN ('tag_error', 'hotword_error', 'spam', 'other')),
+      details TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'resolved')),
+      resolved_by TEXT,
+      resolved_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_content_reports_status_time ON content_reports(status, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_content_reports_user_time ON content_reports(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_content_reports_novel_time ON content_reports(novel_id, created_at DESC);
 
     CREATE TABLE IF NOT EXISTS rate_limit_bans (
       category TEXT NOT NULL,
@@ -344,7 +421,6 @@ function initialize(db: DatabaseSync) {
       kind TEXT NOT NULL CHECK(kind IN ('video', 'audio', 'file')),
       title TEXT NOT NULL,
       visit_count INTEGER NOT NULL DEFAULT 0,
-      hidden_by_user INTEGER NOT NULL DEFAULT 0,
       last_accessed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(user_id, media_id),
@@ -364,21 +440,31 @@ function initialize(db: DatabaseSync) {
   addColumnIfMissing(db, "novels", "last_accessed_ip", "last_accessed_ip TEXT");
   addColumnIfMissing(db, "novels", "last_accessed_user_agent", "last_accessed_user_agent TEXT");
   addColumnIfMissing(db, "users", "registration_ip", "registration_ip TEXT");
-  addColumnIfMissing(db, "users", "history_visible", "history_visible INTEGER NOT NULL DEFAULT 1");
-  addColumnIfMissing(db, "user_reading_history", "hidden_by_user", "hidden_by_user INTEGER NOT NULL DEFAULT 0");
-  addColumnIfMissing(db, "user_media_history", "hidden_by_user", "hidden_by_user INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(db, "users", "role", "role TEXT NOT NULL DEFAULT 'user'");
   addColumnIfMissing(db, "media_assets", "artist", "artist TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(db, "media_assets", "mtime_ms", "mtime_ms INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(db, "media_assets", "duration_seconds", "duration_seconds REAL");
   addColumnIfMissing(db, "media_assets", "category_id", "category_id INTEGER REFERENCES video_categories(id) ON DELETE SET NULL");
   addColumnIfMissing(db, "tags", "parent_id", "parent_id INTEGER REFERENCES tags(id) ON DELETE SET NULL");
+  addColumnIfMissing(db, "tags", "aliases", "aliases TEXT NOT NULL DEFAULT '[]'");
   addColumnIfMissing(db, "analytics_events", "media_id", "media_id INTEGER REFERENCES media_assets(id) ON DELETE SET NULL");
+  addColumnIfMissing(db, "search_query_events", "event_key", "event_key TEXT");
+  addColumnIfMissing(db, "search_query_events", "source", "source TEXT NOT NULL DEFAULT 'direct'");
+  addColumnIfMissing(db, "search_query_events", "user_id", "user_id INTEGER REFERENCES users(id) ON DELETE SET NULL");
+  addColumnIfMissing(db, "search_query_events", "origin_novel_id", "origin_novel_id INTEGER REFERENCES novels(id) ON DELETE SET NULL");
+  addColumnIfMissing(db, "search_query_events", "result_count", "result_count INTEGER");
+  addColumnIfMissing(db, "search_query_events", "result_novel_count", "result_novel_count INTEGER");
+  cleanupObsoleteHistoryColumns(db);
+  db.exec("DROP INDEX IF EXISTS idx_novel_tags_tag_novel;");
   db.exec("CREATE INDEX IF NOT EXISTS idx_novels_title_hash ON novels(title, content_hash);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_novels_last_accessed ON novels(last_accessed_at);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_novels_last_accessed_ip ON novels(last_accessed_ip);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_users_registration_ip_created ON users(registration_ip, created_at);");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_users_role ON users(role, status);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_analytics_events_media_time ON analytics_events(media_id, created_at);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_media_assets_video_category ON media_assets(kind, category_id, updated_at DESC);");
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_search_query_events_event_key ON search_query_events(event_key) WHERE event_key IS NOT NULL;");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_search_query_events_source_time ON search_query_events(source, created_at);");
 }
 
 export function getDb(): DatabaseSync {

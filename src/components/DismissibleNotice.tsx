@@ -20,13 +20,11 @@ export function DismissibleNotice({
   tone = "success",
   variant,
   displaySeconds,
-  stayVisibleAfterBlur,
 }: {
   message: string;
   tone?: NoticeTone;
   variant: NoticeVariant;
   displaySeconds: number;
-  stayVisibleAfterBlur: boolean;
 }) {
   const [visible, setVisible] = useState(Boolean(message));
   const baseClass = variant === "admin" ? "adminNotice" : "searchNotice";
@@ -40,39 +38,13 @@ export function DismissibleNotice({
       return;
     }
 
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    function clearTimer() {
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
+    if (displaySeconds <= 0) {
+      return;
     }
 
-    function hideAfterDelay() {
-      clearTimer();
-      if (displaySeconds > 0) {
-        timer = setTimeout(() => setVisible(false), displaySeconds * 1000);
-      } else {
-        setVisible(false);
-      }
-    }
-
-    if (displaySeconds > 0) {
-      timer = setTimeout(() => setVisible(false), displaySeconds * 1000);
-    }
-
-    function hideOnBlur() {
-      if (!stayVisibleAfterBlur) {
-        hideAfterDelay();
-      }
-    }
-
-    window.addEventListener("blur", hideOnBlur);
-    return () => {
-      clearTimer();
-      window.removeEventListener("blur", hideOnBlur);
-    };
-  }, [displaySeconds, stayVisibleAfterBlur, visible, message]);
+    const timer = setTimeout(() => setVisible(false), displaySeconds * 1000);
+    return () => clearTimeout(timer);
+  }, [displaySeconds, visible, message]);
 
   if (!visible || !message) {
     return null;

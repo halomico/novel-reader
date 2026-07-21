@@ -7,7 +7,7 @@ import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { loginAdminAction } from "../actions";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession, isAdminSecurityConfigured } from "@/lib/admin-auth";
-import { getNoticeDisplaySeconds, getSiteName, shouldNoticeStayVisibleAfterBlur } from "@/lib/config";
+import { getNoticeDisplaySeconds, getSiteName } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -41,7 +41,6 @@ export default async function AdminLoginPage({ searchParams }: AdminLoginPagePro
   const configured = isAdminSecurityConfigured();
   const error = params.error || "";
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
-  const noticeStayVisibleAfterBlur = shouldNoticeStayVisibleAfterBlur();
 
   return (
     <main className="adminLoginShell">
@@ -63,7 +62,6 @@ export default async function AdminLoginPage({ searchParams }: AdminLoginPagePro
             tone="warning"
             variant="admin"
             displaySeconds={noticeDisplaySeconds}
-            stayVisibleAfterBlur={noticeStayVisibleAfterBlur}
           />
         ) : null}
         {error ? (
@@ -72,7 +70,6 @@ export default async function AdminLoginPage({ searchParams }: AdminLoginPagePro
             tone="error"
             variant="admin"
             displaySeconds={noticeDisplaySeconds}
-            stayVisibleAfterBlur={noticeStayVisibleAfterBlur}
           />
         ) : null}
 

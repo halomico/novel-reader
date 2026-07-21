@@ -7,6 +7,7 @@ export type AdminTheme = "system" | "light" | "dark";
 export type SiteIconMimeType = "" | "image/png" | "image/jpeg" | "image/webp" | "image/x-icon";
 export type VideoThumbnailMode = "single" | "carousel";
 export type RelatedVideoMode = "next" | "random";
+export type AudioPlaybackMode = "stop" | "next" | "repeat-one";
 
 export type IpRateLimitRule = {
   id: string;
@@ -61,7 +62,7 @@ export type SiteSettings = {
   randomRecommendationCount: number;
   randomRecommendationIntervalMinutes: number;
   noticeDisplaySeconds: number;
-  noticeStayVisibleAfterBlur: boolean;
+  audioDefaultPlaybackMode: AudioPlaybackMode;
   showProgressBars: boolean;
   frontendSearchConcurrencyLimit: number;
   globalSearchMaxResults: number;
@@ -71,6 +72,7 @@ export type SiteSettings = {
   userLoginEnabled: boolean;
   userRegistrationEnabled: boolean;
   userDailyRegistrationLimitPerIp: number;
+  userDailyReportLimit: number;
   userSearchRateLimitPerMinute: number;
   userAvatarMaxBytes: number;
   analyticsEnabled: boolean;
@@ -80,12 +82,14 @@ export type SiteSettings = {
   audioLibraryEnabled: boolean;
   fileLibraryEnabled: boolean;
   tagLibraryEnabled: boolean;
+  advancedTagSearchEnabled: boolean;
   hotwordLinksEnabled: boolean;
   guestLibraryNavEnabled: boolean;
   guestVideoNavEnabled: boolean;
   guestAudioNavEnabled: boolean;
   guestFileNavEnabled: boolean;
   guestTagLibraryNavEnabled: boolean;
+  guestAdvancedTagSearchEnabled: boolean;
   guestHotwordLinksEnabled: boolean;
   videoThumbnailMode: VideoThumbnailMode;
   videoThumbnailSinglePercent: number;
@@ -110,7 +114,7 @@ type SiteSettingsGlobal = typeof globalThis & {
   siteSettingsCache?: SiteSettingsCache;
 };
 
-const LEGACY_INDEX_SETTING_KEYS = [
+const LEGACY_SETTING_KEYS = [
   "adminIndexPageSize",
   "frontendAutoIndexEnabled",
   "contentIndexMaxSegments",
@@ -118,6 +122,7 @@ const LEGACY_INDEX_SETTING_KEYS = [
   "contentIndexHardLimitBytes",
   "manualIndexMaxSegmentsEnabled",
   "manualIndexMaxSegments",
+  "noticeStayVisibleAfterBlur",
 ] as const;
 
 const DEFAULT_SETTINGS: SiteSettings = {
@@ -153,7 +158,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   randomRecommendationCount: 8,
   randomRecommendationIntervalMinutes: 360,
   noticeDisplaySeconds: 0,
-  noticeStayVisibleAfterBlur: false,
+  audioDefaultPlaybackMode: "next",
   showProgressBars: true,
   frontendSearchConcurrencyLimit: 0,
   globalSearchMaxResults: 0,
@@ -163,6 +168,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   userLoginEnabled: true,
   userRegistrationEnabled: true,
   userDailyRegistrationLimitPerIp: 0,
+  userDailyReportLimit: 50,
   userSearchRateLimitPerMinute: 0,
   userAvatarMaxBytes: 0,
   analyticsEnabled: false,
@@ -172,12 +178,14 @@ const DEFAULT_SETTINGS: SiteSettings = {
   audioLibraryEnabled: true,
   fileLibraryEnabled: true,
   tagLibraryEnabled: true,
+  advancedTagSearchEnabled: false,
   hotwordLinksEnabled: true,
   guestLibraryNavEnabled: false,
   guestVideoNavEnabled: false,
   guestAudioNavEnabled: false,
   guestFileNavEnabled: false,
   guestTagLibraryNavEnabled: false,
+  guestAdvancedTagSearchEnabled: false,
   guestHotwordLinksEnabled: false,
   videoThumbnailMode: "single",
   videoThumbnailSinglePercent: 33,
@@ -229,6 +237,10 @@ function cleanVideoThumbnailMode(value: unknown): VideoThumbnailMode {
 
 function cleanRelatedVideoMode(value: unknown): RelatedVideoMode {
   return value === "random" ? "random" : "next";
+}
+
+function cleanAudioPlaybackMode(value: unknown): AudioPlaybackMode {
+  return value === "stop" || value === "repeat-one" ? value : "next";
 }
 
 function cleanBool(value: unknown, fallback: boolean): boolean {
@@ -303,10 +315,10 @@ function writeSettingsFile(settingsPath: string, settings: object) {
   }
 }
 
-function removeLegacyIndexSettings(value: Record<string, unknown>): { settings: Partial<SiteSettings>; changed: boolean } {
+function removeLegacySettings(value: Record<string, unknown>): { settings: Partial<SiteSettings>; changed: boolean } {
   const settings = { ...value };
   let changed = false;
-  for (const key of LEGACY_INDEX_SETTING_KEYS) {
+  for (const key of LEGACY_SETTING_KEYS) {
     if (Object.hasOwn(settings, key)) {
       delete settings[key];
       changed = true;
@@ -323,13 +335,13 @@ function readSiteSettingsFromDisk(): SiteSettings {
 
   try {
     const raw = JSON.parse(fs.readFileSync(settingsPath, "utf8")) as Record<string, unknown>;
-    const cleaned = removeLegacyIndexSettings(raw);
+    const cleaned = removeLegacySettings(raw);
     const parsed = cleaned.settings;
     if (cleaned.changed) {
       try {
         writeSettingsFile(settingsPath, parsed);
       } catch (error) {
-        console.error("Failed to remove legacy search index settings", error);
+        console.error("Failed to remove legacy settings", error);
       }
     }
     return {
@@ -385,7 +397,7 @@ function readSiteSettingsFromDisk(): SiteSettings {
         10_080,
       ),
       noticeDisplaySeconds: cleanInt(parsed.noticeDisplaySeconds, DEFAULT_SETTINGS.noticeDisplaySeconds, 0, 60),
-      noticeStayVisibleAfterBlur: cleanBool(parsed.noticeStayVisibleAfterBlur, DEFAULT_SETTINGS.noticeStayVisibleAfterBlur),
+      audioDefaultPlaybackMode: cleanAudioPlaybackMode(parsed.audioDefaultPlaybackMode),
       showProgressBars: cleanBool(parsed.showProgressBars, DEFAULT_SETTINGS.showProgressBars),
       frontendSearchConcurrencyLimit: cleanInt(parsed.frontendSearchConcurrencyLimit, DEFAULT_SETTINGS.frontendSearchConcurrencyLimit, 0, 50),
       globalSearchMaxResults: cleanInt(parsed.globalSearchMaxResults, DEFAULT_SETTINGS.globalSearchMaxResults, 0, 1000),
@@ -405,6 +417,7 @@ function readSiteSettingsFromDisk(): SiteSettings {
         0,
         100,
       ),
+      userDailyReportLimit: cleanInt(parsed.userDailyReportLimit, DEFAULT_SETTINGS.userDailyReportLimit, 1, 500),
       userSearchRateLimitPerMinute: cleanInt(
         parsed.userSearchRateLimitPerMinute,
         DEFAULT_SETTINGS.userSearchRateLimitPerMinute,
@@ -419,12 +432,14 @@ function readSiteSettingsFromDisk(): SiteSettings {
       audioLibraryEnabled: cleanBool(parsed.audioLibraryEnabled, DEFAULT_SETTINGS.audioLibraryEnabled),
       fileLibraryEnabled: cleanBool(parsed.fileLibraryEnabled, DEFAULT_SETTINGS.fileLibraryEnabled),
       tagLibraryEnabled: cleanBool(parsed.tagLibraryEnabled, DEFAULT_SETTINGS.tagLibraryEnabled),
+      advancedTagSearchEnabled: cleanBool(parsed.advancedTagSearchEnabled, DEFAULT_SETTINGS.advancedTagSearchEnabled),
       hotwordLinksEnabled: cleanBool(parsed.hotwordLinksEnabled, DEFAULT_SETTINGS.hotwordLinksEnabled),
       guestLibraryNavEnabled: cleanBool(parsed.guestLibraryNavEnabled, DEFAULT_SETTINGS.guestLibraryNavEnabled),
       guestVideoNavEnabled: cleanBool(parsed.guestVideoNavEnabled, DEFAULT_SETTINGS.guestVideoNavEnabled),
       guestAudioNavEnabled: cleanBool(parsed.guestAudioNavEnabled, DEFAULT_SETTINGS.guestAudioNavEnabled),
       guestFileNavEnabled: cleanBool(parsed.guestFileNavEnabled, DEFAULT_SETTINGS.guestFileNavEnabled),
       guestTagLibraryNavEnabled: cleanBool(parsed.guestTagLibraryNavEnabled, DEFAULT_SETTINGS.guestTagLibraryNavEnabled),
+      guestAdvancedTagSearchEnabled: cleanBool(parsed.guestAdvancedTagSearchEnabled, DEFAULT_SETTINGS.guestAdvancedTagSearchEnabled),
       guestHotwordLinksEnabled: cleanBool(parsed.guestHotwordLinksEnabled, DEFAULT_SETTINGS.guestHotwordLinksEnabled),
       videoThumbnailMode: cleanVideoThumbnailMode(parsed.videoThumbnailMode),
       videoThumbnailSinglePercent: cleanInt(parsed.videoThumbnailSinglePercent, DEFAULT_SETTINGS.videoThumbnailSinglePercent, 1, 99),

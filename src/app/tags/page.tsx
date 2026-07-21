@@ -1,10 +1,11 @@
-import { Tags } from "lucide-react";
+import { ListFilter, Tags } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SiteHeader } from "@/components/SiteHeader";
-import { isGuestTagLibraryNavEnabled, isTagLibraryEnabled } from "@/lib/config";
+import { getAdminSession } from "@/lib/admin-auth";
+import { canAccessAdvancedTagSearch, isGuestTagLibraryNavEnabled, isTagLibraryEnabled } from "@/lib/config";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { listTagGroups } from "@/lib/tags";
 import { getCurrentUser } from "@/lib/user-auth";
@@ -44,8 +45,8 @@ export default async function TagsPage() {
   if (!isTagLibraryEnabled()) {
     notFound();
   }
-  const user = await getCurrentUser();
-  if (!user && !isGuestTagLibraryNavEnabled()) {
+  const [user, adminSession] = await Promise.all([getCurrentUser(), getAdminSession()]);
+  if (!user && !adminSession && !isGuestTagLibraryNavEnabled()) {
     return <TagsLocked />;
   }
   const groups = listTagGroups();
@@ -63,6 +64,12 @@ export default async function TagsPage() {
             <h1>所有标签</h1>
             <p>按分组浏览已打标签的小说。</p>
           </div>
+          {adminSession || canAccessAdvancedTagSearch(Boolean(user)) ? (
+            <Link className="tagAdvancedSearchLink" href="/tags/search">
+              <ListFilter size={16} aria-hidden="true" />
+              高级搜索
+            </Link>
+          ) : null}
         </header>
 
         {groups.length ? (

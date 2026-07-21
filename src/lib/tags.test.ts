@@ -9,6 +9,8 @@ import {
   createTag,
   listHotwordsForNovel,
   listNovelsByTag,
+  listNovelsByTagIntersection,
+  listNovelIdsByTagFilters,
   listTagGroups,
   listTagsForNovel,
   listTagsForNovels,
@@ -54,10 +56,18 @@ test("stores grouped tags and lists novels by tag", (t) => {
   withTempDatabase(t);
   const novelId = seedNovel();
   const group = createTag({ name: "题材", slug: "topic", sortOrder: 1 });
-  const child = createTag({ name: "奇幻", slug: "fantasy", parentId: group.id, sortOrder: 2 });
+  const child = createTag({
+    name: "奇幻",
+    slug: "fantasy",
+    parentId: group.id,
+    aliases: "幻想、 奇幻、Fantasy\n幻想",
+    description: "包含幻想世界与超自然元素。",
+    sortOrder: 2,
+  });
 
   assert.equal(setNovelTags(novelId, [child.id]), 1);
   assert.deepEqual(listTagsForNovel(novelId).map((tag) => tag.name), ["奇幻"]);
+  assert.deepEqual(listTagsForNovel(novelId)[0].aliases, ["幻想", "Fantasy"]);
 
   const groups = listTagGroups();
   assert.equal(groups[0].group?.name, "题材");
@@ -93,4 +103,38 @@ test("loads visible tags for a catalog page in one batch", (t) => {
   assert.deepEqual(visible.get(firstNovelId)?.map((tag) => tag.name), ["冒险"]);
   assert.deepEqual(visible.get(secondNovelId)?.map((tag) => tag.name), ["冒险"]);
   assert.deepEqual(listTagsForNovels([firstNovelId], { includeHidden: true }).get(firstNovelId)?.map((tag) => tag.name), ["冒险", "隐藏"]);
+});
+
+test("finds novels containing the intersection of selected visible tags", (t) => {
+  withTempDatabase(t);
+  const alphaId = seedNovel("Alpha Story");
+  const betaId = seedNovel("Beta Story");
+  const singleId = seedNovel("Single Story");
+  const fantasy = createTag({ name: "奇幻", slug: "fantasy" });
+  const adventure = createTag({ name: "冒险", slug: "adventure" });
+  const academy = createTag({ name: "学院", slug: "academy" });
+  const hidden = createTag({ name: "隐藏", slug: "hidden", isVisible: false });
+
+  setNovelTags(alphaId, [fantasy.id, adventure.id]);
+  setNovelTags(betaId, [fantasy.id, adventure.id, academy.id]);
+  setNovelTags(singleId, [fantasy.id, hidden.id]);
+
+  const firstPage = listNovelsByTagIntersection([fantasy.id, adventure.id, fantasy.id], { pageSize: 1 });
+  assert.equal(firstPage.totalBooks, 2);
+  assert.equal(firstPage.totalPages, 2);
+  assert.deepEqual(firstPage.books.map((book) => book.title), ["Alpha Story"]);
+
+  const secondPage = listNovelsByTagIntersection([fantasy.id, adventure.id], { page: 2, pageSize: 1 });
+  assert.deepEqual(secondPage.books.map((book) => book.title), ["Beta Story"]);
+
+  const titleFiltered = listNovelsByTagIntersection([fantasy.id, adventure.id], { q: " beta " });
+  assert.deepEqual(titleFiltered.books.map((book) => book.id), [betaId]);
+  assert.equal(titleFiltered.query, "beta");
+
+  const hiddenIntersection = listNovelsByTagIntersection([fantasy.id, hidden.id]);
+  assert.equal(hiddenIntersection.totalBooks, 0);
+
+  const singleTag = listNovelsByTagIntersection([fantasy.id], { excludeTagIds: [adventure.id] });
+  assert.deepEqual(singleTag.books.map((book) => book.id), [singleId]);
+  assert.deepEqual(listNovelIdsByTagFilters([fantasy.id], { excludeTagIds: [academy.id] }), [alphaId, singleId]);
 });

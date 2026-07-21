@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { canAccessNovelLibrary, isNovelLibraryPublic } from "./config";
+import { canAccessAdvancedTagSearch, canAccessNovelLibrary, isAdvancedTagSearchPublic, isNovelLibraryPublic } from "./config";
 import { readSiteSettings, writeSiteSettings } from "./site-settings";
 
 test("atomically replaces an existing settings file", () => {
@@ -18,14 +18,18 @@ test("atomically replaces an existing settings file", () => {
     assert.equal(defaults.audioLibraryEnabled, true);
     assert.equal(defaults.fileLibraryEnabled, true);
     assert.equal(defaults.tagLibraryEnabled, true);
+    assert.equal(defaults.advancedTagSearchEnabled, false);
     assert.equal(defaults.hotwordLinksEnabled, true);
     assert.equal(defaults.guestTagLibraryNavEnabled, false);
+    assert.equal(defaults.guestAdvancedTagSearchEnabled, false);
     assert.equal(defaults.guestHotwordLinksEnabled, false);
     assert.equal(defaults.randomCatalogEnabled, true);
     assert.equal(defaults.defaultPalette, "default");
     assert.equal(defaults.defaultPaletteRandomEnabled, false);
     assert.equal(defaults.manualPinnedNovelsEnabled, true);
     assert.equal(defaults.randomRecommendationsEnabled, false);
+    assert.equal(defaults.audioDefaultPlaybackMode, "next");
+    assert.equal(defaults.userDailyReportLimit, 50);
     writeSiteSettings({ ...defaults, siteName: "第一次" });
     writeSiteSettings({ ...readSiteSettings(), siteName: "第二次" });
     assert.equal(readSiteSettings().siteName, "第二次");
@@ -142,7 +146,41 @@ test("applies disabled, signed-in, and public novel access modes", () => {
   }
 });
 
-test("removes legacy content index settings while preserving current values", () => {
+test("applies disabled, signed-in, and public advanced tag search modes", () => {
+  const previousPath = process.env.ADMIN_SETTINGS_PATH;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-advanced-tag-access-"));
+  process.env.ADMIN_SETTINGS_PATH = path.join(tempDir, "admin-settings.json");
+
+  try {
+    const defaults = readSiteSettings();
+    writeSiteSettings({
+      ...defaults,
+      advancedTagSearchEnabled: false,
+      guestAdvancedTagSearchEnabled: false,
+      guestLibraryNavEnabled: true,
+    });
+    assert.equal(canAccessAdvancedTagSearch(false), false);
+    assert.equal(canAccessAdvancedTagSearch(true), false);
+
+    writeSiteSettings({ ...readSiteSettings(), advancedTagSearchEnabled: true });
+    assert.equal(canAccessAdvancedTagSearch(false), false);
+    assert.equal(canAccessAdvancedTagSearch(true), true);
+    assert.equal(isAdvancedTagSearchPublic(), false);
+
+    writeSiteSettings({ ...readSiteSettings(), guestAdvancedTagSearchEnabled: true });
+    assert.equal(canAccessAdvancedTagSearch(false), true);
+    assert.equal(isAdvancedTagSearchPublic(), true);
+  } finally {
+    if (previousPath === undefined) {
+      delete process.env.ADMIN_SETTINGS_PATH;
+    } else {
+      process.env.ADMIN_SETTINGS_PATH = previousPath;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("removes retired settings while preserving current values", () => {
   const previousPath = process.env.ADMIN_SETTINGS_PATH;
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-legacy-index-settings-"));
   process.env.ADMIN_SETTINGS_PATH = path.join(tempDir, "admin-settings.json");
@@ -160,6 +198,7 @@ test("removes legacy content index settings while preserving current values", ()
         contentIndexHardLimitBytes: 2048,
         manualIndexMaxSegmentsEnabled: true,
         manualIndexMaxSegments: 10000,
+        noticeStayVisibleAfterBlur: true,
       }),
       "utf8",
     );
@@ -177,6 +216,7 @@ test("removes legacy content index settings while preserving current values", ()
       "contentIndexHardLimitBytes",
       "manualIndexMaxSegmentsEnabled",
       "manualIndexMaxSegments",
+      "noticeStayVisibleAfterBlur",
     ]) {
       assert.equal(Object.hasOwn(stored, key), false);
     }

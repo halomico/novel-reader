@@ -3,7 +3,8 @@ import { Clock, KeyRound, Trash2, UserRound } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LocalDateTime } from "@/components/LocalDateTime";
-import { getUserById, listBrowseHistory, listUserLoginRecords } from "@/lib/users";
+import { Pagination } from "@/components/Pagination";
+import { getUserById, listBrowseHistoryPage, listUserLoginRecordPage } from "@/lib/users";
 import { clearAdminUserHistoryAction, deleteAdminUserHistoryAction } from "../../actions";
 import { AdminFrame } from "../../AdminFrame";
 
@@ -21,6 +22,8 @@ type AdminUserDetailPageProps = {
   }>;
   searchParams: Promise<{
     returnPath?: string;
+    loginPage?: string;
+    historyPage?: string;
   }>;
 };
 
@@ -43,9 +46,15 @@ export default async function AdminUserDetailPage({ params, searchParams }: Admi
     notFound();
   }
 
-  const history = listBrowseHistory(user.id);
-  const loginRecords = listUserLoginRecords(user.id);
+  const history = listBrowseHistoryPage(user.id, { page: Number(query.historyPage || 1), pageSize: 20 });
+  const loginRecords = listUserLoginRecordPage(user.id, { page: Number(query.loginPage || 1), pageSize: 20 });
   const returnPath = safeReturnPath(query.returnPath);
+  const detailBasePath = `/admin/users/${user.id}`;
+  const detailParams = new URLSearchParams();
+  if (returnPath !== "/admin/users") detailParams.set("returnPath", returnPath);
+  if (loginRecords.page > 1) detailParams.set("loginPage", String(loginRecords.page));
+  if (history.page > 1) detailParams.set("historyPage", String(history.page));
+  const detailReturnPath = `${detailBasePath}${detailParams.size ? `?${detailParams.toString()}` : ""}`;
 
   return (
     <AdminFrame active="users" breadcrumbs={[{ label: "用户管理", href: returnPath }, { label: user.displayName }]}>
@@ -62,6 +71,10 @@ export default async function AdminUserDetailPage({ params, searchParams }: Admi
             <p>
               <strong>状态</strong>
               <span>{user.status === "active" ? "启用" : "停用"}</span>
+            </p>
+            <p>
+              <strong>权限组</strong>
+              <span>{user.role === "admin" ? "管理员" : "普通用户"}</span>
             </p>
             <p>
               <strong>注册时间</strong>
@@ -94,7 +107,7 @@ export default async function AdminUserDetailPage({ params, searchParams }: Admi
           <div className="adminPanelHeader">
             <div>
               <h2>登录记录</h2>
-              <p>记录用户登录时的 IP 和 UA。</p>
+              <p>记录用户登录时的 IP 和 UA，共 {loginRecords.totalItems} 条。</p>
             </div>
             <KeyRound size={20} aria-hidden="true" />
           </div>
@@ -108,8 +121,8 @@ export default async function AdminUserDetailPage({ params, searchParams }: Admi
                 </tr>
               </thead>
               <tbody>
-                {loginRecords.length ? (
-                  loginRecords.map((record) => (
+                {loginRecords.items.length ? (
+                  loginRecords.items.map((record) => (
                     <tr key={record.id}>
                       <td>
                         <LocalDateTime value={record.loggedAt} />
@@ -126,18 +139,30 @@ export default async function AdminUserDetailPage({ params, searchParams }: Admi
               </tbody>
             </table>
           </div>
+          <Pagination
+            page={loginRecords.page}
+            totalPages={loginRecords.totalPages}
+            query=""
+            basePath={detailBasePath}
+            pageParam="loginPage"
+            extraParams={{
+              historyPage: history.page > 1 ? String(history.page) : undefined,
+              returnPath: returnPath === "/admin/users" ? undefined : returnPath,
+            }}
+          />
         </section>
 
         <section className="adminLoginAudit">
           <div className="adminPanelHeader">
             <div>
               <h2>浏览记录</h2>
-              <p>小说与资源访问，最多显示最近 200 条。</p>
+              <p>小说与资源访问，共 {history.totalItems} 条。</p>
             </div>
             <Clock size={20} aria-hidden="true" />
           </div>
           <form action={deleteAdminUserHistoryAction}>
             <input name="userId" type="hidden" value={user.id} />
+            <input name="returnPath" type="hidden" value={detailReturnPath} />
             <div className="adminTableWrap">
               <table className="adminTable adminUserHistoryTable">
                 <thead>
@@ -150,8 +175,8 @@ export default async function AdminUserDetailPage({ params, searchParams }: Admi
                   </tr>
                 </thead>
                 <tbody>
-                  {history.length ? (
-                    history.map((item) => {
+                  {history.items.length ? (
+                    history.items.map((item) => {
                       const href = item.source === "novel"
                         ? `/books/${item.itemId}?hit=${item.segmentIndex}#seg-${item.segmentIndex}`
                         : `/media/${item.itemId}`;
@@ -182,13 +207,24 @@ export default async function AdminUserDetailPage({ params, searchParams }: Admi
                 </tbody>
               </table>
             </div>
-            {history.length ? (
+            {history.items.length ? (
               <div className="adminTableFooter">
                 <button className="adminDangerButton" type="submit"><Trash2 size={16} aria-hidden="true" />删除所选</button>
                 <button className="adminDangerButton" type="submit" formAction={clearAdminUserHistoryAction}><Trash2 size={16} aria-hidden="true" />清空全部</button>
               </div>
             ) : null}
           </form>
+          <Pagination
+            page={history.page}
+            totalPages={history.totalPages}
+            query=""
+            basePath={detailBasePath}
+            pageParam="historyPage"
+            extraParams={{
+              loginPage: loginRecords.page > 1 ? String(loginRecords.page) : undefined,
+              returnPath: returnPath === "/admin/users" ? undefined : returnPath,
+            }}
+          />
         </section>
       </section>
     </AdminFrame>
