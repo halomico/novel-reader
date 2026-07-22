@@ -2,6 +2,7 @@ import { ListFilter } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { AdvancedSearchResultAnchor } from "@/components/AdvancedSearchResultAnchor";
 import { CatalogBookGrid } from "@/components/CatalogBookGrid";
 import { ContentSearchClient } from "@/components/ContentSearchClient";
 import { Pagination } from "@/components/Pagination";
@@ -12,7 +13,6 @@ import { recordSearchQuery, resolveSearchQueryEventKey } from "@/lib/analytics";
 import {
   canAccessAdvancedTagSearch,
   getCatalogPageSize,
-  getGlobalSearchMaxResults,
   getSearchResultsPageSize,
   shouldShowProgressBars,
 } from "@/lib/config";
@@ -60,7 +60,7 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
   const contentValidation = contentInput ? validateSearchKeyword(contentInput) : null;
   const pageValue = Number(params.page || 1);
   const page = Number.isFinite(pageValue) && pageValue > 0 ? Math.floor(pageValue) : 1;
-  const result = selectedTags.length && !contentInput
+  const result = (selectedTags.length > 0 || Boolean(titleQuery)) && !contentInput
     ? listNovelsByTagIntersection(selectedTags.map((tag) => tag.id), {
         excludeTagIds: excludedTags.map((tag) => tag.id),
         page,
@@ -95,7 +95,6 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
         <span className="tagLibraryIcon" aria-hidden="true"><ListFilter size={23} /></span>
         <div>
           <h1>高级搜索</h1>
-          {result ? <p>{result.totalBooks} 本</p> : null}
         </div>
       </header>
 
@@ -107,15 +106,16 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
         initialContentQuery={contentValidation?.ok ? contentValidation.keyword : contentInput}
       />
 
+      <AdvancedSearchResultAnchor count={result?.totalBooks} scrollKey={returnHref} />
+
       {contentInput && !contentValidation?.ok ? (
         <section className="emptyState"><h2>{contentValidation?.message || "正文关键词格式有误"}</h2></section>
-      ) : contentValidation?.ok && selectedTags.length ? (
+      ) : contentValidation?.ok ? (
         <ContentSearchClient
           keyword={contentValidation.keyword}
           initialPage={page}
           hasExplicitPage={Boolean(params.page)}
           pageSize={getSearchResultsPageSize()}
-          maxResults={getGlobalSearchMaxResults()}
           highlightTerms={contentValidation.query.highlightTerms}
           showProgressBars={shouldShowProgressBars()}
           searchEventKey={searchEventKey}
@@ -124,6 +124,7 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
           requestFilters={{ includeTags: selectedSlugs, excludeTags: excludedSlugs, titleQuery }}
           resultReturnPath="/tags/search"
           resultReturnParams={Object.fromEntries(returnParams)}
+          scrollTargetId="advanced-search-results"
         />
       ) : result ? (
         result.books.length ? (
@@ -139,7 +140,8 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
           totalPages={result.totalPages}
           query={result.query}
           basePath="/tags/search"
-          extraParams={{ tags: selectedSlugs.join(","), exclude: excludedSlugs.join(",") || undefined }}
+          extraParams={{ tags: selectedSlugs.join(",") || undefined, exclude: excludedSlugs.join(",") || undefined }}
+          hash="advanced-search-results"
         />
       ) : null}
     </main>

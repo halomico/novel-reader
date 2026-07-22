@@ -33,7 +33,7 @@ function jsonError(message: string, status: number) {
 
 async function getSearchAccess(request: NextRequest) {
   const user = getCurrentUserFromRequest(request);
-  const adminSession = await getAdminSession();
+  const adminSession = await getAdminSession(user);
   return { user, adminSession, allowed: Boolean(adminSession) || canAccessNovelLibrary(Boolean(user)) };
 }
 
@@ -88,17 +88,20 @@ export async function POST(request: NextRequest) {
       return jsonError("高级搜索不可用", 404);
     }
     const filters = body.filters as Record<string, unknown>;
-    const includedTags = listVisibleTagsBySlugs(cleanSlugList(filters.includeTags));
-    if (!includedTags.length) {
-      return jsonError("请至少选择一个包含标签", 400);
+    const includedSlugs = cleanSlugList(filters.includeTags);
+    const includedTags = listVisibleTagsBySlugs(includedSlugs);
+    if (includedTags.length !== includedSlugs.length) {
+      return jsonError("包含标签无效", 400);
     }
     const includedIds = includedTags.map((tag) => tag.id);
     const excludedIds = listVisibleTagsBySlugs(cleanSlugList(filters.excludeTags))
       .map((tag) => tag.id)
       .filter((id) => !includedIds.includes(id));
     const titleQuery = String(filters.titleQuery || "").normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, 80);
-    candidateNovelIds = listNovelIdsByTagFilters(includedIds, { excludeTagIds: excludedIds, q: titleQuery });
-    cacheScope = `advanced:${crypto.createHash("sha256").update(candidateNovelIds.join(",")).digest("base64url").slice(0, 20)}`;
+    if (includedIds.length || excludedIds.length || titleQuery) {
+      candidateNovelIds = listNovelIdsByTagFilters(includedIds, { excludeTagIds: excludedIds, q: titleQuery });
+      cacheScope = `advanced:${crypto.createHash("sha256").update(candidateNovelIds.join(",")).digest("base64url").slice(0, 20)}`;
+    }
   }
 
   const concurrencyLimit = getFrontendSearchConcurrencyLimit();

@@ -18,6 +18,8 @@ import {
   sortMediaFolders,
   type MediaAsset,
   type MediaKind,
+  type MediaSortBy,
+  type MediaSortOrder,
 } from "@/lib/media";
 import { scheduleMediaPreparation } from "@/lib/media-maintenance";
 import { formatMediaDuration } from "@/lib/media-metadata";
@@ -84,14 +86,14 @@ function mediaHref(
   folder = "",
   query = "",
   category = "",
-  sort: "name" | "size" = "name",
-  order: "asc" | "desc" = "asc",
+  sort: MediaSortBy = "name",
+  order: MediaSortOrder = "asc",
 ): string {
   const params = new URLSearchParams({ kind });
   if (folder) params.set("folder", folder);
   if (query) params.set("q", query);
   if (kind === "video" && category) params.set("category", category);
-  if (sort === "size") params.set("sort", sort);
+  if (sort !== "name") params.set("sort", sort);
   if (order === "desc") params.set("order", order);
   return `/media?${params.toString()}`;
 }
@@ -125,8 +127,13 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
   const requestedKind = isMediaKind(params.kind) ? params.kind : null;
   if (requestedKind && !accessibleKinds.includes(requestedKind)) notFound();
   const kind = requestedKind || accessibleKinds[0];
-  const sortBy = params.sort === "size" ? "size" : "name";
-  const sortOrder = params.order === "desc" ? "desc" : "asc";
+  const timedKind = kind === "video" || kind === "audio";
+  const sortBy: MediaSortBy = timedKind
+    ? params.sort === "duration" || params.sort === "size" ? "duration" : "name"
+    : params.sort === "size" ? "size" : "name";
+  const sortOrder: MediaSortOrder = params.order === "asc" || params.order === "desc"
+    ? params.order
+    : sortBy === "name" ? "asc" : "desc";
   const videoCategories = kind === "video" ? listVideoCategories() : [];
   const requestedCategoryId = /^\d+$/.test(params.category || "") ? Number(params.category) : undefined;
   const videoCategoryId = requestedCategoryId && videoCategories.some((category) => category.id === requestedCategoryId)
@@ -185,14 +192,6 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
             <h1>{KIND_LABELS[kind]}</h1>
           </div>
           <div className="mediaLibraryActions">
-            <MediaPublicSort
-              kind={kind}
-              folder={kind === "video" ? "" : result.folder}
-              query={result.query}
-              category={categoryParam}
-              sortBy={sortBy}
-              sortOrder={sortOrder}
-            />
             <form className="mediaSearchForm" action="/media">
               <input
                 name="q"
@@ -201,8 +200,8 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
                 aria-label={kind === "video" ? "搜索视频" : kind === "audio" ? "搜索标题、作者或目录" : "搜索文件或目录"}
               />
               <input name="kind" type="hidden" value={kind} />
-              {sortBy === "size" ? <input name="sort" type="hidden" value={sortBy} /> : null}
-              {sortOrder === "desc" ? <input name="order" type="hidden" value={sortOrder} /> : null}
+              {sortBy !== "name" ? <input name="sort" type="hidden" value={sortBy} /> : null}
+              {sortOrder !== (sortBy === "name" ? "asc" : "desc") ? <input name="order" type="hidden" value={sortOrder} /> : null}
               {categoryParam ? <input name="category" type="hidden" value={categoryParam} /> : null}
               {kind !== "video" && result.folder ? <input name="folder" type="hidden" value={result.folder} /> : null}
               {result.query ? (
@@ -214,6 +213,14 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
                 <Search size={16} aria-hidden="true" />
               </button>
             </form>
+            <MediaPublicSort
+              kind={kind}
+              folder={kind === "video" ? "" : result.folder}
+              query={result.query}
+              category={categoryParam}
+              sortBy={sortBy}
+              sortOrder={sortOrder}
+            />
           </div>
         </header>
 
@@ -250,7 +257,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
                     <MediaFolderRow
                       href={mediaHref(kind, folder.path, "", "", sortBy, sortOrder)}
                       name={folder.name}
-                      sizeLabel={formatBytes(folder.totalSizeBytes)}
+                      sizeLabel={kind === "audio" ? `${folder.totalAssets} 项` : formatBytes(folder.totalSizeBytes)}
                       key={folder.path}
                     />
                   ))}
@@ -274,8 +281,8 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
                 folder: kind === "video" ? undefined : result.folder || undefined,
                 category: categoryParam || undefined,
                 folderPage: folderPage > 1 ? String(folderPage) : undefined,
-                sort: sortBy === "size" ? sortBy : undefined,
-                order: sortOrder === "desc" ? sortOrder : undefined,
+                sort: sortBy === "name" ? undefined : sortBy,
+                order: sortOrder === (sortBy === "name" ? "asc" : "desc") ? undefined : sortOrder,
               }}
             />
             <Pagination
@@ -289,8 +296,8 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
                 folder: kind === "video" ? undefined : result.folder || undefined,
                 category: categoryParam || undefined,
                 page: result.page > 1 ? String(result.page) : undefined,
-                sort: sortBy === "size" ? sortBy : undefined,
-                order: sortOrder === "desc" ? sortOrder : undefined,
+                sort: sortBy === "name" ? undefined : sortBy,
+                order: sortOrder === (sortBy === "name" ? "asc" : "desc") ? undefined : sortOrder,
               }}
             />
         </div>

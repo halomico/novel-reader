@@ -47,6 +47,7 @@ export type SearchNovelContentOptions = {
 type SearchCandidate = Pick<Novel, "id" | "title" | "relative_path">;
 
 const SQLITE_ID_CHUNK_SIZE = 400;
+const SEARCH_PROGRESS_INTERVAL_MS = 300;
 
 export class ContentSearchCancelledError extends Error {
   constructor() {
@@ -104,6 +105,7 @@ export async function searchNovelContent(
   let candidates: SearchCandidate[] = [];
   let scanEngine: SearchNovelContentProgress["scanEngine"] = "node";
   let indexLabel: string | undefined;
+  let lastProgressAt = 0;
 
   function throwIfCancelled() {
     if (options.isCancelled?.()) {
@@ -111,7 +113,12 @@ export async function searchNovelContent(
     }
   }
 
-  function emitProgress() {
+  function emitProgress(force = false) {
+    const now = Date.now();
+    if (!force && now - lastProgressAt < SEARCH_PROGRESS_INTERVAL_MS) {
+      return;
+    }
+    lastProgressAt = now;
     onProgress?.({
       totalBooks: candidates.length,
       searchedBooks,
@@ -214,7 +221,7 @@ export async function searchNovelContent(
       : listAllSearchCandidates(db);
   }
 
-  emitProgress();
+  emitProgress(true);
   for (const novel of candidates) {
     throwIfCancelled();
     let content: string;
@@ -243,8 +250,8 @@ export async function searchNovelContent(
           content: segment.content,
           normalizedContent,
         });
-      if (results.length !== beforeResultCount && (reachedMaxResults || results.length <= 50 || results.length % 10 === 0)) {
-        emitProgress();
+      if (results.length !== beforeResultCount) {
+        emitProgress(reachedMaxResults);
       }
       if (reachedMaxResults) {
         break;

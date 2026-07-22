@@ -53,17 +53,19 @@ export async function runMediaLibraryMaintenance(force = false): Promise<MediaSy
   return result;
 }
 
-export async function initializeMediaLibraryMaintenance() {
+export function initializeMediaLibraryMaintenance() {
   const state = globalThis as MediaMaintenanceGlobal;
   if (state.mediaMaintenanceStarted) {
     return;
   }
   state.mediaMaintenanceStarted = true;
-  try {
-    await runMediaLibraryMaintenance(true);
-  } catch (error) {
-    console.error("[media] initial library sync failed", error);
-  }
+
+  const initialRun = setTimeout(() => {
+    void runMediaLibraryMaintenance(true).catch((error) => {
+      console.error("[media] initial library sync failed", error);
+    });
+  }, 1_500);
+  initialRun.unref?.();
 
   state.mediaMaintenanceTimer = setInterval(() => {
     void runMediaLibraryMaintenance().catch((error) => {

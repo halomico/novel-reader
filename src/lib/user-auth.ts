@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import type { NextRequest } from "next/server";
 import { cookies, headers } from "next/headers";
+import { cache } from "react";
 import { getClientIp } from "./admin-access";
 import { getDb } from "./db";
 import { hashPassword, verifyPassword } from "./password";
@@ -127,10 +128,12 @@ export async function loginUser(
   return { ok: true, user: toUserProfile({ ...row, last_login_at: new Date().toISOString(), last_login_ip: ip }) };
 }
 
-export async function getCurrentUser(): Promise<UserProfile | null> {
+async function readCurrentUser(): Promise<UserProfile | null> {
   const cookieStore = await cookies();
   return readUserFromSessionValue(cookieStore.get(USER_SESSION_COOKIE)?.value);
 }
+
+export const getCurrentUser = cache(readCurrentUser);
 
 export function getCurrentUserFromRequest(request: NextRequest): UserProfile | null {
   return readUserFromSessionValue(request.cookies.get(USER_SESSION_COOKIE)?.value);

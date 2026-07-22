@@ -37,6 +37,65 @@ export type NovelListResult = {
 const DEFAULT_PAGE_SIZE = 15;
 const MIN_PAGE_SIZE = 1;
 const MAX_PAGE_SIZE = 100;
+const NOVEL_SEGMENT_CACHE_MAX_BYTES = 64 * 1024 * 1024;
+const NOVEL_SEGMENT_CACHE_MAX_ENTRY_BYTES = 16 * 1024 * 1024;
+const NOVEL_SEGMENT_CACHE_MAX_ENTRIES = 32;
+
+type NovelSegmentCacheEntry = {
+  estimatedBytes: number;
+  segments: NovelSegment[];
+};
+
+type NovelSegmentCacheGlobal = typeof globalThis & {
+  novelSegmentCache?: Map<string, NovelSegmentCacheEntry>;
+  novelSegmentCacheBytes?: number;
+};
+
+function novelSegmentCacheKey(book: Novel): string {
+  return [book.relative_path, book.content_hash || "", book.size_bytes, Math.floor(book.mtime_ms)].join(":");
+}
+
+function getNovelSegmentCache(): Map<string, NovelSegmentCacheEntry> {
+  const state = globalThis as NovelSegmentCacheGlobal;
+  state.novelSegmentCache ||= new Map();
+  state.novelSegmentCacheBytes ||= 0;
+  return state.novelSegmentCache;
+}
+
+function cacheNovelSegments(book: Novel, segments: NovelSegment[], estimatedBytes: number) {
+  if (estimatedBytes > NOVEL_SEGMENT_CACHE_MAX_ENTRY_BYTES) {
+    return;
+  }
+
+  const state = globalThis as NovelSegmentCacheGlobal;
+  const cache = getNovelSegmentCache();
+  const pathPrefix = `${book.relative_path}:`;
+  for (const [key, entry] of cache) {
+    if (key.startsWith(pathPrefix)) {
+      cache.delete(key);
+      state.novelSegmentCacheBytes = Math.max(0, (state.novelSegmentCacheBytes || 0) - entry.estimatedBytes);
+    }
+  }
+
+  while (
+    cache.size >= NOVEL_SEGMENT_CACHE_MAX_ENTRIES ||
+    (state.novelSegmentCacheBytes || 0) + estimatedBytes > NOVEL_SEGMENT_CACHE_MAX_BYTES
+  ) {
+    const oldest = cache.entries().next().value as [string, NovelSegmentCacheEntry] | undefined;
+    if (!oldest) break;
+    cache.delete(oldest[0]);
+    state.novelSegmentCacheBytes = Math.max(0, (state.novelSegmentCacheBytes || 0) - oldest[1].estimatedBytes);
+  }
+
+  cache.set(novelSegmentCacheKey(book), { segments, estimatedBytes });
+  state.novelSegmentCacheBytes = (state.novelSegmentCacheBytes || 0) + estimatedBytes;
+}
+
+export function clearNovelSegmentCache() {
+  const state = globalThis as NovelSegmentCacheGlobal;
+  state.novelSegmentCache?.clear();
+  state.novelSegmentCacheBytes = 0;
+}
 
 export function normalizePageSize(value: number | string | undefined): number {
   const pageSize = Number(value || DEFAULT_PAGE_SIZE);
@@ -252,6 +311,17 @@ export async function readNovelContent(book: Pick<Novel, "relative_path">): Prom
 }
 
 export async function readNovelSegments(book: Novel): Promise<NovelSegment[]> {
+  const cache = getNovelSegmentCache();
+  const key = novelSegmentCacheKey(book);
+  const cached = cache.get(key);
+  if (cached) {
+    cache.delete(key);
+    cache.set(key, cached);
+    return cached.segments;
+  }
+
   const content = await readNovelContent(book);
-  return createNovelSegments(content);
+  const segments = createNovelSegments(content);
+  cacheNovelSegments(book, segments, Math.max(book.size_bytes, content.length * 2));
+  return segments;
 }

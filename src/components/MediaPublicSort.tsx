@@ -1,8 +1,9 @@
 "use client";
 
-import { ArrowDown, ArrowUp } from "lucide-react";
 import { useRouter } from "next/navigation";
-import type { MediaKind } from "@/lib/media";
+import type { MediaKind, MediaSortBy, MediaSortOrder } from "@/lib/media";
+import { MediaSortMenu, type MediaSortOption } from "./MediaSortMenu";
+import { beginNavigationProgress } from "./NavigationProgress";
 
 export function MediaPublicSort({
   kind,
@@ -16,45 +17,24 @@ export function MediaPublicSort({
   folder: string;
   query: string;
   category: string;
-  sortBy: "name" | "size";
-  sortOrder: "asc" | "desc";
+  sortBy: MediaSortBy;
+  sortOrder: MediaSortOrder;
 }) {
   const router = useRouter();
+  const options: MediaSortOption[] = kind === "file"
+    ? [{ value: "name", label: "名称" }, { value: "size", label: "大小" }]
+    : [{ value: "name", label: "名称" }, { value: "duration", label: "时长" }];
 
-  function navigate(nextSort: "name" | "size", nextOrder: "asc" | "desc") {
+  function navigate(nextSort: MediaSortBy, nextOrder: MediaSortOrder) {
     const params = new URLSearchParams({ kind });
     if (folder) params.set("folder", folder);
     if (query) params.set("q", query);
     if (category) params.set("category", category);
-    if (nextSort === "size") params.set("sort", nextSort);
+    if (nextSort !== "name") params.set("sort", nextSort);
     if (nextOrder === "desc") params.set("order", nextOrder);
+    beginNavigationProgress();
     router.push(`/media?${params.toString()}`);
   }
 
-  return (
-    <div className="mediaPublicSort" aria-label="资源排序">
-      <button
-        className="mediaPublicSortDirection"
-        type="button"
-        aria-label={sortOrder === "asc" ? "切换为降序" : "切换为升序"}
-        title={sortOrder === "asc" ? "当前升序，点击切换为降序" : "当前降序，点击切换为升序"}
-        onClick={() => navigate(sortBy, sortOrder === "asc" ? "desc" : "asc")}
-      >
-        {sortOrder === "asc" ? <ArrowUp size={15} aria-hidden="true" /> : <ArrowDown size={15} aria-hidden="true" />}
-      </button>
-      <label className="mediaPublicSortField">
-        <select
-          aria-label="排序字段"
-          value={sortBy}
-          onChange={(event) => {
-            const nextSort = event.target.value === "size" ? "size" : "name";
-            navigate(nextSort, nextSort === "name" ? "asc" : "desc");
-          }}
-        >
-          <option value="name">名称</option>
-          <option value="size">大小</option>
-        </select>
-      </label>
-    </div>
-  );
+  return <MediaSortMenu options={options} sortBy={sortBy} sortOrder={sortOrder} onChange={navigate} />;
 }

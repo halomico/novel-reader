@@ -1,6 +1,7 @@
 import { BookOpen } from "lucide-react";
 import Link from "next/link";
 import {
+  canAccessAdvancedTagSearch,
   getNoticeDisplaySeconds,
   getSiteName,
   isGuestAudioNavEnabled,
@@ -67,35 +68,36 @@ export async function SiteHeader({
 
   return (
     <header className={headerClassName}>
-      <Link className="brand" href="/" aria-label="返回首页">
-        <BookOpen size={24} aria-hidden="true" />
-        <span>{siteName}</span>
-      </Link>
-      {showPrimaryNav ? <HeaderPrimaryNav mediaKinds={mediaKinds} showLibrary={showLibraryNav} showTags={showTagNav} /> : null}
-      {showTools ? (
-        <div className={showLibraryNav ? "headerTools" : "headerTools hasNoSearch"}>
-          {showLibraryNav ? (
-            <HeaderSearch
-              query={query}
-              defaultMode={defaultSearchMode}
-              defaultExpanded={defaultSearchExpanded}
-              showCurrentSearch={showCurrentSearch}
-              noticeDisplaySeconds={noticeDisplaySeconds}
-            />
-          ) : null}
-          <div className="headerActions">
-            <ThemeToggle />
-            <HeaderUserMenu
-              user={user ? { displayName: user.displayName, avatarPath: user.avatarPath } : null}
-              loginEnabled={loginEnabled}
-              registrationEnabled={registrationEnabled}
-              mediaKinds={mediaKinds}
-              showLibrary={showLibraryNav}
-              showTags={showTagNav}
-            />
+        <Link className="brand" href="/" aria-label="返回首页">
+          <BookOpen size={24} aria-hidden="true" />
+          <span>{siteName}</span>
+        </Link>
+        {showPrimaryNav ? <HeaderPrimaryNav mediaKinds={mediaKinds} showLibrary={showLibraryNav} showTags={showTagNav} /> : null}
+        {showTools ? (
+          <div className={showLibraryNav ? "headerTools" : "headerTools hasNoSearch"}>
+            {showLibraryNav ? (
+              <HeaderSearch
+                query={query}
+                defaultMode={defaultSearchMode}
+                defaultExpanded={defaultSearchExpanded}
+                showCurrentSearch={showCurrentSearch}
+                showAdvancedSearch={user?.role === "admin" || canAccessAdvancedTagSearch(Boolean(user))}
+                noticeDisplaySeconds={noticeDisplaySeconds}
+              />
+            ) : null}
+            <div className="headerActions">
+              <ThemeToggle />
+              <HeaderUserMenu
+                user={user ? { displayName: user.displayName, avatarPath: user.avatarPath } : null}
+                loginEnabled={loginEnabled}
+                registrationEnabled={registrationEnabled}
+                mediaKinds={mediaKinds}
+                showLibrary={showLibraryNav}
+                showTags={showTagNav}
+              />
+            </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
     </header>
   );
 }

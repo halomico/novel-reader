@@ -470,11 +470,13 @@ export function listNovelsByTagIntersection(
   const { validIds, validExcludedIds, hasInvalidIncluded } = resolveVisibleTagFilterIds(tagIds, params.excludeTagIds);
   const query = (params.q || "").normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, 80);
   const pageSize = Math.min(Math.max(Math.floor(params.pageSize || 15), 1), 100);
-  if (!validIds.length || hasInvalidIncluded) {
+  if (hasInvalidIncluded || (!validIds.length && !query)) {
     return { books: [], page: 1, pageSize, totalBooks: 0, totalPages: 1, tagIds: validIds, excludedTagIds: validExcludedIds, query };
   }
 
   const placeholders = validIds.map(() => "?").join(",");
+  const includeJoin = validIds.length ? "INNER JOIN novel_tags nt ON nt.novel_id = n.id" : "";
+  const includeFilter = validIds.length ? `nt.tag_id IN (${placeholders})` : "1 = 1";
   const titleFilter = query ? "AND instr(lower(n.title), lower(?)) > 0" : "";
   const excludedFilter = validExcludedIds.length
     ? `AND NOT EXISTS (
@@ -482,11 +484,14 @@ export function listNovelsByTagIntersection(
          WHERE excluded.novel_id = n.id AND excluded.tag_id IN (${validExcludedIds.map(() => "?").join(",")})
        )`
     : "";
+  const includeGrouping = validIds.length
+    ? "GROUP BY n.id HAVING COUNT(DISTINCT nt.tag_id) = ?"
+    : "";
   const filterParams: Array<string | number> = [
     ...validIds,
     ...(query ? [query] : []),
     ...validExcludedIds,
-    validIds.length,
+    ...(validIds.length ? [validIds.length] : []),
   ];
   const total = db
     .prepare(
@@ -494,10 +499,9 @@ export function listNovelsByTagIntersection(
        FROM (
          SELECT n.id
          FROM novels n
-         INNER JOIN novel_tags nt ON nt.novel_id = n.id
-         WHERE nt.tag_id IN (${placeholders}) ${titleFilter} ${excludedFilter}
-         GROUP BY n.id
-         HAVING COUNT(DISTINCT nt.tag_id) = ?
+         ${includeJoin}
+         WHERE ${includeFilter} ${titleFilter} ${excludedFilter}
+         ${includeGrouping}
        )`,
     )
     .get(...filterParams) as { count: number };
@@ -508,10 +512,9 @@ export function listNovelsByTagIntersection(
       `SELECT n.id, n.title, n.file_name, n.relative_path, n.content_hash, n.size_bytes, n.mtime_ms, n.word_count, n.visit_count,
               n.last_accessed_at, n.last_accessed_ip, n.last_accessed_user_agent, n.created_at, n.updated_at
        FROM novels n
-       INNER JOIN novel_tags nt ON nt.novel_id = n.id
-       WHERE nt.tag_id IN (${placeholders}) ${titleFilter} ${excludedFilter}
-       GROUP BY n.id
-       HAVING COUNT(DISTINCT nt.tag_id) = ?
+       ${includeJoin}
+       WHERE ${includeFilter} ${titleFilter} ${excludedFilter}
+       ${includeGrouping}
        ORDER BY n.title COLLATE NOCASE ASC, n.id ASC
        LIMIT ? OFFSET ?`,
     )
@@ -534,10 +537,12 @@ export function listNovelIdsByTagFilters(
   params: { q?: string; excludeTagIds?: number[] } = {},
 ): number[] {
   const { validIds, validExcludedIds, hasInvalidIncluded } = resolveVisibleTagFilterIds(tagIds, params.excludeTagIds);
-  if (!validIds.length || hasInvalidIncluded) return [];
   const query = (params.q || "").normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, 80);
+  if (hasInvalidIncluded || (!validIds.length && !query && !validExcludedIds.length)) return [];
 
   const includePlaceholders = validIds.map(() => "?").join(",");
+  const includeJoin = validIds.length ? "INNER JOIN novel_tags nt ON nt.novel_id = n.id" : "";
+  const includeFilter = validIds.length ? `nt.tag_id IN (${includePlaceholders})` : "1 = 1";
   const titleFilter = query ? "AND instr(lower(n.title), lower(?)) > 0" : "";
   const excludedFilter = validExcludedIds.length
     ? `AND NOT EXISTS (
@@ -545,20 +550,22 @@ export function listNovelIdsByTagFilters(
          WHERE excluded.novel_id = n.id AND excluded.tag_id IN (${validExcludedIds.map(() => "?").join(",")})
        )`
     : "";
+  const includeGrouping = validIds.length
+    ? "GROUP BY n.id HAVING COUNT(DISTINCT nt.tag_id) = ?"
+    : "";
   const paramsList: Array<string | number> = [
     ...validIds,
     ...(query ? [query] : []),
     ...validExcludedIds,
-    validIds.length,
+    ...(validIds.length ? [validIds.length] : []),
   ];
   const rows = getDb()
     .prepare(
       `SELECT n.id
        FROM novels n
-       INNER JOIN novel_tags nt ON nt.novel_id = n.id
-       WHERE nt.tag_id IN (${includePlaceholders}) ${titleFilter} ${excludedFilter}
-       GROUP BY n.id
-       HAVING COUNT(DISTINCT nt.tag_id) = ?
+       ${includeJoin}
+       WHERE ${includeFilter} ${titleFilter} ${excludedFilter}
+       ${includeGrouping}
        ORDER BY n.id ASC`,
     )
     .all(...paramsList) as Array<{ id: number }>;

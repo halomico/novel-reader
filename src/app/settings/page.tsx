@@ -29,7 +29,7 @@ export default async function SettingsPage() {
       <SiteHeader currentUser={user} />
       <Breadcrumbs items={[{ label: "首页", href: "/" }, { label: "阅读设置" }]} />
       <section className="settingsHero">
-        <h1>设置</h1>
+        <h1>阅读设置</h1>
       </section>
       <SettingsPanel
         previewText={previewText}

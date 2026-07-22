@@ -80,6 +80,11 @@ export type AnalyticsOverview = {
   contentPageSize: number;
   contentTotal: number;
   contentTotalPages: number;
+  topTags: AnalyticsMetric[];
+  tagPage: number;
+  tagPageSize: number;
+  tagTotal: number;
+  tagTotalPages: number;
   topIps: AnalyticsMetric[];
   topCountries: AnalyticsMetric[];
   topReferrers: AnalyticsMetric[];
@@ -272,6 +277,7 @@ export function recordAnalyticsEvent(params: {
   referrer?: string | null;
   novelId?: number | null;
   mediaId?: number | null;
+  tagId?: number | null;
 }) {
   if (!isAnalyticsEnabled()) {
     return;
@@ -281,8 +287,8 @@ export function recordAnalyticsEvent(params: {
   const parsed = parseUserAgent(userAgent);
   getDb()
     .prepare(
-      `INSERT INTO analytics_events (user_id, event_type, path, referrer, ip, country, user_agent, device, browser, os, novel_id, media_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO analytics_events (user_id, event_type, path, referrer, ip, country, user_agent, device, browser, os, novel_id, media_id, tag_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       params.userId ?? null,
@@ -297,6 +303,7 @@ export function recordAnalyticsEvent(params: {
       parsed.os,
       params.novelId ?? null,
       params.mediaId ?? null,
+      params.tagId ?? null,
     );
 }
 
@@ -584,6 +591,8 @@ export function getAnalyticsOverview(
     searchQueryPageSize?: number;
     contentPage?: number | string;
     contentPageSize?: number;
+    tagPage?: number | string;
+    tagPageSize?: number;
     customFrom?: string;
     customTo?: string;
   } = {},
@@ -592,10 +601,12 @@ export function getAnalyticsOverview(
   const eventWhere = contentTimeWhere(filter);
   const contentWhere = contentTimeWhere(filter, "e.created_at", "e.novel_id", "e.media_id");
   const searchTime = timeCondition(filter, "created_at");
+  const tagTime = timeCondition(filter, "e.created_at");
   const realtimeLimit = Math.min(Math.max(Math.floor(options.realtimeLimit || 300), 30), 2000);
   const realtimePageSize = Math.min(Math.max(Math.floor(options.realtimePageSize || 30), 1), 100);
   const searchQueryPageSize = Math.min(Math.max(Math.floor(options.searchQueryPageSize || 100), 1), 100);
   const contentPageSize = Math.min(Math.max(Math.floor(options.contentPageSize || 50), 1), 100);
+  const tagPageSize = Math.min(Math.max(Math.floor(options.tagPageSize || 50), 1), 100);
   const totalViews = oneCount(
     `SELECT COUNT(*) AS count FROM analytics_events WHERE ${eventWhere.sql}`,
     eventWhere.params,
@@ -645,6 +656,15 @@ export function getAnalyticsOverview(
   const contentTotalPages = Math.max(1, Math.ceil(contentTotal / contentPageSize));
   const contentPage = normalizePositivePage(options.contentPage, contentTotalPages);
   const contentOffset = (contentPage - 1) * contentPageSize;
+  const tagTotal = oneCount(
+    `SELECT COUNT(DISTINCT e.tag_id) AS count
+     FROM analytics_events e
+     WHERE e.event_type = 'tag_click' AND e.tag_id IS NOT NULL AND ${tagTime.sql}`,
+    tagTime.params,
+  );
+  const tagTotalPages = Math.max(1, Math.ceil(tagTotal / tagPageSize));
+  const tagPage = normalizePositivePage(options.tagPage, tagTotalPages);
+  const tagOffset = (tagPage - 1) * tagPageSize;
 
   const realtimeRows = getDb()
     .prepare(
@@ -716,6 +736,20 @@ export function getAnalyticsOverview(
     contentPageSize,
     contentTotal,
     contentTotalPages,
+    topTags: topMetrics(
+      `SELECT t.name AS label, COUNT(*) AS count
+       FROM analytics_events e
+       INNER JOIN tags t ON t.id = e.tag_id
+       WHERE e.event_type = 'tag_click' AND ${tagTime.sql}
+       GROUP BY e.tag_id, t.name
+       ORDER BY count DESC, MAX(e.created_at) DESC, t.name COLLATE NOCASE ASC
+       LIMIT ? OFFSET ?`,
+      [...tagTime.params, tagPageSize, tagOffset],
+    ),
+    tagPage,
+    tagPageSize,
+    tagTotal,
+    tagTotalPages,
     topIps: topMetrics(
       `SELECT ip AS label, COUNT(*) AS count
        FROM analytics_events

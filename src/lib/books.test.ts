@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
-import { buildTitleSearchSql, normalizePageSize } from "./books";
+import { buildTitleSearchSql, clearNovelSegmentCache, normalizePageSize, readNovelSegments, type Novel } from "./books";
 import { sampleNovelIdsFromList } from "./novel-id-sampler";
 import { parseSearchQuery } from "./search-query";
 
@@ -39,4 +42,49 @@ test("samples sparse novel IDs uniformly without depending on ID gaps", () => {
   assert.equal(first.every((id) => ids.includes(id)), true);
   assert.equal(excluded.some((id) => id === 2 || id === 900_000), false);
   assert.equal(excluded.length, 3);
+});
+
+test("reuses segmented content until the novel file version changes", async () => {
+  const previousLibraryDir = process.env.NOVEL_LIBRARY_DIR;
+  const libraryDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-segments-"));
+  process.env.NOVEL_LIBRARY_DIR = libraryDir;
+  clearNovelSegmentCache();
+
+  const book: Novel = {
+    id: 1,
+    title: "缓存测试",
+    file_name: "缓存测试.txt",
+    relative_path: "缓存测试.txt",
+    content_hash: "version-1",
+    size_bytes: 12,
+    mtime_ms: 1,
+    word_count: 12,
+    visit_count: 0,
+    last_accessed_at: null,
+    last_accessed_ip: null,
+    last_accessed_user_agent: null,
+    created_at: "2026-01-01 00:00:00",
+    updated_at: "2026-01-01 00:00:00",
+  };
+
+  try {
+    fs.writeFileSync(path.join(libraryDir, book.relative_path), "第一版正文", "utf8");
+    const first = await readNovelSegments(book);
+    fs.writeFileSync(path.join(libraryDir, book.relative_path), "第二版正文", "utf8");
+    const cached = await readNovelSegments(book);
+    const refreshed = await readNovelSegments({ ...book, content_hash: "version-2", mtime_ms: 2 });
+
+    assert.strictEqual(cached, first);
+    assert.equal(first[0]?.content, "第一版正文");
+    assert.notStrictEqual(refreshed, first);
+    assert.equal(refreshed[0]?.content, "第二版正文");
+  } finally {
+    clearNovelSegmentCache();
+    if (previousLibraryDir === undefined) {
+      delete process.env.NOVEL_LIBRARY_DIR;
+    } else {
+      process.env.NOVEL_LIBRARY_DIR = previousLibraryDir;
+    }
+    fs.rmSync(libraryDir, { recursive: true, force: true });
+  }
 });

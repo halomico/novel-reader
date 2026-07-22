@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { CatalogBookGrid } from "@/components/CatalogBookGrid";
 import { Pagination } from "@/components/Pagination";
+import { ResultCount } from "@/components/ResultCount";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getCatalogPageSize, isGuestTagLibraryNavEnabled, isTagLibraryEnabled } from "@/lib/config";
 import { getTagBySlug, listNovelsByTag, listTagsForNovels } from "@/lib/tags";
@@ -91,7 +92,7 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
                 <strong>{tag.aliases.join("、")}</strong>
               </span>
             ) : null}
-            <span>共 {result.totalBooks} 本小说</span>
+            <ResultCount count={result.totalBooks} />
           </div>
         </div>
       </section>

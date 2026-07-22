@@ -10,6 +10,7 @@ import {
   getAdminUsername,
 } from "./config";
 import { verifyPassword } from "./password";
+import type { UserProfile } from "./users";
 
 export type AdminSession = {
   username: string;
@@ -98,7 +99,7 @@ export function verifyAdminCredentials(username: string, password: string): bool
   return safeEqual(password, getAdminPassword());
 }
 
-export async function getAdminSession(): Promise<AdminSession | null> {
+export async function getAdminSession(currentUser?: UserProfile | null): Promise<AdminSession | null> {
   const cookieStore = await cookies();
   if (isAdminSecurityConfigured()) {
     const token = cookieStore.get(getAdminCookieName())?.value || cookieStore.get(getAdminSiteCookieName())?.value;
@@ -109,7 +110,7 @@ export async function getAdminSession(): Promise<AdminSession | null> {
   }
 
   const { getCurrentUser } = await import("./user-auth");
-  const user = await getCurrentUser();
+  const user = currentUser === undefined ? await getCurrentUser() : currentUser;
   return user?.role === "admin" ? { username: user.username, expiresAt: Date.now() + 60_000 } : null;
 }
 

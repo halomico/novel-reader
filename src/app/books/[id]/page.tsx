@@ -3,7 +3,8 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Suspense } from "react";
+import { after } from "next/server";
+import { cache, Suspense } from "react";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { AdminReaderActions } from "@/components/AdminReaderActions";
 import { ReaderTagLinks } from "@/components/ReaderTagLinks";
@@ -30,6 +31,8 @@ import { recordNovelVisit, recordReadingHistory } from "@/lib/users";
 
 export const dynamic = "force-dynamic";
 
+const getBookById = cache(getNovelById);
+
 type BookPageProps = {
   params: Promise<{
     id: string;
@@ -42,7 +45,7 @@ type BookPageProps = {
 
 export async function generateMetadata({ params }: BookPageProps): Promise<Metadata> {
   const bookId = Number((await params).id);
-  const book = Number.isInteger(bookId) && bookId > 0 ? getNovelById(bookId) : null;
+  const book = Number.isInteger(bookId) && bookId > 0 ? getBookById(bookId) : null;
   if (!book) {
     return { title: "小说不存在", robots: NO_INDEX_ROBOTS };
   }
@@ -103,18 +106,20 @@ async function ReaderContent({
   user: CurrentUser;
 }) {
   const segments = await readNovelSegments(book);
-  recordNovelVisit(book.id, getClientIp(requestHeaders), requestHeaders.get("user-agent") || "");
-  recordAnalyticsEvent({
-    headers: requestHeaders,
-    userId: user?.id ?? null,
-    eventType: "book_view",
-    path: `/books/${book.id}`,
-    referrer: requestHeaders.get("referer"),
-    novelId: book.id,
+  after(() => {
+    recordNovelVisit(book.id, getClientIp(requestHeaders), requestHeaders.get("user-agent") || "");
+    recordAnalyticsEvent({
+      headers: requestHeaders,
+      userId: user?.id ?? null,
+      eventType: "book_view",
+      path: `/books/${book.id}`,
+      referrer: requestHeaders.get("referer"),
+      novelId: book.id,
+    });
+    if (user) {
+      recordReadingHistory(user.id, book, hitSegment);
+    }
   });
-  if (user) {
-    recordReadingHistory(user.id, book, hitSegment);
-  }
 
   return (
     <div className="readerText">
@@ -142,7 +147,7 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
     notFound();
   }
 
-  const book = getNovelById(bookId);
+  const book = getBookById(bookId);
   if (!book) {
     notFound();
   }

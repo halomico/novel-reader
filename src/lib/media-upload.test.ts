@@ -81,6 +81,16 @@ test("uploads media in chunks, records it, and removes the stored file", async (
     const secondStoredPath = media.mediaFilePath(secondAsset.storedName);
     assert.equal(secondAsset.title, "second");
     assert.equal(secondAsset.artist, "测试作者");
+    assert.equal(media.saveMediaDuration(asset.id, 30), true);
+    assert.equal(media.saveMediaDuration(secondAsset.id, 120), true);
+    assert.deepEqual(
+      media.listMediaAssets({ kind: "audio", folder: "测试专辑", page: 1, pageSize: 1, sortBy: "duration", sortOrder: "desc" }).assets.map((item) => item.id),
+      [secondAsset.id],
+    );
+    assert.deepEqual(
+      media.listMediaAssets({ kind: "audio", folder: "测试专辑", page: 2, pageSize: 1, sortBy: "duration", sortOrder: "desc" }).assets.map((item) => item.id),
+      [asset.id],
+    );
     assert.deepEqual(
       media.listMediaAssets({ kind: "audio", folder: "测试专辑", sortBy: "size", sortOrder: "asc" }).assets.map((item) => item.id),
       [asset.id, secondAsset.id],
@@ -101,6 +111,7 @@ test("uploads media in chunks, records it, and removes the stored file", async (
     );
     const albumFolder = media.listMediaFolders("audio").find((item) => item.path === "测试专辑");
     assert.equal(albumFolder?.directAssets, 2);
+    assert.equal(albumFolder?.totalAssets, 2);
     assert.equal(albumFolder?.totalSizeBytes, source.length + secondSource.length);
     assert.equal(media.listMediaAssets({ query: "测试作者" }).totalAssets, 1);
     assert.equal(media.renameMediaFolder("audio", "测试专辑", "已整理专辑"), "已整理专辑");

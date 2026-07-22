@@ -52,8 +52,17 @@ const FILTERS: Array<{ kind?: MediaKind; label: string }> = [
   { kind: "file", label: "文件" },
 ];
 
+function compatibleMediaSort(kind: MediaKind | undefined, sortBy: MediaSortBy): MediaSortBy {
+  if (kind === "video" || kind === "audio") {
+    return sortBy === "size" ? "duration" : sortBy;
+  }
+  return sortBy === "duration" || sortBy === "plays" ? "name" : sortBy;
+}
+
 function filterHref(kind: MediaKind | undefined, sortBy: MediaSortBy, sortOrder: MediaSortOrder, view: "table" | "grid"): string {
-  const params = new URLSearchParams({ sort: sortBy, order: sortOrder });
+  const nextSortBy = compatibleMediaSort(kind, sortBy);
+  const nextSortOrder = nextSortBy === sortBy ? sortOrder : normalizeMediaSortOrder(undefined, nextSortBy);
+  const params = new URLSearchParams({ sort: nextSortBy, order: nextSortOrder });
   if (kind) params.set("kind", kind);
   if (kind === "video" && view === "grid") params.set("view", view);
   return `/admin/media?${params.toString()}`;
@@ -90,7 +99,7 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
   const params = await searchParams;
   const kind = isMediaKind(params.kind) ? params.kind : undefined;
   const requestedSortBy = normalizeMediaSortBy(params.sort);
-  const sortBy = requestedSortBy === "plays" && kind !== "video" && kind !== "audio" ? "name" : requestedSortBy;
+  const sortBy = compatibleMediaSort(kind, requestedSortBy);
   const sortOrder = normalizeMediaSortOrder(params.order, sortBy);
   const categories = listVideoCategories({ includeHidden: true });
   const requestedCategoryId = /^\d+$/.test(params.category || "") ? Number(params.category) : undefined;

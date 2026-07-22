@@ -4,6 +4,7 @@ import { ChevronRight, Folder } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef } from "react";
+import { beginNavigationProgress } from "./NavigationProgress";
 
 export function MediaFolderRow({ href, name, sizeLabel }: { href: string; name: string; sizeLabel?: string }) {
   const router = useRouter();
@@ -24,6 +25,7 @@ export function MediaFolderRow({ href, name, sizeLabel }: { href: string; name: 
       }}
       onDoubleClick={(event) => {
         event.preventDefault();
+        beginNavigationProgress();
         router.push(href);
       }}
     >

@@ -13,7 +13,7 @@ import {
 import { getDb } from "./db";
 
 export type MediaKind = "video" | "audio" | "file";
-export type MediaSortBy = "name" | "size" | "updated" | "plays";
+export type MediaSortBy = "name" | "duration" | "size" | "updated" | "plays";
 export type MediaSortOrder = "asc" | "desc";
 
 export type MediaAsset = {
@@ -51,6 +51,7 @@ export type MediaFolder = {
   name: string;
   depth: number;
   directAssets: number;
+  totalAssets: number;
   totalSizeBytes: number;
   mtimeMs: number;
 };
@@ -813,7 +814,7 @@ function addFolderFilter(filters: string[], values: Array<string | number>, kind
 }
 
 export function normalizeMediaSortBy(value: string | undefined): MediaSortBy {
-  return value === "size" || value === "updated" || value === "plays" ? value : "name";
+  return value === "duration" || value === "size" || value === "updated" || value === "plays" ? value : "name";
 }
 
 export function normalizeMediaSortOrder(value: string | undefined, sortBy: MediaSortBy): MediaSortOrder {
@@ -831,6 +832,10 @@ function mediaAssetOrderBy(sortBy: MediaSortBy, sortOrder: MediaSortOrder): stri
   if (sortBy === "size") {
     return `size_bytes ${direction}, title COLLATE NOCASE ASC, id ASC`;
   }
+  if (sortBy === "duration") {
+    return `CASE WHEN duration_seconds IS NULL OR duration_seconds <= 0 THEN 1 ELSE 0 END ASC,
+            duration_seconds ${direction}, title COLLATE NOCASE ASC, id ASC`;
+  }
   if (sortBy === "plays") {
     return `play_count ${direction}, title COLLATE NOCASE ASC, id ASC`;
   }
@@ -843,6 +848,8 @@ export function sortMediaFolders(folders: MediaFolder[], sortBy: MediaSortBy, so
     let compared = 0;
     if (sortBy === "size") {
       compared = left.totalSizeBytes - right.totalSizeBytes;
+    } else if (sortBy === "duration") {
+      compared = left.totalAssets - right.totalAssets;
     } else if (sortBy === "updated") {
       compared = left.mtimeMs - right.mtimeMs;
     } else {
@@ -901,7 +908,7 @@ export function listMediaAssets(params: {
 export function listMediaFolders(kind: MediaKind): MediaFolder[] {
   const paths = new Map(getMediaLibrarySyncState().folders[kind].map((item) => [item.path, item.mtimeMs]));
   const directCounts = new Map<string, number>();
-  const aggregates = new Map<string, { totalSizeBytes: number; mtimeMs: number }>();
+  const aggregates = new Map<string, { totalAssets: number; totalSizeBytes: number; mtimeMs: number }>();
   const rows = getDb()
     .prepare("SELECT stored_name, size_bytes, mtime_ms FROM media_assets WHERE kind = ?")
     .all(kind) as Array<{ stored_name: string; size_bytes: number; mtime_ms: number }>;
@@ -912,7 +919,8 @@ export function listMediaFolders(kind: MediaKind): MediaFolder[] {
     for (let index = 1; index <= segments.length; index += 1) {
       const ancestor = segments.slice(0, index).join("/");
       paths.set(ancestor, Math.max(paths.get(ancestor) || 0, row.mtime_ms));
-      const aggregate = aggregates.get(ancestor) || { totalSizeBytes: 0, mtimeMs: 0 };
+      const aggregate = aggregates.get(ancestor) || { totalAssets: 0, totalSizeBytes: 0, mtimeMs: 0 };
+      aggregate.totalAssets += 1;
       aggregate.totalSizeBytes += row.size_bytes;
       aggregate.mtimeMs = Math.max(aggregate.mtimeMs, row.mtime_ms);
       aggregates.set(ancestor, aggregate);
@@ -926,6 +934,7 @@ export function listMediaFolders(kind: MediaKind): MediaFolder[] {
       name: folderPath.split("/").at(-1) || folderPath,
       depth: folderPath.split("/").length - 1,
       directAssets: directCounts.get(folderPath) || 0,
+      totalAssets: aggregates.get(folderPath)?.totalAssets || 0,
       totalSizeBytes: aggregates.get(folderPath)?.totalSizeBytes || 0,
       mtimeMs: Math.max(mtimeMs, aggregates.get(folderPath)?.mtimeMs || 0),
     }));

@@ -2,6 +2,8 @@ import { Clapperboard, Download, File, Headphones } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
+import { cache } from "react";
 import { MediaAudioPlayer, type AudioQueueTrack } from "@/components/MediaAudioPlayer";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { MediaPlayer } from "@/components/MediaPlayer";
@@ -16,6 +18,8 @@ import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { recordMediaHistory } from "@/lib/users";
 
 export const dynamic = "force-dynamic";
+
+const getAssetById = cache(getMediaAsset);
 
 const KIND_LABELS: Record<MediaKind, string> = { video: "视频", audio: "音频", file: "文件" };
 const KIND_ICONS = { video: Clapperboard, audio: Headphones, file: File };
@@ -44,7 +48,7 @@ function listHref(kind: MediaKind, folder: string): string {
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
-  const asset = getMediaAsset(Number((await params).id));
+  const asset = getAssetById(Number((await params).id));
   if (!asset) {
     return { title: "资源不存在", robots: NO_INDEX_ROBOTS };
   }
@@ -63,19 +67,21 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function MediaDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
-  const asset = getMediaAsset(Number((await params).id));
+  const asset = getAssetById(Number((await params).id));
   if (!asset || !isMediaKindAccessible(asset.kind, Boolean(user))) notFound();
 
   const headerStore = await headers();
-  recordAnalyticsEvent({
-    headers: headerStore,
-    userId: user?.id ?? null,
-    eventType: `${asset.kind}_view`,
-    path: `/media/${asset.id}`,
-    referrer: headerStore.get("referer"),
-    mediaId: asset.id,
+  after(() => {
+    recordAnalyticsEvent({
+      headers: headerStore,
+      userId: user?.id ?? null,
+      eventType: `${asset.kind}_view`,
+      path: `/media/${asset.id}`,
+      referrer: headerStore.get("referer"),
+      mediaId: asset.id,
+    });
+    if (user) recordMediaHistory(user.id, asset);
   });
-  if (user) recordMediaHistory(user.id, asset);
 
   const Icon = KIND_ICONS[asset.kind];
   const title = displayTitle(asset.title, asset.fileName);

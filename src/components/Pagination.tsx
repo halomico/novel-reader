@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState, useTransition } from "react";
+import { beginNavigationProgress } from "./NavigationProgress";
 
 type PageItem = number | "ellipsis";
 
@@ -22,6 +23,7 @@ function pageHrefWithParams(
   basePath: string,
   extraParams: Record<string, string | undefined>,
   pageParam: string,
+  hash = "",
 ) {
   const params = new URLSearchParams(pageHref(page, query, basePath, pageParam).split("?")[1]);
   for (const [key, value] of Object.entries(extraParams)) {
@@ -29,7 +31,7 @@ function pageHrefWithParams(
       params.set(key, value);
     }
   }
-  return `${basePath}?${params.toString()}`;
+  return `${basePath}?${params.toString()}${hash ? `#${encodeURIComponent(hash)}` : ""}`;
 }
 
 function getPageItems(page: number, totalPages: number): PageItem[] {
@@ -64,6 +66,7 @@ function PageJump({
   extraParams,
   pageParam,
   index,
+  hash,
   onPageChange,
 }: {
   totalPages: number;
@@ -72,6 +75,7 @@ function PageJump({
   extraParams: Record<string, string | undefined>;
   pageParam: string;
   index: number;
+  hash?: string;
   onPageChange?: (page: number) => void;
 }) {
   const router = useRouter();
@@ -108,7 +112,8 @@ function PageJump({
       return;
     }
     clearCloseTimer();
-    const href = pageHrefWithParams(nextPage, query, basePath, extraParams, pageParam);
+    const href = pageHrefWithParams(nextPage, query, basePath, extraParams, pageParam, hash);
+    beginNavigationProgress();
     startTransition(() => router.push(href));
     setIsOpen(false);
     setValue("");
@@ -166,6 +171,7 @@ export function Pagination({
   basePath = "/",
   extraParams = {},
   pageParam = "page",
+  hash,
   onPageChange,
 }: {
   page: number;
@@ -174,6 +180,7 @@ export function Pagination({
   basePath?: string;
   extraParams?: Record<string, string | undefined>;
   pageParam?: string;
+  hash?: string;
   onPageChange?: (page: number) => void;
 }) {
   const canGoPrev = page > 1;
@@ -192,7 +199,7 @@ export function Pagination({
             <ChevronLeft size={18} aria-hidden="true" />
           </button>
         ) : (
-          <Link className="pageButton" href={pageHrefWithParams(page - 1, query, basePath, extraParams, pageParam)} aria-label="上一页">
+          <Link className="pageButton" href={pageHrefWithParams(page - 1, query, basePath, extraParams, pageParam, hash)} aria-label="上一页">
             <ChevronLeft size={18} aria-hidden="true" />
           </Link>
         )
@@ -212,6 +219,7 @@ export function Pagination({
               extraParams={extraParams}
               pageParam={pageParam}
               index={index}
+              hash={hash}
               onPageChange={onPageChange}
               key={`ellipsis-${index}`}
             />
@@ -224,7 +232,7 @@ export function Pagination({
               {item}
             </button>
           ) : (
-            <Link className="pageNumber" href={pageHrefWithParams(item, query, basePath, extraParams, pageParam)} key={item} aria-label={`第 ${item} 页`}>
+            <Link className="pageNumber" href={pageHrefWithParams(item, query, basePath, extraParams, pageParam, hash)} key={item} aria-label={`第 ${item} 页`}>
               {item}
             </Link>
           ),
@@ -237,7 +245,7 @@ export function Pagination({
             <ChevronRight size={18} aria-hidden="true" />
           </button>
         ) : (
-          <Link className="pageButton" href={pageHrefWithParams(page + 1, query, basePath, extraParams, pageParam)} aria-label="下一页">
+          <Link className="pageButton" href={pageHrefWithParams(page + 1, query, basePath, extraParams, pageParam, hash)} aria-label="下一页">
             <ChevronRight size={18} aria-hidden="true" />
           </Link>
         )

@@ -9,7 +9,7 @@ import {
   resolveSearchQueryEventKey,
 } from "@/lib/analytics";
 import { getAdminSession } from "@/lib/admin-auth";
-import { canAccessNovelLibrary, getGlobalSearchMaxResults, getSearchResultsPageSize, shouldShowProgressBars } from "@/lib/config";
+import { canAccessNovelLibrary, getSearchResultsPageSize, shouldShowProgressBars } from "@/lib/config";
 import { validateSearchKeyword } from "@/lib/search";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { getCurrentUser } from "@/lib/user-auth";
@@ -35,7 +35,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
   const validation = validateSearchKeyword(params.q);
   const pageSize = getSearchResultsPageSize();
-  const maxResults = getGlobalSearchMaxResults();
   const hasExplicitPage = Boolean(params.page);
   const source = normalizeSearchQuerySource(params.source);
   const originNovelId = Number(params.origin || 0);
@@ -60,7 +59,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           initialPage={page}
           hasExplicitPage={hasExplicitPage}
           pageSize={pageSize}
-          maxResults={maxResults}
           highlightTerms={validation.query.highlightTerms}
           showProgressBars={shouldShowProgressBars()}
           searchEventKey={searchEventKey}

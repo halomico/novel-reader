@@ -41,6 +41,29 @@ test("records normalized search queries and aggregates hot terms by range", asyn
       ],
     );
 
+    const tag = db
+      .prepare("INSERT INTO tags (name, slug) VALUES ('科幻', 'science-fiction')")
+      .run();
+    const analyticsHeaders = new Headers({
+      "user-agent": "Mozilla/5.0",
+      "x-forwarded-for": "127.0.0.1",
+    });
+    analytics.recordAnalyticsEvent({
+      headers: analyticsHeaders,
+      eventType: "tag_click",
+      path: "/tags/science-fiction",
+      tagId: Number(tag.lastInsertRowid),
+    });
+    analytics.recordAnalyticsEvent({
+      headers: analyticsHeaders,
+      eventType: "tag_click",
+      path: "/tags/science-fiction",
+      tagId: Number(tag.lastInsertRowid),
+    });
+    const tagOverview = analytics.getAnalyticsOverview("24h");
+    assert.equal(tagOverview.tagTotal, 1);
+    assert.deepEqual(tagOverview.topTags, [{ label: "科幻", count: 2 }]);
+
     const novel = db
       .prepare(
         `INSERT INTO novels (title, file_name, relative_path, size_bytes, mtime_ms)

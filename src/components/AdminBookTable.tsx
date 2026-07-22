@@ -22,6 +22,7 @@ import Link from "next/link";
 import { useEffect, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
 import { deleteNovelsAction, togglePinnedNovelAction } from "@/app/admin/actions";
 import { LocalDateTime } from "@/components/LocalDateTime";
+import { ResultCount } from "@/components/ResultCount";
 import { usePersistentSelection } from "@/components/usePersistentSelection";
 import type { AdminBookSortDir, AdminBookSortKey } from "@/lib/admin-books";
 import type { Novel } from "@/lib/books";
@@ -386,7 +387,7 @@ export function AdminBookTable({
       <input name="returnPath" type="hidden" value={returnPath} />
       {selectedIds.map((id) => <input name="bookIds" type="hidden" value={id} key={id} />)}
       <div className="adminTableToolbar adminBookTableToolbar">
-        <span>共 {totalBooks} 本小说</span>
+        <ResultCount count={totalBooks} />
         <div className="tableColumnControl">
           <button
             className="adminIconButton"
@@ -513,7 +514,7 @@ export function AdminBookTable({
           </button>
         </div>
         <span>
-          第 {page} / {totalPages} 页，共 {totalBooks} 本
+          第 {page} / {totalPages} 页
         </span>
       </div>
     </form>

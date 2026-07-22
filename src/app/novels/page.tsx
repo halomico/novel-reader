@@ -4,6 +4,7 @@ import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { CatalogBookGrid } from "@/components/CatalogBookGrid";
 import { CatalogRandomButton } from "@/components/CatalogRandomButton";
 import { Pagination } from "@/components/Pagination";
+import { ResultCount } from "@/components/ResultCount";
 import { SearchEventUrlSync } from "@/components/SearchEventUrlSync";
 import { SiteHeader } from "@/components/SiteHeader";
 import {
@@ -116,9 +117,7 @@ export default async function NovelsPage({ searchParams }: NovelsPageProps) {
         <Breadcrumbs items={[{ label: "首页", href: "/" }, { label: randomSeed ? "随便看看" : "小说" }]} />
         <div className="catalogSummary">
           {isRandomCatalogEnabled() && result.totalBooks > 1 ? <CatalogRandomButton /> : null}
-          <p>
-            共 <strong>{result.totalBooks}</strong> 本
-          </p>
+          <ResultCount count={result.totalBooks} />
         </div>
       </section>
 

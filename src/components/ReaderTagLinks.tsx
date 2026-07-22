@@ -1,8 +1,8 @@
 "use client";
 
 import { ChevronDown, ChevronUp, Tags } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { TagTrackedLink } from "./TagTrackedLink";
 
 type ReaderTag = {
   id: number;
@@ -57,9 +57,9 @@ export function ReaderTagLinks({ tags }: { tags: ReaderTag[] }) {
       </button>
       <nav className="readerTagLinks" aria-label="文章标签" ref={linksRef}>
         {tags.map((tag) => (
-          <Link href={`/tags/${tag.slug}`} key={tag.id}>
+          <TagTrackedLink slug={tag.slug} key={tag.id}>
             {tag.name}
-          </Link>
+          </TagTrackedLink>
         ))}
       </nav>
       {hasMoreThanTwoRows ? (

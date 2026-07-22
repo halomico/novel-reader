@@ -1,6 +1,6 @@
 "use client";
 
-import { Dices, Monitor, Moon, Sun } from "lucide-react";
+import { ChevronDown, Dices, Monitor, Moon, Sun } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -237,35 +237,25 @@ export function SettingsPanel({
             <div className="settingRow settingPaletteRow">
               <div className="settingRowTitle">
                 <span>配色</span>
-                <span className="settingPaletteValue">
-                  <strong>{getColorPalette(palette).label}</strong>
-                  <button
-                    className="settingPaletteRandomButton"
-                    type="button"
-                    onClick={chooseRandomPalette}
-                    aria-label="随机选择配色"
-                    title="随机选择配色"
-                  >
-                    <Dices size={16} aria-hidden="true" />
-                  </button>
-                </span>
               </div>
-              <div className="paletteOptions" role="group" aria-label="配色风格">
-                {COLOR_PALETTES.map((item) => (
-                  <button
-                    className={palette === item.value ? "isActive" : ""}
-                    key={item.value}
-                    type="button"
-                    aria-pressed={palette === item.value}
-                    onClick={() => changePalette(item.value)}
-                  >
-                    <span className="paletteSwatches" aria-hidden="true">
-                      <span style={{ backgroundColor: item.lightAccent }} />
-                      <span style={{ backgroundColor: item.darkAccent }} />
-                    </span>
-                    <span>{item.label}</span>
-                  </button>
-                ))}
+              <div className="settingPalettePicker">
+                <span className="paletteSwatches" aria-hidden="true">
+                  <span style={{ backgroundColor: getColorPalette(palette).lightAccent }} />
+                  <span style={{ backgroundColor: getColorPalette(palette).darkAccent }} />
+                </span>
+                <select aria-label="配色风格" value={palette} onChange={(event) => changePalette(event.target.value as ColorPalette)}>
+                  {COLOR_PALETTES.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}
+                </select>
+                <ChevronDown className="settingPaletteChevron" size={15} aria-hidden="true" />
+                <button
+                  className="settingPaletteRandomButton"
+                  type="button"
+                  onClick={chooseRandomPalette}
+                  aria-label="随机选择配色"
+                  title="随机选择配色"
+                >
+                  <Dices size={16} aria-hidden="true" />
+                </button>
               </div>
             </div>
           </div>

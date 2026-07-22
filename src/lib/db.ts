@@ -300,10 +300,12 @@ function initialize(db: DatabaseSync) {
       os TEXT NOT NULL DEFAULT 'unknown',
       novel_id INTEGER,
       media_id INTEGER,
+      tag_id INTEGER,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL,
       FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE SET NULL,
-      FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE SET NULL
+      FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE SET NULL,
+      FOREIGN KEY(tag_id) REFERENCES tags(id) ON DELETE SET NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_analytics_events_time ON analytics_events(created_at);
@@ -448,6 +450,7 @@ function initialize(db: DatabaseSync) {
   addColumnIfMissing(db, "tags", "parent_id", "parent_id INTEGER REFERENCES tags(id) ON DELETE SET NULL");
   addColumnIfMissing(db, "tags", "aliases", "aliases TEXT NOT NULL DEFAULT '[]'");
   addColumnIfMissing(db, "analytics_events", "media_id", "media_id INTEGER REFERENCES media_assets(id) ON DELETE SET NULL");
+  addColumnIfMissing(db, "analytics_events", "tag_id", "tag_id INTEGER REFERENCES tags(id) ON DELETE SET NULL");
   addColumnIfMissing(db, "search_query_events", "event_key", "event_key TEXT");
   addColumnIfMissing(db, "search_query_events", "source", "source TEXT NOT NULL DEFAULT 'direct'");
   addColumnIfMissing(db, "search_query_events", "user_id", "user_id INTEGER REFERENCES users(id) ON DELETE SET NULL");
@@ -462,6 +465,7 @@ function initialize(db: DatabaseSync) {
   db.exec("CREATE INDEX IF NOT EXISTS idx_users_registration_ip_created ON users(registration_ip, created_at);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_users_role ON users(role, status);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_analytics_events_media_time ON analytics_events(media_id, created_at);");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_analytics_events_tag_time ON analytics_events(tag_id, created_at);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_media_assets_video_category ON media_assets(kind, category_id, updated_at DESC);");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_search_query_events_event_key ON search_query_events(event_key) WHERE event_key IS NOT NULL;");
   db.exec("CREATE INDEX IF NOT EXISTS idx_search_query_events_source_time ON search_query_events(source, created_at);");

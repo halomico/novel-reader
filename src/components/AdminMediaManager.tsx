@@ -13,6 +13,7 @@ import {
 } from "@/app/admin/actions";
 import { LocalDateTime } from "@/components/LocalDateTime";
 import { MediaVideoPreview } from "@/components/MediaVideoPreview";
+import { beginNavigationProgress } from "@/components/NavigationProgress";
 import { usePersistentSelection } from "@/components/usePersistentSelection";
 import type { MediaAsset, MediaFolder, MediaKind, MediaSortBy, MediaSortOrder, VideoCategory } from "@/lib/media";
 
@@ -87,7 +88,7 @@ function AdminMediaFolderRow({ folder, onOpen }: { folder: MediaFolder; onOpen: 
       <td>-</td>
       <td title={folder.path}>{folder.path}</td>
       <td>{formatBytes(folder.totalSizeBytes)}</td>
-      <td>{folder.directAssets} 个直属资源</td>
+      <td>{folder.totalAssets} 个资源</td>
       <td><LocalDateTime value={folder.mtimeMs ? new Date(folder.mtimeMs).toISOString() : null} /></td>
       <td><ChevronRight size={16} aria-hidden="true" /></td>
     </tr>
@@ -392,6 +393,7 @@ export function AdminMediaManager({
                         const params = new URLSearchParams({ kind, folder: item.path, sort: sortBy, order: sortOrder, view });
                         if (query) params.set("q", query);
                         if (categoryParam) params.set("category", categoryParam);
+                        beginNavigationProgress();
                         router.push(`/admin/media?${params.toString()}`);
                       }}
                       title={`打开 ${item.path}`}
@@ -471,6 +473,7 @@ export function AdminMediaManager({
                         if (view === "grid") params.set("view", view);
                         params.set("sort", sortBy);
                         params.set("order", sortOrder);
+                        beginNavigationProgress();
                         router.push(`/admin/media?${params.toString()}`);
                       }}
                       key={item.path}

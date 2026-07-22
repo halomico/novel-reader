@@ -1,11 +1,14 @@
 ﻿import path from "node:path";
+import { cache } from "react";
 import {
-  readSiteSettings,
+  readSiteSettings as readSiteSettingsFromDisk,
   type AudioPlaybackMode,
   type IpRateLimitRule,
   type RelatedVideoMode,
   type VideoThumbnailMode,
 } from "./site-settings";
+
+const readSiteSettings = cache(readSiteSettingsFromDisk);
 
 function resolveFromProject(value: string): string {
   return path.isAbsolute(value) ? value : path.resolve(process.cwd(), value);

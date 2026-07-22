@@ -24,6 +24,7 @@ type AdminAnalyticsPageProps = {
     realtimePage?: string;
     hotPage?: string;
     contentPage?: string;
+    tagPage?: string;
     notice?: string;
     tone?: "success" | "warning" | "error";
   }>;
@@ -77,6 +78,7 @@ function MetricTable({
   page,
   totalPages,
   paginationParams,
+  pageParam = "contentPage",
 }: {
   title: string;
   items: AnalyticsMetric[];
@@ -84,6 +86,7 @@ function MetricTable({
   page?: number;
   totalPages?: number;
   paginationParams?: Record<string, string | undefined>;
+  pageParam?: string;
 }) {
   return (
     <details className="analyticsMetricPanel" open>
@@ -110,7 +113,7 @@ function MetricTable({
           query=""
           basePath="/admin/analytics"
           extraParams={paginationParams}
-          pageParam="contentPage"
+          pageParam={pageParam}
         />
       ) : null}
     </details>
@@ -168,6 +171,49 @@ function SearchTagPanel({
   );
 }
 
+function PopularTagPanel({
+  items,
+  page,
+  total,
+  totalPages,
+  paginationParams,
+}: {
+  items: AnalyticsMetric[];
+  page: number;
+  total: number;
+  totalPages: number;
+  paginationParams: Record<string, string | undefined>;
+}) {
+  return (
+    <details className="analyticsMetricPanel analyticsSearchPanel" open>
+      <summary>
+        <h3><Tags size={15} aria-hidden="true" />热门标签</h3>
+        <span>{formatCount(total)} 项</span>
+      </summary>
+      {items.length ? (
+        <div className="analyticsSearchTags">
+          {items.map((item) => (
+            <span className="analyticsSearchTag" title={`${item.label}：${formatCount(item.count)} 次点击`} key={item.label}>
+              <span>{item.label}</span>
+              <strong>{formatCount(item.count)}</strong>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="analyticsEmpty">暂无标签点击记录</p>
+      )}
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        query=""
+        basePath="/admin/analytics"
+        extraParams={paginationParams}
+        pageParam="tagPage"
+      />
+    </details>
+  );
+}
+
 export default async function AdminAnalyticsPage({ searchParams }: AdminAnalyticsPageProps) {
   const params = await searchParams;
   const realtimeLimit = getAnalyticsRealtimeLimit();
@@ -179,6 +225,8 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
     searchQueryPageSize: 100,
     contentPage: params.contentPage,
     contentPageSize: 50,
+    tagPage: params.tagPage,
+    tagPageSize: 50,
     customFrom: params.from,
     customTo: params.to,
   });
@@ -189,6 +237,7 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
     to: overview.range === "custom" ? overview.customTo : undefined,
     hotPage: overview.searchQueryPage > 1 ? String(overview.searchQueryPage) : undefined,
     contentPage: overview.contentPage > 1 ? String(overview.contentPage) : undefined,
+    tagPage: overview.tagPage > 1 ? String(overview.tagPage) : undefined,
   };
   const searchPaginationParams: Record<string, string | undefined> = {
     range: overview.range,
@@ -196,6 +245,7 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
     to: overview.range === "custom" ? overview.customTo : undefined,
     page: overview.realtimePage > 1 ? String(overview.realtimePage) : undefined,
     contentPage: overview.contentPage > 1 ? String(overview.contentPage) : undefined,
+    tagPage: overview.tagPage > 1 ? String(overview.tagPage) : undefined,
   };
   const contentPaginationParams: Record<string, string | undefined> = {
     range: overview.range,
@@ -203,6 +253,15 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
     to: overview.range === "custom" ? overview.customTo : undefined,
     page: overview.realtimePage > 1 ? String(overview.realtimePage) : undefined,
     hotPage: overview.searchQueryPage > 1 ? String(overview.searchQueryPage) : undefined,
+    tagPage: overview.tagPage > 1 ? String(overview.tagPage) : undefined,
+  };
+  const tagPaginationParams: Record<string, string | undefined> = {
+    range: overview.range,
+    from: overview.range === "custom" ? overview.customFrom : undefined,
+    to: overview.range === "custom" ? overview.customTo : undefined,
+    page: overview.realtimePage > 1 ? String(overview.realtimePage) : undefined,
+    hotPage: overview.searchQueryPage > 1 ? String(overview.searchQueryPage) : undefined,
+    contentPage: overview.contentPage > 1 ? String(overview.contentPage) : undefined,
   };
 
   return (
@@ -288,6 +347,13 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
             page={overview.contentPage}
             totalPages={overview.contentTotalPages}
             paginationParams={contentPaginationParams}
+          />
+          <PopularTagPanel
+            items={overview.topTags}
+            total={overview.tagTotal}
+            page={overview.tagPage}
+            totalPages={overview.tagTotalPages}
+            paginationParams={tagPaginationParams}
           />
           <MetricTable title="IP 地址" items={overview.topIps} />
           <MetricTable title="国家/地区" items={overview.topCountries} />

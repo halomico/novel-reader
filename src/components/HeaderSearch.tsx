@@ -1,8 +1,10 @@
 "use client";
 
 import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FormEvent, useEffect, useId, useRef, useState } from "react";
+import { beginNavigationProgress } from "./NavigationProgress";
 
 type SearchMode = "title" | "content" | "current";
 type MessageTone = "success" | "warning" | "error";
@@ -91,12 +93,14 @@ export function HeaderSearch({
   defaultMode = "title",
   defaultExpanded = false,
   showCurrentSearch = false,
+  showAdvancedSearch = false,
   noticeDisplaySeconds = 5,
 }: {
   query?: string;
   defaultMode?: SearchMode;
   defaultExpanded?: boolean;
   showCurrentSearch?: boolean;
+  showAdvancedSearch?: boolean;
   noticeDisplaySeconds?: number;
 }) {
   const pathname = usePathname();
@@ -119,6 +123,13 @@ export function HeaderSearch({
   const searchInputId = useId();
   const visibleOptions = showCurrentSearch ? options : options.filter((option) => option.value !== "current");
   const activeOption = visibleOptions.find((option) => option.value === mode) || visibleOptions[0];
+  const showAdvancedOption = showAdvancedSearch && pathname === "/novels";
+  const advancedSearchParams = new URLSearchParams();
+  const advancedKeyword = keyword.normalize("NFKC").replace(/\s+/gu, " ").trim();
+  if (advancedKeyword) {
+    advancedSearchParams.set(mode === "content" ? "content" : "q", advancedKeyword);
+  }
+  const advancedSearchHref = `/tags/search${advancedSearchParams.size ? `?${advancedSearchParams.toString()}` : ""}`;
   const originNovelId = Number(/^\/books\/(\d+)/.exec(pathname)?.[1] || 0);
   const searchSource = mode === "title" ? "header_title" : mode === "content" ? "header_content" : "reader_current";
   const isPinnedOpen = visibility === "open" || (visibility === "default" && uiMode === "standard");
@@ -328,7 +339,9 @@ export function HeaderSearch({
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     if (mode === "current") {
       void searchCurrentBook(event);
+      return;
     }
+    beginNavigationProgress();
   }
 
   function togglePinnedSearch(form: HTMLFormElement | null) {
@@ -448,6 +461,18 @@ export function HeaderSearch({
               {option.label}
             </button>
           ))}
+          {showAdvancedOption ? (
+            <Link
+              href={advancedSearchHref}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                setIsModeMenuOpen(false);
+                beginNavigationProgress();
+              }}
+            >
+              高级
+            </Link>
+          ) : null}
         </div>
       ) : null}
       {isMessageVisible && message ? (

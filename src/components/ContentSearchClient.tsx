@@ -3,6 +3,7 @@
 import { BookText } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pagination } from "@/components/Pagination";
+import { ResultCount } from "@/components/ResultCount";
 import { SearchTrackedLink } from "@/components/SearchTrackedLink";
 import type { ContentJobSnapshot } from "@/lib/content-jobs";
 import type { SearchResult } from "@/lib/search";
@@ -13,7 +14,6 @@ type ContentSearchClientProps = {
   initialPage: number;
   hasExplicitPage: boolean;
   pageSize: number;
-  maxResults: number;
   highlightTerms: SearchTermPattern[];
   showProgressBars: boolean;
   searchEventKey: string | null;
@@ -26,6 +26,7 @@ type ContentSearchClientProps = {
   };
   resultReturnPath?: string;
   resultReturnParams?: Record<string, string>;
+  scrollTargetId?: string;
 };
 
 type SearchApiResponse = {
@@ -145,7 +146,7 @@ function SearchProgress({ job, showProgressBars }: { job: ContentJobSnapshot | n
       ) : null}
       {totalBooks ? (
         <p>
-          已扫描 {scannedBooks} / {totalBooks} 本，当前匹配 {job.resultCount} 条
+          已扫描 {scannedBooks} / {totalBooks} 本，当前匹配 {job.resultCount} 本
         </p>
       ) : (
         <p>正在启动搜索任务</p>
@@ -159,7 +160,6 @@ export function ContentSearchClient({
   initialPage,
   hasExplicitPage,
   pageSize,
-  maxResults,
   highlightTerms,
   showProgressBars,
   searchEventKey,
@@ -168,6 +168,7 @@ export function ContentSearchClient({
   requestFilters,
   resultReturnPath = "/search",
   resultReturnParams = {},
+  scrollTargetId,
 }: ContentSearchClientProps) {
   const [job, setJob] = useState<ContentJobSnapshot | null>(null);
   const [message, setMessage] = useState("");
@@ -184,6 +185,7 @@ export function ContentSearchClient({
   const pendingCancelRef = useRef<{ searchIdentity: string; jobId: string } | null>(null);
   const pendingCancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reportedAnalyticsRef = useRef("");
+  const storedSnapshotSignatureRef = useRef("");
 
   function reportSearchResults(nextJob: ContentJobSnapshot) {
     if (!searchEventKey || nextJob.status !== "done") return;
@@ -211,7 +213,11 @@ export function ContentSearchClient({
   function rememberSnapshot(nextJob: ContentJobSnapshot, nextPage = currentPageRef.current, nextShowProgressBars = displayProgress) {
     activeJobIdRef.current = nextJob.id;
     activeJobStatusRef.current = nextJob.status;
-    writeCachedSearch(resultCacheKey, nextJob, nextPage, nextShowProgressBars);
+    const signature = `${nextJob.id}:${nextJob.status}:${nextJob.resultCount}:${nextPage}:${nextShowProgressBars}`;
+    if (storedSnapshotSignatureRef.current !== signature) {
+      storedSnapshotSignatureRef.current = signature;
+      writeCachedSearch(resultCacheKey, nextJob, nextPage, nextShowProgressBars);
+    }
     reportSearchResults(nextJob);
   }
 
@@ -255,7 +261,7 @@ export function ContentSearchClient({
       if (data.job.status === "running" || data.job.status === "queued") {
         timer = setTimeout(() => {
           poll(jobId).catch((error) => setMessage(error instanceof Error ? error.message : "搜索失败"));
-        }, 700);
+        }, document.visibilityState === "hidden" ? 2_000 : 800);
       }
     }
 
@@ -315,7 +321,9 @@ export function ContentSearchClient({
       setJob(data.job);
       setDisplayProgress(data.showProgressBars ?? showProgressBars);
       rememberSnapshot(data.job, nextPage, data.showProgressBars ?? showProgressBars);
-      poll(data.jobId).catch((error) => setMessage(error instanceof Error ? error.message : "搜索失败"));
+      if (data.job.status === "running" || data.job.status === "queued") {
+        poll(data.jobId).catch((error) => setMessage(error instanceof Error ? error.message : "搜索失败"));
+      }
     }
 
     function cancelActiveJob() {
@@ -367,6 +375,7 @@ export function ContentSearchClient({
   }, [keyword, initialPage, hasExplicitPage, pageStateKey, requestFiltersKey, resultCacheKey, pageSize, searchIdentity, showProgressBars, searchEventKey]);
 
   const results = job?.results || [];
+  const matchedBookCount = useMemo(() => new Set(results.map((result) => result.novelId)).size, [results]);
   const totalPages = Math.max(1, Math.ceil(results.length / pageSize));
   const currentPage = normalizePage(page, totalPages);
   const pagedResults = useMemo(() => {
@@ -384,22 +393,26 @@ export function ContentSearchClient({
     const url = new URL(window.location.href);
     url.searchParams.set("page", String(normalized));
     window.history.replaceState(null, "", url.toString());
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    const scrollTarget = scrollTargetId ? document.getElementById(scrollTargetId) : null;
+    if (scrollTarget) {
+      const header = document.querySelector<HTMLElement>(".siteHeader");
+      const offset = (header?.getBoundingClientRect().height || 0) + 12;
+      const top = scrollTarget.getBoundingClientRect().top + window.scrollY - offset;
+      window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   }
 
   const done = job?.status === "done";
   const failed = job?.status === "error";
   const cancelled = job?.status === "cancelled";
+  const showResultCount = Boolean(job) && !failed && !cancelled && (done || matchedBookCount > 0);
 
   return (
     <>
-      <section className="searchHero">
-        {results.length ? (
-          <p>
-            {done ? "找到" : "已找到"} <strong>{results.length}</strong> 条，最多显示前 {maxResults} 条
-          </p>
-        ) : null}
-        {done && !results.length ? <p className="searchMessage">未找到匹配正文</p> : null}
+      <section className={showResultCount ? "searchHero hasResultCount" : "searchHero"}>
+        {showResultCount ? <ResultCount count={matchedBookCount} /> : null}
         {failed ? <p className="searchMessage">{job?.error || job?.message || "搜索失败"}</p> : null}
         {cancelled ? <p className="searchMessage">{job?.message || "全文搜索任务已取消"}</p> : null}
         {message ? <p className="searchMessage">{message}</p> : null}

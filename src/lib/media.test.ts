@@ -60,19 +60,21 @@ test("parses standard and suffix media ranges", () => {
   assert.equal(parseMediaByteRange(null, 100), null);
 });
 
-test("normalizes media sorting and orders folders by name, size, or update time", () => {
+test("normalizes media sorting and orders folders by name, item count, size, or update time", () => {
   assert.equal(normalizeMediaSortBy("manual"), "name");
   assert.equal(normalizeMediaSortBy("name"), "name");
+  assert.equal(normalizeMediaSortBy("duration"), "duration");
   assert.equal(normalizeMediaSortBy("plays"), "plays");
   assert.equal(normalizeMediaSortBy("invalid"), "name");
   assert.equal(normalizeMediaSortOrder(undefined, "name"), "asc");
   assert.equal(normalizeMediaSortOrder(undefined, "updated"), "desc");
 
   const folders: MediaFolder[] = [
-    { path: "B", name: "B", depth: 0, directAssets: 1, totalSizeBytes: 20, mtimeMs: 10 },
-    { path: "A", name: "A", depth: 0, directAssets: 2, totalSizeBytes: 10, mtimeMs: 20 },
+    { path: "B", name: "B", depth: 0, directAssets: 1, totalAssets: 4, totalSizeBytes: 20, mtimeMs: 10 },
+    { path: "A", name: "A", depth: 0, directAssets: 2, totalAssets: 8, totalSizeBytes: 10, mtimeMs: 20 },
   ];
   assert.deepEqual(sortMediaFolders(folders, "name", "asc").map((folder) => folder.name), ["A", "B"]);
+  assert.deepEqual(sortMediaFolders(folders, "duration", "desc").map((folder) => folder.name), ["A", "B"]);
   assert.deepEqual(sortMediaFolders(folders, "size", "desc").map((folder) => folder.name), ["B", "A"]);
   assert.deepEqual(sortMediaFolders(folders, "updated", "desc").map((folder) => folder.name), ["A", "B"]);
 });

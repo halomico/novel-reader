@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Script from "next/script";
+import { Suspense } from "react";
 import { DefaultPaletteRotation } from "@/components/DefaultPaletteRotation";
+import { NavigationProgress } from "@/components/NavigationProgress";
 import { ThemeScript } from "@/components/ThemeScript";
 import { getReaderDefaultFontSize, getSiteTitle } from "@/lib/config";
 import { getSiteUrl, getUmamiConfig } from "@/lib/seo";
@@ -53,6 +55,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <ThemeScript defaultTheme={settings.adminTheme} defaultFontSize={defaultFontSize} defaultPalette={defaultPalette} />
       </head>
       <body>
+        <Suspense fallback={null}><NavigationProgress /></Suspense>
         <DefaultPaletteRotation
           fallback={settings.defaultPalette}
           enabled={settings.defaultPaletteRandomEnabled}

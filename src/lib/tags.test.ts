@@ -131,10 +131,15 @@ test("finds novels containing the intersection of selected visible tags", (t) =>
   assert.deepEqual(titleFiltered.books.map((book) => book.id), [betaId]);
   assert.equal(titleFiltered.query, "beta");
 
+  const titleOnly = listNovelsByTagIntersection([], { q: " beta " });
+  assert.deepEqual(titleOnly.books.map((book) => book.id), [betaId]);
+  assert.deepEqual(listNovelIdsByTagFilters([], { q: "alpha" }), [alphaId]);
+
   const hiddenIntersection = listNovelsByTagIntersection([fantasy.id, hidden.id]);
   assert.equal(hiddenIntersection.totalBooks, 0);
 
   const singleTag = listNovelsByTagIntersection([fantasy.id], { excludeTagIds: [adventure.id] });
   assert.deepEqual(singleTag.books.map((book) => book.id), [singleId]);
   assert.deepEqual(listNovelIdsByTagFilters([fantasy.id], { excludeTagIds: [academy.id] }), [alphaId, singleId]);
+  assert.deepEqual(listNovelIdsByTagFilters([], { excludeTagIds: [adventure.id] }), [singleId]);
 });

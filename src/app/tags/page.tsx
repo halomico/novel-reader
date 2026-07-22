@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SiteHeader } from "@/components/SiteHeader";
+import { TagTrackedLink } from "@/components/TagTrackedLink";
 import { getAdminSession } from "@/lib/admin-auth";
 import { canAccessAdvancedTagSearch, isGuestTagLibraryNavEnabled, isTagLibraryEnabled } from "@/lib/config";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
@@ -84,10 +85,10 @@ export default async function TagsPage() {
                   {tags.length ? (
                     <div className="tagChipCloud">
                       {tags.map((tag) => (
-                        <Link className="tagChip" href={`/tags/${tag.slug}`} key={tag.id}>
+                        <TagTrackedLink className="tagChip" slug={tag.slug} key={tag.id}>
                           <span>{tag.name}</span>
                           <small>{tag.directCount}</small>
-                        </Link>
+                        </TagTrackedLink>
                       ))}
                     </div>
                   ) : (
