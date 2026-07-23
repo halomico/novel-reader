@@ -133,7 +133,7 @@ export function AdminMediaManager({
   query: string;
   sortBy: MediaSortBy;
   sortOrder: MediaSortOrder;
-  initialKind?: MediaKind;
+  initialKind: MediaKind;
   initialFolder?: string;
   returnPath: string;
   categories: VideoCategory[];
@@ -159,7 +159,7 @@ export function AdminMediaManager({
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState("");
   const { selectedIds, toggleOne, togglePage, clearSelection } = usePersistentSelection(
-    `novel-reader-admin-media-selection:${kind || "all"}`,
+    `novel-reader-admin-media-selection:${kind}`,
   );
   const [editingAsset, setEditingAsset] = useState<MediaAsset | null>(null);
   const [batchEditing, setBatchEditing] = useState(false);
@@ -210,7 +210,7 @@ export function AdminMediaManager({
 
   async function upload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!kind || !files.length || isUploading) {
+    if (!files.length || isUploading) {
       return;
     }
     const uploadFiles = [...files];
@@ -466,7 +466,6 @@ export function AdminMediaManager({
                     <AdminMediaFolderRow
                       folder={item}
                       onOpen={() => {
-                        if (!kind) return;
                         const params = new URLSearchParams({ kind, folder: item.path });
                         if (query) params.set("q", query);
                         if (categoryParam) params.set("category", categoryParam);

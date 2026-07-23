@@ -100,7 +100,7 @@ test("builds and incrementally refreshes an independent content search database"
   process.env.NOVEL_LIBRARY_DIR = libraryDir;
   process.env.CONTENT_SEARCH_DB_PATH = searchPath;
 
-  const mainDb = new DatabaseSync(":memory:");
+  const mainDb = new DatabaseSync(path.join(root, "main.db"));
   const searchDb = new DatabaseSync(searchPath);
   initializeContentSearchDb(searchDb);
   mainDb.exec(`
@@ -173,6 +173,12 @@ test("builds and incrementally refreshes an independent content search database"
     assert.equal(summary.indexedBooks, 2);
     assert.equal(summary.pendingBooks, 1);
     assert.equal(summary.failedBooks, 1);
+
+    mainDb.prepare("UPDATE novels SET content_hash = 'hash-stale' WHERE id = 2").run();
+    const staleSummary = getContentSearchIndexSummary(mainDb, searchDb);
+    assert.equal(staleSummary.indexedBooks, 1);
+    assert.equal(staleSummary.pendingBooks, 2);
+    assert.equal(staleSummary.staleBooks, 1);
   } finally {
     mainDb.close();
     searchDb.close();

@@ -1,7 +1,7 @@
 import { PencilLine, Save, Tags } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getNovelById, type Novel } from "@/lib/books";
+import { listNovelsByIds } from "@/lib/books";
 import { listTagGroups, type TagGroup, type TagWithCount } from "@/lib/tags";
 import { batchUpdateNovelsAction } from "../../actions";
 import { AdminFrame } from "../../AdminFrame";
@@ -38,7 +38,7 @@ export default async function AdminBookBatchPage({ searchParams }: AdminBookBatc
       .map(Number)
       .filter((id) => Number.isInteger(id) && id > 0),
   )).slice(0, 100);
-  const books = ids.map((id) => getNovelById(id)).filter((book): book is Novel => Boolean(book));
+  const books = listNovelsByIds(ids);
   if (!books.length) {
     notFound();
   }

@@ -5,7 +5,24 @@ import { getVideoThumbnailSettings } from "./config";
 import type { MediaAsset } from "./media";
 import { ensureMediaThumbnail, mediaThumbnailEtag } from "./media-thumbnail";
 
-export async function serveMediaThumbnail(request: NextRequest, asset: MediaAsset): Promise<Response> {
+export function mediaThumbnailCacheHeaders(publiclyAccessible: boolean): Record<string, string> {
+  if (publiclyAccessible) {
+    return {
+      "Cache-Control": "public, max-age=86400, immutable",
+      "Cloudflare-CDN-Cache-Control": "public, max-age=300",
+    };
+  }
+  return {
+    "Cache-Control": "private, max-age=86400, stale-while-revalidate=604800, immutable",
+    Vary: "Cookie",
+  };
+}
+
+export async function serveMediaThumbnail(
+  request: NextRequest,
+  asset: MediaAsset,
+  publiclyAccessible = false,
+): Promise<Response> {
   try {
     const settings = getVideoThumbnailSettings();
     const requestedFrame = Number(request.nextUrl.searchParams.get("frame") || 0);
@@ -17,10 +34,9 @@ export async function serveMediaThumbnail(request: NextRequest, asset: MediaAsse
     const stat = fs.statSync(thumbnailPath);
     const etag = mediaThumbnailEtag(asset.id, stat.mtimeMs, stat.size);
     const cacheHeaders = {
-      "Cache-Control": "private, max-age=86400, stale-while-revalidate=604800, immutable",
+      ...mediaThumbnailCacheHeaders(publiclyAccessible),
       ETag: etag,
       "Last-Modified": stat.mtime.toUTCString(),
-      Vary: "Cookie",
     };
     if (request.headers.get("if-none-match") === etag) {
       return new Response(null, { status: 304, headers: cacheHeaders });

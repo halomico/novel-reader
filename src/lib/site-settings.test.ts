@@ -24,10 +24,14 @@ test("atomically replaces an existing settings file", () => {
     assert.equal(defaults.guestAdvancedTagSearchEnabled, false);
     assert.equal(defaults.guestHotwordLinksEnabled, false);
     assert.equal(defaults.randomCatalogEnabled, true);
+    assert.equal(defaults.brandLinkTarget, "novels");
     assert.equal(defaults.defaultPalette, "default");
     assert.equal(defaults.defaultPaletteRandomEnabled, false);
+    assert.equal(defaults.readerDefaultFontSize, 18);
+    assert.equal(defaults.readerDefaultTagsMode, "collapsed");
     assert.equal(defaults.manualPinnedNovelsEnabled, true);
     assert.equal(defaults.randomRecommendationsEnabled, false);
+    assert.equal(defaults.catalogPromotionOrder, "manual-first");
     assert.equal(defaults.audioDefaultPlaybackMode, "next");
     assert.equal(defaults.userDailyReportLimit, 50);
     writeSiteSettings({ ...defaults, siteName: "第一次" });
@@ -96,6 +100,7 @@ test("normalizes palette rotation and random recommendation settings", () => {
       defaultPaletteRotationMinutes: 0,
       manualPinnedNovelsEnabled: false,
       randomRecommendationsEnabled: true,
+      catalogPromotionOrder: "random-first",
       randomRecommendationCount: 500,
       randomRecommendationIntervalMinutes: 20_000,
     });
@@ -104,8 +109,50 @@ test("normalizes palette rotation and random recommendation settings", () => {
     assert.equal(settings.defaultPaletteRotationMinutes, 1);
     assert.equal(settings.manualPinnedNovelsEnabled, false);
     assert.equal(settings.randomRecommendationsEnabled, true);
+    assert.equal(settings.catalogPromotionOrder, "random-first");
     assert.equal(settings.randomRecommendationCount, 50);
     assert.equal(settings.randomRecommendationIntervalMinutes, 10_080);
+  } finally {
+    if (previousPath === undefined) {
+      delete process.env.ADMIN_SETTINGS_PATH;
+    } else {
+      process.env.ADMIN_SETTINGS_PATH = previousPath;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("normalizes the reader tag default and catalog promotion order", () => {
+  const previousPath = process.env.ADMIN_SETTINGS_PATH;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-display-defaults-"));
+  process.env.ADMIN_SETTINGS_PATH = path.join(tempDir, "admin-settings.json");
+
+  try {
+    fs.writeFileSync(
+      process.env.ADMIN_SETTINGS_PATH,
+      JSON.stringify({
+        brandLinkTarget: "home",
+        readerDefaultTagsMode: "expanded",
+        catalogPromotionOrder: "random-first",
+      }),
+      "utf8",
+    );
+    assert.equal(readSiteSettings().brandLinkTarget, "home");
+    assert.equal(readSiteSettings().readerDefaultTagsMode, "expanded");
+    assert.equal(readSiteSettings().catalogPromotionOrder, "random-first");
+
+    fs.writeFileSync(
+      process.env.ADMIN_SETTINGS_PATH,
+      JSON.stringify({
+        brandLinkTarget: "invalid",
+        readerDefaultTagsMode: "invalid",
+        catalogPromotionOrder: "invalid",
+      }),
+      "utf8",
+    );
+    assert.equal(readSiteSettings().brandLinkTarget, "novels");
+    assert.equal(readSiteSettings().readerDefaultTagsMode, "collapsed");
+    assert.equal(readSiteSettings().catalogPromotionOrder, "manual-first");
   } finally {
     if (previousPath === undefined) {
       delete process.env.ADMIN_SETTINGS_PATH;
@@ -199,6 +246,9 @@ test("removes retired settings while preserving current values", () => {
         manualIndexMaxSegmentsEnabled: true,
         manualIndexMaxSegments: 10000,
         noticeStayVisibleAfterBlur: true,
+        adminOperationRateLimitEnabled: true,
+        adminOperationRateLimitPerMinute: 60,
+        adminOperationRateLimitBanEnabled: true,
       }),
       "utf8",
     );
@@ -217,6 +267,9 @@ test("removes retired settings while preserving current values", () => {
       "manualIndexMaxSegmentsEnabled",
       "manualIndexMaxSegments",
       "noticeStayVisibleAfterBlur",
+      "adminOperationRateLimitEnabled",
+      "adminOperationRateLimitPerMinute",
+      "adminOperationRateLimitBanEnabled",
     ]) {
       assert.equal(Object.hasOwn(stored, key), false);
     }

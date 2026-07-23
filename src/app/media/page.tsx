@@ -192,6 +192,14 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
             <h1>{KIND_LABELS[kind]}</h1>
           </div>
           <div className="mediaLibraryActions">
+            <MediaPublicSort
+              kind={kind}
+              folder={kind === "video" ? "" : result.folder}
+              query={result.query}
+              category={categoryParam}
+              sortBy={sortBy}
+              sortOrder={sortOrder}
+            />
             <form className="mediaSearchForm" action="/media">
               <input
                 name="q"
@@ -213,14 +221,6 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
                 <Search size={16} aria-hidden="true" />
               </button>
             </form>
-            <MediaPublicSort
-              kind={kind}
-              folder={kind === "video" ? "" : result.folder}
-              query={result.query}
-              category={categoryParam}
-              sortBy={sortBy}
-              sortOrder={sortOrder}
-            />
           </div>
         </header>
 

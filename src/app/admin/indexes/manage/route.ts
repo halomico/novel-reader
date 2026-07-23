@@ -2,7 +2,6 @@ import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
-import { checkAdminOperationLimit } from "@/lib/admin-operation-limit";
 import { countActiveContentJobs } from "@/lib/content-jobs";
 import { getContentSearchDb } from "@/lib/content-search-db";
 import { clearContentSearchIndex } from "@/lib/content-search-index";
@@ -23,11 +22,6 @@ async function requireAdminJson(request: NextRequest) {
   const session = await getAdminSession();
   if (!session) {
     return { ok: false as const, response: jsonError("请先登录后台", 401) };
-  }
-
-  const limitedMessage = checkAdminOperationLimit(access.clientIp, "indexes-manage");
-  if (limitedMessage) {
-    return { ok: false as const, response: jsonError(limitedMessage, 429) };
   }
 
   return { ok: true as const };

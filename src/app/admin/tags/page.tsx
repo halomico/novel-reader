@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { deleteAdminTagAction, saveAdminTagAction } from "../actions";
 import { AdminFrame } from "../AdminFrame";
-import { listTagGroups, listTags, type Tag, type TagGroup } from "@/lib/tags";
+import { listTagGroups, type Tag, type TagGroup } from "@/lib/tags";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -68,8 +68,9 @@ export default async function AdminTagsPage({ searchParams }: AdminTagsPageProps
   const params = await searchParams;
   const query = (params.q || "").trim().slice(0, 80);
   const normalizedQuery = query.toLocaleLowerCase();
-  const tags = listTags({ includeHidden: true });
-  const groups = filterTagGroups(listTagGroups({ includeHidden: true }), normalizedQuery);
+  const allGroups = listTagGroups({ includeHidden: true });
+  const tags = allGroups.flatMap((group) => group.group ? [group.group, ...group.tags] : group.tags);
+  const groups = filterTagGroups(allGroups, normalizedQuery);
   const editId = Number(params.edit || 0);
   const selectedTag = Number.isInteger(editId) && editId > 0 ? tags.find((tag) => tag.id === editId) || null : null;
 

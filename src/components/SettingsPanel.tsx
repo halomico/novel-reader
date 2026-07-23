@@ -60,10 +60,8 @@ function applyPalette(value: ColorPalette) {
   root.dataset.palette = value;
   root.style.setProperty("--palette-light-accent", palette.lightAccent);
   root.style.setProperty("--palette-light-strong", palette.lightStrong);
-  root.style.setProperty("--palette-light-tint", palette.lightTint);
   root.style.setProperty("--palette-dark-accent", palette.darkAccent);
   root.style.setProperty("--palette-dark-strong", palette.darkStrong);
-  root.style.setProperty("--palette-dark-tint", palette.darkTint);
 }
 
 function applySettings(
@@ -73,6 +71,7 @@ function applySettings(
   palette: ColorPalette,
   readerTagsMode: ReaderTagsMode,
   showReaderHotwords: boolean,
+  persist = true,
 ) {
   const root = document.documentElement;
   if (theme === "system") {
@@ -86,29 +85,35 @@ function applySettings(
   root.dataset.readerHotwords = showReaderHotwords ? "show" : "hide";
   root.style.setProperty("--reader-font-size", `${fontSize}px`);
   applyPalette(palette);
-  writeLocalSetting("novel-theme", theme);
-  writeLocalSetting("novel-font-size", String(fontSize));
-  writeLocalSetting("novel-ui-mode", uiMode);
+  if (persist) {
+    writeLocalSetting("novel-theme", theme);
+    writeLocalSetting("novel-font-size", String(fontSize));
+    writeLocalSetting("novel-ui-mode", uiMode);
+  }
 }
 
 export function SettingsPanel({
   previewText,
   defaultFontSize,
   defaultPalette,
+  defaultTheme,
+  defaultReaderTagsMode,
   canConfigureReaderTags,
   canConfigureReaderHotwords,
 }: {
   previewText: string;
   defaultFontSize: number;
   defaultPalette: ColorPalette;
+  defaultTheme: ThemeChoice;
+  defaultReaderTagsMode: ReaderTagsMode;
   canConfigureReaderTags: boolean;
   canConfigureReaderHotwords: boolean;
 }) {
-  const [theme, setTheme] = useState<ThemeChoice>("system");
+  const [theme, setTheme] = useState<ThemeChoice>(defaultTheme);
   const [uiMode, setUiMode] = useState<UiMode>("standard");
   const [palette, setPalette] = useState<ColorPalette>(defaultPalette);
   const [fontSize, setFontSize] = useState(defaultFontSize);
-  const [readerTagsMode, setReaderTagsMode] = useState<ReaderTagsMode>("expanded");
+  const [readerTagsMode, setReaderTagsMode] = useState<ReaderTagsMode>(defaultReaderTagsMode);
   const [showReaderHotwords, setShowReaderHotwords] = useState(true);
   const [showTopMenu, setShowTopMenu] = useState(true);
   const [hasHotwordPreference, setHasHotwordPreference] = useState(false);
@@ -121,11 +126,11 @@ export function SettingsPanel({
     const savedTags = readLocalSetting(READER_TAGS_STORAGE_KEY);
     const savedHotwords = readLocalSetting(READER_HOTWORDS_STORAGE_KEY);
     const savedTopMenu = readLocalSetting(TOP_MENU_STORAGE_KEY);
-    const nextTheme = savedTheme === "light" || savedTheme === "dark" || savedTheme === "system" ? savedTheme : "system";
+    const nextTheme = savedTheme === "light" || savedTheme === "dark" || savedTheme === "system" ? savedTheme : defaultTheme;
     const nextUiMode = savedUiMode === "minimal" || savedUiMode === "standard" ? savedUiMode : "standard";
     const nextPalette = isColorPalette(savedPalette) ? savedPalette : defaultPalette;
     const nextFontSize = Number.isFinite(savedFontSize) && savedFontSize >= 8 && savedFontSize <= 25 ? savedFontSize : defaultFontSize;
-    const nextReaderTagsMode = normalizeReaderTagsMode(savedTags);
+    const nextReaderTagsMode = normalizeReaderTagsMode(savedTags, defaultReaderTagsMode);
     const nextHasHotwordPreference = savedHotwords === "show" || savedHotwords === "hide";
     const nextShowHotwords = nextHasHotwordPreference ? savedHotwords === "show" : nextUiMode !== "minimal";
 
@@ -140,9 +145,9 @@ export function SettingsPanel({
     removeLocalSetting("novel-palette");
     removeLocalSetting("novel-page-size");
     document.cookie = "novel-page-size=; Path=/; Max-Age=0; SameSite=Lax";
-    applySettings(nextTheme, nextFontSize, nextUiMode, nextPalette, nextReaderTagsMode, nextShowHotwords);
+    applySettings(nextTheme, nextFontSize, nextUiMode, nextPalette, nextReaderTagsMode, nextShowHotwords, false);
     document.documentElement.dataset.topMenu = savedTopMenu === "hide" ? "hide" : "show";
-  }, [defaultFontSize, defaultPalette]);
+  }, [defaultFontSize, defaultPalette, defaultReaderTagsMode, defaultTheme]);
 
   function changeTheme(value: ThemeChoice) {
     setTheme(value);

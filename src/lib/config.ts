@@ -46,6 +46,10 @@ export function getSiteTitle(): string {
   return readSiteSettings().siteTitle || process.env.SITE_TITLE || getSiteName();
 }
 
+export function getSiteBrandHref(): "/" | "/novels" {
+  return readSiteSettings().brandLinkTarget === "home" ? "/" : "/novels";
+}
+
 export function getSettingsPreviewText(): string {
   const configuredPreview = readSiteSettings().settingsPreviewText;
   if (configuredPreview) {
@@ -115,6 +119,7 @@ export function isRandomCatalogEnabled(): boolean {
 export function getCatalogFeatureSettings(): {
   manualPinnedEnabled: boolean;
   randomRecommendationsEnabled: boolean;
+  promotionOrder: "manual-first" | "random-first";
   randomRecommendationCount: number;
   randomRecommendationIntervalMinutes: number;
 } {
@@ -122,6 +127,7 @@ export function getCatalogFeatureSettings(): {
   return {
     manualPinnedEnabled: settings.manualPinnedNovelsEnabled,
     randomRecommendationsEnabled: settings.randomRecommendationsEnabled,
+    promotionOrder: settings.catalogPromotionOrder,
     randomRecommendationCount: settings.randomRecommendationCount,
     randomRecommendationIntervalMinutes: settings.randomRecommendationIntervalMinutes,
   };
@@ -380,18 +386,6 @@ export function isAdminLoginRateLimitEnabled(): boolean {
 
 export function shouldAdminLoginRateLimitBan(): boolean {
   return readSiteSettings().adminLoginRateLimitBanEnabled;
-}
-
-export function isAdminOperationRateLimitEnabled(): boolean {
-  return readSiteSettings().adminOperationRateLimitEnabled || readBoolConfig("ADMIN_OPERATION_RATE_LIMIT_ENABLED", false);
-}
-
-export function getAdminOperationRateLimitPerMinute(): number {
-  return readSettingInt(readSiteSettings().adminOperationRateLimitPerMinute, "ADMIN_OPERATION_RATE_LIMIT_PER_MINUTE", 60, 1, 600);
-}
-
-export function shouldAdminOperationRateLimitBan(): boolean {
-  return readSiteSettings().adminOperationRateLimitBanEnabled;
 }
 
 export function getAdminAllowedIps(): string[] {

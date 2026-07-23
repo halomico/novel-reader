@@ -257,6 +257,92 @@ export function getContentSearchIndexSummary(
   mainDb: DatabaseSync,
   searchDb: DatabaseSync,
 ): ContentSearchIndexSummary {
+  const mainDatabase = (mainDb.prepare("PRAGMA database_list").all() as Array<{ name: string; file: string }>)
+    .find((item) => item.name === "main");
+  if (mainDatabase?.file) {
+    try {
+      const alias = "catalog_summary";
+      const attached = (searchDb.prepare("PRAGMA database_list").all() as Array<{ name: string; file: string }>)
+        .find((item) => item.name === alias);
+      if (attached && attached.file !== mainDatabase.file) {
+        searchDb.exec(`DETACH DATABASE ${alias}`);
+      }
+      if (!attached || attached.file !== mainDatabase.file) {
+        searchDb.prepare(`ATTACH DATABASE ? AS ${alias}`).run(mainDatabase.file);
+      }
+
+      const row = searchDb.prepare(
+        `SELECT
+           COUNT(*) AS total_books,
+           COALESCE(SUM(n.size_bytes), 0) AS source_bytes,
+           COALESCE(SUM(
+             CASE WHEN s.novel_id IS NOT NULL
+               AND s.content_hash IS n.content_hash
+               AND s.size_bytes = n.size_bytes
+               AND s.mtime_ms = n.mtime_ms
+               AND s.index_version = ?
+             THEN 1 ELSE 0 END
+           ), 0) AS indexed_books,
+           COALESCE(SUM(
+             CASE WHEN s.novel_id IS NOT NULL
+               AND NOT (
+                 s.content_hash IS n.content_hash
+                 AND s.size_bytes = n.size_bytes
+                 AND s.mtime_ms = n.mtime_ms
+                 AND s.index_version = ?
+               )
+             THEN 1 ELSE 0 END
+           ), 0) AS stale_books,
+           COALESCE(SUM(
+             CASE WHEN f.novel_id IS NOT NULL
+               AND f.content_hash IS n.content_hash
+               AND f.size_bytes = n.size_bytes
+               AND f.mtime_ms = n.mtime_ms
+               AND f.index_version = ?
+             THEN 1 ELSE 0 END
+           ), 0) AS failed_books,
+           MAX(
+             CASE WHEN s.novel_id IS NOT NULL
+               AND s.content_hash IS n.content_hash
+               AND s.size_bytes = n.size_bytes
+               AND s.mtime_ms = n.mtime_ms
+               AND s.index_version = ?
+             THEN s.indexed_at ELSE NULL END
+           ) AS last_indexed_at
+         FROM ${alias}.novels n
+         LEFT JOIN content_search_state s ON s.novel_id = n.id
+         LEFT JOIN content_search_failures f ON f.novel_id = n.id`,
+      ).get(
+        CONTENT_SEARCH_INDEX_VERSION,
+        CONTENT_SEARCH_INDEX_VERSION,
+        CONTENT_SEARCH_INDEX_VERSION,
+        CONTENT_SEARCH_INDEX_VERSION,
+      ) as {
+        total_books: number;
+        source_bytes: number;
+        indexed_books: number;
+        stale_books: number;
+        failed_books: number;
+        last_indexed_at: string | null;
+      };
+      const databaseBytes = getContentSearchDiskUsageBytes();
+      return {
+        totalBooks: row.total_books,
+        indexedBooks: row.indexed_books,
+        pendingBooks: row.total_books - row.indexed_books,
+        staleBooks: row.stale_books,
+        failedBooks: row.failed_books,
+        sourceBytes: row.source_bytes,
+        databaseBytes,
+        databaseRatio: row.source_bytes > 0 ? databaseBytes / row.source_bytes : 0,
+        indexVersion: CONTENT_SEARCH_INDEX_VERSION,
+        lastIndexedAt: row.last_indexed_at,
+      };
+    } catch {
+      // In-memory and restricted SQLite connections use the row comparison below.
+    }
+  }
+
   const novels = mainDb
     .prepare("SELECT id, relative_path, content_hash, size_bytes, mtime_ms FROM novels ORDER BY id ASC")
     .all() as ContentSearchNovelRecord[];

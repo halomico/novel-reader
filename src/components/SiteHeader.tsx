@@ -3,6 +3,7 @@ import Link from "next/link";
 import {
   canAccessAdvancedTagSearch,
   getNoticeDisplaySeconds,
+  getSiteBrandHref,
   getSiteName,
   isGuestAudioNavEnabled,
   isGuestFileNavEnabled,
@@ -44,6 +45,7 @@ export async function SiteHeader({
   currentUser?: UserProfile | null;
 }) {
   const siteName = getSiteName();
+  const brandHref = getSiteBrandHref();
   const user = currentUser === undefined ? await getCurrentUser() : currentUser;
   const loginEnabled = isUserLoginEnabled();
   const registrationEnabled = isUserRegistrationEnabled();
@@ -68,7 +70,7 @@ export async function SiteHeader({
 
   return (
     <header className={headerClassName}>
-        <Link className="brand" href="/" aria-label="返回首页">
+        <Link className="brand" href={brandHref} aria-label={brandHref === "/novels" ? "前往小说" : "返回首页"}>
           <BookOpen size={24} aria-hidden="true" />
           <span>{siteName}</span>
         </Link>

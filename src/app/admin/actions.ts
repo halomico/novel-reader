@@ -7,7 +7,6 @@ import { getAdminAccessState } from "@/lib/admin-access";
 import { persistBlockedIp } from "@/lib/admin-ban";
 import { clearAdminSession, getAdminSession, setAdminSession, verifyAdminCredentials } from "@/lib/admin-auth";
 import { recordAdminLogin } from "@/lib/admin-login-records";
-import { checkAdminOperationLimit } from "@/lib/admin-operation-limit";
 import {
   getAdminBookPageSize,
   getAdminLoginRateLimitPerMinute,
@@ -32,12 +31,12 @@ import {
   deleteMediaFolder,
   getMediaAsset,
   isMediaKind,
+  listMediaAssetsByIds,
   MediaCategoryError,
   MediaFolderError,
   renameMediaFolder,
   setVideoCategoryForAssets,
   syncMediaLibrary,
-  type MediaAsset,
   type MediaKind,
   updateVideoCategory,
   updateMediaAsset,
@@ -51,7 +50,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { validateSearchKeyword } from "@/lib/search";
 import { detectSiteIconFormat, MAX_SITE_ICON_BYTES, removeSiteIconFile, writeSiteIconFile } from "@/lib/site-icon";
 import { normalizeIpRateLimitRules, readSiteSettings, type SiteSettings, writeSiteSettings } from "@/lib/site-settings";
-import { isColorPalette } from "@/lib/ui-preferences";
+import { isColorPalette, normalizeReaderTagsMode } from "@/lib/ui-preferences";
 import {
   createTag,
   deleteTag,
@@ -151,7 +150,7 @@ function loginNotice(message: string, username = ""): never {
   redirect(`/admin/login?${params.toString()}`);
 }
 
-async function requireAdminRequest(path = "/admin/books", checkOperationRate = true) {
+async function requireAdminRequest() {
   const headerStore = await headers();
   const access = getAdminAccessState(headerStore);
   if (!access.allowed) {
@@ -161,13 +160,6 @@ async function requireAdminRequest(path = "/admin/books", checkOperationRate = t
   const session = await getAdminSession();
   if (!session) {
     redirect("/admin/login");
-  }
-
-  if (checkOperationRate) {
-    const limitedMessage = checkAdminOperationLimit(access.clientIp, path);
-    if (limitedMessage) {
-      adminNotice(limitedMessage, "warning", path);
-    }
   }
 
   return session;
@@ -266,7 +258,7 @@ export async function logoutAdminAction() {
 export async function updateContentReportStatusAction(formData: FormData) {
   const requestedReturnPath = String(formData.get("returnPath") || "");
   const returnPath = requestedReturnPath.startsWith("/admin/reports") ? requestedReturnPath : "/admin/reports";
-  const session = await requireAdminRequest(returnPath);
+  const session = await requireAdminRequest();
   const reportId = Number(formData.get("reportId"));
   const status = formData.get("status") === "open" ? "open" : "resolved";
   if (!Number.isInteger(reportId) || reportId < 1 || !setContentReportStatus(reportId, status, session.username)) {
@@ -277,13 +269,13 @@ export async function updateContentReportStatusAction(formData: FormData) {
 }
 
 export async function cancelFrontendSearchJobsAction() {
-  await requireAdminRequest("/admin/settings");
+  await requireAdminRequest();
   cancelContentJobs("search");
   adminNotice("已请求停止所有前台全文搜索任务", "success", "/admin/settings");
 }
 
 export async function uploadSiteIconAction(formData: FormData) {
-  await requireAdminRequest("/admin/settings");
+  await requireAdminRequest();
   const file = formData.get("siteIcon");
   if (!(file instanceof File) || file.size === 0) {
     adminNotice("请选择站点图标文件", "warning", "/admin/settings");
@@ -330,7 +322,7 @@ export async function uploadSiteIconAction(formData: FormData) {
 }
 
 export async function deleteSiteIconAction() {
-  await requireAdminRequest("/admin/settings");
+  await requireAdminRequest();
   const previous = readSiteSettings();
   try {
     writeSiteSettings({
@@ -353,7 +345,7 @@ export async function deleteSiteIconAction() {
 
 export async function deleteNovelsAction(formData: FormData) {
   const returnPath = listReturnPath(formData, "/admin/books");
-  await requireAdminRequest(returnPath);
+  await requireAdminRequest();
   const ids = formData
     .getAll("bookIds")
     .map((value) => Number(value))
@@ -377,7 +369,7 @@ export async function deleteNovelsAction(formData: FormData) {
 }
 
 export async function togglePinnedNovelAction(formData: FormData) {
-  await requireAdminRequest("/admin/books");
+  await requireAdminRequest();
   const novelId = Number(formData.get("bookId"));
   if (!Number.isInteger(novelId) || novelId < 1) {
     return;
@@ -390,7 +382,7 @@ export async function togglePinnedNovelAction(formData: FormData) {
 
 export async function savePinnedNovelsAction(formData: FormData) {
   const returnPath = listReturnPath(formData, "/admin/books");
-  await requireAdminRequest(returnPath);
+  await requireAdminRequest();
   const novelIds = formData
     .getAll("bookIds")
     .map(Number)
@@ -415,7 +407,7 @@ function tagOperationMessage(error: unknown): string {
 export async function saveAdminTagAction(formData: FormData) {
   const tagId = Number(formData.get("tagId") || 0);
   let returnPath = tagManagerReturnPath(formData, Number.isInteger(tagId) && tagId > 0 ? tagId : undefined);
-  await requireAdminRequest(returnPath);
+  await requireAdminRequest();
   try {
     if (Number.isInteger(tagId) && tagId > 0) {
       const updated = updateTag({
@@ -455,7 +447,7 @@ export async function saveAdminTagAction(formData: FormData) {
 export async function deleteAdminTagAction(formData: FormData) {
   const tagId = Number(formData.get("tagId") || 0);
   const returnPath = tagManagerReturnPath(formData, null);
-  await requireAdminRequest(returnPath);
+  await requireAdminRequest();
   if (!Number.isInteger(tagId) || tagId < 1) {
     adminNotice("标签不存在", "warning", returnPath);
   }
@@ -469,7 +461,7 @@ export async function deleteAdminTagAction(formData: FormData) {
 export async function saveNovelTaggingAction(formData: FormData) {
   const bookId = Number(formData.get("bookId") || 0);
   const returnPath = Number.isInteger(bookId) && bookId > 0 ? `/admin/books/${bookId}/tags` : "/admin/books";
-  await requireAdminRequest(returnPath);
+  await requireAdminRequest();
   if (!Number.isInteger(bookId) || bookId < 1) {
     adminNotice("小说不存在", "warning", "/admin/books");
   }
@@ -508,7 +500,7 @@ export async function saveNovelEditorAction(formData: FormData) {
   const editorPath = Number.isInteger(bookId) && bookId > 0
     ? `/admin/books/${bookId}/edit${editorParams.size ? `?${editorParams.toString()}` : ""}`
     : "/admin/books";
-  await requireAdminRequest(editorPath);
+  await requireAdminRequest();
   if (!Number.isInteger(bookId) || bookId < 1) {
     adminNotice("小说不存在", "warning", "/admin/books");
   }
@@ -559,7 +551,7 @@ export async function batchUpdateNovelsAction(formData: FormData) {
     editorParams.set("returnPath", successPath);
   }
   const editorPath = ids.length ? `/admin/books/batch?${editorParams.toString()}` : "/admin/books";
-  await requireAdminRequest(editorPath);
+  await requireAdminRequest();
   if (!ids.length) {
     adminNotice("请选择要编辑的小说", "warning", "/admin/books");
   }
@@ -603,7 +595,7 @@ export async function batchUpdateNovelsAction(formData: FormData) {
 }
 
 export async function saveAdminSettingsAction(formData: FormData) {
-  await requireAdminRequest("/admin/settings");
+  await requireAdminRequest();
   const previous = readSiteSettings();
   const adminUsername = String(formData.get("adminUsername") || "").trim();
   const newPassword = String(formData.get("newAdminPassword") || "");
@@ -638,8 +630,13 @@ export async function saveAdminSettingsAction(formData: FormData) {
     ...previous,
     siteName: String(formData.get("siteName") || "").trim(),
     siteTitle: String(formData.get("siteTitle") || "").trim(),
+    brandLinkTarget: formData.get("brandLinkTarget") === "home" ? "home" : "novels",
     settingsPreviewText: String(formData.get("settingsPreviewText") || "").trim(),
-    readerDefaultFontSize: intField(formData, "readerDefaultFontSize", previous.readerDefaultFontSize || 17, 8, 25),
+    readerDefaultFontSize: intField(formData, "readerDefaultFontSize", previous.readerDefaultFontSize || 18, 8, 25),
+    readerDefaultTagsMode: normalizeReaderTagsMode(
+      String(formData.get("readerDefaultTagsMode") || ""),
+      previous.readerDefaultTagsMode,
+    ),
     defaultPalette: isColorPalette(defaultPalette) ? defaultPalette : "default",
     defaultPaletteRandomEnabled: formData.get("defaultPaletteRandomEnabled") === "on",
     defaultPaletteRotationMinutes: intField(
@@ -657,21 +654,13 @@ export async function saveAdminSettingsAction(formData: FormData) {
     adminLoginRateLimitPerMinute: intField(formData, "adminLoginRateLimitPerMinute", previous.adminLoginRateLimitPerMinute || 6, 1, 120),
     adminLoginRateLimitEnabled: formData.get("adminLoginRateLimitEnabled") === "on",
     adminLoginRateLimitBanEnabled: formData.get("adminLoginRateLimitBanEnabled") === "on",
-    adminOperationRateLimitEnabled: formData.get("adminOperationRateLimitEnabled") === "on",
-    adminOperationRateLimitPerMinute: intField(
-      formData,
-      "adminOperationRateLimitPerMinute",
-      previous.adminOperationRateLimitPerMinute || 60,
-      1,
-      600,
-    ),
-    adminOperationRateLimitBanEnabled: formData.get("adminOperationRateLimitBanEnabled") === "on",
     catalogPageSize: intField(formData, "catalogPageSize", previous.catalogPageSize || getCatalogPageSize(), 1, 100),
     searchResultsPageSize: intField(formData, "searchResultsPageSize", previous.searchResultsPageSize || getSearchResultsPageSize(), 1, 100),
     adminBookPageSize: intField(formData, "adminBookPageSize", previous.adminBookPageSize || getAdminBookPageSize(), 1, 200),
     randomCatalogEnabled: formData.get("randomCatalogEnabled") === "on",
     manualPinnedNovelsEnabled: formData.get("manualPinnedNovelsEnabled") === "on",
     randomRecommendationsEnabled: formData.get("randomRecommendationsEnabled") === "on",
+    catalogPromotionOrder: formData.get("catalogPromotionOrder") === "random-first" ? "random-first" : "manual-first",
     randomRecommendationCount: intField(
       formData,
       "randomRecommendationCount",
@@ -772,17 +761,15 @@ export async function saveAdminSettingsAction(formData: FormData) {
 }
 
 export async function loadAdminMediaSelectionAction(requestedIds: number[]) {
-  await requireAdminRequest("/admin/media", false);
+  await requireAdminRequest();
   const ids = Array.from(new Set(
     requestedIds.filter((id) => Number.isInteger(id) && id > 0),
   )).slice(0, 100);
-  return ids
-    .map((id) => getMediaAsset(id))
-    .filter((asset): asset is MediaAsset => Boolean(asset));
+  return listMediaAssetsByIds(ids);
 }
 
 export async function updateAdminMediaAction(formData: FormData) {
-  await requireAdminRequest("/admin/media");
+  await requireAdminRequest();
   const returnPath = mediaReturnPath(formData);
   const id = Number(formData.get("mediaId"));
   const title = String(formData.get("title") || "").trim();
@@ -820,7 +807,7 @@ export async function updateAdminMediaAction(formData: FormData) {
 }
 
 export async function batchUpdateAdminMediaAction(formData: FormData) {
-  await requireAdminRequest("/admin/media");
+  await requireAdminRequest();
   const returnPath = mediaReturnPath(formData);
   const ids = Array.from(new Set(
     formData
@@ -868,7 +855,7 @@ export async function batchUpdateAdminMediaAction(formData: FormData) {
 }
 
 export async function createAdminVideoCategoryAction(formData: FormData) {
-  await requireAdminRequest("/admin/media");
+  await requireAdminRequest();
   const returnPath = mediaReturnPath(formData);
   try {
     createVideoCategory(String(formData.get("name") || ""));
@@ -881,7 +868,7 @@ export async function createAdminVideoCategoryAction(formData: FormData) {
 }
 
 export async function updateAdminVideoCategoryAction(formData: FormData) {
-  await requireAdminRequest("/admin/media");
+  await requireAdminRequest();
   const returnPath = mediaReturnPath(formData);
   const id = Number(formData.get("categoryId"));
   let updated = false;
@@ -904,7 +891,7 @@ export async function updateAdminVideoCategoryAction(formData: FormData) {
 }
 
 export async function deleteAdminVideoCategoryAction(formData: FormData) {
-  await requireAdminRequest("/admin/media");
+  await requireAdminRequest();
   const returnPath = mediaReturnPath(formData);
   const deleted = deleteVideoCategory(Number(formData.get("categoryId")));
   revalidatePath("/media");
@@ -913,7 +900,7 @@ export async function deleteAdminVideoCategoryAction(formData: FormData) {
 }
 
 export async function assignAdminVideoCategoryAction(formData: FormData) {
-  await requireAdminRequest("/admin/media");
+  await requireAdminRequest();
   const returnPath = mediaReturnPath(formData);
   const ids = formData
     .getAll("mediaIds")
@@ -934,7 +921,7 @@ export async function assignAdminVideoCategoryAction(formData: FormData) {
 }
 
 export async function saveAdminMediaDisplaySettingsAction(formData: FormData) {
-  await requireAdminRequest("/admin/media");
+  await requireAdminRequest();
   const returnPath = mediaReturnPath(formData);
   const previous = readSiteSettings();
   const next: SiteSettings = {
@@ -972,7 +959,7 @@ export async function saveAdminMediaDisplaySettingsAction(formData: FormData) {
 }
 
 export async function deleteAdminMediaAction(formData: FormData) {
-  await requireAdminRequest("/admin/media");
+  await requireAdminRequest();
   const returnPath = mediaReturnPath(formData);
   const ids = Array.from(
     new Set(
@@ -996,7 +983,7 @@ export async function deleteAdminMediaAction(formData: FormData) {
 }
 
 export async function syncAdminMediaAction(formData: FormData) {
-  await requireAdminRequest("/admin/media");
+  await requireAdminRequest();
   const returnPath = mediaReturnPath(formData);
   let result: Awaited<ReturnType<typeof syncMediaLibrary>>;
   try {
@@ -1011,7 +998,7 @@ export async function syncAdminMediaAction(formData: FormData) {
 }
 
 export async function createAdminMediaFolderAction(formData: FormData) {
-  await requireAdminRequest("/admin/media");
+  await requireAdminRequest();
   const kindValue = formData.get("kind");
   if (!isMediaKind(kindValue)) {
     adminNotice("资源类型无效", "warning", mediaReturnPath(formData));
@@ -1028,7 +1015,7 @@ export async function createAdminMediaFolderAction(formData: FormData) {
 }
 
 export async function renameAdminMediaFolderAction(formData: FormData) {
-  await requireAdminRequest("/admin/media");
+  await requireAdminRequest();
   const kindValue = formData.get("kind");
   if (!isMediaKind(kindValue)) {
     adminNotice("资源类型无效", "warning", mediaReturnPath(formData));
@@ -1045,7 +1032,7 @@ export async function renameAdminMediaFolderAction(formData: FormData) {
 }
 
 export async function deleteAdminMediaFolderAction(formData: FormData) {
-  await requireAdminRequest("/admin/media");
+  await requireAdminRequest();
   const kindValue = formData.get("kind");
   if (!isMediaKind(kindValue)) {
     adminNotice("资源类型无效", "warning", mediaReturnPath(formData));
@@ -1068,7 +1055,7 @@ export async function deleteAdminMediaFolderAction(formData: FormData) {
 }
 
 export async function deleteIpRateLimitBanAction(formData: FormData) {
-  await requireAdminRequest("/admin/settings");
+  await requireAdminRequest();
   const requestedValues = [...formData.getAll("rateLimitBanKeys"), ...formData.getAll("rateLimitBanKey")];
   const bans = requestedValues.map(parseIpRateLimitBanKey).filter((ban): ban is IpRateLimitBanKey => ban !== null);
   if (bans.length === 0) {
@@ -1082,7 +1069,7 @@ export async function deleteIpRateLimitBanAction(formData: FormData) {
 
 export async function createAdminUserAction(formData: FormData) {
   const returnPath = listReturnPath(formData, "/admin/users");
-  await requireAdminRequest(returnPath);
+  await requireAdminRequest();
   const username = String(formData.get("username") || "").trim();
   const displayName = String(formData.get("displayName") || "").trim() || username;
   const password = String(formData.get("password") || "");
@@ -1126,7 +1113,7 @@ export async function createAdminUserAction(formData: FormData) {
 
 export async function updateAdminUserAction(formData: FormData) {
   const returnPath = listReturnPath(formData, "/admin/users");
-  await requireAdminRequest(returnPath);
+  await requireAdminRequest();
   const userId = Number(formData.get("userId"));
   const displayName = String(formData.get("displayName") || "").trim();
   const status = formData.get("status") === "disabled" ? "disabled" : "active";
@@ -1168,7 +1155,7 @@ export async function updateAdminUserAction(formData: FormData) {
 
 export async function updateAdminUserStatusAction(formData: FormData) {
   const returnPath = listReturnPath(formData, "/admin/users");
-  await requireAdminRequest(returnPath);
+  await requireAdminRequest();
   const userId = Number(formData.get("userId"));
   const status = formData.get("status") === "disabled" ? "disabled" : "active";
 
@@ -1185,7 +1172,7 @@ export async function updateAdminUserStatusAction(formData: FormData) {
 
 export async function deleteAdminUsersAction(formData: FormData) {
   const returnPath = listReturnPath(formData, "/admin/users");
-  await requireAdminRequest(returnPath);
+  await requireAdminRequest();
   const ids = formData
     .getAll("userIds")
     .map((value) => Number(value))
@@ -1203,7 +1190,7 @@ export async function deleteAdminUsersAction(formData: FormData) {
 export async function deleteAdminUserHistoryAction(formData: FormData) {
   const userId = Number(formData.get("userId"));
   const returnPath = Number.isInteger(userId) && userId > 0 ? userDetailReturnPath(formData, userId) : "/admin/users";
-  await requireAdminRequest(returnPath);
+  await requireAdminRequest();
   const historyKeys = Array.from(
     new Set(
       formData
@@ -1223,7 +1210,7 @@ export async function deleteAdminUserHistoryAction(formData: FormData) {
 export async function clearAdminUserHistoryAction(formData: FormData) {
   const userId = Number(formData.get("userId"));
   const returnPath = Number.isInteger(userId) && userId > 0 ? userDetailReturnPath(formData, userId) : "/admin/users";
-  await requireAdminRequest(returnPath);
+  await requireAdminRequest();
   if (!Number.isInteger(userId) || userId < 1) {
     adminNotice("用户不存在", "warning", "/admin/users");
   }

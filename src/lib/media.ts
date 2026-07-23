@@ -803,6 +803,21 @@ export function getMediaAsset(id: number): MediaAsset | null {
   return row ? toAsset(row) : null;
 }
 
+export function listMediaAssetsByIds(assetIds: number[]): MediaAsset[] {
+  const ids = Array.from(new Set(assetIds.filter((id) => Number.isInteger(id) && id > 0)));
+  if (!ids.length) {
+    return [];
+  }
+  const rows = getDb()
+    .prepare(`SELECT * FROM media_assets WHERE id IN (${ids.map(() => "?").join(", ")})`)
+    .all(...ids) as MediaRow[];
+  const byId = new Map(rows.map((row) => [row.id, toAsset(row)]));
+  return ids.flatMap((id) => {
+    const asset = byId.get(id);
+    return asset ? [asset] : [];
+  });
+}
+
 function addFolderFilter(filters: string[], values: Array<string | number>, kind: MediaKind, folder: string, recursive: boolean) {
   const prefix = `${kind}/${folder ? `${folder}/` : ""}`;
   filters.push("stored_name LIKE ? ESCAPE '\\'");

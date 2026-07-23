@@ -14,7 +14,7 @@ export function AdminMediaSort({
   category,
   view,
 }: {
-  kind?: MediaKind;
+  kind: MediaKind;
   folder: string;
   query: string;
   sortBy: MediaSortBy;
@@ -37,8 +37,7 @@ export function AdminMediaSort({
       ];
 
   function navigate(nextSort: MediaSortBy, nextOrder: MediaSortOrder) {
-    const params = new URLSearchParams({ sort: nextSort, order: nextOrder });
-    if (kind) params.set("kind", kind);
+    const params = new URLSearchParams({ kind, sort: nextSort, order: nextOrder });
     if (folder) params.set("folder", folder);
     if (query) params.set("q", query);
     if (kind === "video" && category) params.set("category", category);

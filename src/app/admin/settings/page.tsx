@@ -9,7 +9,6 @@ import { getAdminBookStats } from "@/lib/admin-books";
 import {
   getAdminBookPageSize,
   getAdminLoginRateLimitPerMinute,
-  getAdminOperationRateLimitPerMinute,
   getAdminUsername,
   getAnalyticsRealtimeLimit,
   getCatalogPageSize,
@@ -66,7 +65,6 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
   const siteTitle = getSiteTitle();
   const adminUsername = settings.adminUsername || getAdminUsername();
   const loginRateLimit = settings.adminLoginRateLimitPerMinute || getAdminLoginRateLimitPerMinute();
-  const operationRateLimit = settings.adminOperationRateLimitPerMinute || getAdminOperationRateLimitPerMinute();
   const catalogPageSize = settings.catalogPageSize || getCatalogPageSize();
   const searchResultsPageSize = settings.searchResultsPageSize || getSearchResultsPageSize();
   const adminBookPageSize = settings.adminBookPageSize || getAdminBookPageSize();
@@ -146,6 +144,13 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 <input name="siteTitle" defaultValue={settings.siteTitle || siteTitle} />
               </label>
             </div>
+            <label className="adminCompactField">
+              <span>站点标识跳转</span>
+              <AdminSelect name="brandLinkTarget" defaultValue={settings.brandLinkTarget}>
+                <option value="novels">小说</option>
+                <option value="home">首页</option>
+              </AdminSelect>
+            </label>
             <label>
               <span>设置页底部文案</span>
               <textarea name="settingsPreviewText" rows={3} defaultValue={settings.settingsPreviewText} />
@@ -155,7 +160,15 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               <input name="readerDefaultFontSize" type="number" min="8" max="25" defaultValue={readerDefaultFontSize} />
             </label>
             <label className="adminCompactField">
-              <span>后台主题默认值</span>
+              <span>文章标签默认显示</span>
+              <AdminSelect name="readerDefaultTagsMode" defaultValue={settings.readerDefaultTagsMode}>
+                <option value="collapsed">收起</option>
+                <option value="expanded">展开</option>
+                <option value="hidden">关闭</option>
+              </AdminSelect>
+            </label>
+            <label className="adminCompactField">
+              <span>默认明暗模式</span>
               <AdminSelect name="adminTheme" defaultValue={settings.adminTheme}>
                 <option value="system">跟随系统</option>
                 <option value="light">浅色</option>
@@ -198,16 +211,10 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 <input name="confirmAdminPassword" type="password" minLength={6} maxLength={72} placeholder="再次输入新密码" />
               </label>
             </div>
-            <div className="adminFieldGrid">
-              <label>
-                <span>登录限速 / 分钟</span>
-                <input name="adminLoginRateLimitPerMinute" type="number" min="1" max="120" defaultValue={loginRateLimit} />
-              </label>
-              <label>
-                <span>后台写操作限速 / 分钟</span>
-                <input name="adminOperationRateLimitPerMinute" type="number" min="1" max="600" defaultValue={operationRateLimit} />
-              </label>
-            </div>
+            <label className="adminCompactField isNarrow">
+              <span>登录限速 / 分钟</span>
+              <input name="adminLoginRateLimitPerMinute" type="number" min="1" max="120" defaultValue={loginRateLimit} />
+            </label>
             <label className="adminSwitchLabel">
               <span>
                 <strong>启用登录限速</strong>
@@ -221,20 +228,6 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 <small>关闭后只返回限速提示，不写入黑名单。</small>
               </span>
               <input name="adminLoginRateLimitBanEnabled" type="checkbox" defaultChecked={settings.adminLoginRateLimitBanEnabled} />
-            </label>
-            <label className="adminSwitchLabel">
-              <span>
-                <strong>启用后台写操作限速</strong>
-                <small>限制上传、删除、添加索引等写操作；索引进度轮询不计入。</small>
-              </span>
-              <input name="adminOperationRateLimitEnabled" type="checkbox" defaultChecked={settings.adminOperationRateLimitEnabled} />
-            </label>
-            <label className="adminSwitchLabel">
-              <span>
-                <strong>后台写操作超限自动加入黑名单</strong>
-                <small>个人使用时建议关闭，避免误封自己的管理 IP。</small>
-              </span>
-              <input name="adminOperationRateLimitBanEnabled" type="checkbox" defaultChecked={settings.adminOperationRateLimitBanEnabled} />
             </label>
           </details>
 
@@ -284,9 +277,16 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
             <label className="adminSwitchLabel">
               <span>
                 <strong>启用随机推荐</strong>
-                <small>每个周期等权抽取一批小说，排列在手动置顶之后。</small>
+                <small>每个周期等权抽取一批小说，顺序可在下方调整。</small>
               </span>
               <input name="randomRecommendationsEnabled" type="checkbox" defaultChecked={settings.randomRecommendationsEnabled} />
+            </label>
+            <label className="adminCompactField">
+              <span>置顶显示顺序</span>
+              <AdminSelect name="catalogPromotionOrder" defaultValue={settings.catalogPromotionOrder}>
+                <option value="manual-first">手动置顶在前</option>
+                <option value="random-first">随机推荐在前</option>
+              </AdminSelect>
             </label>
             <div className="adminFieldGrid">
               <label>

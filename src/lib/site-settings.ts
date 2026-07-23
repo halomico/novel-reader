@@ -1,9 +1,16 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { isColorPalette, type ColorPalette } from "./ui-preferences";
+import {
+  isColorPalette,
+  normalizeReaderTagsMode,
+  type ColorPalette,
+  type ReaderTagsMode,
+} from "./ui-preferences";
 
 export type AdminTheme = "system" | "light" | "dark";
+export type BrandLinkTarget = "home" | "novels";
+export type CatalogPromotionOrder = "manual-first" | "random-first";
 export type SiteIconMimeType = "" | "image/png" | "image/jpeg" | "image/webp" | "image/x-icon";
 export type VideoThumbnailMode = "single" | "carousel";
 export type RelatedVideoMode = "next" | "random";
@@ -32,11 +39,13 @@ export type AdminLoginRecord = {
 export type SiteSettings = {
   siteName: string;
   siteTitle: string;
+  brandLinkTarget: BrandLinkTarget;
   settingsPreviewText: string;
   siteIconFileName: string;
   siteIconMimeType: SiteIconMimeType;
   siteIconUpdatedAt: string;
   readerDefaultFontSize: number;
+  readerDefaultTagsMode: ReaderTagsMode;
   defaultPalette: ColorPalette;
   defaultPaletteRandomEnabled: boolean;
   defaultPaletteRotationMinutes: number;
@@ -49,9 +58,6 @@ export type SiteSettings = {
   adminLoginRateLimitPerMinute: number;
   adminLoginRateLimitEnabled: boolean;
   adminLoginRateLimitBanEnabled: boolean;
-  adminOperationRateLimitEnabled: boolean;
-  adminOperationRateLimitPerMinute: number;
-  adminOperationRateLimitBanEnabled: boolean;
   adminTheme: AdminTheme;
   catalogPageSize: number;
   searchResultsPageSize: number;
@@ -59,6 +65,7 @@ export type SiteSettings = {
   randomCatalogEnabled: boolean;
   manualPinnedNovelsEnabled: boolean;
   randomRecommendationsEnabled: boolean;
+  catalogPromotionOrder: CatalogPromotionOrder;
   randomRecommendationCount: number;
   randomRecommendationIntervalMinutes: number;
   noticeDisplaySeconds: number;
@@ -123,16 +130,21 @@ const LEGACY_SETTING_KEYS = [
   "manualIndexMaxSegmentsEnabled",
   "manualIndexMaxSegments",
   "noticeStayVisibleAfterBlur",
+  "adminOperationRateLimitEnabled",
+  "adminOperationRateLimitPerMinute",
+  "adminOperationRateLimitBanEnabled",
 ] as const;
 
 const DEFAULT_SETTINGS: SiteSettings = {
   siteName: "",
   siteTitle: "",
+  brandLinkTarget: "novels",
   settingsPreviewText: "",
   siteIconFileName: "",
   siteIconMimeType: "",
   siteIconUpdatedAt: "",
-  readerDefaultFontSize: 17,
+  readerDefaultFontSize: 18,
+  readerDefaultTagsMode: "collapsed",
   defaultPalette: "default",
   defaultPaletteRandomEnabled: false,
   defaultPaletteRotationMinutes: 1_440,
@@ -145,9 +157,6 @@ const DEFAULT_SETTINGS: SiteSettings = {
   adminLoginRateLimitPerMinute: 0,
   adminLoginRateLimitEnabled: true,
   adminLoginRateLimitBanEnabled: true,
-  adminOperationRateLimitEnabled: false,
-  adminOperationRateLimitPerMinute: 0,
-  adminOperationRateLimitBanEnabled: false,
   adminTheme: "system",
   catalogPageSize: 0,
   searchResultsPageSize: 0,
@@ -155,6 +164,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   randomCatalogEnabled: true,
   manualPinnedNovelsEnabled: true,
   randomRecommendationsEnabled: false,
+  catalogPromotionOrder: "manual-first",
   randomRecommendationCount: 8,
   randomRecommendationIntervalMinutes: 360,
   noticeDisplaySeconds: 0,
@@ -241,6 +251,14 @@ function cleanRelatedVideoMode(value: unknown): RelatedVideoMode {
 
 function cleanAudioPlaybackMode(value: unknown): AudioPlaybackMode {
   return value === "stop" || value === "repeat-one" ? value : "next";
+}
+
+function cleanBrandLinkTarget(value: unknown): BrandLinkTarget {
+  return value === "home" ? "home" : "novels";
+}
+
+function cleanCatalogPromotionOrder(value: unknown): CatalogPromotionOrder {
+  return value === "random-first" ? "random-first" : "manual-first";
 }
 
 function cleanBool(value: unknown, fallback: boolean): boolean {
@@ -347,11 +365,16 @@ function readSiteSettingsFromDisk(): SiteSettings {
     return {
       siteName: cleanText(parsed.siteName),
       siteTitle: cleanText(parsed.siteTitle),
+      brandLinkTarget: cleanBrandLinkTarget(parsed.brandLinkTarget),
       settingsPreviewText: cleanText(parsed.settingsPreviewText),
       siteIconFileName: path.basename(cleanText(parsed.siteIconFileName)),
       siteIconMimeType: cleanSiteIconMimeType(parsed.siteIconMimeType),
       siteIconUpdatedAt: cleanText(parsed.siteIconUpdatedAt),
       readerDefaultFontSize: cleanInt(parsed.readerDefaultFontSize, DEFAULT_SETTINGS.readerDefaultFontSize, 8, 25),
+      readerDefaultTagsMode: normalizeReaderTagsMode(
+        typeof parsed.readerDefaultTagsMode === "string" ? parsed.readerDefaultTagsMode : undefined,
+        DEFAULT_SETTINGS.readerDefaultTagsMode,
+      ),
       defaultPalette: cleanColorPalette(parsed.defaultPalette),
       defaultPaletteRandomEnabled: cleanBool(parsed.defaultPaletteRandomEnabled, DEFAULT_SETTINGS.defaultPaletteRandomEnabled),
       defaultPaletteRotationMinutes: cleanInt(
@@ -369,14 +392,6 @@ function readSiteSettingsFromDisk(): SiteSettings {
       adminLoginRateLimitPerMinute: cleanInt(parsed.adminLoginRateLimitPerMinute, DEFAULT_SETTINGS.adminLoginRateLimitPerMinute, 0, 120),
       adminLoginRateLimitEnabled: cleanBool(parsed.adminLoginRateLimitEnabled, DEFAULT_SETTINGS.adminLoginRateLimitEnabled),
       adminLoginRateLimitBanEnabled: cleanBool(parsed.adminLoginRateLimitBanEnabled, DEFAULT_SETTINGS.adminLoginRateLimitBanEnabled),
-      adminOperationRateLimitEnabled: cleanBool(parsed.adminOperationRateLimitEnabled, DEFAULT_SETTINGS.adminOperationRateLimitEnabled),
-      adminOperationRateLimitPerMinute: cleanInt(
-        parsed.adminOperationRateLimitPerMinute,
-        DEFAULT_SETTINGS.adminOperationRateLimitPerMinute,
-        0,
-        600,
-      ),
-      adminOperationRateLimitBanEnabled: cleanBool(parsed.adminOperationRateLimitBanEnabled, DEFAULT_SETTINGS.adminOperationRateLimitBanEnabled),
       adminTheme: cleanTheme(parsed.adminTheme),
       catalogPageSize: cleanInt(parsed.catalogPageSize, DEFAULT_SETTINGS.catalogPageSize, 0, 100),
       searchResultsPageSize: cleanInt(parsed.searchResultsPageSize, DEFAULT_SETTINGS.searchResultsPageSize, 0, 100),
@@ -384,6 +399,7 @@ function readSiteSettingsFromDisk(): SiteSettings {
       randomCatalogEnabled: cleanBool(parsed.randomCatalogEnabled, DEFAULT_SETTINGS.randomCatalogEnabled),
       manualPinnedNovelsEnabled: cleanBool(parsed.manualPinnedNovelsEnabled, DEFAULT_SETTINGS.manualPinnedNovelsEnabled),
       randomRecommendationsEnabled: cleanBool(parsed.randomRecommendationsEnabled, DEFAULT_SETTINGS.randomRecommendationsEnabled),
+      catalogPromotionOrder: cleanCatalogPromotionOrder(parsed.catalogPromotionOrder),
       randomRecommendationCount: cleanInt(
         parsed.randomRecommendationCount,
         DEFAULT_SETTINGS.randomRecommendationCount,

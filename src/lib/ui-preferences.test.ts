@@ -42,5 +42,6 @@ test("normalizes current and legacy reader tag preferences", () => {
   assert.equal(normalizeReaderTagsMode("hidden"), "hidden");
   assert.equal(normalizeReaderTagsMode("hide"), "hidden");
   assert.equal(normalizeReaderTagsMode("show"), "expanded");
-  assert.equal(normalizeReaderTagsMode(null), "expanded");
+  assert.equal(normalizeReaderTagsMode(null), "collapsed");
+  assert.equal(normalizeReaderTagsMode("unknown", "expanded"), "expanded");
 });

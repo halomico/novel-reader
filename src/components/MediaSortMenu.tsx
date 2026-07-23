@@ -1,10 +1,11 @@
 "use client";
 
 import {
-  ArrowDown,
-  ArrowUp,
+  ArrowDownWideNarrow,
   ArrowUpDown,
+  ArrowUpNarrowWide,
   CalendarDays,
+  Check,
   Clock,
   HardDrive,
   Play,
@@ -40,8 +41,7 @@ export function MediaSortMenu({
   const containerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const activeOption = options.find((option) => option.value === sortBy) || options[0];
-  const ActiveIcon = OPTION_ICONS[activeOption.value];
-  const DirectionIcon = sortOrder === "asc" ? ArrowUp : ArrowDown;
+  const SortIcon = sortOrder === "asc" ? ArrowUpNarrowWide : ArrowDownWideNarrow;
 
   useEffect(() => {
     if (!open) return;
@@ -83,8 +83,7 @@ export function MediaSortMenu({
         title={`排序：${currentLabel}`}
         onClick={() => setOpen((value) => !value)}
       >
-        <ActiveIcon size={17} aria-hidden="true" />
-        <DirectionIcon className="mediaSortTriggerDirection" size={10} aria-hidden="true" />
+        <SortIcon size={18} aria-hidden="true" />
       </button>
       {open ? (
         <div className="mediaSortPopover" role="menu" aria-label="资源排序方式">
@@ -102,7 +101,7 @@ export function MediaSortMenu({
               >
                 <Icon size={15} aria-hidden="true" />
                 <span>{option.label}</span>
-                {active ? <DirectionIcon size={13} aria-hidden="true" /> : <span className="mediaSortMenuSpacer" />}
+                {active ? <Check size={14} aria-hidden="true" /> : <span className="mediaSortMenuSpacer" />}
               </button>
             );
           })}

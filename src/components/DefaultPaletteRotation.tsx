@@ -15,10 +15,8 @@ function applyPalette(value: ColorPalette) {
   root.dataset.palette = value;
   root.style.setProperty("--palette-light-accent", palette.lightAccent);
   root.style.setProperty("--palette-light-strong", palette.lightStrong);
-  root.style.setProperty("--palette-light-tint", palette.lightTint);
   root.style.setProperty("--palette-dark-accent", palette.darkAccent);
   root.style.setProperty("--palette-dark-strong", palette.darkStrong);
-  root.style.setProperty("--palette-dark-tint", palette.darkTint);
 }
 
 export function DefaultPaletteRotation({

@@ -1,4 +1,4 @@
-import { File, FolderPen, FolderPlus, ImageIcon, LayoutGrid, LibraryBig, List, RefreshCw, Save, Search, Trash2 } from "lucide-react";
+import { File, FolderPen, FolderPlus, ImageIcon, LayoutGrid, List, RefreshCw, Save, Search, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { AdminMediaManager } from "@/components/AdminMediaManager";
 import { AdminMediaSort } from "@/components/AdminMediaSort";
@@ -45,31 +45,29 @@ type AdminMediaPageProps = {
   }>;
 };
 
-const FILTERS: Array<{ kind?: MediaKind; label: string }> = [
-  { label: "全部" },
+const FILTERS: Array<{ kind: MediaKind; label: string }> = [
   { kind: "video", label: "视频" },
   { kind: "audio", label: "音频" },
   { kind: "file", label: "文件" },
 ];
 
-function compatibleMediaSort(kind: MediaKind | undefined, sortBy: MediaSortBy): MediaSortBy {
+function compatibleMediaSort(kind: MediaKind, sortBy: MediaSortBy): MediaSortBy {
   if (kind === "video" || kind === "audio") {
     return sortBy === "size" ? "duration" : sortBy;
   }
   return sortBy === "duration" || sortBy === "plays" ? "name" : sortBy;
 }
 
-function filterHref(kind: MediaKind | undefined, sortBy: MediaSortBy, sortOrder: MediaSortOrder, view: "table" | "grid"): string {
+function filterHref(kind: MediaKind, sortBy: MediaSortBy, sortOrder: MediaSortOrder, view: "table" | "grid"): string {
   const nextSortBy = compatibleMediaSort(kind, sortBy);
   const nextSortOrder = nextSortBy === sortBy ? sortOrder : normalizeMediaSortOrder(undefined, nextSortBy);
-  const params = new URLSearchParams({ sort: nextSortBy, order: nextSortOrder });
-  if (kind) params.set("kind", kind);
+  const params = new URLSearchParams({ kind, sort: nextSortBy, order: nextSortOrder });
   if (kind === "video" && view === "grid") params.set("view", view);
   return `/admin/media?${params.toString()}`;
 }
 
 function currentPath(
-  kind: MediaKind | undefined,
+  kind: MediaKind,
   folder: string,
   query: string,
   sortBy: MediaSortBy,
@@ -77,8 +75,7 @@ function currentPath(
   category: string,
   view: "table" | "grid",
 ): string {
-  const params = new URLSearchParams({ sort: sortBy, order: sortOrder });
-  if (kind) params.set("kind", kind);
+  const params = new URLSearchParams({ kind, sort: sortBy, order: sortOrder });
   if (folder) params.set("folder", folder);
   if (query) params.set("q", query);
   if (kind === "video" && category) params.set("category", category);
@@ -97,11 +94,11 @@ function withMediaParam(pathValue: string, name: string, value: string): string 
 
 export default async function AdminMediaPage({ searchParams }: AdminMediaPageProps) {
   const params = await searchParams;
-  const kind = isMediaKind(params.kind) ? params.kind : undefined;
+  const kind = isMediaKind(params.kind) ? params.kind : "video";
   const requestedSortBy = normalizeMediaSortBy(params.sort);
   const sortBy = compatibleMediaSort(kind, requestedSortBy);
   const sortOrder = normalizeMediaSortOrder(params.order, sortBy);
-  const categories = listVideoCategories({ includeHidden: true });
+  const categories = kind === "video" ? listVideoCategories({ includeHidden: true }) : [];
   const requestedCategoryId = /^\d+$/.test(params.category || "") ? Number(params.category) : undefined;
   const categoryValue = kind === "video" && params.category === "none"
     ? null
@@ -123,18 +120,16 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
   if (view === "grid") {
     scheduleMediaPreparation(result.assets);
   }
-  const folders = {
-    video: listMediaFolders("video"),
-    audio: listMediaFolders("audio"),
-    file: listMediaFolders("file"),
+  const folders: Record<MediaKind, ReturnType<typeof listMediaFolders>> = {
+    video: kind === "video" ? listMediaFolders("video") : [],
+    audio: kind === "audio" ? listMediaFolders("audio") : [],
+    file: kind === "file" ? listMediaFolders("file") : [],
   };
-  const directFolders = kind
-    ? sortMediaFolders(
-        folders[kind].filter((item) => item.path.split("/").slice(0, -1).join("/") === result.folder),
-        sortBy,
-        sortOrder,
-      )
-    : [];
+  const directFolders = sortMediaFolders(
+    folders[kind].filter((item) => item.path.split("/").slice(0, -1).join("/") === result.folder),
+    sortBy,
+    sortOrder,
+  );
   const returnPath = currentPath(kind, result.folder, result.query, sortBy, sortOrder, categoryParam, view);
   const currentFolderName = result.folder.split("/").at(-1) || "";
   const settings = readSiteSettings();
@@ -150,7 +145,7 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
           <form className="adminTitleSearchForm" action="/admin/media">
             <Search size={17} aria-hidden="true" />
             <input name="q" defaultValue={result.query} placeholder="搜索标题、作者或文件名" />
-            {kind ? <input name="kind" type="hidden" value={kind} /> : null}
+            <input name="kind" type="hidden" value={kind} />
             {result.folder ? <input name="folder" type="hidden" value={result.folder} /> : null}
             {categoryParam ? <input name="category" type="hidden" value={categoryParam} /> : null}
             {view === "grid" ? <input name="view" type="hidden" value={view} /> : null}
@@ -163,13 +158,21 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
         <div className="adminMediaToolbar">
           <nav className="adminMediaFilters" aria-label="资源类型筛选">
             {FILTERS.map((item) => (
-              <Link className={item.kind === kind || (!item.kind && !kind) ? "isActive" : ""} href={filterHref(item.kind, sortBy, sortOrder, view)} key={item.label}>
-                {item.kind ? null : <LibraryBig size={15} aria-hidden="true" />}
+              <Link className={item.kind === kind ? "isActive" : ""} href={filterHref(item.kind, sortBy, sortOrder, view)} key={item.label}>
                 {item.label}
               </Link>
             ))}
           </nav>
           <div className="adminMediaToolbarControls">
+            <AdminMediaSort
+              kind={kind}
+              folder={result.folder}
+              query={result.query}
+              sortBy={sortBy}
+              sortOrder={sortOrder}
+              category={categoryParam}
+              view={view}
+            />
             {kind === "video" ? (
               <div className="adminMediaViewSwitch" role="group" aria-label="视频列表视图">
                 <Link className={view === "table" ? "isActive" : ""} href={withMediaParam(returnPath, "view", "")} aria-label="表格视图" title="表格视图">
@@ -180,15 +183,6 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
                 </Link>
               </div>
             ) : null}
-            <AdminMediaSort
-              kind={kind}
-              folder={result.folder}
-              query={result.query}
-              sortBy={sortBy}
-              sortOrder={sortOrder}
-              category={categoryParam}
-              view={view}
-            />
           </div>
         </div>
 
@@ -204,7 +198,7 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
           </nav>
         ) : null}
 
-        {!kind || kind === "video" ? (
+        {kind === "video" ? (
           <details className="adminMediaDisplaySettings">
             <summary><ImageIcon size={16} aria-hidden="true" />视频封面与推荐</summary>
             <form action={saveAdminMediaDisplaySettingsAction}>
@@ -248,9 +242,8 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
 
         {kind === "video" ? <AdminVideoCategoryManager categories={categories} returnPath={returnPath} /> : null}
 
-        <div className={kind ? "adminMediaWorkspace" : "adminMediaWorkspace withoutFolders"}>
-          {kind ? (
-            <aside className="adminMediaFolderPanel">
+        <div className="adminMediaWorkspace">
+          <aside className="adminMediaFolderPanel">
               <div className="adminMediaFolderPanelHeader">
                 <strong>服务器目录</strong>
                 <form action={syncAdminMediaAction}>
@@ -303,8 +296,7 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
                   </>
                 ) : null}
               </div>
-            </aside>
-          ) : null}
+          </aside>
           <div className="adminMediaWorkspaceMain">
             <AdminMediaManager
               assets={result.assets}

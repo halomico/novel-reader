@@ -6,16 +6,19 @@ import {
   READER_TAGS_STORAGE_KEY,
   TOP_MENU_STORAGE_KEY,
   type ColorPalette,
+  type ReaderTagsMode,
 } from "@/lib/ui-preferences";
 
 export function ThemeScript({
   defaultTheme = "system",
-  defaultFontSize = 17,
+  defaultFontSize = 18,
   defaultPalette = "default",
+  defaultReaderTagsMode = "collapsed",
 }: {
   defaultTheme?: "system" | "light" | "dark";
   defaultFontSize?: number;
   defaultPalette?: ColorPalette;
+  defaultReaderTagsMode?: ReaderTagsMode;
 }) {
   const paletteTokens = Object.fromEntries(COLOR_PALETTES.map((palette) => [palette.value, palette]));
   const code = `
@@ -45,17 +48,19 @@ export function ThemeScript({
         root.dataset.palette = palette.value;
         root.dataset.readerTags = readerTags === "collapsed"
           ? "collapsed"
-          : (readerTags === "hidden" || readerTags === "hide" ? "hidden" : "expanded");
+          : (readerTags === "hidden" || readerTags === "hide"
+            ? "hidden"
+            : (readerTags === "expanded" || readerTags === "show"
+              ? "expanded"
+              : ${JSON.stringify(defaultReaderTagsMode)}));
         root.dataset.readerHotwords = readerHotwords === "show" || readerHotwords === "hide" ? readerHotwords : (uiMode === "minimal" ? "hide" : "show");
         root.dataset.topMenu = topMenu === "hide" ? "hide" : "show";
         root.dataset.adminSidebar = adminSidebarCollapsed ? "collapsed" : "expanded";
         root.style.setProperty("--reader-font-size", fontSize + "px");
         root.style.setProperty("--palette-light-accent", palette.lightAccent);
         root.style.setProperty("--palette-light-strong", palette.lightStrong);
-        root.style.setProperty("--palette-light-tint", palette.lightTint);
         root.style.setProperty("--palette-dark-accent", palette.darkAccent);
         root.style.setProperty("--palette-dark-strong", palette.darkStrong);
-        root.style.setProperty("--palette-dark-tint", palette.darkTint);
         localStorage.removeItem("novel-palette");
       } catch (error) {}
     })();

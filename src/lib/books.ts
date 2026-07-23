@@ -133,25 +133,29 @@ export function buildTitleSearchSql(query: ParsedSearchQuery): { whereSql: strin
   return { whereSql: clauses.join(" AND "), values: [...required.map((item) => item.value), ...expression.values] };
 }
 
-function listRandomNovels(pageSize: number, seed: string): Novel[] {
-  const db = getDb();
-  const selectedIds = sampleNovelIds(db, pageSize, seed);
-  if (!selectedIds.length) {
+export function listNovelsByIds(novelIds: number[]): Novel[] {
+  const ids = Array.from(new Set(novelIds.filter((id) => Number.isInteger(id) && id > 0)));
+  if (!ids.length) {
     return [];
   }
-  const placeholders = selectedIds.map(() => "?").join(", ");
-  const rows = db
+  const placeholders = ids.map(() => "?").join(", ");
+  const rows = getDb()
     .prepare(
       `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
        FROM novels
        WHERE id IN (${placeholders})`,
     )
-    .all(...selectedIds) as Novel[];
+    .all(...ids) as Novel[];
   const byId = new Map(rows.map((book) => [book.id, book]));
-  return selectedIds.flatMap((id) => {
+  return ids.flatMap((id) => {
     const book = byId.get(id);
     return book ? [book] : [];
   });
+}
+
+function listRandomNovels(pageSize: number, seed: string): Novel[] {
+  const db = getDb();
+  return listNovelsByIds(sampleNovelIds(db, pageSize, seed));
 }
 
 function listCatalogNovels(pageSize: number, offset: number): Novel[] {
@@ -176,11 +180,12 @@ function listCatalogNovels(pageSize: number, offset: number): Novel[] {
   const pinnedJoin = settings.manualPinnedEnabled
     ? "LEFT JOIN pinned_novels p ON p.novel_id = n.id"
     : "";
+  const manualPriority = settings.randomRecommendationsEnabled && settings.promotionOrder === "random-first" ? 1 : 0;
+  const randomPriority = settings.manualPinnedEnabled && settings.promotionOrder === "manual-first" ? 1 : 0;
   const pinnedPriority = settings.manualPinnedEnabled
-    ? "WHEN p.novel_id IS NOT NULL THEN 0"
+    ? `WHEN p.novel_id IS NOT NULL THEN ${manualPriority}`
     : "";
-  const recommendationPriority = settings.manualPinnedEnabled ? 1 : 0;
-  const defaultPriority = recommendationPriority + 1;
+  const defaultPriority = Number(settings.manualPinnedEnabled) + Number(settings.randomRecommendationsEnabled);
   const pinnedOrder = settings.manualPinnedEnabled ? "p.sort_order ASC," : "";
 
   return db
@@ -192,7 +197,7 @@ function listCatalogNovels(pageSize: number, offset: number): Novel[] {
        LEFT JOIN recommended r ON r.novel_id = n.id
        ORDER BY CASE
          ${pinnedPriority}
-         WHEN r.novel_id IS NOT NULL THEN ${recommendationPriority}
+         WHEN r.novel_id IS NOT NULL THEN ${randomPriority}
          ELSE ${defaultPriority}
        END ASC,
        ${pinnedOrder}

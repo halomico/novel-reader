@@ -35,6 +35,8 @@ export default async function SettingsPage() {
         previewText={previewText}
         defaultFontSize={defaultFontSize}
         defaultPalette={defaultPalette}
+        defaultTheme={settings.adminTheme}
+        defaultReaderTagsMode={settings.readerDefaultTagsMode}
         canConfigureReaderTags={authenticated || (settings.tagLibraryEnabled && settings.guestTagLibraryNavEnabled)}
         canConfigureReaderHotwords={authenticated || (settings.hotwordLinksEnabled && settings.guestHotwordLinksEnabled)}
       />

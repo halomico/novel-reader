@@ -52,7 +52,12 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
-        <ThemeScript defaultTheme={settings.adminTheme} defaultFontSize={defaultFontSize} defaultPalette={defaultPalette} />
+        <ThemeScript
+          defaultTheme={settings.adminTheme}
+          defaultFontSize={defaultFontSize}
+          defaultPalette={defaultPalette}
+          defaultReaderTagsMode={settings.readerDefaultTagsMode}
+        />
       </head>
       <body>
         <Suspense fallback={null}><NavigationProgress /></Suspense>

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
-import { checkAdminOperationLimit } from "@/lib/admin-operation-limit";
 import { shouldShowProgressBars } from "@/lib/config";
 import { cancelContentJob, countActiveContentJobs, getContentJob, startContentIndexJob } from "@/lib/content-jobs";
 
@@ -12,7 +11,7 @@ function jsonError(message: string, status: number) {
   return NextResponse.json({ ok: false, message }, { status });
 }
 
-async function requireAdminJson(request: NextRequest, scope = "") {
+async function requireAdminJson(request: NextRequest) {
   const access = getAdminAccessState(request.headers);
   if (!access.allowed) {
     return { ok: false as const, response: new NextResponse(null, { status: 404 }) };
@@ -23,18 +22,11 @@ async function requireAdminJson(request: NextRequest, scope = "") {
     return { ok: false as const, response: jsonError("请先登录后台", 401) };
   }
 
-  if (scope) {
-    const limitedMessage = checkAdminOperationLimit(access.clientIp, scope);
-    if (limitedMessage) {
-      return { ok: false as const, response: jsonError(limitedMessage, 429) };
-    }
-  }
-
   return { ok: true as const };
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAdminJson(request, "indexes-job");
+  const auth = await requireAdminJson(request);
   if (!auth.ok) {
     return auth.response;
   }

@@ -1,38 +1,36 @@
 :root {
   color-scheme: light;
-  --theme-bg: #f3f5f6;
-  --theme-bg-soft: #f8fafb;
+  --theme-bg: #f6f7f9;
+  --theme-bg-soft: #fafbfc;
   --theme-surface: #ffffff;
-  --theme-surface-strong: #e9eef1;
-  --theme-text: #202a32;
-  --theme-muted: #66747e;
-  --theme-border: #d7e0e5;
-  --palette-light-accent: #800020;
-  --palette-light-strong: #650019;
-  --palette-light-tint: #800020;
-  --palette-dark-accent: #b9652a;
-  --palette-dark-strong: #d77b3d;
-  --palette-dark-tint: #a95320;
-  --palette-tint: var(--palette-light-tint);
-  --tag-color: #2a7068;
-  --bg: color-mix(in srgb, var(--theme-bg) 97%, var(--palette-tint));
-  --bg-soft: color-mix(in srgb, var(--theme-bg-soft) 97%, var(--palette-tint));
-  --surface: color-mix(in srgb, var(--theme-surface) 99%, var(--palette-tint));
-  --surface-strong: color-mix(in srgb, var(--theme-surface-strong) 93%, var(--palette-tint));
+  --theme-surface-strong: #eef1f4;
+  --theme-text: #25282d;
+  --theme-muted: #69717a;
+  --theme-border: #dde2e7;
+  --palette-light-accent: #a42828;
+  --palette-light-strong: #7c1e1e;
+  --palette-dark-accent: #b65d2d;
+  --palette-dark-strong: #d1743e;
+  --bg: var(--theme-bg);
+  --bg-soft: var(--theme-bg-soft);
+  --surface: var(--theme-surface);
+  --surface-strong: var(--theme-surface-strong);
   --text: var(--theme-text);
   --muted: var(--theme-muted);
-  --border: color-mix(in srgb, var(--theme-border) 94%, var(--palette-tint));
+  --border: var(--theme-border);
   --accent: var(--palette-light-accent);
   --accent-strong: var(--palette-light-strong);
-  --font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-  --font-reading: "Noto Serif SC", "Source Han Serif SC", "Songti SC", SimSun, serif;
+  --tag-color: var(--accent-strong);
+  --font-ui: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --font-title: var(--font-ui);
+  --font-reading: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
   --radius-sm: 6px;
   --radius-md: 8px;
   --control-sm: 32px;
   --control-md: 38px;
   --shadow: 0 1px 2px rgb(31 45 54 / 7%);
   --shadow-float: 0 14px 36px rgb(22 31 37 / 14%);
-  --reader-font-size: 17px;
+  --reader-font-size: 18px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -45,10 +43,9 @@
     --theme-text: #edf1f3;
     --theme-muted: #a7b2b9;
     --theme-border: #39434a;
-    --palette-tint: var(--palette-dark-tint);
     --accent: var(--palette-dark-accent);
     --accent-strong: var(--palette-dark-strong);
-    --tag-color: #78cabe;
+    --tag-color: var(--accent-strong);
     --shadow: 0 10px 30px rgb(0 0 0 / 24%);
   }
 }
@@ -62,26 +59,24 @@
   --theme-text: #edf1f3;
   --theme-muted: #a7b2b9;
   --theme-border: #39434a;
-  --palette-tint: var(--palette-dark-tint);
   --accent: var(--palette-dark-accent);
   --accent-strong: var(--palette-dark-strong);
-  --tag-color: #78cabe;
+  --tag-color: var(--accent-strong);
   --shadow: 0 10px 30px rgb(0 0 0 / 24%);
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --theme-bg: #f3f5f6;
-  --theme-bg-soft: #f8fafb;
+  --theme-bg: #f6f7f9;
+  --theme-bg-soft: #fafbfc;
   --theme-surface: #ffffff;
-  --theme-surface-strong: #e9eef1;
-  --theme-text: #202a32;
-  --theme-muted: #66747e;
-  --theme-border: #d7e0e5;
-  --palette-tint: var(--palette-light-tint);
+  --theme-surface-strong: #eef1f4;
+  --theme-text: #25282d;
+  --theme-muted: #69717a;
+  --theme-border: #dde2e7;
   --accent: var(--palette-light-accent);
   --accent-strong: var(--palette-light-strong);
-  --tag-color: #2a7068;
+  --tag-color: var(--accent-strong);
   --shadow: 0 10px 28px rgb(31 45 54 / 9%);
 }
 
@@ -199,9 +194,9 @@ textarea {
   grid-column: 1;
   grid-row: 1;
   color: var(--accent);
-  font-family: var(--font-reading);
-  font-size: 25px;
-  font-weight: 800;
+  font-family: var(--font-title);
+  font-size: 24px;
+  font-weight: 650;
   letter-spacing: 0;
 }
 
@@ -651,14 +646,17 @@ textarea {
 }
 
 .homePortalShell {
+  display: grid;
   min-height: 100dvh;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .homePortalGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-self: center;
   gap: 12px;
-  padding: 28px 0;
+  padding: clamp(24px, 4vh, 40px) 0 clamp(76px, 11vh, 112px);
 }
 
 .homePortalCard {
@@ -721,6 +719,12 @@ textarea {
   min-width: 0;
   font-size: 20px;
   letter-spacing: 0;
+  transition: color 140ms ease;
+}
+
+.homePortalCard:hover strong,
+.homePortalCard:focus-visible strong {
+  color: var(--portal-accent);
 }
 
 .homePortalCardArrow {
@@ -855,12 +859,18 @@ textarea {
   display: block;
   overflow: hidden;
   color: var(--text);
-  font-family: var(--font-reading);
+  font-family: var(--font-title);
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1.45;
   text-overflow: ellipsis;
+  transition: color 140ms ease;
   white-space: nowrap;
+}
+
+.bookCard:hover .bookTitle,
+.bookCard:focus-visible .bookTitle {
+  color: var(--accent);
 }
 
 .bookCardBody {
@@ -1567,9 +1577,10 @@ button.pageNumber {
   min-width: 0;
   margin: 0;
   color: var(--text);
-  font-family: var(--font-reading);
-  font-size: 36px;
-  line-height: 1.2;
+  font-family: var(--font-title);
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1.35;
   letter-spacing: 0;
   overflow-wrap: anywhere;
 }
@@ -1865,10 +1876,14 @@ button.pageNumber {
 
 .readerText {
   color: var(--text);
+  cursor: text;
   font-family: var(--font-reading);
   font-size: var(--reader-font-size);
-  line-height: 2.05;
+  font-weight: 400;
+  line-height: 1.8;
   overflow-wrap: anywhere;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .readerContentLoading {
@@ -1896,8 +1911,6 @@ button.pageNumber {
 }
 
 .readerSegment {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 900px;
   scroll-margin-top: 132px;
   white-space: pre-wrap;
 }
@@ -2169,8 +2182,15 @@ button.pageNumber {
 }
 
 .searchResultBody strong {
-  font-family: var(--font-reading);
+  font-family: var(--font-title);
   font-size: 18px;
+  font-weight: 500;
+  transition: color 140ms ease;
+}
+
+.searchResultCard:hover .searchResultBody strong,
+.searchResultCard:focus-visible .searchResultBody strong {
+  color: var(--accent);
 }
 
 .searchResultBody span {
@@ -2466,7 +2486,7 @@ mark {
   color: var(--text);
   font-family: var(--font-reading);
   font-size: var(--reader-font-size);
-  line-height: 2;
+  line-height: 1.8;
 }
 
 .previewReader p {
@@ -2729,15 +2749,14 @@ mark {
 }
 
 .mediaSortTrigger {
-  position: relative;
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   place-items: center;
-  border: 1px solid var(--border);
-  border-radius: 7px;
+  border: 1px solid transparent;
+  border-radius: 6px;
   padding: 0;
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface-strong) 62%, transparent);
   color: var(--muted);
   cursor: pointer;
 }
@@ -2750,20 +2769,12 @@ mark {
   color: var(--accent);
 }
 
-.mediaSortTriggerDirection {
-  position: absolute;
-  right: 3px;
-  bottom: 3px;
-  border-radius: 3px;
-  background: var(--surface);
-}
-
 .mediaSortPopover {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
   display: grid;
-  width: 156px;
+  width: 148px;
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: 7px;
@@ -2796,7 +2807,7 @@ mark {
 }
 
 .mediaSortPopover button.isActive {
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .mediaSortMenuSpacer {
@@ -3171,6 +3182,7 @@ mark {
 .mediaCardCopy strong {
   color: var(--text);
   font-size: 14px;
+  transition: color 140ms ease;
 }
 
 .mediaCardCopy small,
@@ -3189,6 +3201,13 @@ mark {
 
 .mediaVideoCard .mediaCardCopy strong {
   font-size: 15px;
+}
+
+.mediaVideoCard:hover .mediaCardCopy strong,
+.mediaVideoCard:focus-visible .mediaCardCopy strong,
+.mediaResourceRow:hover .mediaCardCopy strong,
+.mediaResourceRow:focus-visible .mediaCardCopy strong {
+  color: var(--accent);
 }
 
 .mediaResourceList {
@@ -3664,7 +3683,7 @@ mark {
   width: min(1180px, calc(100% - 28px));
   margin: 0 auto;
   padding: 22px 0 56px;
-  font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  font-family: var(--font-ui);
 }
 
 .adminLoginShell {
@@ -5016,7 +5035,7 @@ mark {
 .adminNovelContentEditor {
   min-height: min(62vh, 760px);
   resize: vertical;
-  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  font-family: var(--font-reading) !important;
   font-size: 15px !important;
   line-height: 1.75;
 }
@@ -6429,10 +6448,6 @@ a.analyticsSearchTag:focus-visible {
   gap: 16px;
 }
 
-.adminMediaWorkspace.withoutFolders {
-  grid-template-columns: minmax(0, 1fr);
-}
-
 .adminMediaWorkspaceMain {
   min-width: 0;
 }
@@ -7335,7 +7350,7 @@ a.analyticsSearchTag:focus-visible {
 
   .homePortalGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    padding-top: 24px;
+    padding: 24px 0 72px;
   }
 
   .siteHeader {
@@ -8038,10 +8053,14 @@ a.analyticsSearchTag:focus-visible {
     height: 13px;
   }
 
+  .homePortalShell {
+    display: block;
+  }
+
   .homePortalGrid {
     grid-template-columns: minmax(0, 1fr);
     gap: 11px;
-    padding-top: 18px;
+    padding: 18px 0 40px;
   }
 
   .homePortalCard {
@@ -8055,7 +8074,7 @@ a.analyticsSearchTag:focus-visible {
 
   .mediaLibraryActions {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr);
   }
 
   .mediaLibraryActions .mediaSearchForm {

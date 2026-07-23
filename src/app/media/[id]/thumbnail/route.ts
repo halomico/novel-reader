@@ -13,5 +13,5 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return new Response(null, { status: 404 });
   }
 
-  return serveMediaThumbnail(request, asset);
+  return serveMediaThumbnail(request, asset, isMediaKindAccessible(asset.kind, false));
 }

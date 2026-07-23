@@ -1,7 +1,7 @@
 import { getConfiguredPaths } from "./config";
 import { getDb } from "./db";
-import { matchesParsedSearchQuery, parseSearchQuery } from "./search-query";
-import type { Novel } from "./books";
+import { parseSearchQuery } from "./search-query";
+import { buildTitleSearchSql, type Novel } from "./books";
 
 export type AdminBookSortKey = "title" | "file_name" | "size_bytes" | "word_count" | "updated_at" | "visit_count" | "last_accessed_at";
 export type AdminBookSortDir = "asc" | "desc";
@@ -78,31 +78,6 @@ function normalizeDir(value: string | undefined): AdminBookSortDir {
   return value === "asc" ? "asc" : "desc";
 }
 
-function compareAdminBooks(sort: AdminBookSortKey, dir: AdminBookSortDir) {
-  const collator = new Intl.Collator("zh-Hans-CN", { numeric: true, sensitivity: "base" });
-  const direction = dir === "asc" ? 1 : -1;
-
-  return (left: Novel, right: Novel) => {
-    let result = 0;
-    if (sort === "size_bytes") {
-      result = left.size_bytes - right.size_bytes;
-    } else if (sort === "word_count") {
-      result = left.word_count - right.word_count;
-    } else if (sort === "visit_count") {
-      result = left.visit_count - right.visit_count;
-    } else if (sort === "last_accessed_at") {
-      result = new Date(left.last_accessed_at || 0).getTime() - new Date(right.last_accessed_at || 0).getTime();
-    } else if (sort === "updated_at") {
-      result = new Date(left.updated_at).getTime() - new Date(right.updated_at).getTime();
-    } else if (sort === "file_name") {
-      result = collator.compare(left.file_name, right.file_name);
-    } else {
-      result = collator.compare(left.title, right.title);
-    }
-    return result === 0 ? (left.id - right.id) * direction : result * direction;
-  };
-}
-
 export function listAdminBooks(params: { page?: number; q?: string; pageSize?: number; sort?: string; dir?: string }): AdminBookListResult {
   const db = getDb();
   const pageSize = Math.min(Math.max(Math.floor(params.pageSize || 20), 1), 200);
@@ -127,23 +102,32 @@ export function listAdminBooks(params: { page?: number; q?: string; pageSize?: n
       };
     }
 
-    const candidates = db
+    const search = buildTitleSearchSql(validation.query);
+    const totalBooks = db
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM novels
+         WHERE ${search.whereSql}`,
+      )
+      .get(...search.values) as { count: number };
+    const totalPages = Math.max(1, Math.ceil(totalBooks.count / pageSize));
+    const page = normalizePage(params.page || 1, totalPages);
+    const offset = (page - 1) * pageSize;
+    const books = db
       .prepare(
         `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
          FROM novels
-         ORDER BY ${orderBy}`,
+         WHERE ${search.whereSql}
+         ORDER BY ${orderBy}
+         LIMIT ? OFFSET ?`,
       )
-      .all() as Novel[];
-    const matchedBooks = candidates.filter((book) => matchesParsedSearchQuery(book.title, validation.query)).sort(compareAdminBooks(sort, dir));
-    const totalPages = Math.max(1, Math.ceil(matchedBooks.length / pageSize));
-    const page = normalizePage(params.page || 1, totalPages);
-    const offset = (page - 1) * pageSize;
+      .all(...search.values, pageSize, offset) as Novel[];
 
     return {
-      books: matchedBooks.slice(offset, offset + pageSize).map(toPlainNovel),
+      books: books.map(toPlainNovel),
       page,
       pageSize,
-      totalBooks: matchedBooks.length,
+      totalBooks: totalBooks.count,
       totalPages,
       query: validation.keyword,
       sort,

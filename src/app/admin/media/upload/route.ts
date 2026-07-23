@@ -2,7 +2,6 @@ import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
-import { checkAdminOperationLimit } from "@/lib/admin-operation-limit";
 import {
   appendMediaUploadChunk,
   cancelMediaUpload,
@@ -20,7 +19,7 @@ function jsonError(message: string, status: number) {
   return NextResponse.json({ ok: false, message }, { status });
 }
 
-async function authorize(request: NextRequest): Promise<{ clientIp: string } | NextResponse> {
+async function authorize(request: NextRequest): Promise<NextResponse | null> {
   const access = getAdminAccessState(request.headers);
   if (!access.allowed) {
     return new NextResponse(null, { status: 404 });
@@ -28,7 +27,7 @@ async function authorize(request: NextRequest): Promise<{ clientIp: string } | N
   if (!(await getAdminSession())) {
     return jsonError("请先登录后台", 401);
   }
-  return { clientIp: access.clientIp };
+  return null;
 }
 
 function uploadError(error: unknown) {
@@ -40,18 +39,14 @@ function uploadError(error: unknown) {
 }
 
 export async function POST(request: NextRequest) {
-  const authorized = await authorize(request);
-  if (authorized instanceof NextResponse) {
-    return authorized;
+  const authorizationError = await authorize(request);
+  if (authorizationError) {
+    return authorizationError;
   }
   const action = request.nextUrl.searchParams.get("action");
 
   try {
     if (action === "start") {
-      const limitedMessage = checkAdminOperationLimit(authorized.clientIp, "media-upload");
-      if (limitedMessage) {
-        return jsonError(limitedMessage, 429);
-      }
       const body = (await request.json()) as {
         kind?: unknown;
         categoryId?: unknown;

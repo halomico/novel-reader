@@ -2,7 +2,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
-import { checkAdminOperationLimit } from "@/lib/admin-operation-limit";
 import { saveUploadedNovels } from "@/lib/novel-files";
 
 export const dynamic = "force-dynamic";
@@ -21,11 +20,6 @@ export async function POST(request: NextRequest) {
   const session = await getAdminSession();
   if (!session) {
     return jsonError("请先登录后台", 401);
-  }
-
-  const limitedMessage = checkAdminOperationLimit(access.clientIp, "books-upload");
-  if (limitedMessage) {
-    return jsonError(limitedMessage, 429);
   }
 
   let formData: FormData;
