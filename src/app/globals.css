@@ -534,7 +534,7 @@ textarea {
   position: relative;
 }
 
-.readerHeaderTopButton {
+.readerHeaderTopArea {
   display: none;
 }
 
@@ -7514,48 +7514,39 @@ a.analyticsSearchTag:focus-visible {
   }
 
   .readerShell .readerSiteHeader {
-    transition: transform 170ms ease, opacity 140ms ease;
+    transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease;
     will-change: transform, opacity;
   }
 
-  .readerShell .readerSiteHeader.isReaderHeaderHidden {
+  :root[data-ui-mode="minimal"] .readerShell .readerSiteHeader.isReaderHeaderHidden {
     opacity: 0;
     pointer-events: none;
     transform: translateY(calc(-100% - 12px));
   }
 
   .readerShell .readerSiteHeader .brand {
+    position: relative;
+    z-index: 2;
     max-width: calc(50vw - 38px);
   }
 
-  .readerHeaderTopButton {
-    position: absolute;
-    top: 50%;
-    left: 50%;
+  .readerShell .readerSiteHeader .headerTools {
+    position: relative;
     z-index: 2;
-    display: grid;
-    width: 36px;
-    height: 36px;
-    place-items: center;
+  }
+
+  .readerHeaderTopArea {
+    z-index: 1;
+    display: block;
+    align-self: stretch;
+    justify-self: stretch;
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
     border: 0;
     padding: 0;
     background: transparent;
-    color: var(--muted);
     cursor: pointer;
-    opacity: 0;
-    pointer-events: none;
-    transform: translate(-50%, -50%);
-    transition: color 140ms ease, opacity 140ms ease;
-  }
-
-  .readerHeaderTopButton.isVisible {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  .readerHeaderTopButton:hover,
-  .readerHeaderTopButton:focus-visible {
-    color: var(--accent);
   }
 
   .siteHeader.hasPrimaryNav,

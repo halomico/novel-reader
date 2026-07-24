@@ -1,14 +1,10 @@
 "use client";
 
-import { ArrowUp } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 const MOBILE_READER_QUERY = "(max-width: 820px)";
-const TOP_BUTTON_THRESHOLD = 320;
 
 export function ReaderHeaderBehavior() {
-  const [showTopButton, setShowTopButton] = useState(false);
-
   useEffect(() => {
     const header = document.querySelector<HTMLElement>(".readerSiteHeader");
     const reader = document.querySelector<HTMLElement>(".readerPage");
@@ -17,9 +13,15 @@ export function ReaderHeaderBehavior() {
     const mobile = window.matchMedia(MOBILE_READER_QUERY);
     let lastScrollY = Math.max(0, window.scrollY);
     let frame = 0;
+    let pointerStartY: number | null = null;
+    let pointerMoved = false;
 
     function showHeader() {
       header!.classList.remove("isReaderHeaderHidden");
+    }
+
+    function isMinimalMobileReader() {
+      return mobile.matches && document.documentElement.dataset.uiMode === "minimal";
     }
 
     function headerHasOpenControl() {
@@ -29,12 +31,7 @@ export function ReaderHeaderBehavior() {
     function updateAfterScroll() {
       frame = 0;
       const scrollY = Math.max(0, window.scrollY);
-      setShowTopButton((current) => {
-        const next = scrollY > TOP_BUTTON_THRESHOLD;
-        return current === next ? current : next;
-      });
-
-      if (!mobile.matches || scrollY <= 24 || headerHasOpenControl()) {
+      if (!isMinimalMobileReader() || scrollY <= 24 || headerHasOpenControl()) {
         showHeader();
       } else if (Math.abs(scrollY - lastScrollY) >= 6) {
         header!.classList.add("isReaderHeaderHidden");
@@ -46,29 +43,53 @@ export function ReaderHeaderBehavior() {
       if (!frame) frame = window.requestAnimationFrame(updateAfterScroll);
     }
 
+    function handlePointerDown(event: PointerEvent) {
+      if (!isMinimalMobileReader()) return;
+      pointerStartY = event.clientY;
+      pointerMoved = false;
+    }
+
+    function handlePointerMove(event: PointerEvent) {
+      if (pointerStartY !== null && Math.abs(event.clientY - pointerStartY) > 8) {
+        pointerMoved = true;
+      }
+    }
+
     function handleReaderTap(event: MouseEvent) {
-      if (!mobile.matches || !header!.classList.contains("isReaderHeaderHidden")) return;
+      if (!isMinimalMobileReader()) return;
       const target = event.target instanceof Element ? event.target : null;
       if (!target?.closest(".readerPage") || target.closest("a, button, input, select, textarea, label")) return;
-      if (window.getSelection()?.toString()) return;
-      showHeader();
+      if (pointerMoved || window.getSelection()?.toString()) {
+        pointerMoved = false;
+        pointerStartY = null;
+        return;
+      }
+      header!.classList.toggle("isReaderHeaderHidden");
+      pointerStartY = null;
     }
 
-    function handleViewportChange() {
-      if (!mobile.matches) showHeader();
+    function handleViewportOrModeChange() {
+      if (!isMinimalMobileReader()) showHeader();
     }
 
+    const modeObserver = new MutationObserver(handleViewportOrModeChange);
     updateAfterScroll();
     window.addEventListener("scroll", handleScroll, { passive: true });
     window.addEventListener("pageshow", showHeader);
+    document.addEventListener("pointerdown", handlePointerDown, { passive: true });
+    document.addEventListener("pointermove", handlePointerMove, { passive: true });
     document.addEventListener("click", handleReaderTap);
-    mobile.addEventListener("change", handleViewportChange);
+    mobile.addEventListener("change", handleViewportOrModeChange);
+    modeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-ui-mode"] });
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
       window.removeEventListener("scroll", handleScroll);
       window.removeEventListener("pageshow", showHeader);
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("pointermove", handlePointerMove);
       document.removeEventListener("click", handleReaderTap);
-      mobile.removeEventListener("change", handleViewportChange);
+      mobile.removeEventListener("change", handleViewportOrModeChange);
+      modeObserver.disconnect();
       header.classList.remove("isReaderHeaderHidden");
     };
   }, []);
@@ -83,13 +104,11 @@ export function ReaderHeaderBehavior() {
 
   return (
     <button
-      className={showTopButton ? "readerHeaderTopButton isVisible" : "readerHeaderTopButton"}
+      className="readerHeaderTopArea"
       type="button"
       onClick={scrollToTop}
       aria-label="返回顶部"
       title="返回顶部"
-    >
-      <ArrowUp size={18} aria-hidden="true" />
-    </button>
+    />
   );
 }
