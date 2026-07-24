@@ -388,7 +388,12 @@ export function HeaderSearch({
         aria-expanded={isPinnedOpen}
         title={isPinnedOpen ? "收起搜索框" : "展开搜索框"}
         onPointerDown={(event) => event.preventDefault()}
-        onClick={(event) => togglePinnedSearch(event.currentTarget.form)}
+        onClick={(event) => {
+          if (event.detail > 0) {
+            event.currentTarget.blur();
+          }
+          togglePinnedSearch(event.currentTarget.form);
+        }}
       >
         <Search size={18} aria-hidden="true" />
       </button>
@@ -449,14 +454,14 @@ export function HeaderSearch({
         </div>
       ) : null}
       {isModeMenuOpen ? (
-        <div className="searchModeMenu" role="group" aria-label="搜索范围">
+        <div className="segmentedControl searchModeMenu" role="group" aria-label="搜索范围">
           {visibleOptions.map((option) => (
             <button
               className={mode === option.value ? "isActive" : ""}
               key={option.value}
               type="button"
               aria-pressed={mode === option.value}
-              onMouseDown={(event) => event.preventDefault()}
+              onPointerDown={(event) => event.preventDefault()}
               onClick={() => chooseMode(option.value)}
             >
               {option.label}
