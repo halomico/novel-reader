@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
+import Form from "next/form";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FormEvent, useEffect, useId, useRef, useState } from "react";
@@ -367,10 +368,9 @@ export function HeaderSearch({
   }
 
   return (
-    <form
+    <Form
       className={formClassName}
       action={activeOption.action}
-      method="get"
       role="search"
       onSubmit={handleSubmit}
       onBlur={(event) => {
@@ -387,6 +387,7 @@ export function HeaderSearch({
         aria-controls={searchInputId}
         aria-expanded={isPinnedOpen}
         title={isPinnedOpen ? "收起搜索框" : "展开搜索框"}
+        onPointerDown={(event) => event.preventDefault()}
         onClick={(event) => togglePinnedSearch(event.currentTarget.form)}
       >
         <Search size={18} aria-hidden="true" />
@@ -480,6 +481,6 @@ export function HeaderSearch({
           {message}
         </p>
       ) : null}
-    </form>
+    </Form>
   );
 }

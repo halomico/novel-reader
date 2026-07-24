@@ -1,30 +1,12 @@
 "use client";
 
-import {
-  ArrowDownWideNarrow,
-  ArrowUpDown,
-  ArrowUpNarrowWide,
-  CalendarDays,
-  Check,
-  Clock,
-  HardDrive,
-  Play,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowUpDown, Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { MediaSortBy, MediaSortOrder } from "@/lib/media";
 
 export type MediaSortOption = {
   value: MediaSortBy;
   label: string;
-};
-
-const OPTION_ICONS: Record<MediaSortBy, LucideIcon> = {
-  name: ArrowUpDown,
-  duration: Clock,
-  size: HardDrive,
-  plays: Play,
-  updated: CalendarDays,
 };
 
 export function MediaSortMenu({
@@ -41,7 +23,6 @@ export function MediaSortMenu({
   const containerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const activeOption = options.find((option) => option.value === sortBy) || options[0];
-  const SortIcon = sortOrder === "asc" ? ArrowUpNarrowWide : ArrowDownWideNarrow;
 
   useEffect(() => {
     if (!open) return;
@@ -83,12 +64,11 @@ export function MediaSortMenu({
         title={`排序：${currentLabel}`}
         onClick={() => setOpen((value) => !value)}
       >
-        <SortIcon size={18} aria-hidden="true" />
+        <ArrowUpDown size={17} aria-hidden="true" />
       </button>
       {open ? (
         <div className="mediaSortPopover" role="menu" aria-label="资源排序方式">
           {options.map((option) => {
-            const Icon = OPTION_ICONS[option.value];
             const active = option.value === sortBy;
             return (
               <button
@@ -99,9 +79,8 @@ export function MediaSortMenu({
                 onClick={() => select(option.value)}
                 key={option.value}
               >
-                <Icon size={15} aria-hidden="true" />
-                <span>{option.label}</span>
                 {active ? <Check size={14} aria-hidden="true" /> : <span className="mediaSortMenuSpacer" />}
+                <span>{option.label}</span>
               </button>
             );
           })}

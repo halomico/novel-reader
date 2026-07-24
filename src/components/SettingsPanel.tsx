@@ -165,31 +165,40 @@ export function SettingsPanel({
 
   function changeTheme(value: ThemeChoice) {
     setTheme(value);
-    applySettings(value, fontSize, lineHeight, uiMode, palette, readerTagsMode, showReaderHotwords);
+    if (value === "system") {
+      document.documentElement.removeAttribute("data-theme");
+    } else {
+      document.documentElement.dataset.theme = value;
+    }
+    writeLocalSetting("novel-theme", value);
   }
 
   function changeUiMode(value: UiMode) {
     const nextShowHotwords = hasHotwordPreference ? showReaderHotwords : value !== "minimal";
     setUiMode(value);
     setShowReaderHotwords(nextShowHotwords);
-    applySettings(theme, fontSize, lineHeight, value, palette, readerTagsMode, nextShowHotwords);
+    document.documentElement.dataset.uiMode = value;
+    document.documentElement.dataset.readerHotwords = nextShowHotwords ? "show" : "hide";
+    writeLocalSetting("novel-ui-mode", value);
   }
 
   function changeFontSize(value: number) {
     const nextValue = Math.min(Math.max(value, 8), 25);
     setFontSize(nextValue);
-    applySettings(theme, nextValue, lineHeight, uiMode, palette, readerTagsMode, showReaderHotwords);
+    document.documentElement.style.setProperty("--reader-font-size", `${nextValue}px`);
+    writeLocalSetting("novel-font-size", String(nextValue));
   }
 
   function changeLineHeight(value: ReaderLineHeight) {
     setLineHeight(value);
-    applySettings(theme, fontSize, value, uiMode, palette, readerTagsMode, showReaderHotwords);
+    document.documentElement.style.setProperty("--reader-line-height", String(value));
+    writeLocalSetting(READER_LINE_HEIGHT_STORAGE_KEY, String(value));
   }
 
   function changePalette(value: ColorPalette) {
     setPalette(value);
+    applyPalette(value);
     writeLocalSetting(PALETTE_STORAGE_KEY, value);
-    applySettings(theme, fontSize, lineHeight, uiMode, value, readerTagsMode, showReaderHotwords);
   }
 
   function chooseRandomPalette() {
@@ -202,15 +211,15 @@ export function SettingsPanel({
 
   function changeReaderTags(mode: ReaderTagsMode) {
     setReaderTagsMode(mode);
+    document.documentElement.dataset.readerTags = mode;
     writeLocalSetting(READER_TAGS_STORAGE_KEY, mode);
-    applySettings(theme, fontSize, lineHeight, uiMode, palette, mode, showReaderHotwords);
   }
 
   function changeReaderHotwords(visible: boolean) {
     setShowReaderHotwords(visible);
     setHasHotwordPreference(true);
+    document.documentElement.dataset.readerHotwords = visible ? "show" : "hide";
     writeLocalSetting(READER_HOTWORDS_STORAGE_KEY, visible ? "show" : "hide");
-    applySettings(theme, fontSize, lineHeight, uiMode, palette, readerTagsMode, visible);
   }
 
   function changeTopMenu(visible: boolean) {

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { CalendarDays, Globe2, MonitorSmartphone, MousePointerClick, Radio, Search, Tags, X } from "lucide-react";
+import Form from "next/form";
 import Link from "next/link";
 import { LocalDateTime } from "@/components/LocalDateTime";
 import { Pagination } from "@/components/Pagination";
@@ -281,7 +282,7 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
                   </Link>
                 ))}
               </div>
-              <form className={overview.range === "custom" ? "analyticsCustomRange isActive" : "analyticsCustomRange"} action="/admin/analytics">
+              <Form className={overview.range === "custom" ? "analyticsCustomRange isActive" : "analyticsCustomRange"} action="/admin/analytics">
                 <input name="range" type="hidden" value="custom" />
                 <label className="analyticsDateField">
                   <CalendarDays size={14} aria-hidden="true" />
@@ -299,7 +300,7 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
                     <X size={15} aria-hidden="true" />
                   </Link>
                 ) : null}
-              </form>
+              </Form>
             </div>
           </div>
         </article>

@@ -1,4 +1,5 @@
 import { File, FolderPen, FolderPlus, ImageIcon, LayoutGrid, List, RefreshCw, Save, Search, Trash2 } from "lucide-react";
+import Form from "next/form";
 import Link from "next/link";
 import { AdminMediaManager } from "@/components/AdminMediaManager";
 import { AdminMediaSort } from "@/components/AdminMediaSort";
@@ -142,7 +143,7 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
             <h2>资源管理</h2>
             <p>上传、编辑和统计视频、音频与文件。媒体由浏览器原生播放，不进行服务器转码。</p>
           </div>
-          <form className="adminTitleSearchForm" action="/admin/media">
+          <Form className="adminTitleSearchForm" action="/admin/media">
             <Search size={17} aria-hidden="true" />
             <input name="q" defaultValue={result.query} placeholder="搜索标题、作者或文件名" />
             <input name="kind" type="hidden" value={kind} />
@@ -152,7 +153,7 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
             <input name="sort" type="hidden" value={sortBy} />
             <input name="order" type="hidden" value={sortOrder} />
             <button type="submit">搜索</button>
-          </form>
+          </Form>
         </div>
 
         <div className="adminMediaToolbar">

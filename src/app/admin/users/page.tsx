@@ -1,5 +1,6 @@
 import { ChevronDown, Search, UserPlus, Users } from "lucide-react";
 import type { Metadata } from "next";
+import Form from "next/form";
 import { Pagination } from "@/components/Pagination";
 import { AdminUserTable } from "@/components/AdminUserTable";
 import { listUsers } from "@/lib/users";
@@ -44,11 +45,11 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
             <h2>用户管理</h2>
             <p>管理前台用户、头像资料、登录状态和权限组。</p>
           </div>
-          <form className="adminTitleSearchForm" action="/admin/users">
+          <Form className="adminTitleSearchForm" action="/admin/users">
             <Search size={17} aria-hidden="true" />
             <input name="q" defaultValue={userList.query} placeholder="搜索用户名、昵称或 IP" />
             <button type="submit">搜索</button>
-          </form>
+          </Form>
         </div>
 
         <details className="adminCreateUserPanel">

@@ -1,5 +1,6 @@
 import { ChevronRight, Clapperboard, Disc3, File, Headphones, Search, X } from "lucide-react";
 import type { Metadata } from "next";
+import Form from "next/form";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MediaFolderRow } from "@/components/MediaFolderRow";
@@ -200,7 +201,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
               sortBy={sortBy}
               sortOrder={sortOrder}
             />
-            <form className="mediaSearchForm" action="/media">
+            <Form className="mediaSearchForm" action="/media">
               <input
                 name="q"
                 defaultValue={result.query}
@@ -220,7 +221,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
               <button className="mediaSearchIconButton" type="submit" aria-label="搜索资源" title="搜索资源">
                 <Search size={16} aria-hidden="true" />
               </button>
-            </form>
+            </Form>
           </div>
         </header>
 

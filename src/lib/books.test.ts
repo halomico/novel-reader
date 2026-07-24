@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
-import { buildTitleSearchSql, clearNovelSegmentCache, normalizePageSize, readNovelSegments, type Novel } from "./books";
+import { buildTitleSearchSql, clearNovelSegmentCache, normalizePageSize, planCatalogPage, readNovelSegments, type Novel } from "./books";
 import { sampleNovelIdsFromList } from "./novel-id-sampler";
 import { parseSearchQuery } from "./search-query";
 
@@ -42,6 +42,27 @@ test("samples sparse novel IDs uniformly without depending on ID gaps", () => {
   assert.equal(first.every((id) => ids.includes(id)), true);
   assert.equal(excluded.some((id) => id === 2 || id === 900_000), false);
   assert.equal(excluded.length, 3);
+});
+
+test("paginates promoted novels before the regular catalog without gaps", () => {
+  const promotedIds = Array.from({ length: 20 }, (_, index) => index + 1);
+
+  assert.deepEqual(planCatalogPage(promotedIds, 15, 0), {
+    promotedIds: promotedIds.slice(0, 15),
+    baseOffset: 0,
+  });
+  assert.deepEqual(planCatalogPage(promotedIds, 15, 15), {
+    promotedIds: promotedIds.slice(15),
+    baseOffset: 0,
+  });
+  assert.deepEqual(planCatalogPage(promotedIds, 15, 30), {
+    promotedIds: [],
+    baseOffset: 10,
+  });
+  assert.deepEqual(planCatalogPage([], 15, 15), {
+    promotedIds: [],
+    baseOffset: 15,
+  });
 });
 
 test("reuses segmented content until the novel file version changes", async () => {

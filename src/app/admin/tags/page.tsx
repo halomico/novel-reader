@@ -1,5 +1,6 @@
 import { Pencil, Search, Tags, X } from "lucide-react";
 import type { Metadata } from "next";
+import Form from "next/form";
 import Link from "next/link";
 import { deleteAdminTagAction, saveAdminTagAction } from "../actions";
 import { AdminFrame } from "../AdminFrame";
@@ -85,7 +86,7 @@ export default async function AdminTagsPage({ searchParams }: AdminTagsPageProps
           <Tags size={20} aria-hidden="true" />
         </div>
 
-        <form className="adminTagSearchForm" action="/admin/tags">
+        <Form className="adminTagSearchForm" action="/admin/tags">
           <Search size={16} aria-hidden="true" />
           <input name="q" defaultValue={query} maxLength={80} placeholder="搜索标签、别名或描述" aria-label="搜索标签" />
           {query ? (
@@ -94,7 +95,7 @@ export default async function AdminTagsPage({ searchParams }: AdminTagsPageProps
             </Link>
           ) : null}
           <button type="submit">搜索</button>
-        </form>
+        </Form>
 
         <section className="adminSettingsSection adminTagTreePreview">
           <div className="adminTagSectionTitle">

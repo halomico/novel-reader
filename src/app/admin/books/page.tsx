@@ -1,5 +1,6 @@
 import { Search } from "lucide-react";
 import type { Metadata } from "next";
+import Form from "next/form";
 import { Pagination } from "@/components/Pagination";
 import { AdminBookTable } from "@/components/AdminBookTable";
 import { AdminBookUpload } from "@/components/AdminBookUpload";
@@ -56,13 +57,13 @@ export default async function AdminBooksPage({ searchParams }: AdminBooksPagePro
             <h2>小说管理</h2>
             <p>添加、筛选和批量删除小说目录里的 `.txt` 文件。</p>
           </div>
-          <form className="adminTitleSearchForm" action="/admin/books">
+          <Form className="adminTitleSearchForm" action="/admin/books">
             <Search size={17} aria-hidden="true" />
             <input name="q" defaultValue={bookList.query} placeholder="搜索书名，支持 AND / OR / NOT" />
             <input name="sort" type="hidden" value={bookList.sort} />
             <input name="dir" type="hidden" value={bookList.dir} />
             <button type="submit">搜索</button>
-          </form>
+          </Form>
         </div>
 
         {bookList.message ? <p className="adminInlineMessage">{bookList.message}</p> : null}

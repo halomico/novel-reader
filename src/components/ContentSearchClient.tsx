@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { BookText } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Pagination } from "@/components/Pagination";
 import { ResultCount } from "@/components/ResultCount";
 import { SearchTrackedLink } from "@/components/SearchTrackedLink";
@@ -238,7 +238,7 @@ export function ContentSearchClient({
     return Number.isFinite(storedPage) && storedPage > 0 ? Math.floor(storedPage) : initialPage;
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     keepJobOnUnmountRef.current = false;

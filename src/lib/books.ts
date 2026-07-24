@@ -158,14 +158,23 @@ function listRandomNovels(pageSize: number, seed: string): Novel[] {
   return listNovelsByIds(sampleNovelIds(db, pageSize, seed));
 }
 
+export function planCatalogPage(promotedIds: readonly number[], pageSize: number, offset: number) {
+  return {
+    promotedIds: promotedIds.slice(offset, offset + pageSize),
+    baseOffset: Math.max(0, offset - promotedIds.length),
+  };
+}
+
 function listCatalogNovels(pageSize: number, offset: number): Novel[] {
   const db = getDb();
   const settings = getCatalogFeatureSettings();
-  const pinnedIds = settings.manualPinnedEnabled && settings.randomRecommendationsEnabled
-    ? new Set((db.prepare("SELECT novel_id FROM pinned_novels").all() as Array<{ novel_id: number }>).map((row) => row.novel_id))
-    : new Set<number>();
+  const manualIds = settings.manualPinnedEnabled
+    ? (db.prepare("SELECT novel_id FROM pinned_novels ORDER BY sort_order ASC, novel_id ASC").all() as Array<{ novel_id: number }>)
+        .map((row) => row.novel_id)
+    : [];
+  const pinnedIds = new Set(manualIds);
   const intervalMs = settings.randomRecommendationIntervalMinutes * 60_000;
-  const recommendationIds = settings.randomRecommendationsEnabled
+  const randomIds = settings.randomRecommendationsEnabled
     ? sampleNovelIds(
         db,
         settings.randomRecommendationCount,
@@ -173,40 +182,27 @@ function listCatalogNovels(pageSize: number, offset: number): Novel[] {
         pinnedIds,
       )
     : [];
-  const recommendationValues = recommendationIds.length
-    ? `VALUES ${recommendationIds.map(() => "(?, ?)").join(", ")}`
-    : "SELECT NULL, NULL WHERE 0";
-  const recommendationParams = recommendationIds.flatMap((id, index) => [id, index]);
-  const pinnedJoin = settings.manualPinnedEnabled
-    ? "LEFT JOIN pinned_novels p ON p.novel_id = n.id"
-    : "";
-  const manualPriority = settings.randomRecommendationsEnabled && settings.promotionOrder === "random-first" ? 1 : 0;
-  const randomPriority = settings.manualPinnedEnabled && settings.promotionOrder === "manual-first" ? 1 : 0;
-  const pinnedPriority = settings.manualPinnedEnabled
-    ? `WHEN p.novel_id IS NOT NULL THEN ${manualPriority}`
-    : "";
-  const defaultPriority = Number(settings.manualPinnedEnabled) + Number(settings.randomRecommendationsEnabled);
-  const pinnedOrder = settings.manualPinnedEnabled ? "p.sort_order ASC," : "";
+  const promotedIds = settings.promotionOrder === "random-first"
+    ? [...randomIds, ...manualIds]
+    : [...manualIds, ...randomIds];
+  const pagePlan = planCatalogPage(promotedIds, pageSize, offset);
+  const promotedBooks = listNovelsByIds(pagePlan.promotedIds);
+  const remaining = pageSize - promotedBooks.length;
+  if (remaining <= 0) {
+    return promotedBooks;
+  }
 
-  return db
+  const excludedSql = promotedIds.length ? `WHERE id NOT IN (${promotedIds.map(() => "?").join(", ")})` : "";
+  const baseBooks = db
     .prepare(
-      `WITH recommended(novel_id, sort_order) AS (${recommendationValues})
-       SELECT n.id, n.title, n.file_name, n.relative_path, n.content_hash, n.size_bytes, n.mtime_ms, n.word_count, n.visit_count, n.last_accessed_at, n.last_accessed_ip, n.last_accessed_user_agent, n.created_at, n.updated_at
-       FROM novels n
-       ${pinnedJoin}
-       LEFT JOIN recommended r ON r.novel_id = n.id
-       ORDER BY CASE
-         ${pinnedPriority}
-         WHEN r.novel_id IS NOT NULL THEN ${randomPriority}
-         ELSE ${defaultPriority}
-       END ASC,
-       ${pinnedOrder}
-       r.sort_order ASC,
-       n.title COLLATE NOCASE ASC,
-       n.id ASC
+      `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
+       FROM novels
+       ${excludedSql}
+       ORDER BY title COLLATE NOCASE ASC, id ASC
        LIMIT ? OFFSET ?`,
     )
-    .all(...recommendationParams, pageSize, offset) as Novel[];
+    .all(...promotedIds, remaining, pagePlan.baseOffset) as Novel[];
+  return [...promotedBooks, ...baseBooks];
 }
 
 export function listNovels(params: { page?: number; q?: string; pageSize?: number; randomSeed?: string }): NovelListResult {
