@@ -3,8 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   isColorPalette,
+  normalizeReaderLineHeight,
   normalizeReaderTagsMode,
   type ColorPalette,
+  type ReaderLineHeight,
   type ReaderTagsMode,
 } from "./ui-preferences";
 
@@ -27,8 +29,6 @@ export type IpRateLimitRule = {
   banSeconds: number;
 };
 
-export type SearchRateLimitRule = IpRateLimitRule;
-
 export type AdminLoginRecord = {
   username: string;
   ip: string;
@@ -45,6 +45,7 @@ export type SiteSettings = {
   siteIconMimeType: SiteIconMimeType;
   siteIconUpdatedAt: string;
   readerDefaultFontSize: number;
+  readerDefaultLineHeight: ReaderLineHeight;
   readerDefaultTagsMode: ReaderTagsMode;
   defaultPalette: ColorPalette;
   defaultPaletteRandomEnabled: boolean;
@@ -73,14 +74,10 @@ export type SiteSettings = {
   showProgressBars: boolean;
   frontendSearchConcurrencyLimit: number;
   globalSearchMaxResults: number;
-  searchRateLimitPerMinute: number;
-  searchShortQueryRateLimitPerMinute: number;
-  searchRateLimitRules: SearchRateLimitRule[];
   userLoginEnabled: boolean;
   userRegistrationEnabled: boolean;
   userDailyRegistrationLimitPerIp: number;
   userDailyReportLimit: number;
-  userSearchRateLimitPerMinute: number;
   userAvatarMaxBytes: number;
   analyticsEnabled: boolean;
   analyticsRealtimeLimit: number;
@@ -111,6 +108,7 @@ export type SiteSettings = {
 };
 
 type SiteSettingsCache = {
+  schemaVersion: number;
   path: string;
   mtimeMs: number;
   size: number;
@@ -120,6 +118,8 @@ type SiteSettingsCache = {
 type SiteSettingsGlobal = typeof globalThis & {
   siteSettingsCache?: SiteSettingsCache;
 };
+
+const SITE_SETTINGS_CACHE_SCHEMA_VERSION = 2;
 
 const LEGACY_SETTING_KEYS = [
   "adminIndexPageSize",
@@ -133,6 +133,10 @@ const LEGACY_SETTING_KEYS = [
   "adminOperationRateLimitEnabled",
   "adminOperationRateLimitPerMinute",
   "adminOperationRateLimitBanEnabled",
+  "searchRateLimitPerMinute",
+  "searchShortQueryRateLimitPerMinute",
+  "searchRateLimitRules",
+  "userSearchRateLimitPerMinute",
 ] as const;
 
 const DEFAULT_SETTINGS: SiteSettings = {
@@ -144,6 +148,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   siteIconMimeType: "",
   siteIconUpdatedAt: "",
   readerDefaultFontSize: 18,
+  readerDefaultLineHeight: 1.7,
   readerDefaultTagsMode: "collapsed",
   defaultPalette: "default",
   defaultPaletteRandomEnabled: false,
@@ -172,14 +177,10 @@ const DEFAULT_SETTINGS: SiteSettings = {
   showProgressBars: true,
   frontendSearchConcurrencyLimit: 0,
   globalSearchMaxResults: 0,
-  searchRateLimitPerMinute: 0,
-  searchShortQueryRateLimitPerMinute: 0,
-  searchRateLimitRules: [],
   userLoginEnabled: true,
   userRegistrationEnabled: true,
   userDailyRegistrationLimitPerIp: 0,
   userDailyReportLimit: 50,
-  userSearchRateLimitPerMinute: 0,
   userAvatarMaxBytes: 0,
   analyticsEnabled: false,
   analyticsRealtimeLimit: 0,
@@ -371,6 +372,12 @@ function readSiteSettingsFromDisk(): SiteSettings {
       siteIconMimeType: cleanSiteIconMimeType(parsed.siteIconMimeType),
       siteIconUpdatedAt: cleanText(parsed.siteIconUpdatedAt),
       readerDefaultFontSize: cleanInt(parsed.readerDefaultFontSize, DEFAULT_SETTINGS.readerDefaultFontSize, 8, 25),
+      readerDefaultLineHeight: normalizeReaderLineHeight(
+        typeof parsed.readerDefaultLineHeight === "number" || typeof parsed.readerDefaultLineHeight === "string"
+          ? parsed.readerDefaultLineHeight
+          : undefined,
+        DEFAULT_SETTINGS.readerDefaultLineHeight,
+      ),
       readerDefaultTagsMode: normalizeReaderTagsMode(
         typeof parsed.readerDefaultTagsMode === "string" ? parsed.readerDefaultTagsMode : undefined,
         DEFAULT_SETTINGS.readerDefaultTagsMode,
@@ -415,16 +422,8 @@ function readSiteSettingsFromDisk(): SiteSettings {
       noticeDisplaySeconds: cleanInt(parsed.noticeDisplaySeconds, DEFAULT_SETTINGS.noticeDisplaySeconds, 0, 60),
       audioDefaultPlaybackMode: cleanAudioPlaybackMode(parsed.audioDefaultPlaybackMode),
       showProgressBars: cleanBool(parsed.showProgressBars, DEFAULT_SETTINGS.showProgressBars),
-      frontendSearchConcurrencyLimit: cleanInt(parsed.frontendSearchConcurrencyLimit, DEFAULT_SETTINGS.frontendSearchConcurrencyLimit, 0, 50),
+      frontendSearchConcurrencyLimit: cleanInt(parsed.frontendSearchConcurrencyLimit, DEFAULT_SETTINGS.frontendSearchConcurrencyLimit, 0, 100),
       globalSearchMaxResults: cleanInt(parsed.globalSearchMaxResults, DEFAULT_SETTINGS.globalSearchMaxResults, 0, 1000),
-      searchRateLimitPerMinute: cleanInt(parsed.searchRateLimitPerMinute, DEFAULT_SETTINGS.searchRateLimitPerMinute, 0, 120),
-      searchShortQueryRateLimitPerMinute: cleanInt(
-        parsed.searchShortQueryRateLimitPerMinute,
-        DEFAULT_SETTINGS.searchShortQueryRateLimitPerMinute,
-        0,
-        120,
-      ),
-      searchRateLimitRules: normalizeIpRateLimitRules(parsed.searchRateLimitRules),
       userLoginEnabled: cleanBool(parsed.userLoginEnabled, DEFAULT_SETTINGS.userLoginEnabled),
       userRegistrationEnabled: cleanBool(parsed.userRegistrationEnabled, DEFAULT_SETTINGS.userRegistrationEnabled),
       userDailyRegistrationLimitPerIp: cleanInt(
@@ -434,12 +433,6 @@ function readSiteSettingsFromDisk(): SiteSettings {
         100,
       ),
       userDailyReportLimit: cleanInt(parsed.userDailyReportLimit, DEFAULT_SETTINGS.userDailyReportLimit, 1, 500),
-      userSearchRateLimitPerMinute: cleanInt(
-        parsed.userSearchRateLimitPerMinute,
-        DEFAULT_SETTINGS.userSearchRateLimitPerMinute,
-        0,
-        600,
-      ),
       userAvatarMaxBytes: cleanInt(parsed.userAvatarMaxBytes, DEFAULT_SETTINGS.userAvatarMaxBytes, 0, 10 * 1024 ** 2),
       analyticsEnabled: cleanBool(parsed.analyticsEnabled, DEFAULT_SETTINGS.analyticsEnabled),
       analyticsRealtimeLimit: cleanInt(parsed.analyticsRealtimeLimit, DEFAULT_SETTINGS.analyticsRealtimeLimit, 0, 2000),
@@ -491,6 +484,7 @@ export function readSiteSettings(): SiteSettings {
     // Missing settings use defaults and are cached below.
   }
   if (
+    state.siteSettingsCache?.schemaVersion === SITE_SETTINGS_CACHE_SCHEMA_VERSION &&
     state.siteSettingsCache?.path === settingsPath &&
     state.siteSettingsCache.mtimeMs === mtimeMs &&
     state.siteSettingsCache.size === size
@@ -499,7 +493,13 @@ export function readSiteSettings(): SiteSettings {
   }
 
   const value = readSiteSettingsFromDisk();
-  state.siteSettingsCache = { path: settingsPath, mtimeMs, size, value };
+  state.siteSettingsCache = {
+    schemaVersion: SITE_SETTINGS_CACHE_SCHEMA_VERSION,
+    path: settingsPath,
+    mtimeMs,
+    size,
+    value,
+  };
   return value;
 }
 

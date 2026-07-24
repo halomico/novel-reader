@@ -3,20 +3,26 @@ import {
   ADMIN_SIDEBAR_STORAGE_KEY,
   PALETTE_STORAGE_KEY,
   READER_HOTWORDS_STORAGE_KEY,
+  READER_LINE_HEIGHT_STORAGE_KEY,
+  READER_LINE_HEIGHTS,
   READER_TAGS_STORAGE_KEY,
   TOP_MENU_STORAGE_KEY,
+  DEFAULT_READER_LINE_HEIGHT,
   type ColorPalette,
+  type ReaderLineHeight,
   type ReaderTagsMode,
 } from "@/lib/ui-preferences";
 
 export function ThemeScript({
   defaultTheme = "system",
   defaultFontSize = 18,
+  defaultLineHeight = DEFAULT_READER_LINE_HEIGHT,
   defaultPalette = "default",
   defaultReaderTagsMode = "collapsed",
 }: {
   defaultTheme?: "system" | "light" | "dark";
   defaultFontSize?: number;
+  defaultLineHeight?: ReaderLineHeight;
   defaultPalette?: ColorPalette;
   defaultReaderTagsMode?: ReaderTagsMode;
 }) {
@@ -32,11 +38,20 @@ export function ThemeScript({
         var palette = palettes[paletteName] || palettes[${JSON.stringify(defaultPalette)}];
         var readerTags = localStorage.getItem(${JSON.stringify(READER_TAGS_STORAGE_KEY)});
         var readerHotwords = localStorage.getItem(${JSON.stringify(READER_HOTWORDS_STORAGE_KEY)});
+        var readerLineHeights = ${JSON.stringify(READER_LINE_HEIGHTS)};
+        var readerLineHeight = Number(localStorage.getItem(${JSON.stringify(READER_LINE_HEIGHT_STORAGE_KEY)}) || ${defaultLineHeight});
         var topMenu = localStorage.getItem(${JSON.stringify(TOP_MENU_STORAGE_KEY)});
         var adminSidebarCollapsed = localStorage.getItem(${JSON.stringify(ADMIN_SIDEBAR_STORAGE_KEY)}) === "true";
         var fontSize = Number(localStorage.getItem("novel-font-size") || ${JSON.stringify(defaultFontSize)});
         if (!Number.isFinite(fontSize) || fontSize < 8 || fontSize > 25) {
           fontSize = ${JSON.stringify(defaultFontSize)};
+        }
+        if (readerLineHeights.indexOf(readerLineHeight) === -1) {
+          readerLineHeight = Number.isFinite(readerLineHeight) && readerLineHeight >= 1.2 && readerLineHeight <= 2.3
+            ? readerLineHeights.reduce(function(nearest, item) {
+                return Math.abs(item - readerLineHeight) < Math.abs(nearest - readerLineHeight) ? item : nearest;
+              })
+            : ${defaultLineHeight};
         }
         if (theme === "light" || theme === "dark") {
           root.dataset.theme = theme;
@@ -57,6 +72,7 @@ export function ThemeScript({
         root.dataset.topMenu = topMenu === "hide" ? "hide" : "show";
         root.dataset.adminSidebar = adminSidebarCollapsed ? "collapsed" : "expanded";
         root.style.setProperty("--reader-font-size", fontSize + "px");
+        root.style.setProperty("--reader-line-height", String(readerLineHeight));
         root.style.setProperty("--palette-light-accent", palette.lightAccent);
         root.style.setProperty("--palette-light-strong", palette.lightStrong);
         root.style.setProperty("--palette-dark-accent", palette.darkAccent);

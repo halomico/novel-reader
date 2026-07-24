@@ -22,6 +22,7 @@ import { getCurrentUser } from "@/lib/user-auth";
 import type { UserProfile } from "@/lib/users";
 import { HeaderSearch } from "./HeaderSearch";
 import { HeaderPrimaryNav } from "./HeaderPrimaryNav";
+import { ReaderHeaderBehavior } from "./ReaderHeaderBehavior";
 import { HeaderUserMenu } from "./HeaderUserMenu";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -33,6 +34,7 @@ export async function SiteHeader({
   showPrimaryNavigation = true,
   showTools = true,
   isHomePage = false,
+  readerMode = false,
   currentUser,
 }: {
   query?: string;
@@ -42,6 +44,7 @@ export async function SiteHeader({
   showPrimaryNavigation?: boolean;
   showTools?: boolean;
   isHomePage?: boolean;
+  readerMode?: boolean;
   currentUser?: UserProfile | null;
 }) {
   const siteName = getSiteName();
@@ -64,7 +67,12 @@ export async function SiteHeader({
   const showPrimaryNav = showPrimaryNavigation && (showLibraryNav || showTagNav || mediaKinds.length > 0);
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
 
-  const headerClassName = ["siteHeader", showPrimaryNav ? "hasPrimaryNav" : "", isHomePage ? "isHomeHeader" : ""]
+  const headerClassName = [
+    "siteHeader",
+    showPrimaryNav ? "hasPrimaryNav" : "",
+    isHomePage ? "isHomeHeader" : "",
+    readerMode ? "readerSiteHeader" : "",
+  ]
     .filter(Boolean)
     .join(" ");
 
@@ -74,6 +82,7 @@ export async function SiteHeader({
           <BookOpen size={24} aria-hidden="true" />
           <span>{siteName}</span>
         </Link>
+        {readerMode ? <ReaderHeaderBehavior /> : null}
         {showPrimaryNav ? <HeaderPrimaryNav mediaKinds={mediaKinds} showLibrary={showLibraryNav} showTags={showTagNav} /> : null}
         {showTools ? (
           <div className={showLibraryNav ? "headerTools" : "headerTools hasNoSearch"}>

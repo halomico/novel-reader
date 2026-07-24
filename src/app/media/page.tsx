@@ -255,7 +255,9 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
                 <div className="mediaResourceList">
                   {visibleChildFolders.map((folder) => (
                     <MediaFolderRow
-                      href={mediaHref(kind, folder.path, "", "", sortBy, sortOrder)}
+                      href={kind === "audio"
+                        ? mediaHref(kind, folder.path)
+                        : mediaHref(kind, folder.path, "", "", sortBy, sortOrder)}
                       name={folder.name}
                       sizeLabel={kind === "audio" ? `${folder.totalAssets} 项` : formatBytes(folder.totalSizeBytes)}
                       key={folder.path}

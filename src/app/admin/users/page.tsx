@@ -42,7 +42,7 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
         <div className="adminPanelHeader">
           <div>
             <h2>用户管理</h2>
-            <p>管理前台用户、头像资料、登录状态和单用户全文搜索限速。</p>
+            <p>管理前台用户、头像资料、登录状态和权限组。</p>
           </div>
           <form className="adminTitleSearchForm" action="/admin/users">
             <Search size={17} aria-hidden="true" />
@@ -83,10 +83,6 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
                 <option value="user">普通用户</option>
                 <option value="admin">管理员</option>
               </select>
-            </label>
-            <label>
-              <span>搜索限速（次/分钟）</span>
-              <input name="searchRateLimitPerMinute" type="number" min="1" max="600" placeholder="跟随全局" />
             </label>
             <button type="submit"><UserPlus size={15} aria-hidden="true" />创建用户</button>
           </form>

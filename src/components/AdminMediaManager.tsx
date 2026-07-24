@@ -58,21 +58,13 @@ async function responseJson(response: Response): Promise<{ ok?: boolean; message
 }
 
 function AdminMediaFolderRow({ folder, onOpen }: { folder: MediaFolder; onOpen: () => void }) {
-  const pointerType = useRef("");
-
   return (
     <tr
       className="adminMediaFolderRow"
       tabIndex={0}
-      title={`双击打开 ${folder.path}`}
+      title={`打开 ${folder.path}`}
       aria-label={`打开文件夹 ${folder.name}`}
-      onPointerDown={(event) => {
-        pointerType.current = event.pointerType;
-      }}
-      onClick={() => {
-        if (pointerType.current !== "mouse") onOpen();
-      }}
-      onDoubleClick={onOpen}
+      onClick={onOpen}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();

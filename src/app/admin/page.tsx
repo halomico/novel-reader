@@ -118,7 +118,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
             <Users size={19} aria-hidden="true" />
             <span>
               <strong>用户管理</strong>
-              <small>维护前台用户、登录记录和搜索限速</small>
+              <small>维护前台用户、登录记录和权限组</small>
             </span>
           </Link>
           <Link className="adminHomeLink" href="/admin/analytics">

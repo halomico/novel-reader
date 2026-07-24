@@ -31,6 +31,7 @@
   --shadow: 0 1px 2px rgb(31 45 54 / 7%);
   --shadow-float: 0 14px 36px rgb(22 31 37 / 14%);
   --reader-font-size: 18px;
+  --reader-line-height: 1.7;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -86,6 +87,7 @@
 
 html {
   min-height: 100%;
+  background: var(--bg);
   scrollbar-gutter: stable;
 }
 
@@ -203,32 +205,37 @@ textarea {
 .searchForm {
   position: relative;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  height: 42px;
   min-width: 0;
   min-height: 42px;
-  padding: 6px 7px 6px 12px;
+  padding: 4px 5px 4px 7px;
   border: 1px solid var(--border);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  border-radius: 8px;
+  background: var(--surface);
   box-shadow: none;
   transition:
     border-color 140ms ease,
+    background-color 140ms ease,
     box-shadow 140ms ease;
 }
 
 .searchForm:focus-within {
   border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 9%, transparent);
+  background: color-mix(in srgb, var(--surface) 97%, var(--accent) 3%);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
 }
 
 .searchForm input {
+  height: 32px;
   min-width: 0;
   border: 0;
   outline: 0;
   background: transparent;
   color: var(--text);
+  line-height: 1.35;
 }
 
 .searchSubmitIcon {
@@ -247,10 +254,10 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border: 0;
-  border-radius: 999px;
+  border-radius: 6px;
   padding: 0;
   background: transparent;
   color: var(--muted);
@@ -259,14 +266,15 @@ textarea {
 
 .searchIconButton:hover,
 .searchIconButton:focus-visible {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  background: transparent;
   color: var(--accent);
 }
 
 .searchForm .searchSubmit {
+  height: 32px;
   border: 0;
-  border-radius: 999px;
-  padding: 7px 12px;
+  border-radius: 6px;
+  padding: 0 10px;
   background: transparent;
   color: var(--accent);
   cursor: pointer;
@@ -311,7 +319,6 @@ textarea {
   color: var(--accent);
 }
 
-.iconLink,
 .pageButton {
   display: inline-flex;
   align-items: center;
@@ -326,7 +333,7 @@ textarea {
 .headerActions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
 }
 
 :root[data-ui-mode="minimal"] .siteHeader .themeToggle {
@@ -340,7 +347,7 @@ textarea {
   justify-self: end;
   grid-column: 3;
   grid-row: 1;
-  gap: 16px;
+  gap: 10px;
   width: min(100%, 558px);
   min-width: 0;
 }
@@ -454,12 +461,21 @@ textarea {
 
 .searchForm:not(.isPinnedOpen):not(.isDefaultOpen),
 :root[data-ui-mode="minimal"] .searchForm.isDefaultOpen {
-  grid-template-columns: 28px;
+  grid-template-columns: 42px;
   justify-self: end;
   width: 42px;
   gap: 0;
-  padding: 6px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
   box-shadow: none;
+}
+
+.searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .searchIconButton,
+:root[data-ui-mode="minimal"] .searchForm.isDefaultOpen .searchIconButton {
+  width: 42px;
+  height: 42px;
 }
 
 .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) input,
@@ -494,18 +510,36 @@ textarea {
 }
 
 .iconLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 42px;
   height: 42px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
   cursor: pointer;
+}
+
+.iconLink:hover,
+.iconLink:focus-visible,
+.userMenuButton[aria-expanded="true"] {
+  color: var(--accent);
 }
 
 .userMenu {
   position: relative;
 }
 
-.userMenuButton[aria-expanded="true"] {
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
-  color: var(--accent);
+.readerHeaderTopButton {
+  display: none;
+}
+
+.analyticsRealtime {
+  scroll-margin-top: 76px;
 }
 
 .userMenuPanel {
@@ -1858,7 +1892,7 @@ button.pageNumber {
 }
 
 :root[data-reader-tags="collapsed"][data-ui-mode="standard"] .readerTagsBlock:not(.isExpanded) .readerTagLinks {
-  max-height: calc(var(--reader-font-size) * 2.7 + 20px);
+  max-height: var(--reader-tags-collapsed-height, calc(var(--reader-font-size) * 2.7 + 22px));
   overflow: hidden;
 }
 
@@ -1880,7 +1914,7 @@ button.pageNumber {
   font-family: var(--font-reading);
   font-size: var(--reader-font-size);
   font-weight: 400;
-  line-height: 1.8;
+  line-height: var(--reader-line-height);
   overflow-wrap: anywhere;
   -webkit-user-select: text;
   user-select: text;
@@ -2374,27 +2408,147 @@ mark {
   background: color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
-.rangeRow {
+.fontSizeStepper {
   display: grid;
-  grid-template-columns: auto minmax(120px, 220px) auto;
+  grid-template-columns: 34px 48px 34px;
   align-items: center;
-  gap: 4px;
-  color: var(--muted);
+  justify-self: end;
   min-height: 36px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface-strong) 60%, transparent);
+}
+
+.fontSizeStepper button {
+  display: grid;
+  width: 34px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.fontSizeStepper button:hover,
+.fontSizeStepper button:focus-visible {
+  color: var(--accent);
+}
+
+.fontSizeStepper button:disabled {
+  color: color-mix(in srgb, var(--muted) 38%, transparent);
+  cursor: default;
+}
+
+.fontSizeStepper output {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  text-align: center;
+}
+
+.readerLineHeightControl {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) 32px;
+  align-items: center;
+  gap: 10px;
+  width: min(220px, 100%);
+  height: 36px;
   justify-self: end;
 }
 
-.rangeRow span:first-child {
-  justify-self: end;
+.readerLineHeightSlider {
+  position: relative;
+  height: 36px;
 }
 
-.rangeRow span:last-child {
-  justify-self: start;
+.readerLineHeightTrack {
+  position: absolute;
+  top: 12px;
+  right: 8px;
+  left: 8px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--border);
 }
 
-.rangeRow input {
+.readerLineHeightTrack::before {
+  display: block;
+  width: var(--reader-line-height-progress);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  content: "";
+}
+
+.readerLineHeightSlider input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   width: 100%;
-  accent-color: var(--accent);
+  height: 26px;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.readerLineHeightSlider input::-webkit-slider-runnable-track {
+  height: 3px;
+  background: transparent;
+}
+
+.readerLineHeightSlider input::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  appearance: none;
+  border: 3px solid var(--surface);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 34%, var(--border));
+}
+
+.readerLineHeightSlider input::-moz-range-track {
+  height: 3px;
+  background: transparent;
+}
+
+.readerLineHeightSlider input::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: 3px solid var(--surface);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 34%, var(--border));
+}
+
+.readerLineHeightTicks {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  left: 8px;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  place-items: center;
+}
+
+.readerLineHeightTicks i {
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.readerLineHeightControl output {
+  color: var(--text);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  text-align: right;
 }
 
 .settingMetaToggles {
@@ -2486,7 +2640,7 @@ mark {
   color: var(--text);
   font-family: var(--font-reading);
   font-size: var(--reader-font-size);
-  line-height: 1.8;
+  line-height: var(--reader-line-height);
 }
 
 .previewReader p {
@@ -3820,6 +3974,11 @@ mark {
 
 .adminSettingsForm .adminCompactField.isNarrow {
   max-width: 220px;
+}
+
+.adminReaderDefaults {
+  grid-template-columns: repeat(2, minmax(150px, 220px));
+  justify-content: start;
 }
 
 .adminSettingsForm .adminPaletteDiceButton {
@@ -5316,11 +5475,6 @@ mark {
 .rateLimitPolicyStack {
   display: grid;
   gap: 12px;
-}
-
-.rateLimitRulesEditor + .rateLimitRulesEditor {
-  border-top: 1px solid var(--border);
-  padding-top: 12px;
 }
 
 .searchRateRulesHeader {
@@ -7359,6 +7513,51 @@ a.analyticsSearchTag:focus-visible {
     backdrop-filter: none;
   }
 
+  .readerShell .readerSiteHeader {
+    transition: transform 170ms ease, opacity 140ms ease;
+    will-change: transform, opacity;
+  }
+
+  .readerShell .readerSiteHeader.isReaderHeaderHidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(calc(-100% - 12px));
+  }
+
+  .readerShell .readerSiteHeader .brand {
+    max-width: calc(50vw - 38px);
+  }
+
+  .readerHeaderTopButton {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 2;
+    display: grid;
+    width: 36px;
+    height: 36px;
+    place-items: center;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    transition: color 140ms ease, opacity 140ms ease;
+  }
+
+  .readerHeaderTopButton.isVisible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .readerHeaderTopButton:hover,
+  .readerHeaderTopButton:focus-visible {
+    color: var(--accent);
+  }
+
   .siteHeader.hasPrimaryNav,
   :root[data-ui-mode="minimal"] .siteHeader.hasPrimaryNav {
     grid-template-columns: minmax(0, 1fr) auto;
@@ -7462,12 +7661,12 @@ a.analyticsSearchTag:focus-visible {
 
   .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen):not(.isDefaultOpen),
   :root[data-ui-mode="minimal"] .siteHeader.hasPrimaryNav .searchForm.isDefaultOpen {
-    grid-template-columns: 28px;
+    grid-template-columns: 42px;
     justify-self: end;
     width: 42px;
     min-height: 42px;
     gap: 0;
-    padding: 6px;
+    padding: 0;
     box-shadow: none;
   }
 
@@ -7491,10 +7690,10 @@ a.analyticsSearchTag:focus-visible {
     top: calc(100% + 4px);
     left: calc((100% - 100vw) / 2 + 8px);
     z-index: 80;
-    grid-template-columns: 28px minmax(0, 1fr) auto;
+    grid-template-columns: 30px minmax(0, 1fr) auto;
     width: calc(100vw - 16px);
     gap: 6px;
-    padding: 6px 7px 6px 6px;
+    padding: 4px 5px 4px 7px;
     box-shadow: 0 10px 26px rgb(84 54 31 / 12%);
   }
 
@@ -7541,7 +7740,8 @@ a.analyticsSearchTag:focus-visible {
   }
 
   .segmentedControl,
-  .rangeRow,
+  .fontSizeStepper,
+  .readerLineHeightControl,
   .settingPalettePicker {
     justify-self: start;
   }
@@ -7582,12 +7782,12 @@ a.analyticsSearchTag:focus-visible {
 
   .readerShell .readerSearchForm,
   :root[data-ui-mode="minimal"] .readerShell .readerSearchForm {
-    grid-template-columns: 28px;
+    grid-template-columns: 42px;
     justify-self: end;
     width: 42px;
     min-height: 42px;
     gap: 0;
-    padding: 6px;
+    padding: 0;
     box-shadow: none;
   }
 
@@ -7606,11 +7806,11 @@ a.analyticsSearchTag:focus-visible {
     top: calc(100% + 4px);
     left: 0;
     z-index: 80;
-    grid-template-columns: 28px minmax(0, 1fr) auto;
+    grid-template-columns: 30px minmax(0, 1fr) auto;
     justify-self: stretch;
     width: 100%;
     gap: 8px;
-    padding: 6px 7px 6px 6px;
+    padding: 4px 5px 4px 7px;
     box-shadow: 0 10px 26px rgb(84 54 31 / 12%);
   }
 
@@ -7627,12 +7827,8 @@ a.analyticsSearchTag:focus-visible {
     margin-bottom: 100px;
   }
 
-  .readerText {
-    line-height: 1.95;
-  }
-
-  .rangeRow {
-    grid-template-columns: auto minmax(120px, 1fr) auto;
+  .readerLineHeightControl {
+    width: min(280px, 100%);
   }
 
   .settingsGrid {

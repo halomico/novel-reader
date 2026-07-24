@@ -141,48 +141,6 @@ export function getAudioDefaultPlaybackMode(): AudioPlaybackMode {
   return readSiteSettings().audioDefaultPlaybackMode;
 }
 
-export function getSearchRateLimitPerMinute(): number {
-  return readSettingInt(readSiteSettings().searchRateLimitPerMinute, "SEARCH_RATE_LIMIT_PER_MINUTE", 8, 1, 120);
-}
-
-export function getSearchShortQueryRateLimitPerMinute(): number {
-  return readSettingInt(readSiteSettings().searchShortQueryRateLimitPerMinute, "SEARCH_SHORT_QUERY_RATE_LIMIT_PER_MINUTE", 3, 1, 120);
-}
-
-export function getUserSearchRateLimitPerMinute(): number {
-  return readSettingInt(readSiteSettings().userSearchRateLimitPerMinute, "USER_SEARCH_RATE_LIMIT_PER_MINUTE", 30, 1, 600);
-}
-
-export function getSearchRateLimitRules(): IpRateLimitRule[] {
-  const settings = readSiteSettings();
-  if (settings.searchRateLimitRules.length > 0) {
-    return settings.searchRateLimitRules;
-  }
-
-  return [
-    {
-      id: "guest-general",
-      enabled: true,
-      scope: "guest",
-      queryType: "all",
-      windowSeconds: 60,
-      maxRequests: getSearchRateLimitPerMinute(),
-      banMode: "none",
-      banSeconds: 3_600,
-    },
-    {
-      id: "guest-short",
-      enabled: true,
-      scope: "guest",
-      queryType: "short",
-      windowSeconds: 60,
-      maxRequests: getSearchShortQueryRateLimitPerMinute(),
-      banMode: "none",
-      banSeconds: 3_600,
-    },
-  ];
-}
-
 export function isUserLoginEnabled(): boolean {
   return readSiteSettings().userLoginEnabled && readBoolConfig("USER_LOGIN_ENABLED", true);
 }
@@ -305,7 +263,7 @@ export function getRelatedVideoSettings(): { count: number; mode: RelatedVideoMo
 }
 
 export function getFrontendSearchConcurrencyLimit(): number {
-  return readSettingInt(readSiteSettings().frontendSearchConcurrencyLimit, "FRONTEND_SEARCH_CONCURRENCY_LIMIT", 10, 1, 50);
+  return readSettingInt(readSiteSettings().frontendSearchConcurrencyLimit, "FRONTEND_SEARCH_CONCURRENCY_LIMIT", 10, 1, 100);
 }
 
 export function getContentRateLimitPerMinute(): number {

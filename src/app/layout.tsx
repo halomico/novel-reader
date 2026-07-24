@@ -55,6 +55,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <ThemeScript
           defaultTheme={settings.adminTheme}
           defaultFontSize={defaultFontSize}
+          defaultLineHeight={settings.readerDefaultLineHeight}
           defaultPalette={defaultPalette}
           defaultReaderTagsMode={settings.readerDefaultTagsMode}
         />

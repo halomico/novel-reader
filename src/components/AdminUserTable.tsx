@@ -154,17 +154,6 @@ export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; re
               <input name="displayName" defaultValue={editingUser.displayName} maxLength={40} required autoFocus />
             </label>
             <label>
-              <span>搜索限速（次/分钟）</span>
-              <input
-                name="searchRateLimitPerMinute"
-                type="number"
-                min="1"
-                max="600"
-                defaultValue={editingUser.searchRateLimitPerMinute ?? ""}
-                placeholder="跟随系统全局值"
-              />
-            </label>
-            <label>
               <span>权限组</span>
               <select name="role" defaultValue={editingUser.role}>
                 <option value="user">普通用户</option>

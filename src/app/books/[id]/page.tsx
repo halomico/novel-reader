@@ -179,7 +179,7 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
 
   return (
     <main className="readerShell">
-      <SiteHeader defaultSearchMode="current" showCurrentSearch currentUser={user} />
+      <SiteHeader defaultSearchMode="current" showCurrentSearch readerMode currentUser={user} />
 
       <article className="readerPage hasReaderPreferences">
         <Breadcrumbs

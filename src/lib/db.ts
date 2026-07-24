@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { getContentSearchDatabasePath, getDatabasePath } from "./config";
+import { naturalSortKey } from "./natural-sort";
 
 type DbGlobal = typeof globalThis & {
   novelReaderDb?: DatabaseSync;
@@ -482,6 +483,7 @@ export function getDb(): DatabaseSync {
   cleanupLegacyContentIndexFiles(databasePath);
 
   const db = new DatabaseSync(databasePath);
+  db.function("natural_sort_key", { deterministic: true }, naturalSortKey);
   initialize(db);
   globalForDb.novelReaderDb = db;
   return db;

@@ -96,10 +96,6 @@ export default async function AdminUserDetailPage({ params, searchParams }: Admi
               <strong>最后登录 IP</strong>
               <span title={user.lastLoginIp || ""}>{user.lastLoginIp || "-"}</span>
             </p>
-            <p>
-              <strong>搜索限速</strong>
-              <span>{user.searchRateLimitPerMinute || "全局"}</span>
-            </p>
           </div>
         </article>
 

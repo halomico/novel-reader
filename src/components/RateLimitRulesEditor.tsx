@@ -8,14 +8,13 @@ import type { IpRateLimitRule } from "@/lib/site-settings";
 type RateLimitRulesEditorProps = {
   fieldName: string;
   title: string;
-  variant: "search" | "content";
   initialRules: IpRateLimitRule[];
   defaultMaxRequests: number;
 };
 
-function newRule(variant: RateLimitRulesEditorProps["variant"], maxRequests: number): IpRateLimitRule {
+function newRule(maxRequests: number): IpRateLimitRule {
   return {
-    id: `${variant}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    id: `content-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     enabled: true,
     scope: "all",
     queryType: "all",
@@ -29,12 +28,11 @@ function newRule(variant: RateLimitRulesEditorProps["variant"], maxRequests: num
 export function RateLimitRulesEditor({
   fieldName,
   title,
-  variant,
   initialRules,
   defaultMaxRequests,
 }: RateLimitRulesEditorProps) {
   const [rules, setRules] = useState<IpRateLimitRule[]>(
-    initialRules.length ? initialRules : [newRule(variant, defaultMaxRequests)],
+    initialRules.length ? initialRules : [newRule(defaultMaxRequests)],
   );
 
   function updateRule(id: string, patch: Partial<IpRateLimitRule>) {
@@ -43,7 +41,7 @@ export function RateLimitRulesEditor({
 
   function addRule() {
     setRules((current) =>
-      current.length >= 20 ? current : [...current, newRule(variant, defaultMaxRequests)],
+      current.length >= 20 ? current : [...current, newRule(defaultMaxRequests)],
     );
   }
 
@@ -52,7 +50,7 @@ export function RateLimitRulesEditor({
   }
 
   return (
-    <div className={`searchRateRulesEditor rateLimitRulesEditor is-${variant}`}>
+    <div className="searchRateRulesEditor rateLimitRulesEditor is-content">
       <input name={fieldName} type="hidden" value={JSON.stringify(rules)} />
       <div className="searchRateRulesHeader">
         <strong>{title}</strong>
@@ -78,31 +76,6 @@ export function RateLimitRulesEditor({
               />
               <span>规则 {index + 1}</span>
             </label>
-            {variant === "search" ? (
-              <>
-                <label>
-                  <span>适用对象</span>
-                  <AdminSelect
-                    value={rule.scope}
-                    onChange={(event) => updateRule(rule.id, { scope: event.target.value as IpRateLimitRule["scope"] })}
-                  >
-                    <option value="all">全部用户</option>
-                    <option value="guest">未登录访客</option>
-                    <option value="user">登录用户</option>
-                  </AdminSelect>
-                </label>
-                <label>
-                  <span>搜索类型</span>
-                  <AdminSelect
-                    value={rule.queryType}
-                    onChange={(event) => updateRule(rule.id, { queryType: event.target.value as IpRateLimitRule["queryType"] })}
-                  >
-                    <option value="all">全部搜索</option>
-                    <option value="short">仅双字短词</option>
-                  </AdminSelect>
-                </label>
-              </>
-            ) : null}
             <label>
               <span>窗口 / 秒</span>
               <input

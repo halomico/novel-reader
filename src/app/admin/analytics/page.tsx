@@ -363,7 +363,7 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
           <MetricTable title="操作系统" items={overview.operatingSystems} />
         </div>
 
-        <section className="adminLoginAudit analyticsRealtime">
+        <section className="adminLoginAudit analyticsRealtime" id="realtime-activity">
           <div className="adminPanelHeader">
             <div>
               <h2>实时访问</h2>
@@ -411,7 +411,14 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
               </tbody>
             </table>
           </div>
-          <Pagination page={overview.realtimePage} totalPages={overview.realtimeTotalPages} query="" basePath="/admin/analytics" extraParams={paginationParams} />
+          <Pagination
+            page={overview.realtimePage}
+            totalPages={overview.realtimeTotalPages}
+            query=""
+            basePath="/admin/analytics"
+            extraParams={paginationParams}
+            hash="realtime-activity"
+          />
         </section>
       </section>
     </AdminFrame>

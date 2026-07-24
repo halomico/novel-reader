@@ -12,6 +12,7 @@ import {
   sortMediaFolders,
   type MediaFolder,
 } from "./media";
+import { naturalSortKey } from "./natural-sort";
 import { readSiteSettings, writeSiteSettings } from "./site-settings";
 
 test("applies public, signed-in, and disabled media access modes", (t) => {
@@ -77,4 +78,12 @@ test("normalizes media sorting and orders folders by name, item count, size, or 
   assert.deepEqual(sortMediaFolders(folders, "duration", "desc").map((folder) => folder.name), ["A", "B"]);
   assert.deepEqual(sortMediaFolders(folders, "size", "desc").map((folder) => folder.name), ["B", "A"]);
   assert.deepEqual(sortMediaFolders(folders, "updated", "desc").map((folder) => folder.name), ["A", "B"]);
+});
+
+test("builds natural name keys for numbered media across pagination", () => {
+  const names = ["第10集", "第2集", "第100集", "第1集", "第02集"];
+  assert.deepEqual(
+    names.sort((left, right) => naturalSortKey(left).localeCompare(naturalSortKey(right))),
+    ["第1集", "第2集", "第02集", "第10集", "第100集"],
+  );
 });

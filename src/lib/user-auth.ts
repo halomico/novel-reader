@@ -18,7 +18,6 @@ type SessionUserRow = {
   avatar_path: string | null;
   status: string;
   role: string;
-  search_rate_limit_per_minute: number | null;
   registration_ip: string | null;
   created_at: string;
   updated_at: string;
@@ -38,7 +37,6 @@ function toUserProfile(row: SessionUserRow): UserProfile {
     avatarPath: row.avatar_path,
     status: row.status === "disabled" ? "disabled" : "active",
     role: row.role === "admin" ? "admin" : "user",
-    searchRateLimitPerMinute: row.search_rate_limit_per_minute,
     registrationIp: row.registration_ip,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -67,7 +65,7 @@ function readUserFromSessionValue(value: string | undefined): UserProfile | null
 
   const row = getDb()
     .prepare(
-      `SELECT u.id, u.username, u.display_name, u.avatar_path, u.status, u.role, u.search_rate_limit_per_minute,
+      `SELECT u.id, u.username, u.display_name, u.avatar_path, u.status, u.role,
               u.registration_ip, u.created_at, u.updated_at, u.last_login_at, u.last_login_ip
        FROM user_sessions s
        JOIN users u ON u.id = s.user_id

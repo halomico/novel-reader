@@ -282,7 +282,7 @@ export function ContentSearchClient({
         url.searchParams.set("searchEvent", searchEventKey);
         replaceUrl = true;
       }
-      if (replaceUrl) window.history.replaceState(null, "", url.toString());
+      if (replaceUrl) window.history.replaceState(window.history.state, "", url.toString());
 
       if (cached?.job) {
         const cachedResultCount = cached.job.results?.length || 0;
@@ -392,7 +392,7 @@ export function ContentSearchClient({
     }
     const url = new URL(window.location.href);
     url.searchParams.set("page", String(normalized));
-    window.history.replaceState(null, "", url.toString());
+    window.history.replaceState(window.history.state, "", url.toString());
     const scrollTarget = scrollTargetId ? document.getElementById(scrollTargetId) : null;
     if (scrollTarget) {
       const header = document.querySelector<HTMLElement>(".siteHeader");

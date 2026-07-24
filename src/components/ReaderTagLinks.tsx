@@ -20,12 +20,23 @@ export function ReaderTagLinks({ tags }: { tags: ReaderTag[] }) {
     if (!links) return;
 
     function measureRows() {
-      const rowTops: number[] = [];
-      for (const link of links!.querySelectorAll("a")) {
-        const top = link.getBoundingClientRect().top;
-        if (!rowTops.some((rowTop) => Math.abs(rowTop - top) < 2)) rowTops.push(top);
+      const containerTop = links!.getBoundingClientRect().top;
+      const rows: Array<{ top: number; bottom: number }> = [];
+      for (const link of links!.querySelectorAll<HTMLAnchorElement>("a")) {
+        const bounds = link.getBoundingClientRect();
+        const row = rows.find((item) => Math.abs(item.top - bounds.top) < 2);
+        if (row) {
+          row.bottom = Math.max(row.bottom, bounds.bottom);
+        } else {
+          rows.push({ top: bounds.top, bottom: bounds.bottom });
+        }
       }
-      setHasMoreThanTwoRows(rowTops.length > 2);
+      if (rows[1]) {
+        links!.style.setProperty("--reader-tags-collapsed-height", `${Math.ceil(rows[1].bottom - containerTop + 2)}px`);
+      } else {
+        links!.style.removeProperty("--reader-tags-collapsed-height");
+      }
+      setHasMoreThanTwoRows(rows.length > 2);
     }
 
     measureRows();

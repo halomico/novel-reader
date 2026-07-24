@@ -14,7 +14,6 @@ export type UserProfile = {
   avatarPath: string | null;
   status: UserStatus;
   role: UserRole;
-  searchRateLimitPerMinute: number | null;
   registrationIp: string | null;
   createdAt: string;
   updatedAt: string;
@@ -74,7 +73,6 @@ type UserRow = {
   avatar_path: string | null;
   status: string;
   role: string;
-  search_rate_limit_per_minute: number | null;
   registration_ip: string | null;
   created_at: string;
   updated_at: string;
@@ -127,7 +125,6 @@ function toUserProfile(row: UserRow): UserProfile {
     avatarPath: row.avatar_path,
     status: row.status === "disabled" ? "disabled" : "active",
     role: row.role === "admin" ? "admin" : "user",
-    searchRateLimitPerMinute: row.search_rate_limit_per_minute,
     registrationIp: row.registration_ip,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -139,7 +136,7 @@ function toUserProfile(row: UserRow): UserProfile {
 export function getUserById(id: number): UserProfile | null {
   const row = getDb()
     .prepare(
-      `SELECT id, username, display_name, avatar_path, status, role, search_rate_limit_per_minute, registration_ip, created_at, updated_at, last_login_at, last_login_ip
+      `SELECT id, username, display_name, avatar_path, status, role, registration_ip, created_at, updated_at, last_login_at, last_login_ip
        FROM users
        WHERE id = ?`,
     )
@@ -151,7 +148,7 @@ export function getUserById(id: number): UserProfile | null {
 export function getUserPasswordRow(username: string): (UserRow & { password_hash: string }) | null {
   const row = getDb()
     .prepare(
-      `SELECT id, username, display_name, password_hash, avatar_path, status, role, search_rate_limit_per_minute, registration_ip, created_at, updated_at, last_login_at, last_login_ip
+      `SELECT id, username, display_name, password_hash, avatar_path, status, role, registration_ip, created_at, updated_at, last_login_at, last_login_ip
        FROM users
        WHERE username = ?`,
     )
@@ -166,13 +163,12 @@ export function createUserRecord(params: {
   passwordHash: string;
   status?: UserStatus;
   role?: UserRole;
-  searchRateLimitPerMinute?: number | null;
   registrationIp?: string | null;
 }): number {
   const info = getDb()
     .prepare(
-      `INSERT INTO users (username, display_name, password_hash, status, role, search_rate_limit_per_minute, registration_ip, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      `INSERT INTO users (username, display_name, password_hash, status, role, registration_ip, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
     )
     .run(
       normalizeUsername(params.username),
@@ -180,7 +176,6 @@ export function createUserRecord(params: {
       params.passwordHash,
       params.status || "active",
       params.role || "user",
-      params.searchRateLimitPerMinute ?? null,
       params.registrationIp || null,
     );
 
@@ -230,7 +225,7 @@ export function listUsers(params: { page?: number; q?: string; pageSize?: number
   const offset = (page - 1) * pageSize;
   const users = db
     .prepare(
-      `SELECT id, username, display_name, avatar_path, status, role, search_rate_limit_per_minute, registration_ip, created_at, updated_at, last_login_at, last_login_ip
+      `SELECT id, username, display_name, avatar_path, status, role, registration_ip, created_at, updated_at, last_login_at, last_login_ip
        FROM users
        ${where}
        ORDER BY updated_at DESC, id DESC
@@ -253,27 +248,26 @@ export function updateUserRecord(params: {
   displayName: string;
   status: UserStatus;
   role: UserRole;
-  searchRateLimitPerMinute: number | null;
   passwordHash?: string;
 }): boolean {
   if (params.passwordHash) {
     const info = getDb()
       .prepare(
         `UPDATE users
-         SET display_name = ?, status = ?, role = ?, search_rate_limit_per_minute = ?, password_hash = ?, updated_at = CURRENT_TIMESTAMP
+         SET display_name = ?, status = ?, role = ?, password_hash = ?, updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`,
       )
-      .run(params.displayName.trim(), params.status, params.role, params.searchRateLimitPerMinute, params.passwordHash, params.id);
+      .run(params.displayName.trim(), params.status, params.role, params.passwordHash, params.id);
     return Number(info.changes) > 0;
   }
 
   const info = getDb()
     .prepare(
       `UPDATE users
-       SET display_name = ?, status = ?, role = ?, search_rate_limit_per_minute = ?, updated_at = CURRENT_TIMESTAMP
+       SET display_name = ?, status = ?, role = ?, updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
     )
-    .run(params.displayName.trim(), params.status, params.role, params.searchRateLimitPerMinute, params.id);
+    .run(params.displayName.trim(), params.status, params.role, params.id);
   return Number(info.changes) > 0;
 }
 

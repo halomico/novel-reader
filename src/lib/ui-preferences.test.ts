@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   COLOR_PALETTES,
+  DEFAULT_READER_LINE_HEIGHT,
   getColorPalette,
   isColorPalette,
+  normalizeReaderLineHeight,
   normalizeReaderTagsMode,
+  READER_LINE_HEIGHTS,
   resolveDefaultPalette,
 } from "./ui-preferences";
 
@@ -44,4 +47,14 @@ test("normalizes current and legacy reader tag preferences", () => {
   assert.equal(normalizeReaderTagsMode("show"), "expanded");
   assert.equal(normalizeReaderTagsMode(null), "collapsed");
   assert.equal(normalizeReaderTagsMode("unknown", "expanded"), "expanded");
+});
+
+test("provides seven practical reader line heights and migrates old loose values", () => {
+  assert.deepEqual(READER_LINE_HEIGHTS, [1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2]);
+  assert.equal(DEFAULT_READER_LINE_HEIGHT, 1.7);
+  assert.equal(normalizeReaderLineHeight("1.4"), 1.4);
+  assert.equal(normalizeReaderLineHeight("1.76"), 1.8);
+  assert.equal(normalizeReaderLineHeight("2.2"), 2);
+  assert.equal(normalizeReaderLineHeight("invalid"), 1.7);
+  assert.equal(normalizeReaderLineHeight("invalid", 1.4), 1.4);
 });

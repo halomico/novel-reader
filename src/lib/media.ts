@@ -842,7 +842,8 @@ export function normalizeMediaSortOrder(value: string | undefined, sortBy: Media
 function mediaAssetOrderBy(sortBy: MediaSortBy, sortOrder: MediaSortOrder): string {
   const direction = sortOrder === "asc" ? "ASC" : "DESC";
   if (sortBy === "name") {
-    return `title COLLATE NOCASE ${direction}, file_name COLLATE NOCASE ${direction}, id ${direction}`;
+    return `natural_sort_key(title) ${direction}, title COLLATE NOCASE ${direction},
+            natural_sort_key(file_name) ${direction}, file_name COLLATE NOCASE ${direction}, id ${direction}`;
   }
   if (sortBy === "size") {
     return `size_bytes ${direction}, title COLLATE NOCASE ASC, id ASC`;

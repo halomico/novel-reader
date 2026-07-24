@@ -28,6 +28,7 @@ test("atomically replaces an existing settings file", () => {
     assert.equal(defaults.defaultPalette, "default");
     assert.equal(defaults.defaultPaletteRandomEnabled, false);
     assert.equal(defaults.readerDefaultFontSize, 18);
+    assert.equal(defaults.readerDefaultLineHeight, 1.7);
     assert.equal(defaults.readerDefaultTagsMode, "collapsed");
     assert.equal(defaults.manualPinnedNovelsEnabled, true);
     assert.equal(defaults.randomRecommendationsEnabled, false);
@@ -78,6 +79,28 @@ test("clamps the configured reader font size to 8 through 25", () => {
     assert.equal(readSiteSettings().readerDefaultFontSize, 25);
     writeSiteSettings({ ...readSiteSettings(), readerDefaultFontSize: 5 });
     assert.equal(readSiteSettings().readerDefaultFontSize, 8);
+  } finally {
+    if (previousPath === undefined) {
+      delete process.env.ADMIN_SETTINGS_PATH;
+    } else {
+      process.env.ADMIN_SETTINGS_PATH = previousPath;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("normalizes the configured reader line height", () => {
+  const previousPath = process.env.ADMIN_SETTINGS_PATH;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-line-height-"));
+  process.env.ADMIN_SETTINGS_PATH = path.join(tempDir, "admin-settings.json");
+
+  try {
+    fs.writeFileSync(process.env.ADMIN_SETTINGS_PATH, JSON.stringify({ readerDefaultLineHeight: 1.4 }), "utf8");
+    assert.equal(readSiteSettings().readerDefaultLineHeight, 1.4);
+    fs.writeFileSync(process.env.ADMIN_SETTINGS_PATH, JSON.stringify({ readerDefaultLineHeight: 2.2, legacy: true }), "utf8");
+    assert.equal(readSiteSettings().readerDefaultLineHeight, 2);
+    fs.writeFileSync(process.env.ADMIN_SETTINGS_PATH, JSON.stringify({ readerDefaultLineHeight: "invalid" }), "utf8");
+    assert.equal(readSiteSettings().readerDefaultLineHeight, 1.7);
   } finally {
     if (previousPath === undefined) {
       delete process.env.ADMIN_SETTINGS_PATH;
@@ -237,7 +260,7 @@ test("removes retired settings while preserving current values", () => {
       process.env.ADMIN_SETTINGS_PATH,
       JSON.stringify({
         siteName: "保留站点",
-        frontendSearchConcurrencyLimit: 8,
+        frontendSearchConcurrencyLimit: 100,
         adminIndexPageSize: 30,
         frontendAutoIndexEnabled: true,
         contentIndexMaxSegments: 5000,
@@ -249,15 +272,19 @@ test("removes retired settings while preserving current values", () => {
         adminOperationRateLimitEnabled: true,
         adminOperationRateLimitPerMinute: 60,
         adminOperationRateLimitBanEnabled: true,
+        searchRateLimitPerMinute: 8,
+        searchShortQueryRateLimitPerMinute: 3,
+        searchRateLimitRules: [{ id: "legacy-search-rule" }],
+        userSearchRateLimitPerMinute: 30,
       }),
       "utf8",
     );
     const settings = readSiteSettings();
     assert.equal(settings.siteName, "保留站点");
-    assert.equal(settings.frontendSearchConcurrencyLimit, 8);
+    assert.equal(settings.frontendSearchConcurrencyLimit, 100);
     const stored = JSON.parse(fs.readFileSync(process.env.ADMIN_SETTINGS_PATH, "utf8")) as Record<string, unknown>;
     assert.equal(stored.siteName, "保留站点");
-    assert.equal(stored.frontendSearchConcurrencyLimit, 8);
+    assert.equal(stored.frontendSearchConcurrencyLimit, 100);
     for (const key of [
       "adminIndexPageSize",
       "frontendAutoIndexEnabled",
@@ -270,6 +297,10 @@ test("removes retired settings while preserving current values", () => {
       "adminOperationRateLimitEnabled",
       "adminOperationRateLimitPerMinute",
       "adminOperationRateLimitBanEnabled",
+      "searchRateLimitPerMinute",
+      "searchShortQueryRateLimitPerMinute",
+      "searchRateLimitRules",
+      "userSearchRateLimitPerMinute",
     ]) {
       assert.equal(Object.hasOwn(stored, key), false);
     }

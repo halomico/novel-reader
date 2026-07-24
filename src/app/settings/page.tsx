@@ -34,6 +34,7 @@ export default async function SettingsPage() {
       <SettingsPanel
         previewText={previewText}
         defaultFontSize={defaultFontSize}
+        defaultLineHeight={settings.readerDefaultLineHeight}
         defaultPalette={defaultPalette}
         defaultTheme={settings.adminTheme}
         defaultReaderTagsMode={settings.readerDefaultTagsMode}

@@ -17,17 +17,16 @@ import {
   getGlobalSearchMaxResults,
   getNoticeDisplaySeconds,
   getReaderDefaultFontSize,
-  getSearchRateLimitRules,
   getSearchResultsPageSize,
   getUserDailyRegistrationLimitPerIp,
   getUserDailyReportLimit,
   getUserAvatarMaxBytes,
-  getUserSearchRateLimitPerMinute,
   getSiteName,
   getSiteTitle,
   shouldBlockHeadlessBrowsers,
 } from "@/lib/config";
 import { readSiteSettings } from "@/lib/site-settings";
+import { normalizeReaderLineHeight, READER_LINE_HEIGHTS } from "@/lib/ui-preferences";
 import { listIpRateLimitBans } from "@/lib/ip-rate-limit";
 import {
   cancelFrontendSearchJobsAction,
@@ -70,14 +69,12 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
   const adminBookPageSize = settings.adminBookPageSize || getAdminBookPageSize();
   const noticeDisplaySeconds = settings.noticeDisplaySeconds || getNoticeDisplaySeconds();
   const readerDefaultFontSize = settings.readerDefaultFontSize || getReaderDefaultFontSize();
+  const readerDefaultLineHeight = normalizeReaderLineHeight(settings.readerDefaultLineHeight);
   const globalSearchMaxResults = settings.globalSearchMaxResults || getGlobalSearchMaxResults();
-  const searchRateLimitRules = getSearchRateLimitRules();
   const contentRateLimitRules = getContentRateLimitRules();
-  const searchRateLimitBans = listIpRateLimitBans("search", 500);
   const contentRateLimitBans = listIpRateLimitBans("content", 500);
   const userDailyRegistrationLimit = settings.userDailyRegistrationLimitPerIp || getUserDailyRegistrationLimitPerIp();
   const userDailyReportLimit = settings.userDailyReportLimit || getUserDailyReportLimit();
-  const userSearchRateLimit = settings.userSearchRateLimitPerMinute || getUserSearchRateLimitPerMinute();
   const userAvatarMaxMb = ((settings.userAvatarMaxBytes || getUserAvatarMaxBytes()) / 1024 ** 2).toFixed(1);
   const analyticsRealtimeLimit = settings.analyticsRealtimeLimit || getAnalyticsRealtimeLimit();
   const frontendSearchConcurrencyLimit = settings.frontendSearchConcurrencyLimit || getFrontendSearchConcurrencyLimit();
@@ -155,10 +152,20 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               <span>设置页底部文案</span>
               <textarea name="settingsPreviewText" rows={3} defaultValue={settings.settingsPreviewText} />
             </label>
-            <label className="adminCompactField isNarrow">
-              <span>默认正文字号 / px</span>
-              <input name="readerDefaultFontSize" type="number" min="8" max="25" defaultValue={readerDefaultFontSize} />
-            </label>
+            <div className="adminFieldGrid adminReaderDefaults">
+              <label>
+                <span>默认正文字号 / px</span>
+                <input name="readerDefaultFontSize" type="number" min="8" max="25" defaultValue={readerDefaultFontSize} />
+              </label>
+              <label>
+                <span>默认正文行距</span>
+                <AdminSelect name="readerDefaultLineHeight" defaultValue={String(readerDefaultLineHeight)}>
+                  {READER_LINE_HEIGHTS.map((value) => (
+                    <option key={value} value={String(value)}>{value.toFixed(1)} 倍</option>
+                  ))}
+                </AdminSelect>
+              </label>
+            </div>
             <label className="adminCompactField">
               <span>文章标签默认显示</span>
               <AdminSelect name="readerDefaultTagsMode" defaultValue={settings.readerDefaultTagsMode}>
@@ -310,25 +317,13 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
             <summary>应用级访问保护</summary>
             <div className="rateLimitPolicyStack">
               <RateLimitRulesEditor
-                fieldName="searchRateLimitRules"
-                title="搜索 IP 限速"
-                variant="search"
-                initialRules={searchRateLimitRules}
-                defaultMaxRequests={30}
-              />
-              <RateLimitRulesEditor
                 fieldName="contentRateLimitRules"
                 title="正文 IP 限速"
-                variant="content"
                 initialRules={contentRateLimitRules}
                 defaultMaxRequests={60}
               />
             </div>
             <div className="adminFieldGrid">
-              <label>
-                <span>登录账号搜索兜底限速 / 分钟</span>
-                <input name="userSearchRateLimitPerMinute" type="number" min="1" max="600" defaultValue={userSearchRateLimit} />
-              </label>
               <label>
                 <span>用户头像上限 / MB</span>
                 <input name="userAvatarMaxMb" type="number" min="0.1" max="10" step="0.1" defaultValue={userAvatarMaxMb} />
@@ -457,7 +452,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               </label>
               <label>
                 <span>全文搜索并发上限 / 个</span>
-                <input name="frontendSearchConcurrencyLimit" type="number" min="1" max="50" defaultValue={frontendSearchConcurrencyLimit} />
+                <input name="frontendSearchConcurrencyLimit" type="number" min="1" max="100" defaultValue={frontendSearchConcurrencyLimit} />
               </label>
             </div>
             <div className="adminActionRow">
@@ -486,7 +481,6 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
         <details className="adminSettingsSection adminSettingsDisclosure rateLimitBanSection">
           <summary>IP 封禁记录</summary>
           <div className="rateLimitBanTables">
-            <RateLimitBanTable title="搜索封禁" bans={searchRateLimitBans} />
             <RateLimitBanTable title="正文封禁" bans={contentRateLimitBans} />
           </div>
         </details>

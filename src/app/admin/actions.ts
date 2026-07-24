@@ -18,7 +18,6 @@ import {
   getUserDailyRegistrationLimitPerIp,
   isAdminLoginRateLimitEnabled,
   getUserAvatarMaxBytes,
-  getUserSearchRateLimitPerMinute,
   shouldAdminLoginRateLimitBan,
 } from "@/lib/config";
 import { cancelContentJobs } from "@/lib/content-jobs";
@@ -50,7 +49,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { validateSearchKeyword } from "@/lib/search";
 import { detectSiteIconFormat, MAX_SITE_ICON_BYTES, removeSiteIconFile, writeSiteIconFile } from "@/lib/site-icon";
 import { normalizeIpRateLimitRules, readSiteSettings, type SiteSettings, writeSiteSettings } from "@/lib/site-settings";
-import { isColorPalette, normalizeReaderTagsMode } from "@/lib/ui-preferences";
+import { isColorPalette, normalizeReaderLineHeight, normalizeReaderTagsMode } from "@/lib/ui-preferences";
 import {
   createTag,
   deleteTag,
@@ -198,8 +197,8 @@ function mediaAccessModeField(formData: FormData, name: string): "off" | "user" 
   return value === "user" || value === "public" ? value : "off";
 }
 
-function rateLimitRulesField(formData: FormData, name: string, label: string): SiteSettings["searchRateLimitRules"] {
-  let rules: SiteSettings["searchRateLimitRules"] = [];
+function rateLimitRulesField(formData: FormData, name: string, label: string): SiteSettings["contentRateLimitRules"] {
+  let rules: SiteSettings["contentRateLimitRules"] = [];
   try {
     rules = normalizeIpRateLimitRules(JSON.parse(String(formData.get(name) || "[]")));
   } catch {
@@ -612,7 +611,6 @@ export async function saveAdminSettingsAction(formData: FormData) {
   }
 
   const userAvatarMaxMb = numberField(formData, "userAvatarMaxMb", getUserAvatarMaxBytes() / 1024 ** 2, 0.1, 10);
-  const searchRateLimitRules = rateLimitRulesField(formData, "searchRateLimitRules", "搜索限速");
   const contentRateLimitRules = rateLimitRulesField(formData, "contentRateLimitRules", "正文限速").map((rule) => ({
     ...rule,
     scope: "all" as const,
@@ -633,6 +631,10 @@ export async function saveAdminSettingsAction(formData: FormData) {
     brandLinkTarget: formData.get("brandLinkTarget") === "home" ? "home" : "novels",
     settingsPreviewText: String(formData.get("settingsPreviewText") || "").trim(),
     readerDefaultFontSize: intField(formData, "readerDefaultFontSize", previous.readerDefaultFontSize || 18, 8, 25),
+    readerDefaultLineHeight: normalizeReaderLineHeight(
+      String(formData.get("readerDefaultLineHeight") || ""),
+      normalizeReaderLineHeight(previous.readerDefaultLineHeight),
+    ),
     readerDefaultTagsMode: normalizeReaderTagsMode(
       String(formData.get("readerDefaultTagsMode") || ""),
       previous.readerDefaultTagsMode,
@@ -681,7 +683,6 @@ export async function saveAdminSettingsAction(formData: FormData) {
         ? formData.get("audioDefaultPlaybackMode") as "stop" | "repeat-one"
         : "next",
     globalSearchMaxResults: intField(formData, "globalSearchMaxResults", previous.globalSearchMaxResults || getGlobalSearchMaxResults(), 1, 1000),
-    searchRateLimitRules,
     contentRateLimitRules,
     userLoginEnabled: formData.get("userLoginEnabled") === "on",
     userRegistrationEnabled: formData.get("userRegistrationEnabled") === "on",
@@ -693,13 +694,6 @@ export async function saveAdminSettingsAction(formData: FormData) {
       100,
     ),
     userDailyReportLimit: intField(formData, "userDailyReportLimit", previous.userDailyReportLimit || 50, 1, 500),
-    userSearchRateLimitPerMinute: intField(
-      formData,
-      "userSearchRateLimitPerMinute",
-      previous.userSearchRateLimitPerMinute || getUserSearchRateLimitPerMinute(),
-      1,
-      600,
-    ),
     userAvatarMaxBytes: Math.floor(userAvatarMaxMb * 1024 ** 2),
     analyticsEnabled: formData.get("analyticsEnabled") === "on",
     analyticsRealtimeLimit: intField(formData, "analyticsRealtimeLimit", previous.analyticsRealtimeLimit || 300, 30, 2000),
@@ -723,7 +717,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
       "frontendSearchConcurrencyLimit",
       previous.frontendSearchConcurrencyLimit || getFrontendSearchConcurrencyLimit(),
       1,
-      50,
+      100,
     ),
     adminTheme:
       formData.get("adminTheme") === "light" || formData.get("adminTheme") === "dark" || formData.get("adminTheme") === "system"
@@ -1075,7 +1069,6 @@ export async function createAdminUserAction(formData: FormData) {
   const password = String(formData.get("password") || "");
   const status = formData.get("status") === "disabled" ? "disabled" : "active";
   const role = formData.get("role") === "admin" ? "admin" : "user";
-  const searchRateLimitPerMinute = optionalIntField(formData, "searchRateLimitPerMinute", 1, 600);
 
   const usernameError = validateUsername(username);
   if (usernameError) {
@@ -1097,7 +1090,6 @@ export async function createAdminUserAction(formData: FormData) {
       passwordHash: hashUserPassword(password),
       status,
       role,
-      searchRateLimitPerMinute,
     });
   } catch (error) {
     if (isUsernameConflict(error)) {
@@ -1119,7 +1111,6 @@ export async function updateAdminUserAction(formData: FormData) {
   const status = formData.get("status") === "disabled" ? "disabled" : "active";
   const role = formData.get("role") === "admin" ? "admin" : "user";
   const newPassword = String(formData.get("newPassword") || "");
-  const searchRateLimitPerMinute = optionalIntField(formData, "searchRateLimitPerMinute", 1, 600);
 
   if (!Number.isInteger(userId) || userId < 1) {
     adminNotice("用户不存在", "warning", returnPath);
@@ -1139,7 +1130,6 @@ export async function updateAdminUserAction(formData: FormData) {
     displayName,
     status,
     role,
-    searchRateLimitPerMinute,
     passwordHash: newPassword ? hashUserPassword(newPassword) : undefined,
   });
   if (!updated) {
