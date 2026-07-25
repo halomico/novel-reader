@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     return new Response(null, { status: 404 });
   }
 
-  const tag = getTagBySlug(slug);
+  const tag = getTagBySlug(slug, { audience: user?.role === "admin" ? "admin" : user ? "member" : "public" });
   if (!tag) {
     return new Response(null, { status: 404 });
   }

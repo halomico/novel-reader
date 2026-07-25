@@ -1,4 +1,4 @@
-import { BookOpen } from "lucide-react";
+import { BookOpen, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import {
   canAccessAdvancedTagSearch,
@@ -19,7 +19,9 @@ import {
   isVideoLibraryEnabled,
 } from "@/lib/config";
 import { getCurrentUser } from "@/lib/user-auth";
+import { hasUserPermission } from "@/lib/user-levels";
 import type { UserProfile } from "@/lib/users";
+import { countUserUnreadMessages } from "@/lib/station";
 import { HeaderSearch } from "./HeaderSearch";
 import { HeaderPrimaryNav } from "./HeaderPrimaryNav";
 import { ReaderHeaderBehavior } from "./ReaderHeaderBehavior";
@@ -35,7 +37,9 @@ export async function SiteHeader({
   showTools = true,
   isHomePage = false,
   readerMode = false,
+  authMode = false,
   currentUser,
+  unreadMessages,
 }: {
   query?: string;
   defaultSearchMode?: "title" | "content" | "current";
@@ -45,7 +49,9 @@ export async function SiteHeader({
   showTools?: boolean;
   isHomePage?: boolean;
   readerMode?: boolean;
+  authMode?: boolean;
   currentUser?: UserProfile | null;
+  unreadMessages?: number;
 }) {
   const siteName = getSiteName();
   const brandHref = getSiteBrandHref();
@@ -66,12 +72,16 @@ export async function SiteHeader({
     ));
   const showPrimaryNav = showPrimaryNavigation && (showLibraryNav || showTagNav || mediaKinds.length > 0);
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
+  const unreadCount = user ? unreadMessages ?? countUserUnreadMessages(user.id) : 0;
+  const showAdvancedSearch = canAccessAdvancedTagSearch(false) ||
+    (canAccessAdvancedTagSearch(Boolean(user)) && hasUserPermission(user, "advanced_search"));
 
   const headerClassName = [
     "siteHeader",
     showPrimaryNav ? "hasPrimaryNav" : "",
     isHomePage ? "isHomeHeader" : "",
     readerMode ? "readerSiteHeader" : "",
+    authMode ? "isAuthHeader" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -85,21 +95,32 @@ export async function SiteHeader({
         {readerMode ? <ReaderHeaderBehavior /> : null}
         {showPrimaryNav ? <HeaderPrimaryNav mediaKinds={mediaKinds} showLibrary={showLibraryNav} showTags={showTagNav} /> : null}
         {showTools ? (
-          <div className={showLibraryNav ? "headerTools" : "headerTools hasNoSearch"}>
-            {showLibraryNav ? (
+          <div className={showLibraryNav && !authMode ? "headerTools" : "headerTools hasNoSearch"}>
+            {showLibraryNav && !authMode ? (
               <HeaderSearch
                 query={query}
                 defaultMode={defaultSearchMode}
                 defaultExpanded={defaultSearchExpanded}
                 showCurrentSearch={showCurrentSearch}
-                showAdvancedSearch={user?.role === "admin" || canAccessAdvancedTagSearch(Boolean(user))}
+                showAdvancedSearch={showAdvancedSearch}
                 noticeDisplaySeconds={noticeDisplaySeconds}
               />
             ) : null}
             <div className="headerActions">
-              <ThemeToggle />
+              {user ? (
+                <Link className="iconLink headerMessageLink" href="/messages" aria-label="消息" title="消息">
+                  <MessageCircle size={20} aria-hidden="true" />
+                  {unreadCount > 0 ? <span className="headerUnreadDot" aria-label={`${unreadCount} 条未读消息`} /> : null}
+                </Link>
+              ) : <ThemeToggle />}
               <HeaderUserMenu
-                user={user ? { displayName: user.displayName, avatarPath: user.avatarPath } : null}
+                user={user ? {
+                  displayName: user.displayName,
+                  avatarPath: user.avatarPath,
+                  trustLevel: user.trustLevel,
+                  sodaBalance: user.sodaBalance,
+                } : null}
+                unreadMessages={unreadCount}
                 loginEnabled={loginEnabled}
                 registrationEnabled={registrationEnabled}
                 mediaKinds={mediaKinds}

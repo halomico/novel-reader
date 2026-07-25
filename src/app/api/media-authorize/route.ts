@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { authorizeMediaDelivery, mediaDeliveryHeaders, resolveMediaDeliveryUri } from "@/lib/media-delivery";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
+import { checkContentAccess } from "@/lib/content-access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,7 +14,13 @@ export function GET(request: NextRequest) {
   }
   const delivery = resolveMediaDeliveryUri(originalUri);
   const user = getCurrentUserFromRequest(request);
-  if (!delivery || !authorizeMediaDelivery(delivery, Boolean(user))) {
+  const access = checkContentAccess(request.headers, {
+    scope: "media",
+    authenticated: Boolean(user),
+    admin: user?.role === "admin",
+    rateLimit: false,
+  });
+  if (!delivery || !access.allowed || !authorizeMediaDelivery(delivery, Boolean(user))) {
     return new Response(null, { status: 404 });
   }
 

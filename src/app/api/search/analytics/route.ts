@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminSession } from "@/lib/admin-auth";
 import {
   normalizeSearchAnalyticsQuery,
   recordSearchQuery,
@@ -12,10 +11,9 @@ import { getCurrentUserFromRequest } from "@/lib/user-auth";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-async function canRecord(request: NextRequest) {
+function canRecord(request: NextRequest) {
   const user = getCurrentUserFromRequest(request);
-  const admin = user ? null : await getAdminSession();
-  return { user, allowed: Boolean(admin) || canAccessNovelLibrary(Boolean(user)) };
+  return { user, allowed: canAccessNovelLibrary(Boolean(user)) };
 }
 
 export async function POST(request: NextRequest) {
@@ -26,7 +24,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "请求格式有误" }, { status: 400 });
   }
 
-  const access = await canRecord(request);
+  const access = canRecord(request);
   if (!access.allowed) {
     return NextResponse.json({ ok: false, message: "搜索不可用" }, { status: 404 });
   }

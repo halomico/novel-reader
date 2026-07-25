@@ -6,10 +6,11 @@ import {
   House,
   LibraryBig,
   Menu,
-  Flag,
   ChevronLeft,
   ChevronRight,
   Search,
+  ShieldCheck,
+  MessagesSquare,
   Settings,
   Tags,
   Users,
@@ -19,13 +20,14 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ADMIN_SIDEBAR_STORAGE_KEY } from "@/lib/ui-preferences";
 
-export type AdminNavKey = "home" | "books" | "indexes" | "settings" | "users" | "analytics" | "media" | "tags" | "reports";
+export type AdminNavKey = "home" | "books" | "indexes" | "settings" | "users" | "analytics" | "media" | "tags" | "access" | "station";
 
 const navItems = [
   { href: "/admin", label: "后台首页", value: "home", icon: House },
   { href: "/admin/books", label: "小说管理", value: "books", icon: BookOpen },
   { href: "/admin/tags", label: "标签管理", value: "tags", icon: Tags },
-  { href: "/admin/reports", label: "内容举报", value: "reports", icon: Flag },
+  { href: "/admin/access", label: "内容访问", value: "access", icon: ShieldCheck },
+  { href: "/admin/station", label: "站务中心", value: "station", icon: MessagesSquare },
   { href: "/admin/media", label: "资源管理", value: "media", icon: LibraryBig },
   { href: "/admin/indexes", label: "搜索索引", value: "indexes", icon: Search },
   { href: "/admin/users", label: "用户管理", value: "users", icon: Users },

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SettingsPanel } from "@/components/SettingsPanel";
 import { SiteHeader } from "@/components/SiteHeader";
-import { getAdminSession } from "@/lib/admin-auth";
+import { UserWorkspace } from "@/components/UserWorkspace";
 import { getReaderDefaultFontSize, getSettingsPreviewText } from "@/lib/config";
 import { readSiteSettings } from "@/lib/site-settings";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
@@ -21,13 +21,10 @@ export default async function SettingsPage() {
     settings.defaultPaletteRandomEnabled,
     settings.defaultPaletteRotationMinutes,
   );
-  const [user, adminSession] = await Promise.all([getCurrentUser(), getAdminSession()]);
-  const authenticated = Boolean(user || adminSession);
-
-  return (
-    <main className="appShell">
-      <SiteHeader currentUser={user} />
-      <Breadcrumbs items={[{ label: "首页", href: "/" }, { label: "阅读设置" }]} />
+  const user = await getCurrentUser();
+  const authenticated = Boolean(user);
+  const content = (
+    <>
       <section className="settingsHero">
         <h1>阅读设置</h1>
       </section>
@@ -41,6 +38,22 @@ export default async function SettingsPage() {
         canConfigureReaderTags={authenticated || (settings.tagLibraryEnabled && settings.guestTagLibraryNavEnabled)}
         canConfigureReaderHotwords={authenticated || (settings.hotwordLinksEnabled && settings.guestHotwordLinksEnabled)}
       />
+    </>
+  );
+
+  if (user) {
+    return (
+      <UserWorkspace user={user} active="settings" breadcrumb="阅读设置">
+        {content}
+      </UserWorkspace>
+    );
+  }
+
+  return (
+    <main className="appShell">
+      <SiteHeader currentUser={null} />
+      <Breadcrumbs items={[{ label: "首页", href: "/" }, { label: "阅读设置" }]} />
+      {content}
     </main>
   );
 }

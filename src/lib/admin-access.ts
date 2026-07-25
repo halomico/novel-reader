@@ -1,9 +1,5 @@
 ﻿import { BlockList, isIP } from "node:net";
-import {
-  getAdminAllowedIps,
-  getAdminBlockedIps,
-  isAdminEnabled,
-} from "./config";
+import { isAdminEnabled } from "./config";
 
 export type AdminAccessState = {
   allowed: boolean;
@@ -100,15 +96,11 @@ export function matchesIpRule(ip: string, rule: string): boolean {
   return matchesExactIp(ip, normalizedRule);
 }
 
-function matchesAny(ip: string, rules: string[]): boolean {
-  return rules.some((rule) => matchesIpRule(ip, rule));
-}
-
 export function getClientIp(headers: Headers): string {
   const clientIp =
+    headers.get("cf-connecting-ip")?.trim() ||
     headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     headers.get("x-real-ip")?.trim() ||
-    headers.get("cf-connecting-ip")?.trim() ||
     "unknown";
   return clientIp === "unknown" ? clientIp : normalizeIpLiteral(clientIp);
 }
@@ -117,17 +109,6 @@ export function getAdminAccessState(headers: Headers): AdminAccessState {
   const clientIp = getClientIp(headers);
   if (!isAdminEnabled()) {
     return { allowed: false, clientIp, reason: "后台管理未启用" };
-  }
-
-  const blockedIps = getAdminBlockedIps();
-  const allowedIps = getAdminAllowedIps();
-
-  if (matchesAny(clientIp, blockedIps)) {
-    return { allowed: false, clientIp, reason: "当前 IP 已被黑名单拦截" };
-  }
-
-  if (allowedIps.length > 0 && !matchesAny(clientIp, allowedIps)) {
-    return { allowed: false, clientIp, reason: "当前 IP 不在后台白名单内" };
   }
 
   return { allowed: true, clientIp };

@@ -8,7 +8,6 @@ import {
   recordSearchQuery,
   resolveSearchQueryEventKey,
 } from "@/lib/analytics";
-import { getAdminSession } from "@/lib/admin-auth";
 import { canAccessNovelLibrary, getSearchResultsPageSize, shouldShowProgressBars } from "@/lib/config";
 import { validateSearchKeyword } from "@/lib/search";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
@@ -28,8 +27,8 @@ type SearchPageProps = {
 };
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
-  const [user, adminSession] = await Promise.all([getCurrentUser(), getAdminSession()]);
-  if (!adminSession && !canAccessNovelLibrary(Boolean(user))) {
+  const user = await getCurrentUser();
+  if (!canAccessNovelLibrary(Boolean(user))) {
     notFound();
   }
   const params = await searchParams;

@@ -8,7 +8,6 @@ import { ContentSearchClient } from "@/components/ContentSearchClient";
 import { Pagination } from "@/components/Pagination";
 import { SiteHeader } from "@/components/SiteHeader";
 import { TagIntersectionSearchForm, type AdvancedTagGroup } from "@/components/TagIntersectionSearchForm";
-import { getAdminSession } from "@/lib/admin-auth";
 import { recordSearchQuery, resolveSearchQueryEventKey } from "@/lib/analytics";
 import {
   canAccessAdvancedTagSearch,
@@ -20,6 +19,7 @@ import { validateSearchKeyword } from "@/lib/search";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { listNovelsByTagIntersection, listTagGroups, listTagsForNovels } from "@/lib/tags";
 import { getCurrentUser } from "@/lib/user-auth";
+import { hasUserPermission } from "@/lib/user-levels";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "高级搜索", robots: NO_INDEX_ROBOTS };
@@ -37,10 +37,13 @@ type AdvancedTagSearchPageProps = {
 
 export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTagSearchPageProps) {
   const params = await searchParams;
-  const [user, adminSession] = await Promise.all([getCurrentUser(), getAdminSession()]);
-  if (!adminSession && !canAccessAdvancedTagSearch(Boolean(user))) notFound();
+  const user = await getCurrentUser();
+  const canUseAdvancedSearch = canAccessAdvancedTagSearch(false) ||
+    (canAccessAdvancedTagSearch(Boolean(user)) && hasUserPermission(user, "advanced_search"));
+  if (!canUseAdvancedSearch) notFound();
 
-  const sourceGroups = listTagGroups();
+  const audience = user?.role === "admin" ? "admin" : user ? "member" : "public";
+  const sourceGroups = listTagGroups({ audience });
   const groups: AdvancedTagGroup[] = sourceGroups.flatMap((group) => {
     const tags = group.tags.length ? group.tags : group.group ? [group.group] : [];
     return tags.length
@@ -66,9 +69,10 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
         page,
         pageSize: getCatalogPageSize(),
         q: titleQuery,
+        audience,
       })
     : null;
-  const tagsByNovel = result ? listTagsForNovels(result.books.map((book) => book.id)) : new Map();
+  const tagsByNovel = result ? listTagsForNovels(result.books.map((book) => book.id), { audience }) : new Map();
   const returnParams = new URLSearchParams();
   if (selectedSlugs.length) returnParams.set("tags", selectedSlugs.join(","));
   if (excludedSlugs.length) returnParams.set("exclude", excludedSlugs.join(","));

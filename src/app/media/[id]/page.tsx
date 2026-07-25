@@ -98,7 +98,7 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
       }));
   const relatedSettings = getRelatedVideoSettings();
   const thumbnailSettings = getVideoThumbnailSettings();
-  const posterVersion = `${asset.mtimeMs}-${thumbnailSettings.mode}-${thumbnailSettings.singlePercent}-${thumbnailSettings.carouselFrames}`;
+  const posterVersion = `${asset.mtimeMs}-single-${thumbnailSettings.singlePercent}`;
   const relatedVideos = asset.kind === "video" ? listRelatedVideoAssets(asset.id, relatedSettings.count, relatedSettings.mode) : [];
   scheduleMediaPreparation([asset, ...relatedVideos]);
 

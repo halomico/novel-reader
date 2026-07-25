@@ -1,37 +1,551 @@
-import { getClientIp } from "./admin-access";
-import { getContentRateLimitRules, shouldBlockHeadlessBrowsers } from "./config";
-import { checkIpRateLimit } from "./ip-rate-limit";
+import { isIP } from "node:net";
+import { getClientIp, matchesIpRule } from "./admin-access";
+import { getContentRateLimitRules } from "./config";
+import { getDb } from "./db";
+import { checkRateLimit, clearRateLimitBucketsByPrefix } from "./rate-limit";
 
-const HEADLESS_UA_PATTERN = /HeadlessChrome|Playwright|Puppeteer|PhantomJS|Selenium|Cypress|python-requests|Scrapy|curl|wget/i;
+export type ContentAccessScope = "all" | "novel" | "media";
+export type ContentAccessAudience = "all" | "guest";
+export type ContentAccessTargetType = "ip" | "cidr" | "country";
+export type ContentAccessRuleSource = "manual" | "rate_limit";
+
+export type ContentAccessRule = {
+  id: number;
+  targetType: ContentAccessTargetType;
+  targetValue: string;
+  scope: ContentAccessScope;
+  audience: ContentAccessAudience;
+  source: ContentAccessRuleSource;
+  reason: string;
+  expiresAt: number | null;
+  enabled: boolean;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ContentAccessPolicy = {
+  id: number;
+  name: string;
+  enabled: boolean;
+  scope: ContentAccessScope;
+  audience: ContentAccessAudience;
+  windowSeconds: number;
+  maxRequests: number;
+  blockSeconds: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ContentAccessResult =
+  | { allowed: true }
+  | {
+      allowed: false;
+      message: string;
+      retryAfterSeconds?: number;
+      status: 403 | 429;
+      ruleId: number;
+    };
 
 type HeaderReader = {
   get(name: string): string | null;
 };
 
-export type ContentAccessResult =
-  | { allowed: true }
-  | { allowed: false; message: string; retryAfterSeconds?: number; status: number };
+type ContentAccessRuleRow = {
+  id: number;
+  target_type: ContentAccessTargetType;
+  target_value: string;
+  scope: ContentAccessScope;
+  audience: ContentAccessAudience;
+  source: ContentAccessRuleSource;
+  reason: string;
+  expires_at: number | null;
+  enabled: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+};
 
-export function checkContentAccess(headers: HeaderReader): ContentAccessResult {
-  const userAgent = headers.get("user-agent") || "";
-  if (shouldBlockHeadlessBrowsers() && HEADLESS_UA_PATTERN.test(userAgent)) {
-    return { allowed: false, message: "当前客户端不能访问正文页面", status: 403 };
+type ContentAccessPolicyRow = {
+  id: number;
+  name: string;
+  enabled: number;
+  scope: ContentAccessScope;
+  audience: ContentAccessAudience;
+  window_seconds: number;
+  max_requests: number;
+  block_seconds: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type ContentAccessGlobal = typeof globalThis & {
+  contentAccessCache?: {
+    expiresAt: number;
+    rules: ContentAccessRule[];
+    policies: ContentAccessPolicy[];
+  };
+  contentAccessCleanupAt?: number;
+};
+
+const CACHE_MS = 2_000;
+const CLEANUP_INTERVAL_MS = 5 * 60_000;
+const LEGACY_POLICY_MIGRATION_KEY = "content_access_policy_v2_migrated";
+
+export class ContentAccessInputError extends Error {}
+
+function toRule(row: ContentAccessRuleRow): ContentAccessRule {
+  return {
+    id: row.id,
+    targetType: row.target_type,
+    targetValue: row.target_value,
+    scope: row.scope,
+    audience: row.audience,
+    source: row.source,
+    reason: row.reason,
+    expiresAt: row.expires_at,
+    enabled: row.enabled === 1,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toPolicy(row: ContentAccessPolicyRow): ContentAccessPolicy {
+  return {
+    id: row.id,
+    name: row.name,
+    enabled: row.enabled === 1,
+    scope: row.scope,
+    audience: row.audience,
+    windowSeconds: row.window_seconds,
+    maxRequests: row.max_requests,
+    blockSeconds: row.block_seconds,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function cleanInt(value: unknown, fallback: number, min: number, max: number): number {
+  const numeric = Number(value);
+  return Number.isFinite(numeric)
+    ? Math.min(Math.max(Math.floor(numeric), min), max)
+    : fallback;
+}
+
+function normalizeScope(value: unknown): ContentAccessScope {
+  return value === "novel" || value === "media" ? value : "all";
+}
+
+function normalizeAudience(value: unknown): ContentAccessAudience {
+  return value === "guest" ? "guest" : "all";
+}
+
+function normalizeTargetType(value: unknown): ContentAccessTargetType {
+  if (value === "cidr" || value === "country") {
+    return value;
+  }
+  return "ip";
+}
+
+function normalizeTargetValue(type: ContentAccessTargetType, value: unknown): string {
+  const text = String(value || "").trim();
+  if (type === "ip") {
+    if (!isIP(text)) {
+      throw new ContentAccessInputError("请输入有效的 IPv4 或 IPv6 地址");
+    }
+    return text.toLowerCase();
+  }
+  if (type === "cidr") {
+    const parts = text.split("/");
+    const family = isIP(parts[0] || "");
+    const prefix = Number(parts[1]);
+    const maximum = family === 4 ? 32 : 128;
+    if (parts.length !== 2 || !family || !Number.isInteger(prefix) || prefix < 0 || prefix > maximum) {
+      throw new ContentAccessInputError("请输入有效的 CIDR 网段");
+    }
+    return `${parts[0].toLowerCase()}/${prefix}`;
   }
 
-  const limit = checkIpRateLimit({
-    category: "content",
-    ip: getClientIp(headers as Headers),
-    rules: getContentRateLimitRules(),
-  });
+  const country = text.toUpperCase();
+  if (!/^(?:[A-Z]{2}|T1)$/.test(country)) {
+    throw new ContentAccessInputError("国家代码应为两位 ISO 代码，也可使用 XX 或 T1");
+  }
+  return country;
+}
 
-  if (!limit.allowed) {
+function clearContentAccessCache() {
+  delete (globalThis as ContentAccessGlobal).contentAccessCache;
+}
+
+function migrateLegacyPoliciesOnce() {
+  const db = getDb();
+  const migrated = db.prepare("SELECT 1 AS found FROM app_metadata WHERE key = ?").get(LEGACY_POLICY_MIGRATION_KEY);
+  if (migrated) {
+    return;
+  }
+
+  const existing = db.prepare("SELECT COUNT(*) AS count FROM content_access_policies").get() as { count: number };
+  if (existing.count === 0) {
+    const insert = db.prepare(
+      `INSERT INTO content_access_policies
+        (name, enabled, scope, audience, window_seconds, max_requests, block_seconds)
+       VALUES (?, ?, 'all', ?, ?, ?, ?)`,
+    );
+    for (const [index, rule] of getContentRateLimitRules().entries()) {
+      if (rule.queryType !== "all" || rule.scope === "user") {
+        continue;
+      }
+      const blockSeconds = rule.banMode === "temporary"
+        ? rule.banSeconds
+        : rule.banMode === "permanent"
+          ? 86_400
+          : Math.max(rule.windowSeconds, 60);
+      insert.run(
+        index === 0 ? "内容访问保护" : `内容访问保护 ${index + 1}`,
+        rule.enabled ? 1 : 0,
+        rule.scope === "guest" ? "guest" : "all",
+        rule.windowSeconds,
+        rule.maxRequests,
+        blockSeconds,
+      );
+    }
+  }
+  db.prepare(
+    `INSERT INTO app_metadata (key, value)
+     VALUES (?, '1')
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
+  ).run(LEGACY_POLICY_MIGRATION_KEY);
+}
+
+function cleanupExpiredRules(now: number) {
+  const state = globalThis as ContentAccessGlobal;
+  if ((state.contentAccessCleanupAt || 0) > now) {
+    return;
+  }
+  getDb().prepare("DELETE FROM content_access_rules WHERE expires_at IS NOT NULL AND expires_at <= ?").run(now);
+  state.contentAccessCleanupAt = now + CLEANUP_INTERVAL_MS;
+  clearContentAccessCache();
+}
+
+function readActiveAccessConfig(now: number) {
+  migrateLegacyPoliciesOnce();
+  cleanupExpiredRules(now);
+  const state = globalThis as ContentAccessGlobal;
+  if (state.contentAccessCache && state.contentAccessCache.expiresAt > now) {
+    return state.contentAccessCache;
+  }
+
+  const rules = (getDb()
+    .prepare(
+      `SELECT id, target_type, target_value, scope, audience, source, reason, expires_at,
+              enabled, created_by, created_at, updated_at
+       FROM content_access_rules
+       WHERE enabled = 1 AND (expires_at IS NULL OR expires_at > ?)
+       ORDER BY source ASC, id ASC`,
+    )
+    .all(now) as ContentAccessRuleRow[]).map(toRule);
+  const policies = (getDb()
+    .prepare(
+      `SELECT id, name, enabled, scope, audience, window_seconds, max_requests,
+              block_seconds, created_at, updated_at
+       FROM content_access_policies
+       WHERE enabled = 1
+       ORDER BY id ASC`,
+    )
+    .all() as ContentAccessPolicyRow[]).map(toPolicy);
+  const value = { rules, policies, expiresAt: now + CACHE_MS };
+  state.contentAccessCache = value;
+  return value;
+}
+
+export function getRequestCountry(headers: HeaderReader): string {
+  const value = (headers.get("cf-ipcountry") || "").trim().toUpperCase();
+  return /^(?:[A-Z]{2}|T1)$/.test(value) ? value : "unknown";
+}
+
+function scopeMatches(configured: ContentAccessScope, requested: Exclude<ContentAccessScope, "all">): boolean {
+  return configured === "all" || configured === requested;
+}
+
+function audienceMatches(configured: ContentAccessAudience, authenticated: boolean): boolean {
+  return configured === "all" || !authenticated;
+}
+
+function ruleMatches(
+  rule: ContentAccessRule,
+  context: {
+    ip: string;
+    country: string;
+    scope: Exclude<ContentAccessScope, "all">;
+    authenticated: boolean;
+  },
+): boolean {
+  if (!scopeMatches(rule.scope, context.scope) || !audienceMatches(rule.audience, context.authenticated)) {
+    return false;
+  }
+  if (rule.targetType === "country") {
+    return context.country === rule.targetValue;
+  }
+  if (!isIP(context.ip)) {
+    return false;
+  }
+  return rule.targetType === "ip"
+    ? context.ip.toLowerCase() === rule.targetValue.toLowerCase()
+    : matchesIpRule(context.ip, rule.targetValue);
+}
+
+function saveTemporaryRateLimitRule(params: {
+  ip: string;
+  scope: ContentAccessScope;
+  audience: ContentAccessAudience;
+  expiresAt: number;
+  policyName: string;
+}): ContentAccessRule {
+  const db = getDb();
+  const existing = db
+    .prepare(
+      `SELECT id, expires_at
+       FROM content_access_rules
+       WHERE target_type = 'ip' AND target_value = ? AND scope = ? AND audience = ?
+         AND source = 'rate_limit' AND enabled = 1
+       ORDER BY id DESC LIMIT 1`,
+    )
+    .get(params.ip.toLowerCase(), params.scope, params.audience) as { id: number; expires_at: number | null } | undefined;
+  let id: number;
+  if (existing) {
+    id = existing.id;
+    db.prepare(
+      `UPDATE content_access_rules
+       SET reason = ?, expires_at = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+    ).run(params.policyName, Math.max(existing.expires_at || 0, params.expiresAt), id);
+  } else {
+    const result = db.prepare(
+      `INSERT INTO content_access_rules
+        (target_type, target_value, scope, audience, source, reason, expires_at)
+       VALUES ('ip', ?, ?, ?, 'rate_limit', ?, ?)`,
+    ).run(params.ip.toLowerCase(), params.scope, params.audience, params.policyName, params.expiresAt);
+    id = Number(result.lastInsertRowid);
+  }
+  clearContentAccessCache();
+  return getContentAccessRule(id)!;
+}
+
+export function checkContentAccess(
+  headers: HeaderReader,
+  options: {
+    scope?: Exclude<ContentAccessScope, "all">;
+    authenticated?: boolean;
+    admin?: boolean;
+    rateLimit?: boolean;
+    now?: number;
+  } = {},
+): ContentAccessResult {
+  if (options.admin) {
+    return { allowed: true };
+  }
+
+  const now = options.now ?? Date.now();
+  const scope = options.scope || "novel";
+  const authenticated = Boolean(options.authenticated);
+  const ip = getClientIp(headers as Headers);
+  const country = getRequestCountry(headers);
+  const config = readActiveAccessConfig(now);
+  const context = { ip, country, scope, authenticated };
+  const blockedBy = config.rules.find((rule) => ruleMatches(rule, context));
+  if (blockedBy) {
+    if (blockedBy.source === "rate_limit") {
+      const retryAfterSeconds = blockedBy.expiresAt
+        ? Math.max(1, Math.ceil((blockedBy.expiresAt - now) / 1_000))
+        : undefined;
+      return {
+        allowed: false,
+        message: retryAfterSeconds ? `访问过于频繁，请 ${retryAfterSeconds} 秒后再试` : "访问过于频繁，请稍后再试",
+        retryAfterSeconds,
+        status: 429,
+        ruleId: blockedBy.id,
+      };
+    }
     return {
       allowed: false,
-      message: limit.permanent ? "当前 IP 已被永久禁止访问正文" : `正文访问太频繁，请 ${limit.retryAfterSeconds} 秒后再试`,
-      retryAfterSeconds: limit.retryAfterSeconds,
-      status: 429,
+      message: "当前网络暂不能访问该内容",
+      status: 403,
+      ruleId: blockedBy.id,
     };
   }
 
+  if (options.rateLimit === false || !isIP(ip)) {
+    return { allowed: true };
+  }
+  for (const policy of config.policies) {
+    if (!scopeMatches(policy.scope, scope) || !audienceMatches(policy.audience, authenticated)) {
+      continue;
+    }
+    const limit = checkRateLimit({
+      key: `content-access:${policy.id}:${ip}`,
+      limit: policy.maxRequests,
+      windowMs: policy.windowSeconds * 1_000,
+      now,
+    });
+    if (!limit.allowed) {
+      const rule = saveTemporaryRateLimitRule({
+        ip,
+        scope: policy.scope,
+        audience: policy.audience,
+        expiresAt: now + policy.blockSeconds * 1_000,
+        policyName: policy.name,
+      });
+      return {
+        allowed: false,
+        message: `访问过于频繁，请 ${policy.blockSeconds} 秒后再试`,
+        retryAfterSeconds: policy.blockSeconds,
+        status: 429,
+        ruleId: rule.id,
+      };
+    }
+  }
   return { allowed: true };
+}
+
+export function getContentAccessRule(id: number): ContentAccessRule | null {
+  const row = getDb()
+    .prepare(
+      `SELECT id, target_type, target_value, scope, audience, source, reason, expires_at,
+              enabled, created_by, created_at, updated_at
+       FROM content_access_rules WHERE id = ?`,
+    )
+    .get(id) as ContentAccessRuleRow | undefined;
+  return row ? toRule(row) : null;
+}
+
+export function listContentAccessRules(limit = 300): ContentAccessRule[] {
+  cleanupExpiredRules(Date.now());
+  const safeLimit = cleanInt(limit, 300, 1, 1_000);
+  return (getDb()
+    .prepare(
+      `SELECT id, target_type, target_value, scope, audience, source, reason, expires_at,
+              enabled, created_by, created_at, updated_at
+       FROM content_access_rules
+       ORDER BY enabled DESC, source ASC, expires_at IS NULL DESC, expires_at DESC, id DESC
+       LIMIT ?`,
+    )
+    .all(safeLimit) as ContentAccessRuleRow[]).map(toRule);
+}
+
+export function saveContentAccessRule(input: {
+  id?: number;
+  targetType: unknown;
+  targetValue: unknown;
+  scope?: unknown;
+  audience?: unknown;
+  reason?: unknown;
+  expiresAt?: number | null;
+  enabled?: boolean;
+  createdBy?: string;
+}): ContentAccessRule {
+  const id = cleanInt(input.id, 0, 0, Number.MAX_SAFE_INTEGER);
+  const targetType = normalizeTargetType(input.targetType);
+  const targetValue = normalizeTargetValue(targetType, input.targetValue);
+  const scope = normalizeScope(input.scope);
+  const audience = normalizeAudience(input.audience);
+  const reason = String(input.reason || "").trim().slice(0, 120);
+  const expiresAt = input.expiresAt && input.expiresAt > Date.now() ? Math.floor(input.expiresAt) : null;
+  const enabled = input.enabled === false ? 0 : 1;
+  const db = getDb();
+
+  if (id > 0) {
+    const result = db.prepare(
+      `UPDATE content_access_rules
+       SET target_type = ?, target_value = ?, scope = ?, audience = ?, reason = ?,
+           expires_at = ?, enabled = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND source = 'manual'`,
+    ).run(targetType, targetValue, scope, audience, reason, expiresAt, enabled, id);
+    if (!result.changes) {
+      throw new ContentAccessInputError("访问规则不存在或不可编辑");
+    }
+  } else {
+    const result = db.prepare(
+      `INSERT INTO content_access_rules
+        (target_type, target_value, scope, audience, source, reason, expires_at, enabled, created_by)
+       VALUES (?, ?, ?, ?, 'manual', ?, ?, ?, ?)`,
+    ).run(targetType, targetValue, scope, audience, reason, expiresAt, enabled, String(input.createdBy || "").slice(0, 64));
+    clearContentAccessCache();
+    return getContentAccessRule(Number(result.lastInsertRowid))!;
+  }
+
+  clearContentAccessCache();
+  return getContentAccessRule(id)!;
+}
+
+export function deleteContentAccessRule(id: number): boolean {
+  const deleted = getDb().prepare("DELETE FROM content_access_rules WHERE id = ?").run(id).changes > 0;
+  if (deleted) {
+    clearContentAccessCache();
+  }
+  return deleted;
+}
+
+export function listContentAccessPolicies(): ContentAccessPolicy[] {
+  migrateLegacyPoliciesOnce();
+  return (getDb()
+    .prepare(
+      `SELECT id, name, enabled, scope, audience, window_seconds, max_requests,
+              block_seconds, created_at, updated_at
+       FROM content_access_policies
+       ORDER BY id ASC`,
+    )
+    .all() as ContentAccessPolicyRow[]).map(toPolicy);
+}
+
+export function saveContentAccessPolicy(input: {
+  id?: number;
+  name?: unknown;
+  enabled?: boolean;
+  scope?: unknown;
+  audience?: unknown;
+  windowSeconds?: unknown;
+  maxRequests?: unknown;
+  blockSeconds?: unknown;
+}): ContentAccessPolicy {
+  const id = cleanInt(input.id, 0, 0, Number.MAX_SAFE_INTEGER);
+  const name = String(input.name || "内容访问保护").trim().slice(0, 40) || "内容访问保护";
+  const enabled = input.enabled === false ? 0 : 1;
+  const scope = normalizeScope(input.scope);
+  const audience = normalizeAudience(input.audience);
+  const windowSeconds = cleanInt(input.windowSeconds, 60, 1, 86_400);
+  const maxRequests = cleanInt(input.maxRequests, 60, 1, 100_000);
+  const blockSeconds = cleanInt(input.blockSeconds, 300, 60, 31_536_000);
+  const db = getDb();
+  if (id > 0) {
+    const result = db.prepare(
+      `UPDATE content_access_policies
+       SET name = ?, enabled = ?, scope = ?, audience = ?, window_seconds = ?,
+           max_requests = ?, block_seconds = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+    ).run(name, enabled, scope, audience, windowSeconds, maxRequests, blockSeconds, id);
+    if (!result.changes) {
+      throw new ContentAccessInputError("访问频率规则不存在");
+    }
+  } else {
+    const result = db.prepare(
+      `INSERT INTO content_access_policies
+        (name, enabled, scope, audience, window_seconds, max_requests, block_seconds)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(name, enabled, scope, audience, windowSeconds, maxRequests, blockSeconds);
+    clearContentAccessCache();
+    return listContentAccessPolicies().find((policy) => policy.id === Number(result.lastInsertRowid))!;
+  }
+  clearRateLimitBucketsByPrefix(`content-access:${id}:`);
+  clearContentAccessCache();
+  return listContentAccessPolicies().find((policy) => policy.id === id)!;
+}
+
+export function deleteContentAccessPolicy(id: number): boolean {
+  const deleted = getDb().prepare("DELETE FROM content_access_policies WHERE id = ?").run(id).changes > 0;
+  if (deleted) {
+    clearRateLimitBucketsByPrefix(`content-access:${id}:`);
+    clearContentAccessCache();
+  }
+  return deleted;
 }

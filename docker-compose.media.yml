@@ -1,0 +1,27 @@
+services:
+  media:
+    image: ${NOVEL_READER_IMAGE:-ghcr.io/halomico/novel-reader}:${NOVEL_READER_IMAGE_TAG:-latest}
+    container_name: novel-reader-media
+    restart: unless-stopped
+    init: true
+    command: ["node", "maintenance/media-node.js"]
+    environment:
+      NODE_ENV: production
+      MEDIA_NODE_DIR: /app/data/media
+      MEDIA_NODE_PORT: 3100
+      MEDIA_SIGNING_SECRET: ${MEDIA_SIGNING_SECRET}
+    ports:
+      - "127.0.0.1:${MEDIA_NODE_PORT:-3100}:3100"
+    volumes:
+      - ./data/media:/app/data/media:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

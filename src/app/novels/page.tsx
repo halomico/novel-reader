@@ -13,7 +13,6 @@ import {
   resolveSearchQueryEventKey,
   updateSearchQueryResults,
 } from "@/lib/analytics";
-import { getAdminSession } from "@/lib/admin-auth";
 import { listNovels } from "@/lib/books";
 import {
   canAccessNovelLibrary,
@@ -70,9 +69,9 @@ export async function generateMetadata({ searchParams }: NovelsPageProps): Promi
 
 export default async function NovelsPage({ searchParams }: NovelsPageProps) {
   const params = await searchParams;
-  const [user, adminSession] = await Promise.all([getCurrentUser(), getAdminSession()]);
-  const authenticated = Boolean(user || adminSession);
-  if (!adminSession && !canAccessNovelLibrary(Boolean(user))) {
+  const user = await getCurrentUser();
+  const authenticated = Boolean(user);
+  if (!canAccessNovelLibrary(authenticated)) {
     notFound();
   }
   const page = Number(params.page || "1");
@@ -95,7 +94,10 @@ export default async function NovelsPage({ searchParams }: NovelsPageProps) {
     updateSearchQueryResults(searchEventKey, result.totalBooks, result.totalBooks);
   }
   const showTags = isTagLibraryEnabled() && (authenticated || isGuestTagLibraryNavEnabled());
-  const tagsByNovel = showTags ? listTagsForNovels(result.books.map((book) => book.id)) : new Map();
+  const tagAudience = user?.role === "admin" ? "admin" : user ? "member" : "public";
+  const tagsByNovel = showTags
+    ? listTagsForNovels(result.books.map((book) => book.id), { audience: tagAudience })
+    : new Map();
   const returnParams = new URLSearchParams();
   returnParams.set("page", String(result.page));
   if (result.query) {

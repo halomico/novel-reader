@@ -1,13 +1,12 @@
-import { LockKeyhole } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { SiteHeader } from "@/components/SiteHeader";
 import { loginAdminAction } from "../actions";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession, isAdminSecurityConfigured } from "@/lib/admin-auth";
-import { getNoticeDisplaySeconds, getSiteName } from "@/lib/config";
+import { getNoticeDisplaySeconds } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -37,24 +36,16 @@ export default async function AdminLoginPage({ searchParams }: AdminLoginPagePro
   }
 
   const params = await searchParams;
-  const siteName = getSiteName();
   const configured = isAdminSecurityConfigured();
   const error = params.error || "";
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
 
   return (
-    <main className="adminLoginShell">
-      <section className="adminLoginPanel">
-        <Breadcrumbs className="adminBreadcrumbs" items={[{ label: "后台登录" }]} />
-        <div className="adminLoginBrand">
-          <span className="adminLogo" aria-hidden="true">
-            <LockKeyhole size={24} />
-          </span>
-          <div>
-            <p>{siteName}</p>
-            <h1>后台管理</h1>
-          </div>
-        </div>
+    <main className="appShell adminLoginShell">
+      <SiteHeader currentUser={null} showPrimaryNavigation={false} authMode />
+      <section className="authPage">
+        <div className="userPanel authPanel adminLoginPanel">
+          <div className="userPanelHeader"><div><h1>后台登录</h1></div></div>
 
         {!configured ? (
           <DismissibleNotice
@@ -86,6 +77,7 @@ export default async function AdminLoginPage({ searchParams }: AdminLoginPagePro
             登录
           </button>
         </form>
+        </div>
       </section>
     </main>
   );

@@ -6,7 +6,6 @@ import {
   getFrontendSearchConcurrencyLimit,
   shouldShowProgressBars,
 } from "@/lib/config";
-import { getAdminSession } from "@/lib/admin-auth";
 import {
   cancelContentJob,
   countActiveContentJobs,
@@ -17,6 +16,8 @@ import {
 import { validateSearchKeyword } from "@/lib/search";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 import { listNovelIdsByTagFilters, listVisibleTagsBySlugs } from "@/lib/tags";
+import { checkContentAccess } from "@/lib/content-access";
+import { hasUserPermission } from "@/lib/user-levels";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -25,10 +26,19 @@ function jsonError(message: string, status: number) {
   return NextResponse.json({ ok: false, message }, { status });
 }
 
-async function getSearchAccess(request: NextRequest) {
+async function getSearchAccess(request: NextRequest, rateLimit = false) {
   const user = getCurrentUserFromRequest(request);
-  const adminSession = await getAdminSession(user);
-  return { user, adminSession, allowed: Boolean(adminSession) || canAccessNovelLibrary(Boolean(user)) };
+  const contentAccess = checkContentAccess(request.headers, {
+    scope: "novel",
+    authenticated: Boolean(user),
+    admin: user?.role === "admin",
+    rateLimit,
+  });
+  return {
+    user,
+    contentAccess,
+    allowed: canAccessNovelLibrary(Boolean(user)) && contentAccess.allowed,
+  };
 }
 
 function cleanSlugList(value: unknown): string[] {
@@ -49,29 +59,34 @@ export async function POST(request: NextRequest) {
     return jsonError(validation.message, 400);
   }
 
-  const { user, adminSession, allowed } = await getSearchAccess(request);
+  const { user, allowed, contentAccess } = await getSearchAccess(request, true);
   if (!allowed) {
-    return jsonError("搜索不可用", 404);
+    return contentAccess.allowed
+      ? jsonError("搜索不可用", 404)
+      : jsonError(contentAccess.message, contentAccess.status);
   }
   let candidateNovelIds: number[] | undefined;
   let cacheScope = "";
   if (body.filters && typeof body.filters === "object") {
-    if (!adminSession && !canAccessAdvancedTagSearch(Boolean(user))) {
+    const canUseAdvancedSearch = canAccessAdvancedTagSearch(false) ||
+      (canAccessAdvancedTagSearch(Boolean(user)) && hasUserPermission(user, "advanced_search"));
+    if (!canUseAdvancedSearch) {
       return jsonError("高级搜索不可用", 404);
     }
     const filters = body.filters as Record<string, unknown>;
+    const audience = user?.role === "admin" ? "admin" : user ? "member" : "public";
     const includedSlugs = cleanSlugList(filters.includeTags);
-    const includedTags = listVisibleTagsBySlugs(includedSlugs);
+    const includedTags = listVisibleTagsBySlugs(includedSlugs, { audience });
     if (includedTags.length !== includedSlugs.length) {
       return jsonError("包含标签无效", 400);
     }
     const includedIds = includedTags.map((tag) => tag.id);
-    const excludedIds = listVisibleTagsBySlugs(cleanSlugList(filters.excludeTags))
+    const excludedIds = listVisibleTagsBySlugs(cleanSlugList(filters.excludeTags), { audience })
       .map((tag) => tag.id)
       .filter((id) => !includedIds.includes(id));
     const titleQuery = String(filters.titleQuery || "").normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, 80);
     if (includedIds.length || excludedIds.length || titleQuery) {
-      candidateNovelIds = listNovelIdsByTagFilters(includedIds, { excludeTagIds: excludedIds, q: titleQuery });
+      candidateNovelIds = listNovelIdsByTagFilters(includedIds, { excludeTagIds: excludedIds, q: titleQuery, audience });
       cacheScope = `advanced:${crypto.createHash("sha256").update(candidateNovelIds.join(",")).digest("base64url").slice(0, 20)}`;
     }
   }
@@ -90,7 +105,7 @@ export async function GET(request: NextRequest) {
     return jsonError("搜索不可用", 404);
   }
   const id = request.nextUrl.searchParams.get("id") || "";
-  const job = getContentJob(id);
+  const job = getContentJob(id, request.nextUrl.searchParams.get("results") === "1");
   if (!job || job.kind !== "search") {
     return jsonError("搜索任务不存在或已过期", 404);
   }

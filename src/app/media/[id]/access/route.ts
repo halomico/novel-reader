@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { recordAnalyticsEvent } from "@/lib/analytics";
+import { checkContentAccess } from "@/lib/content-access";
 import { getMediaAsset, isMediaKindAccessible } from "@/lib/media";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 import { recordMediaHistory } from "@/lib/users";
@@ -10,6 +11,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const user = getCurrentUserFromRequest(request);
   const asset = getMediaAsset(Number((await params).id));
   if (!asset || !isMediaKindAccessible(asset.kind, Boolean(user))) {
+    return new Response(null, { status: 404 });
+  }
+  const access = checkContentAccess(request.headers, {
+    scope: "media",
+    authenticated: Boolean(user),
+    admin: user?.role === "admin",
+    rateLimit: false,
+  });
+  if (!access.allowed) {
     return new Response(null, { status: 404 });
   }
   recordAnalyticsEvent({

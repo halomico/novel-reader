@@ -1,10 +1,9 @@
-import { UserPlus } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
 import { HumanVerificationField } from "@/components/HumanVerificationField";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SiteHeader } from "@/components/SiteHeader";
 import {
   getNoticeDisplaySeconds,
@@ -40,7 +39,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
 
   return (
     <main className="appShell">
-      <SiteHeader currentUser={null} />
+      <SiteHeader currentUser={null} showPrimaryNavigation={false} authMode />
       <Breadcrumbs items={[{ label: "首页", href: "/" }, { label: "注册" }]} />
       {params.notice ? (
         <DismissibleNotice
@@ -52,13 +51,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
       ) : null}
       <section className="authPage">
         <form className="userPanel authPanel" action={registerUserAction}>
-          <div className="userPanelHeader">
-            <UserPlus size={20} aria-hidden="true" />
-            <div>
-              <h1>注册账号</h1>
-              <p>用户名支持英文、数字、下划线和短横线。</p>
-            </div>
-          </div>
+          <div className="userPanelHeader"><div><h1>注册</h1></div></div>
           <label>
             <span>用户名</span>
             <input name="username" autoComplete="username" minLength={3} maxLength={32} disabled={!registrationEnabled} required />

@@ -1,6 +1,8 @@
-import { ChevronDown, Search, UserPlus, Users } from "lucide-react";
+import { ChevronDown, Search, ShieldCheck, UserPlus, Users } from "lucide-react";
 import type { Metadata } from "next";
 import Form from "next/form";
+import Link from "next/link";
+import { AdminSelect } from "@/components/AdminSelect";
 import { Pagination } from "@/components/Pagination";
 import { AdminUserTable } from "@/components/AdminUserTable";
 import { listUsers } from "@/lib/users";
@@ -45,11 +47,17 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
             <h2>用户管理</h2>
             <p>管理前台用户、头像资料、登录状态和权限组。</p>
           </div>
-          <Form className="adminTitleSearchForm" action="/admin/users">
-            <Search size={17} aria-hidden="true" />
-            <input name="q" defaultValue={userList.query} placeholder="搜索用户名、昵称或 IP" />
-            <button type="submit">搜索</button>
-          </Form>
+          <div className="adminUserHeaderActions">
+            <Link className="adminIconTextButton" href="/admin/users/levels">
+              <ShieldCheck size={16} aria-hidden="true" />
+              等级权限
+            </Link>
+            <Form className="adminTitleSearchForm" action="/admin/users">
+              <Search size={17} aria-hidden="true" />
+              <input name="q" defaultValue={userList.query} placeholder="搜索用户名、昵称或 IP" />
+              <button type="submit">搜索</button>
+            </Form>
+          </div>
         </div>
 
         <details className="adminCreateUserPanel">
@@ -73,17 +81,25 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
             </label>
             <label>
               <span>初始状态</span>
-              <select name="status" defaultValue="active">
+              <AdminSelect name="status" defaultValue="active">
                 <option value="active">启用</option>
                 <option value="disabled">停用</option>
-              </select>
+              </AdminSelect>
             </label>
             <label>
               <span>权限组</span>
-              <select name="role" defaultValue="user">
+              <AdminSelect name="role" defaultValue="user">
                 <option value="user">普通用户</option>
-                <option value="admin">管理员</option>
-              </select>
+                <option value="admin">前台管理员</option>
+              </AdminSelect>
+            </label>
+            <label>
+              <span>等级</span>
+              <input name="trustLevel" type="number" min="1" max="7" defaultValue="1" />
+            </label>
+            <label>
+              <span>苏打</span>
+              <input name="sodaBalance" type="number" min="0" max="1000000000" defaultValue="0" />
             </label>
             <button type="submit"><UserPlus size={15} aria-hidden="true" />创建用户</button>
           </form>

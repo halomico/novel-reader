@@ -29,7 +29,7 @@ export function TagTrackedLink({
   children: ReactNode;
 }) {
   return (
-    <Link className={className} href={`/tags/${slug}`} title={title} onClick={() => recordTagClick(slug)}>
+    <Link className={className} href={`/tags/${slug}`} title={title} prefetch={false} onClick={() => recordTagClick(slug)}>
       {children}
     </Link>
   );

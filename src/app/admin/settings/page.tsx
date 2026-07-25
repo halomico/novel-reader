@@ -1,10 +1,9 @@
 ﻿import { Settings } from "lucide-react";
 import type { Metadata } from "next";
-import { BookOpen, Clapperboard, File, Globe2, Headphones, ListFilter, Search, Tags, Trash2, Upload } from "lucide-react";
+import { BookOpen, Clapperboard, File, Globe2, Headphones, ListFilter, Megaphone, Search, Tags, Trash2, Upload } from "lucide-react";
 import { AdminPaletteField } from "@/components/AdminPaletteField";
 import { AdminSelect } from "@/components/AdminSelect";
-import { RateLimitBanTable } from "@/components/RateLimitBanTable";
-import { RateLimitRulesEditor } from "@/components/RateLimitRulesEditor";
+import { HomeCardOrderField } from "@/components/HomeCardOrderField";
 import { getAdminBookStats } from "@/lib/admin-books";
 import {
   getAdminBookPageSize,
@@ -12,7 +11,6 @@ import {
   getAdminUsername,
   getAnalyticsRealtimeLimit,
   getCatalogPageSize,
-  getContentRateLimitRules,
   getFrontendSearchConcurrencyLimit,
   getGlobalSearchMaxResults,
   getNoticeDisplaySeconds,
@@ -23,11 +21,9 @@ import {
   getUserAvatarMaxBytes,
   getSiteName,
   getSiteTitle,
-  shouldBlockHeadlessBrowsers,
 } from "@/lib/config";
 import { readSiteSettings } from "@/lib/site-settings";
 import { normalizeReaderLineHeight, READER_LINE_HEIGHTS } from "@/lib/ui-preferences";
-import { listIpRateLimitBans } from "@/lib/ip-rate-limit";
 import {
   cancelFrontendSearchJobsAction,
   deleteSiteIconAction,
@@ -71,14 +67,11 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
   const readerDefaultFontSize = settings.readerDefaultFontSize || getReaderDefaultFontSize();
   const readerDefaultLineHeight = normalizeReaderLineHeight(settings.readerDefaultLineHeight);
   const globalSearchMaxResults = settings.globalSearchMaxResults || getGlobalSearchMaxResults();
-  const contentRateLimitRules = getContentRateLimitRules();
-  const contentRateLimitBans = listIpRateLimitBans("content", 500);
   const userDailyRegistrationLimit = settings.userDailyRegistrationLimitPerIp || getUserDailyRegistrationLimitPerIp();
   const userDailyReportLimit = settings.userDailyReportLimit || getUserDailyReportLimit();
   const userAvatarMaxMb = ((settings.userAvatarMaxBytes || getUserAvatarMaxBytes()) / 1024 ** 2).toFixed(1);
   const analyticsRealtimeLimit = settings.analyticsRealtimeLimit || getAnalyticsRealtimeLimit();
   const frontendSearchConcurrencyLimit = settings.frontendSearchConcurrencyLimit || getFrontendSearchConcurrencyLimit();
-  const contentBlockHeadlessBrowsers = shouldBlockHeadlessBrowsers();
 
   return (
     <AdminFrame active="settings" notice={params.notice} tone={params.tone}>
@@ -86,7 +79,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
         <div className="adminPanelHeader">
           <div>
             <h2>系统设置</h2>
-            <p>站点展示、登录安全、搜索行为和 IP 规则会写入后台设置文件。</p>
+            <p>管理站点展示、账户入口、内容开放范围与搜索行为。</p>
           </div>
           <Settings size={20} aria-hidden="true" />
         </div>
@@ -229,13 +222,6 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               </span>
               <input name="adminLoginRateLimitEnabled" type="checkbox" defaultChecked={settings.adminLoginRateLimitEnabled} />
             </label>
-            <label className="adminSwitchLabel">
-              <span>
-                <strong>登录超限自动加入黑名单</strong>
-                <small>关闭后只返回限速提示，不写入黑名单。</small>
-              </span>
-              <input name="adminLoginRateLimitBanEnabled" type="checkbox" defaultChecked={settings.adminLoginRateLimitBanEnabled} />
-            </label>
           </details>
 
           <details className="adminSettingsSection adminSettingsDisclosure">
@@ -314,19 +300,15 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
           </details>
 
           <details className="adminSettingsSection adminSettingsDisclosure">
-            <summary>应用级访问保护</summary>
-            <div className="rateLimitPolicyStack">
-              <RateLimitRulesEditor
-                fieldName="contentRateLimitRules"
-                title="正文 IP 限速"
-                initialRules={contentRateLimitRules}
-                defaultMaxRequests={60}
-              />
-            </div>
+            <summary>账户与内容访问</summary>
             <div className="adminFieldGrid">
               <label>
                 <span>用户头像上限 / MB</span>
                 <input name="userAvatarMaxMb" type="number" min="0.1" max="10" step="0.1" defaultValue={userAvatarMaxMb} />
+              </label>
+              <label>
+                <span>站务显示名称</span>
+                <input name="stationDisplayName" maxLength={20} defaultValue={settings.stationDisplayName} />
               </label>
             </div>
             <div className="adminFieldGrid">
@@ -404,6 +386,17 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                   </AdminSelect>
                 </label>
                 <label className="adminAccessModeRow">
+                  <span><Megaphone size={16} aria-hidden="true" /><strong>公告卡片</strong></span>
+                  <AdminSelect
+                    name="announcementCardAccessMode"
+                    defaultValue={mediaAccessMode(settings.announcementCardEnabled, settings.guestAnnouncementCardEnabled)}
+                  >
+                    <option value="off">关闭</option>
+                    <option value="public">公开访问</option>
+                    <option value="user">登录可用</option>
+                  </AdminSelect>
+                </label>
+                <label className="adminAccessModeRow">
                   <span><ListFilter size={16} aria-hidden="true" /><strong>高级搜索</strong></span>
                   <AdminSelect name="advancedTagAccessMode" defaultValue={mediaAccessMode(settings.advancedTagSearchEnabled, settings.guestAdvancedTagSearchEnabled)}>
                     <option value="off">关闭</option>
@@ -420,6 +413,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                   </AdminSelect>
                 </label>
               </div>
+              <HomeCardOrderField initialOrder={settings.homePortalOrder} />
             </div>
             <div className="adminFieldGrid">
               <label>
@@ -427,13 +421,6 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 <input name="analyticsRealtimeLimit" type="number" min="30" max="2000" defaultValue={analyticsRealtimeLimit} />
               </label>
             </div>
-            <label className="adminSwitchLabel">
-              <span>
-                <strong>拦截无头浏览器访问正文</strong>
-                <small>用于降低脚本化访问正文页面的压力。</small>
-              </span>
-              <input name="contentBlockHeadlessBrowsers" type="checkbox" defaultChecked={contentBlockHeadlessBrowsers} />
-            </label>
           </details>
 
           <details className="adminSettingsSection adminSettingsDisclosure">
@@ -463,27 +450,8 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
             </div>
           </details>
 
-          <details className="adminSettingsSection adminSettingsDisclosure">
-            <summary>IP 规则</summary>
-            <label>
-              <span>入站 IP 白名单</span>
-              <textarea name="adminAllowedIps" rows={3} defaultValue={settings.adminAllowedIps} placeholder="留空表示不限制，可用英文逗号或换行分隔" />
-            </label>
-            <label>
-              <span>入站 IP 黑名单</span>
-              <textarea name="adminBlockedIps" rows={3} defaultValue={settings.adminBlockedIps} />
-            </label>
-          </details>
-
           <button type="submit">保存设置</button>
         </form>
-
-        <details className="adminSettingsSection adminSettingsDisclosure rateLimitBanSection">
-          <summary>IP 封禁记录</summary>
-          <div className="rateLimitBanTables">
-            <RateLimitBanTable title="正文封禁" bans={contentRateLimitBans} />
-          </div>
-        </details>
 
         <div className="adminPaths">
           <p>

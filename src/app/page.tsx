@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
-import { BookOpenText, ChevronRight, Clapperboard, File, Headphones, Tags, type LucideIcon } from "lucide-react";
+import { Bell, BookOpenText, ChevronRight, Clapperboard, File, Headphones, Tags, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CatalogRandomCard } from "@/components/CatalogRandomButton";
 import { SiteHeader } from "@/components/SiteHeader";
 import {
+  canAccessHomeAnnouncementCard,
+  getHomePortalOrder,
   getSiteTitle,
   isGuestLibraryNavEnabled,
   isGuestTagLibraryNavEnabled,
@@ -12,8 +14,10 @@ import {
   isNovelLibraryEnabled,
   isTagLibraryEnabled,
 } from "@/lib/config";
+import type { HomePortalCardKey } from "@/lib/home-portal";
 import { getAccessibleMediaKinds, type MediaKind } from "@/lib/media";
 import { getCurrentUser } from "@/lib/user-auth";
+import { getHomeAnnouncement } from "@/lib/station";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +32,7 @@ type HomeProps = {
 type PortalCard = {
   href: string;
   label: string;
-  kind: "novels" | "tags" | MediaKind;
+  kind: Exclude<HomePortalCardKey, "random">;
   icon: LucideIcon;
 };
 
@@ -65,24 +69,41 @@ export default async function Home({ searchParams }: HomeProps) {
 
   const user = await getCurrentUser();
   const authenticated = Boolean(user);
+  const announcement = canAccessHomeAnnouncementCard(authenticated)
+    ? getHomeAnnouncement(authenticated)
+    : null;
   const showNovels = isNovelLibraryEnabled() && (authenticated || isGuestLibraryNavEnabled());
-  const cards: PortalCard[] = [];
+  const cards = new Map<Exclude<HomePortalCardKey, "random">, PortalCard>();
 
+  if (announcement) {
+    cards.set("announcement", {
+      href: "/announcements",
+      label: "公告",
+      kind: "announcement",
+      icon: Bell,
+    });
+  }
   if (showNovels) {
-    cards.push({ href: "/novels", label: "小说", kind: "novels", icon: BookOpenText });
+    cards.set("novels", { href: "/novels", label: "小说", kind: "novels", icon: BookOpenText });
   }
   if (isTagLibraryEnabled() && (authenticated || isGuestTagLibraryNavEnabled())) {
-    cards.push({ href: "/tags", label: "标签", kind: "tags", icon: Tags });
+    cards.set("tags", { href: "/tags", label: "标签", kind: "tags", icon: Tags });
   }
   for (const kind of getAccessibleMediaKinds(authenticated)) {
-    cards.push({ ...MEDIA_CARDS[kind], kind });
+    cards.set(kind, { ...MEDIA_CARDS[kind], kind });
   }
+  const homePortalOrder = getHomePortalOrder();
 
   return (
     <main className="appShell homePortalShell">
       <SiteHeader showPrimaryNavigation={false} showTools={false} isHomePage currentUser={user} />
       <section className="homePortalGrid" aria-label="内容导航">
-        {cards.map((card) => {
+        {homePortalOrder.map((key) => {
+          if (key === "random") {
+            return showNovels && isRandomCatalogEnabled() ? <CatalogRandomCard key={key} /> : null;
+          }
+          const card = cards.get(key);
+          if (!card) return null;
           const Icon = card.icon;
           return (
             <Link className={`homePortalCard is-${card.kind}`} href={card.href} key={card.kind}>
@@ -94,7 +115,6 @@ export default async function Home({ searchParams }: HomeProps) {
             </Link>
           );
         })}
-        {showNovels && isRandomCatalogEnabled() ? <CatalogRandomCard /> : null}
       </section>
     </main>
   );

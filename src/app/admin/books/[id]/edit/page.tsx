@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminNovelContentEditor } from "@/components/AdminNovelContentEditor";
 import { getNovelById } from "@/lib/books";
+import { getNovelRecommendationCount } from "@/lib/recommendations";
 import { listHotwordsForNovel, listTagGroups, listTagsForNovel, type TagGroup, type TagWithCount } from "@/lib/tags";
 import { saveNovelEditorAction } from "../../../actions";
 import { AdminFrame } from "../../../AdminFrame";
@@ -60,6 +61,7 @@ export default async function AdminBookEditPage({ params, searchParams }: AdminB
   const groups = listTagGroups({ includeHidden: true });
   const selectedTagIds = new Set(listTagsForNovel(book.id, { includeHidden: true }).map((tag) => tag.id));
   const hotwords = listHotwordsForNovel(book.id);
+  const recommendationCount = getNovelRecommendationCount(book.id);
   const returnPath = safeReturnPath(query.returnPath, book.id);
 
   return (
@@ -87,10 +89,22 @@ export default async function AdminBookEditPage({ params, searchParams }: AdminB
 
           <section className="adminBookEditorSection">
             <h3><PencilLine size={16} aria-hidden="true" />基本信息</h3>
-            <label>
-              <span>小说名称</span>
-              <input name="title" maxLength={120} defaultValue={book.title} required />
-            </label>
+            <div className="adminBookBasicFields">
+              <label>
+                <span>小说名称</span>
+                <input name="title" maxLength={120} defaultValue={book.title} required />
+              </label>
+              <label>
+                <span>苏打推荐</span>
+                <input
+                  name="recommendationCount"
+                  type="number"
+                  min="0"
+                  max="2000000000"
+                  defaultValue={recommendationCount}
+                />
+              </label>
+            </div>
           </section>
 
           <section className="adminBookEditorSection adminBookTagChooser">

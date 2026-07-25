@@ -21,6 +21,7 @@ RUN npm pkg set \
   scripts.scan:books="node maintenance/scan-books.js" \
   scripts.index:search="node maintenance/build-content-search-index.js" \
   scripts.optimize:media="node maintenance/optimize-media.js"
+RUN npm pkg set scripts.media:serve="node maintenance/media-node.js"
 
 FROM node:24-bookworm-slim AS runner
 WORKDIR /app

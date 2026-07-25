@@ -2,6 +2,11 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
+  DEFAULT_HOME_PORTAL_ORDER,
+  normalizeHomePortalOrder,
+  type HomePortalCardKey,
+} from "./home-portal";
+import {
   isColorPalette,
   normalizeReaderLineHeight,
   normalizeReaderTagsMode,
@@ -14,7 +19,6 @@ export type AdminTheme = "system" | "light" | "dark";
 export type BrandLinkTarget = "home" | "novels";
 export type CatalogPromotionOrder = "manual-first" | "random-first";
 export type SiteIconMimeType = "" | "image/png" | "image/jpeg" | "image/webp" | "image/x-icon";
-export type VideoThumbnailMode = "single" | "carousel";
 export type RelatedVideoMode = "next" | "random";
 export type AudioPlaybackMode = "stop" | "next" | "repeat-one";
 
@@ -54,11 +58,8 @@ export type SiteSettings = {
   adminPasswordHash: string;
   adminPasswordSha256: string;
   adminLoginRecords: AdminLoginRecord[];
-  adminAllowedIps: string;
-  adminBlockedIps: string;
   adminLoginRateLimitPerMinute: number;
   adminLoginRateLimitEnabled: boolean;
-  adminLoginRateLimitBanEnabled: boolean;
   adminTheme: AdminTheme;
   catalogPageSize: number;
   searchResultsPageSize: number;
@@ -79,6 +80,10 @@ export type SiteSettings = {
   userDailyRegistrationLimitPerIp: number;
   userDailyReportLimit: number;
   userAvatarMaxBytes: number;
+  stationDisplayName: string;
+  announcementCardEnabled: boolean;
+  guestAnnouncementCardEnabled: boolean;
+  homePortalOrder: HomePortalCardKey[];
   analyticsEnabled: boolean;
   analyticsRealtimeLimit: number;
   novelLibraryEnabled: boolean;
@@ -95,16 +100,12 @@ export type SiteSettings = {
   guestTagLibraryNavEnabled: boolean;
   guestAdvancedTagSearchEnabled: boolean;
   guestHotwordLinksEnabled: boolean;
-  videoThumbnailMode: VideoThumbnailMode;
   videoThumbnailSinglePercent: number;
-  videoThumbnailCarouselFrames: number;
-  videoThumbnailCarouselIntervalSeconds: number;
   relatedVideoCount: number;
   relatedVideoMode: RelatedVideoMode;
   contentRateLimitPerMinute: number;
   contentRateLimitWindowSeconds: number;
   contentRateLimitRules: IpRateLimitRule[];
-  contentBlockHeadlessBrowsers: boolean;
 };
 
 type SiteSettingsCache = {
@@ -119,7 +120,11 @@ type SiteSettingsGlobal = typeof globalThis & {
   siteSettingsCache?: SiteSettingsCache;
 };
 
-const SITE_SETTINGS_CACHE_SCHEMA_VERSION = 2;
+const SITE_SETTINGS_CACHE_SCHEMA_VERSION = 5;
+
+const DEFAULT_SETTINGS_PREVIEW_TEXT =
+  process.env.SETTINGS_PREVIEW_TEXT?.trim() ||
+  "夜色像一页慢慢翻开的纸，灯下的字迹温润清明。读到安静处，页面不抢戏，只把故事稳稳托住。";
 
 const LEGACY_SETTING_KEYS = [
   "adminIndexPageSize",
@@ -137,13 +142,20 @@ const LEGACY_SETTING_KEYS = [
   "searchShortQueryRateLimitPerMinute",
   "searchRateLimitRules",
   "userSearchRateLimitPerMinute",
+  "adminAllowedIps",
+  "adminBlockedIps",
+  "adminLoginRateLimitBanEnabled",
+  "contentBlockHeadlessBrowsers",
+  "videoThumbnailMode",
+  "videoThumbnailCarouselFrames",
+  "videoThumbnailCarouselIntervalSeconds",
 ] as const;
 
 const DEFAULT_SETTINGS: SiteSettings = {
   siteName: "",
   siteTitle: "",
   brandLinkTarget: "novels",
-  settingsPreviewText: "",
+  settingsPreviewText: DEFAULT_SETTINGS_PREVIEW_TEXT,
   siteIconFileName: "",
   siteIconMimeType: "",
   siteIconUpdatedAt: "",
@@ -157,11 +169,8 @@ const DEFAULT_SETTINGS: SiteSettings = {
   adminPasswordHash: "",
   adminPasswordSha256: "",
   adminLoginRecords: [],
-  adminAllowedIps: "",
-  adminBlockedIps: "",
   adminLoginRateLimitPerMinute: 0,
   adminLoginRateLimitEnabled: true,
-  adminLoginRateLimitBanEnabled: true,
   adminTheme: "system",
   catalogPageSize: 0,
   searchResultsPageSize: 0,
@@ -182,6 +191,10 @@ const DEFAULT_SETTINGS: SiteSettings = {
   userDailyRegistrationLimitPerIp: 0,
   userDailyReportLimit: 50,
   userAvatarMaxBytes: 0,
+  stationDisplayName: "站务",
+  announcementCardEnabled: true,
+  guestAnnouncementCardEnabled: true,
+  homePortalOrder: DEFAULT_HOME_PORTAL_ORDER,
   analyticsEnabled: false,
   analyticsRealtimeLimit: 0,
   novelLibraryEnabled: true,
@@ -198,16 +211,12 @@ const DEFAULT_SETTINGS: SiteSettings = {
   guestTagLibraryNavEnabled: false,
   guestAdvancedTagSearchEnabled: false,
   guestHotwordLinksEnabled: false,
-  videoThumbnailMode: "single",
   videoThumbnailSinglePercent: 33,
-  videoThumbnailCarouselFrames: 3,
-  videoThumbnailCarouselIntervalSeconds: 3,
   relatedVideoCount: 5,
   relatedVideoMode: "next",
   contentRateLimitPerMinute: 0,
   contentRateLimitWindowSeconds: 0,
   contentRateLimitRules: [],
-  contentBlockHeadlessBrowsers: true,
 };
 
 function resolveFromProject(value: string): string {
@@ -240,10 +249,6 @@ function cleanColorPalette(value: unknown): ColorPalette {
 
 function cleanSiteIconMimeType(value: unknown): SiteIconMimeType {
   return value === "image/png" || value === "image/jpeg" || value === "image/webp" || value === "image/x-icon" ? value : "";
-}
-
-function cleanVideoThumbnailMode(value: unknown): VideoThumbnailMode {
-  return value === "carousel" ? "carousel" : "single";
 }
 
 function cleanRelatedVideoMode(value: unknown): RelatedVideoMode {
@@ -367,7 +372,10 @@ function readSiteSettingsFromDisk(): SiteSettings {
       siteName: cleanText(parsed.siteName),
       siteTitle: cleanText(parsed.siteTitle),
       brandLinkTarget: cleanBrandLinkTarget(parsed.brandLinkTarget),
-      settingsPreviewText: cleanText(parsed.settingsPreviewText),
+      settingsPreviewText:
+        typeof parsed.settingsPreviewText === "string"
+          ? cleanText(parsed.settingsPreviewText)
+          : DEFAULT_SETTINGS.settingsPreviewText,
       siteIconFileName: path.basename(cleanText(parsed.siteIconFileName)),
       siteIconMimeType: cleanSiteIconMimeType(parsed.siteIconMimeType),
       siteIconUpdatedAt: cleanText(parsed.siteIconUpdatedAt),
@@ -394,11 +402,8 @@ function readSiteSettingsFromDisk(): SiteSettings {
       adminPasswordHash: cleanText(parsed.adminPasswordHash),
       adminPasswordSha256: cleanText(parsed.adminPasswordSha256),
       adminLoginRecords: cleanLoginRecords(parsed.adminLoginRecords),
-      adminAllowedIps: cleanText(parsed.adminAllowedIps),
-      adminBlockedIps: cleanText(parsed.adminBlockedIps),
       adminLoginRateLimitPerMinute: cleanInt(parsed.adminLoginRateLimitPerMinute, DEFAULT_SETTINGS.adminLoginRateLimitPerMinute, 0, 120),
       adminLoginRateLimitEnabled: cleanBool(parsed.adminLoginRateLimitEnabled, DEFAULT_SETTINGS.adminLoginRateLimitEnabled),
-      adminLoginRateLimitBanEnabled: cleanBool(parsed.adminLoginRateLimitBanEnabled, DEFAULT_SETTINGS.adminLoginRateLimitBanEnabled),
       adminTheme: cleanTheme(parsed.adminTheme),
       catalogPageSize: cleanInt(parsed.catalogPageSize, DEFAULT_SETTINGS.catalogPageSize, 0, 100),
       searchResultsPageSize: cleanInt(parsed.searchResultsPageSize, DEFAULT_SETTINGS.searchResultsPageSize, 0, 100),
@@ -434,6 +439,13 @@ function readSiteSettingsFromDisk(): SiteSettings {
       ),
       userDailyReportLimit: cleanInt(parsed.userDailyReportLimit, DEFAULT_SETTINGS.userDailyReportLimit, 1, 500),
       userAvatarMaxBytes: cleanInt(parsed.userAvatarMaxBytes, DEFAULT_SETTINGS.userAvatarMaxBytes, 0, 10 * 1024 ** 2),
+      stationDisplayName: cleanText(parsed.stationDisplayName).slice(0, 20) || DEFAULT_SETTINGS.stationDisplayName,
+      announcementCardEnabled: cleanBool(parsed.announcementCardEnabled, DEFAULT_SETTINGS.announcementCardEnabled),
+      guestAnnouncementCardEnabled: cleanBool(
+        parsed.guestAnnouncementCardEnabled,
+        DEFAULT_SETTINGS.guestAnnouncementCardEnabled,
+      ),
+      homePortalOrder: normalizeHomePortalOrder(parsed.homePortalOrder),
       analyticsEnabled: cleanBool(parsed.analyticsEnabled, DEFAULT_SETTINGS.analyticsEnabled),
       analyticsRealtimeLimit: cleanInt(parsed.analyticsRealtimeLimit, DEFAULT_SETTINGS.analyticsRealtimeLimit, 0, 2000),
       novelLibraryEnabled: cleanBool(parsed.novelLibraryEnabled, DEFAULT_SETTINGS.novelLibraryEnabled),
@@ -450,21 +462,12 @@ function readSiteSettingsFromDisk(): SiteSettings {
       guestTagLibraryNavEnabled: cleanBool(parsed.guestTagLibraryNavEnabled, DEFAULT_SETTINGS.guestTagLibraryNavEnabled),
       guestAdvancedTagSearchEnabled: cleanBool(parsed.guestAdvancedTagSearchEnabled, DEFAULT_SETTINGS.guestAdvancedTagSearchEnabled),
       guestHotwordLinksEnabled: cleanBool(parsed.guestHotwordLinksEnabled, DEFAULT_SETTINGS.guestHotwordLinksEnabled),
-      videoThumbnailMode: cleanVideoThumbnailMode(parsed.videoThumbnailMode),
       videoThumbnailSinglePercent: cleanInt(parsed.videoThumbnailSinglePercent, DEFAULT_SETTINGS.videoThumbnailSinglePercent, 1, 99),
-      videoThumbnailCarouselFrames: cleanInt(parsed.videoThumbnailCarouselFrames, DEFAULT_SETTINGS.videoThumbnailCarouselFrames, 2, 8),
-      videoThumbnailCarouselIntervalSeconds: cleanInt(
-        parsed.videoThumbnailCarouselIntervalSeconds,
-        DEFAULT_SETTINGS.videoThumbnailCarouselIntervalSeconds,
-        1,
-        15,
-      ),
       relatedVideoCount: cleanInt(parsed.relatedVideoCount, DEFAULT_SETTINGS.relatedVideoCount, 0, 20),
       relatedVideoMode: cleanRelatedVideoMode(parsed.relatedVideoMode),
       contentRateLimitPerMinute: cleanInt(parsed.contentRateLimitPerMinute, DEFAULT_SETTINGS.contentRateLimitPerMinute, 0, 600),
       contentRateLimitWindowSeconds: cleanInt(parsed.contentRateLimitWindowSeconds, DEFAULT_SETTINGS.contentRateLimitWindowSeconds, 0, 3600),
       contentRateLimitRules: normalizeIpRateLimitRules(parsed.contentRateLimitRules),
-      contentBlockHeadlessBrowsers: cleanBool(parsed.contentBlockHeadlessBrowsers, DEFAULT_SETTINGS.contentBlockHeadlessBrowsers),
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

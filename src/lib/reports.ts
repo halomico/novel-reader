@@ -1,6 +1,6 @@
 import { getDb } from "./db";
 
-export type ContentReportCategory = "tag_error" | "hotword_error" | "spam" | "other";
+export type ContentReportCategory = "title_error" | "tag_error" | "hotword_error" | "spam" | "other";
 export type ContentReportStatus = "open" | "resolved";
 
 export type ContentReport = {
@@ -44,7 +44,7 @@ type ContentReportRow = {
   updated_at: string;
 };
 
-const CATEGORIES = new Set<ContentReportCategory>(["tag_error", "hotword_error", "spam", "other"]);
+const CATEGORIES = new Set<ContentReportCategory>(["title_error", "tag_error", "hotword_error", "spam", "other"]);
 
 function toContentReport(row: ContentReportRow): ContentReport {
   return {

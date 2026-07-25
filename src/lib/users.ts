@@ -14,6 +14,8 @@ export type UserProfile = {
   avatarPath: string | null;
   status: UserStatus;
   role: UserRole;
+  trustLevel: number;
+  sodaBalance: number;
   registrationIp: string | null;
   createdAt: string;
   updatedAt: string;
@@ -73,6 +75,8 @@ type UserRow = {
   avatar_path: string | null;
   status: string;
   role: string;
+  trust_level: number;
+  soda_balance: number;
   registration_ip: string | null;
   created_at: string;
   updated_at: string;
@@ -125,6 +129,8 @@ function toUserProfile(row: UserRow): UserProfile {
     avatarPath: row.avatar_path,
     status: row.status === "disabled" ? "disabled" : "active",
     role: row.role === "admin" ? "admin" : "user",
+    trustLevel: Math.min(Math.max(Math.floor(row.trust_level || 0), 0), 6),
+    sodaBalance: Math.max(Math.floor(row.soda_balance || 0), 0),
     registrationIp: row.registration_ip,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -136,7 +142,8 @@ function toUserProfile(row: UserRow): UserProfile {
 export function getUserById(id: number): UserProfile | null {
   const row = getDb()
     .prepare(
-      `SELECT id, username, display_name, avatar_path, status, role, registration_ip, created_at, updated_at, last_login_at, last_login_ip
+      `SELECT id, username, display_name, avatar_path, status, role, trust_level, soda_balance,
+              registration_ip, created_at, updated_at, last_login_at, last_login_ip
        FROM users
        WHERE id = ?`,
     )
@@ -148,7 +155,8 @@ export function getUserById(id: number): UserProfile | null {
 export function getUserPasswordRow(username: string): (UserRow & { password_hash: string }) | null {
   const row = getDb()
     .prepare(
-      `SELECT id, username, display_name, password_hash, avatar_path, status, role, registration_ip, created_at, updated_at, last_login_at, last_login_ip
+      `SELECT id, username, display_name, password_hash, avatar_path, status, role, trust_level, soda_balance,
+              registration_ip, created_at, updated_at, last_login_at, last_login_ip
        FROM users
        WHERE username = ?`,
     )
@@ -163,12 +171,17 @@ export function createUserRecord(params: {
   passwordHash: string;
   status?: UserStatus;
   role?: UserRole;
+  trustLevel?: number;
+  sodaBalance?: number;
   registrationIp?: string | null;
 }): number {
   const info = getDb()
     .prepare(
-      `INSERT INTO users (username, display_name, password_hash, status, role, registration_ip, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      `INSERT INTO users (
+         username, display_name, password_hash, status, role,
+         trust_level, soda_balance, registration_ip, updated_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
     )
     .run(
       normalizeUsername(params.username),
@@ -176,32 +189,12 @@ export function createUserRecord(params: {
       params.passwordHash,
       params.status || "active",
       params.role || "user",
+      Math.min(Math.max(Math.floor(params.trustLevel || 0), 0), 6),
+      Math.max(Math.floor(params.sodaBalance || 0), 0),
       params.registrationIp || null,
     );
 
   return Number(info.lastInsertRowid);
-}
-
-export function upsertLegacyAdminUser(username: string, passwordHash: string): number {
-  const normalizedUsername = normalizeUsername(username);
-  const existing = getDb().prepare("SELECT id FROM users WHERE username = ?").get(normalizedUsername) as { id: number } | undefined;
-  if (existing) {
-    getDb()
-      .prepare(
-        `UPDATE users
-         SET password_hash = ?, role = 'admin', status = 'active', updated_at = CURRENT_TIMESTAMP
-         WHERE id = ?`,
-      )
-      .run(passwordHash, existing.id);
-    return existing.id;
-  }
-  return createUserRecord({
-    username: normalizedUsername,
-    displayName: username.trim() || normalizedUsername,
-    passwordHash,
-    status: "active",
-    role: "admin",
-  });
 }
 
 export function countTodayRegistrationsForIp(ip: string): number {
@@ -225,7 +218,8 @@ export function listUsers(params: { page?: number; q?: string; pageSize?: number
   const offset = (page - 1) * pageSize;
   const users = db
     .prepare(
-      `SELECT id, username, display_name, avatar_path, status, role, registration_ip, created_at, updated_at, last_login_at, last_login_ip
+      `SELECT id, username, display_name, avatar_path, status, role, trust_level, soda_balance,
+              registration_ip, created_at, updated_at, last_login_at, last_login_ip
        FROM users
        ${where}
        ORDER BY updated_at DESC, id DESC

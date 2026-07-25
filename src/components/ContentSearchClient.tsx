@@ -255,10 +255,22 @@ export function ContentSearchClient({
       if (!response.ok || !data.ok || !data.job) {
         throw new Error(data.message || "搜索任务状态读取失败");
       }
-      setJob(data.job);
+      let nextJob = data.job;
+      if (nextJob.status === "done" && !nextJob.results) {
+        const resultResponse = await fetch(
+          `/api/search/content?id=${encodeURIComponent(jobId)}&results=1`,
+          { cache: "no-store" },
+        );
+        const resultData = (await resultResponse.json()) as SearchApiResponse;
+        if (!resultResponse.ok || !resultData.ok || !resultData.job) {
+          throw new Error(resultData.message || "搜索结果读取失败");
+        }
+        nextJob = resultData.job;
+      }
+      setJob(nextJob);
       setDisplayProgress(data.showProgressBars ?? showProgressBars);
-      rememberSnapshot(data.job, currentPageRef.current, data.showProgressBars ?? showProgressBars);
-      if (data.job.status === "running" || data.job.status === "queued") {
+      rememberSnapshot(nextJob, currentPageRef.current, data.showProgressBars ?? showProgressBars);
+      if (nextJob.status === "running" || nextJob.status === "queued") {
         timer = setTimeout(() => {
           poll(jobId).catch((error) => setMessage(error instanceof Error ? error.message : "搜索失败"));
         }, document.visibilityState === "hidden" ? 2_000 : 800);
@@ -317,6 +329,10 @@ export function ContentSearchClient({
       }
       if (!response.ok || !data.ok || !data.jobId || !data.job) {
         throw new Error(data.message || "搜索启动失败");
+      }
+      if (data.job.status === "done" && !data.job.results) {
+        await poll(data.jobId);
+        return;
       }
       setJob(data.job);
       setDisplayProgress(data.showProgressBars ?? showProgressBars);

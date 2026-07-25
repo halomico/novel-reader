@@ -74,7 +74,11 @@ export default async function AdminUserDetailPage({ params, searchParams }: Admi
             </p>
             <p>
               <strong>权限组</strong>
-              <span>{user.role === "admin" ? "管理员" : "普通用户"}</span>
+              <span>{user.role === "admin" ? "前台管理员" : "普通用户"}</span>
+            </p>
+            <p>
+              <strong>成长</strong>
+              <span>Lv.{user.trustLevel + 1} · 苏打 {user.sodaBalance}</span>
             </p>
             <p>
               <strong>注册时间</strong>

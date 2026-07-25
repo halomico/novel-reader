@@ -1,6 +1,6 @@
 {
   "name": "novel-reader",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "A clean Chinese novel reader with configurable local library storage.",
   "private": true,
   "scripts": {
@@ -10,15 +10,17 @@
     "scan:books": "tsx scripts/scan-books.ts",
     "index:search": "tsx scripts/build-content-search-index.ts",
     "optimize:media": "tsx scripts/optimize-media.ts",
-    "test": "node --import tsx --test src/lib/filename.test.ts src/lib/books.test.ts src/lib/text.test.ts src/lib/search-query.test.ts src/lib/content-search-scanner.node.test.ts src/lib/content-search-index.test.ts src/lib/search.test.ts src/lib/content-search-cache.test.ts src/lib/db.test.ts src/lib/admin-access.test.ts src/lib/date-time.test.ts src/lib/analytics.test.ts src/lib/search-analytics.test.ts src/lib/rate-limit.test.ts src/lib/ip-rate-limit.test.ts src/lib/media.test.ts src/lib/media-thumbnail.test.ts src/lib/media-metadata.test.ts src/lib/media-upload.test.ts src/lib/media-analytics.test.ts src/lib/mp4-faststart.test.ts src/lib/site-icon.test.ts src/lib/site-settings.test.ts src/lib/tags.test.ts src/lib/reports.test.ts src/lib/ui-preferences.test.ts src/lib/human-verification.test.ts src/lib/seo.test.ts src/lib/sitemap.test.ts src/lib/password.test.ts"
+    "media:serve": "tsx scripts/media-node.ts",
+    "test": "node --import tsx --test src/lib/filename.test.ts src/lib/books.test.ts src/lib/text.test.ts src/lib/search-query.test.ts src/lib/content-search-scanner.node.test.ts src/lib/content-search-index.test.ts src/lib/search.test.ts src/lib/content-search-cache.test.ts src/lib/db.test.ts src/lib/admin-access.test.ts src/lib/content-access.test.ts src/lib/date-time.test.ts src/lib/analytics.test.ts src/lib/search-analytics.test.ts src/lib/rate-limit.test.ts src/lib/media.test.ts src/lib/media-thumbnail.test.ts src/lib/media-metadata.test.ts src/lib/media-upload.test.ts src/lib/media-analytics.test.ts src/lib/media-signing.test.ts src/lib/mp4-faststart.test.ts src/lib/site-icon.test.ts src/lib/site-settings.test.ts src/lib/tags.test.ts src/lib/recommendations.test.ts src/lib/user-economy.test.ts src/lib/user-levels.test.ts src/lib/station.test.ts src/lib/reports.test.ts src/lib/ui-preferences.test.ts src/lib/human-verification.test.ts src/lib/seo.test.ts src/lib/sitemap.test.ts src/lib/password.test.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
     "iconv-lite": "^0.6.3",
     "lucide-react": "^0.468.0",
-    "next": "^15.5.19",
+    "next": "^15.5.21",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "sharp": "^0.35.3"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
@@ -28,7 +30,8 @@
     "typescript": "^5.7.2"
   },
   "overrides": {
-    "postcss": "^8.5.15"
+    "postcss": "^8.5.23",
+    "sharp": "^0.35.3"
   },
   "keywords": [
     "novel",

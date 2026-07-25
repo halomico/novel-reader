@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { deleteAdminUsersAction, updateAdminUserAction, updateAdminUserStatusAction } from "@/app/admin/actions";
 import { LocalDateTime } from "@/components/LocalDateTime";
+import { AdminSelect } from "@/components/AdminSelect";
 import { usePersistentSelection } from "@/components/usePersistentSelection";
 import type { UserProfile } from "@/lib/users";
 
@@ -56,7 +57,11 @@ export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; re
                       <Link className="adminUserNameLink" href={`/admin/users/${user.id}?returnPath=${encodeURIComponent(returnPath)}`}>
                         {user.username}
                       </Link>
-                      <small>{user.displayName}{user.role === "admin" ? " · 管理员" : ""}</small>
+                      <small>
+                        {user.displayName}
+                        {user.role === "admin" ? " · 前台管理员" : ""}
+                        {" · "}Lv.{user.trustLevel + 1} · 苏打 {user.sodaBalance}
+                      </small>
                     </span>
                   </td>
                   <td>
@@ -86,7 +91,7 @@ export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; re
                     <form className="adminUserStatusForm" action={updateAdminUserStatusAction}>
                       <input name="userId" type="hidden" value={user.id} />
                       <input name="returnPath" type="hidden" value={returnPath} />
-                      <select
+                      <AdminSelect
                         className={`adminUserStatusSelect is-${user.status}`}
                         name="status"
                         defaultValue={user.status}
@@ -96,7 +101,7 @@ export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; re
                       >
                         <option value="active">启用</option>
                         <option value="disabled">停用</option>
-                      </select>
+                      </AdminSelect>
                     </form>
                   </td>
                 </tr>
@@ -155,11 +160,21 @@ export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; re
             </label>
             <label>
               <span>权限组</span>
-              <select name="role" defaultValue={editingUser.role}>
+              <AdminSelect name="role" defaultValue={editingUser.role}>
                 <option value="user">普通用户</option>
-                <option value="admin">管理员</option>
-              </select>
+                <option value="admin">前台管理员</option>
+              </AdminSelect>
             </label>
+            <div className="adminUserGrowthFields">
+              <label>
+                <span>等级</span>
+                <input name="trustLevel" type="number" min="1" max="7" defaultValue={editingUser.trustLevel + 1} />
+              </label>
+              <label>
+                <span>苏打余额</span>
+                <input name="sodaBalance" type="number" min="0" max="1000000000" defaultValue={editingUser.sodaBalance} />
+              </label>
+            </div>
             <label>
               <span>重置密码</span>
               <input name="newPassword" type="password" minLength={6} maxLength={72} placeholder="留空则不修改" />

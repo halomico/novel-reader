@@ -17,6 +17,7 @@ import {
   parseHotwordInput,
   setNovelHotwords,
   setNovelTags,
+  updateTag,
 } from "./tags";
 
 function resetDb() {
@@ -95,14 +96,34 @@ test("loads visible tags for a catalog page in one batch", (t) => {
   const firstNovelId = seedNovel("第一本");
   const secondNovelId = seedNovel("第二本");
   const visibleTag = createTag({ name: "冒险", slug: "adventure" });
+  const memberTag = createTag({ name: "内板", slug: "member", visibility: "member" });
   const hiddenTag = createTag({ name: "隐藏", slug: "hidden", isVisible: false });
-  setNovelTags(firstNovelId, [visibleTag.id, hiddenTag.id]);
+  setNovelTags(firstNovelId, [visibleTag.id, memberTag.id, hiddenTag.id]);
   setNovelTags(secondNovelId, [visibleTag.id]);
 
   const visible = listTagsForNovels([firstNovelId, secondNovelId, firstNovelId, 0]);
   assert.deepEqual(visible.get(firstNovelId)?.map((tag) => tag.name), ["冒险"]);
   assert.deepEqual(visible.get(secondNovelId)?.map((tag) => tag.name), ["冒险"]);
-  assert.deepEqual(listTagsForNovels([firstNovelId], { includeHidden: true }).get(firstNovelId)?.map((tag) => tag.name), ["冒险", "隐藏"]);
+  assert.deepEqual(
+    listTagsForNovels([firstNovelId], { audience: "member" }).get(firstNovelId)?.map((tag) => tag.name),
+    ["内板", "冒险"],
+  );
+  assert.deepEqual(
+    listTagsForNovels([firstNovelId], { includeHidden: true }).get(firstNovelId)?.map((tag) => tag.name),
+    ["内板", "冒险", "隐藏"],
+  );
+});
+
+test("keeps child tag visibility within its parent boundary", (t) => {
+  withTempDatabase(t);
+  const memberGroup = createTag({ name: "内板分组", slug: "member-group", visibility: "member" });
+  const child = createTag({ name: "子标签", slug: "member-child", parentId: memberGroup.id, visibility: "public" });
+  assert.equal(child.visibility, "member");
+  assert.equal(listTagGroups({ audience: "public" }).length, 0);
+  assert.equal(listTagGroups({ audience: "member" })[0].tags[0].slug, "member-child");
+  assert.equal(updateTag({ ...memberGroup, visibility: "hidden" }), true);
+  assert.equal(listTagGroups({ audience: "member" }).length, 0);
+  assert.equal(listTagGroups({ audience: "admin" })[0].tags[0].visibility, "hidden");
 });
 
 test("finds novels containing the intersection of selected visible tags", (t) => {

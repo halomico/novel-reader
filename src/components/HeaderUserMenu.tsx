@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Compass, KeyRound, LogOut, Menu, Settings, UserPlus, UserRound } from "lucide-react";
+import { CupSoda, KeyRound, LogOut, Menu, MessageCircle, Settings, Sparkles, UserPlus, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { logoutUserAction } from "@/app/account/actions";
@@ -12,6 +12,8 @@ type HeaderUserMenuProps = {
     | {
         displayName: string;
         avatarPath: string | null;
+        trustLevel: number;
+        sodaBalance: number;
       }
     | null;
   loginEnabled: boolean;
@@ -19,6 +21,7 @@ type HeaderUserMenuProps = {
   mediaKinds: MediaKind[];
   showLibrary: boolean;
   showTags: boolean;
+  unreadMessages: number;
 };
 
 export function HeaderUserMenu({
@@ -28,14 +31,13 @@ export function HeaderUserMenu({
   mediaKinds,
   showLibrary,
   showTags,
+  unreadMessages,
 }: HeaderUserMenuProps) {
   const [open, setOpen] = useState(false);
-  const [navigationOpen, setNavigationOpen] = useState(false);
   const hasNavigation = showLibrary || showTags || mediaKinds.length > 0;
 
   function closeMenu() {
     setOpen(false);
-    setNavigationOpen(false);
   }
 
   return (
@@ -54,10 +56,7 @@ export function HeaderUserMenu({
         aria-label="打开导航菜单"
         aria-expanded={open}
         title="导航菜单"
-        onClick={() => {
-          setOpen((value) => !value);
-          setNavigationOpen(false);
-        }}
+        onClick={() => setOpen((value) => !value)}
       >
         <Menu size={21} aria-hidden="true" />
       </button>
@@ -72,11 +71,24 @@ export function HeaderUserMenu({
                 <span>
                   <small>当前账户</small>
                   <strong>{user.displayName}</strong>
+                  <span className="userMenuGrowthMeta">
+                    <i title="等级"><Sparkles size={11} aria-hidden="true" />Lv.{user.trustLevel + 1}</i>
+                    <i title="苏打余额"><CupSoda size={12} aria-hidden="true" />{user.sodaBalance}</i>
+                  </span>
                 </span>
               </div>
               <Link href="/account" onClick={closeMenu}>
                 <UserRound size={16} aria-hidden="true" />
-                用户中心
+                账户
+              </Link>
+              <Link href="/account?view=growth" onClick={closeMenu}>
+                <Sparkles size={16} aria-hidden="true" />
+                成长
+              </Link>
+              <Link href="/messages" onClick={closeMenu}>
+                <MessageCircle size={16} aria-hidden="true" />
+                消息
+                {unreadMessages > 0 ? <span className="userMenuUnreadDot" aria-label={`${unreadMessages} 条未读消息`} /> : null}
               </Link>
             </>
           ) : (
@@ -84,50 +96,36 @@ export function HeaderUserMenu({
               {loginEnabled ? (
                 <Link href="/login" onClick={closeMenu}>
                   <KeyRound size={16} aria-hidden="true" />
-                  登录账号
+                  登录
                 </Link>
               ) : null}
               {registrationEnabled ? (
                 <Link href="/register" onClick={closeMenu}>
                   <UserPlus size={16} aria-hidden="true" />
-                  创建账号
+                  注册
                 </Link>
               ) : null}
             </>
           )}
           <Link href="/settings" onClick={closeMenu}>
             <Settings size={16} aria-hidden="true" />
-            阅读设置
+            设置
           </Link>
           {hasNavigation ? (
-            <div className={navigationOpen ? "userMenuPrimaryNav isOpen" : "userMenuPrimaryNav"}>
-              <button
-                className="userMenuPrimaryNavToggle"
-                type="button"
-                aria-expanded={navigationOpen}
-                onClick={() => setNavigationOpen((value) => !value)}
-              >
-                <Compass size={16} aria-hidden="true" />
-                <span>顶部导航</span>
-                <ChevronDown className="userMenuPrimaryNavChevron" size={14} aria-hidden="true" />
-              </button>
-              {navigationOpen ? (
-                <HeaderPrimaryNav
-                  className="userMenuPrimaryNavLinks"
-                  ariaLabel="折叠顶部导航"
-                  mediaKinds={mediaKinds}
-                  showLibrary={showLibrary}
-                  showTags={showTags}
-                  onNavigate={closeMenu}
-                />
-              ) : null}
-            </div>
+            <HeaderPrimaryNav
+              className="userMenuPrimaryNav"
+              ariaLabel="菜单导航"
+              mediaKinds={mediaKinds}
+              showLibrary={showLibrary}
+              showTags={showTags}
+              onNavigate={closeMenu}
+            />
           ) : null}
           {user ? (
             <form action={logoutUserAction}>
               <button type="submit">
                 <LogOut size={16} aria-hidden="true" />
-                退出登录
+                退出
               </button>
             </form>
           ) : null}

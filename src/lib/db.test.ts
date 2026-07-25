@@ -28,6 +28,16 @@ test("removes legacy search tables and the retired content index database", asyn
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE rate_limit_bans (
+      ip TEXT NOT NULL,
+      category TEXT NOT NULL,
+      rule_id TEXT NOT NULL,
+      is_permanent INTEGER NOT NULL DEFAULT 0,
+      banned_until INTEGER,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(ip, category)
+    );
     CREATE TABLE novels (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
@@ -52,6 +62,24 @@ test("removes legacy search tables and the retired content index database", asyn
       last_login_at TEXT,
       last_login_ip TEXT
     );
+    CREATE TABLE novel_recommendations (
+      novel_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(novel_id, user_id)
+    );
+    CREATE TABLE content_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      novel_id INTEGER NOT NULL,
+      category TEXT NOT NULL CHECK(category IN ('tag_error', 'hotword_error', 'spam', 'other')),
+      details TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'resolved')),
+      resolved_by TEXT,
+      resolved_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
     CREATE TABLE media_assets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       kind TEXT NOT NULL,
@@ -66,6 +94,17 @@ test("removes legacy search tables and the retired content index database", asyn
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE tags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      description TEXT NOT NULL DEFAULT '',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_visible INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX idx_tags_visible_sort ON tags(is_visible, sort_order, name);
     CREATE TABLE user_reading_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -94,14 +133,22 @@ test("removes legacy search tables and the retired content index database", asyn
     VALUES ('legacy novel', 'legacy.txt', 'legacy.txt', 10, 1);
     INSERT INTO users (username, display_name, password_hash, history_visible)
     VALUES ('legacy-user', 'Legacy User', 'test-hash', 0);
+    INSERT INTO novel_recommendations (novel_id, user_id, created_at)
+    VALUES (1, 1, '2026-07-25 10:00:00');
+    INSERT INTO content_reports (user_id, novel_id, category)
+    VALUES (1, 1, 'tag_error');
     INSERT INTO media_assets (kind, title, file_name, stored_name, mime_type, size_bytes)
     VALUES ('audio', 'legacy audio', 'legacy.mp3', 'legacy.mp3', 'audio/mpeg', 10);
+    INSERT INTO tags (name, slug, is_visible) VALUES ('公开标签', 'public-tag', 1);
+    INSERT INTO tags (name, slug, is_visible) VALUES ('隐藏标签', 'hidden-tag', 0);
     INSERT INTO user_reading_history (user_id, novel_id, title, visit_count, hidden_by_user)
     VALUES (1, 1, 'legacy novel', 2, 1);
     INSERT INTO user_media_history (user_id, media_id, kind, title, visit_count, hidden_by_user)
     VALUES (1, 1, 'audio', 'legacy audio', 3, 1);
     INSERT INTO search_rate_limit_bans (ip, rule_id, is_permanent, banned_until)
     VALUES ('203.0.113.9', 'legacy-search-rule', 1, NULL);
+    INSERT INTO rate_limit_bans (ip, category, rule_id, is_permanent, banned_until)
+    VALUES ('198.51.100.8', 'content', 'legacy-content-rule', 1, NULL);
   `);
   seed.close();
   fs.writeFileSync(legacyPath, "retired derived database", "utf8");
@@ -121,10 +168,40 @@ test("removes legacy search tables and the retired content index database", asyn
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'search_rate_limit_bans'")
       .get();
     assert.equal(legacyRateLimitTable, undefined);
+    const legacyBanTable = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'rate_limit_bans'")
+      .get();
+    assert.equal(legacyBanTable, undefined);
     const migratedBan = db
-      .prepare("SELECT category, rule_id, is_permanent FROM rate_limit_bans WHERE ip = '203.0.113.9'")
-      .get() as { category: string; rule_id: string; is_permanent: number };
-    assert.deepEqual({ ...migratedBan }, { category: "search", rule_id: "legacy-search-rule", is_permanent: 1 });
+      .prepare(
+        `SELECT target_type, target_value, scope, audience, source, expires_at
+         FROM content_access_rules WHERE target_value = '198.51.100.8'`,
+      )
+      .get() as {
+        target_type: string;
+        target_value: string;
+        scope: string;
+        audience: string;
+        source: string;
+        expires_at: number;
+      };
+    assert.deepEqual(
+      {
+        targetType: migratedBan.target_type,
+        targetValue: migratedBan.target_value,
+        scope: migratedBan.scope,
+        audience: migratedBan.audience,
+        source: migratedBan.source,
+      },
+      {
+        targetType: "ip",
+        targetValue: "198.51.100.8",
+        scope: "all",
+        audience: "all",
+        source: "rate_limit",
+      },
+    );
+    assert.ok(migratedBan.expires_at > Date.now());
     assert.equal(fs.existsSync(legacyPath), false);
     const obsoleteColumns = [
       ["users", "history_visible"],
@@ -138,7 +215,25 @@ test("removes legacy search tables and the retired content index database", asyn
     assert.equal((db.prepare("SELECT COUNT(*) AS count FROM users").get() as { count: number }).count, 1);
     const userColumns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
     assert.equal(userColumns.some((column) => column.name === "role"), true);
+    assert.equal(userColumns.some((column) => column.name === "trust_level"), true);
+    assert.equal(userColumns.some((column) => column.name === "soda_balance"), true);
     assert.equal((db.prepare("SELECT role FROM users").get() as { role: string }).role, "user");
+    assert.deepEqual(
+      { ...(db.prepare("SELECT trust_level, soda_balance FROM users").get() as object) },
+      { trust_level: 2, soda_balance: 0 },
+    );
+    assert.equal(
+      (db.prepare("SELECT COUNT(*) AS count FROM user_levels").get() as { count: number }).count,
+      7,
+    );
+    const recommendationColumns = db.prepare("PRAGMA table_info(novel_recommendations)").all() as Array<{ name: string }>;
+    assert.equal(recommendationColumns.some((column) => column.name === "recommendation_date"), true);
+    assert.equal((db.prepare("SELECT recommend_count FROM novels").get() as { recommend_count: number }).recommend_count, 1);
+    assert.doesNotThrow(() => {
+      db!.prepare(
+        "INSERT INTO content_reports (user_id, novel_id, category) VALUES (1, 1, 'title_error')",
+      ).run();
+    });
     assert.equal(
       (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'content_reports'").get() as { name: string }).name,
       "content_reports",
@@ -147,6 +242,16 @@ test("removes legacy search tables and the retired content index database", asyn
     assert.equal((db.prepare("SELECT visit_count FROM user_media_history").get() as { visit_count: number }).visit_count, 3);
     const mediaColumns = db.prepare("PRAGMA table_info(media_assets)").all() as Array<{ name: string }>;
     assert.equal(mediaColumns.some((column) => column.name === "category_id"), true);
+    const tagColumns = db.prepare("PRAGMA table_info(tags)").all() as Array<{ name: string }>;
+    assert.equal(tagColumns.some((column) => column.name === "is_visible"), false);
+    assert.equal(tagColumns.some((column) => column.name === "visibility"), true);
+    assert.deepEqual(
+      db.prepare("SELECT slug, visibility FROM tags ORDER BY id").all().map((row) => ({ ...row })),
+      [
+        { slug: "public-tag", visibility: "public" },
+        { slug: "hidden-tag", visibility: "hidden" },
+      ],
+    );
     const mediaIndexes = db.prepare("PRAGMA index_list(media_assets)").all() as Array<{ name: string }>;
     assert.equal(mediaIndexes.some((index) => index.name === "idx_media_assets_video_category"), true);
     const pinnedTable = db

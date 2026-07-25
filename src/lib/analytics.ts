@@ -755,7 +755,8 @@ export function getAnalyticsOverview(
        FROM analytics_events
        WHERE ${eventWhere.sql}
        GROUP BY ip
-       ORDER BY count DESC, label ASC`,
+       ORDER BY count DESC, label ASC
+       LIMIT 100`,
       eventWhere.params,
     ),
     topCountries: topMetrics(
@@ -763,7 +764,8 @@ export function getAnalyticsOverview(
        FROM analytics_events
        WHERE ${eventWhere.sql}
        GROUP BY country
-       ORDER BY count DESC, label ASC`,
+       ORDER BY count DESC, label ASC
+       LIMIT 100`,
       eventWhere.params,
     ),
     topReferrers: topMetrics(
@@ -771,7 +773,8 @@ export function getAnalyticsOverview(
        FROM analytics_events
        WHERE ${eventWhere.sql}
        GROUP BY referrer
-       ORDER BY count DESC, label ASC`,
+       ORDER BY count DESC, label ASC
+       LIMIT 100`,
       eventWhere.params,
     ),
     devices: topMetrics(
@@ -779,7 +782,8 @@ export function getAnalyticsOverview(
        FROM analytics_events
        WHERE ${eventWhere.sql}
        GROUP BY device
-       ORDER BY count DESC, label ASC`,
+       ORDER BY count DESC, label ASC
+       LIMIT 50`,
       eventWhere.params,
     ),
     browsers: topMetrics(
@@ -787,7 +791,8 @@ export function getAnalyticsOverview(
        FROM analytics_events
        WHERE ${eventWhere.sql}
        GROUP BY browser
-       ORDER BY count DESC, label ASC`,
+       ORDER BY count DESC, label ASC
+       LIMIT 50`,
       eventWhere.params,
     ),
     operatingSystems: topMetrics(
@@ -795,7 +800,8 @@ export function getAnalyticsOverview(
        FROM analytics_events
        WHERE ${eventWhere.sql}
        GROUP BY os
-       ORDER BY count DESC, label ASC`,
+       ORDER BY count DESC, label ASC
+       LIMIT 50`,
       eventWhere.params,
     ),
     realtime: realtimeRows.map((row) => ({

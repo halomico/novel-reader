@@ -25,11 +25,10 @@ export async function serveMediaThumbnail(
 ): Promise<Response> {
   try {
     const settings = getVideoThumbnailSettings();
-    const requestedFrame = Number(request.nextUrl.searchParams.get("frame") || 0);
-    const frame = Math.min(Math.max(Number.isInteger(requestedFrame) ? requestedFrame : 0, 0), settings.carouselFrames - 1);
-    const options = settings.mode === "carousel"
-      ? { fraction: (frame + 1) / (settings.carouselFrames + 1), cacheKey: `carousel-${settings.carouselFrames}-${frame}` }
-      : { fraction: settings.singlePercent / 100, cacheKey: `single-${settings.singlePercent}` };
+    const options = {
+      fraction: settings.singlePercent / 100,
+      cacheKey: `single-${settings.singlePercent}`,
+    };
     const thumbnailPath = await ensureMediaThumbnail(asset, options);
     const stat = fs.statSync(thumbnailPath);
     const etag = mediaThumbnailEtag(asset.id, stat.mtimeMs, stat.size);

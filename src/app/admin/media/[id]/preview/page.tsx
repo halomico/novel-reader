@@ -46,7 +46,7 @@ export default async function AdminMediaPreviewPage({ params }: { params: Promis
       version: item.mtimeMs,
     }));
   const thumbnailSettings = getVideoThumbnailSettings();
-  const posterVersion = `${asset.mtimeMs}-${thumbnailSettings.mode}-${thumbnailSettings.singlePercent}-${thumbnailSettings.carouselFrames}`;
+  const posterVersion = `${asset.mtimeMs}-single-${thumbnailSettings.singlePercent}`;
   scheduleMediaPreparation([asset]);
 
   return (

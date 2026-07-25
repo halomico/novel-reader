@@ -1,11 +1,11 @@
 ﻿import path from "node:path";
 import { cache } from "react";
+import type { HomePortalCardKey } from "./home-portal";
 import {
   readSiteSettings as readSiteSettingsFromDisk,
   type AudioPlaybackMode,
   type IpRateLimitRule,
   type RelatedVideoMode,
-  type VideoThumbnailMode,
 } from "./site-settings";
 
 const readSiteSettings = cache(readSiteSettingsFromDisk);
@@ -51,15 +51,7 @@ export function getSiteBrandHref(): "/" | "/novels" {
 }
 
 export function getSettingsPreviewText(): string {
-  const configuredPreview = readSiteSettings().settingsPreviewText;
-  if (configuredPreview) {
-    return configuredPreview;
-  }
-
-  return (
-    process.env.SETTINGS_PREVIEW_TEXT ||
-    "夜色像一页慢慢翻开的纸，灯下的字迹温润清明。读到安静处，页面不抢戏，只把故事稳稳托住。"
-  );
+  return readSiteSettings().settingsPreviewText;
 }
 
 export function getReaderDefaultFontSize(): number {
@@ -87,13 +79,6 @@ function readBoolConfig(name: string, fallback: boolean): boolean {
     return fallback;
   }
   return ["1", "true", "yes", "on"].includes(value.toLowerCase());
-}
-
-function splitList(value: string): string[] {
-  return value
-    .split(/[\n,]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
 }
 
 export function getGlobalSearchMaxResults(): number {
@@ -159,6 +144,19 @@ export function getUserDailyReportLimit(): number {
 
 export function getUserAvatarMaxBytes(): number {
   return readSettingInt(readSiteSettings().userAvatarMaxBytes, "USER_AVATAR_MAX_BYTES", 1048576, 1, 10 * 1024 ** 2);
+}
+
+export function getStationDisplayName(): string {
+  return readSiteSettings().stationDisplayName || "站务";
+}
+
+export function canAccessHomeAnnouncementCard(authenticated: boolean): boolean {
+  const settings = readSiteSettings();
+  return settings.announcementCardEnabled && (authenticated || settings.guestAnnouncementCardEnabled);
+}
+
+export function getHomePortalOrder(): HomePortalCardKey[] {
+  return readSiteSettings().homePortalOrder;
 }
 
 export function isAnalyticsEnabled(): boolean {
@@ -243,17 +241,11 @@ export function areGuestHotwordLinksEnabled(): boolean {
 }
 
 export function getVideoThumbnailSettings(): {
-  mode: VideoThumbnailMode;
   singlePercent: number;
-  carouselFrames: number;
-  carouselIntervalSeconds: number;
 } {
   const settings = readSiteSettings();
   return {
-    mode: settings.videoThumbnailMode,
     singlePercent: settings.videoThumbnailSinglePercent,
-    carouselFrames: settings.videoThumbnailCarouselFrames,
-    carouselIntervalSeconds: settings.videoThumbnailCarouselIntervalSeconds,
   };
 }
 
@@ -279,6 +271,14 @@ export function getContentRateLimitRules(): IpRateLimitRule[] {
   if (settings.contentRateLimitRules.length > 0) {
     return settings.contentRateLimitRules;
   }
+  const hasLegacyLimit =
+    settings.contentRateLimitPerMinute > 0 ||
+    settings.contentRateLimitWindowSeconds > 0 ||
+    process.env.CONTENT_RATE_LIMIT_PER_MINUTE !== undefined ||
+    process.env.CONTENT_RATE_LIMIT_WINDOW_SECONDS !== undefined;
+  if (!hasLegacyLimit) {
+    return [];
+  }
 
   return [
     {
@@ -292,10 +292,6 @@ export function getContentRateLimitRules(): IpRateLimitRule[] {
       banSeconds: 3_600,
     },
   ];
-}
-
-export function shouldBlockHeadlessBrowsers(): boolean {
-  return readSiteSettings().contentBlockHeadlessBrowsers && readBoolConfig("CONTENT_BLOCK_HEADLESS_BROWSERS", true);
 }
 
 export function shouldShowProgressBars(): boolean {
@@ -340,20 +336,6 @@ export function getAdminLoginRateLimitPerMinute(): number {
 
 export function isAdminLoginRateLimitEnabled(): boolean {
   return readSiteSettings().adminLoginRateLimitEnabled;
-}
-
-export function shouldAdminLoginRateLimitBan(): boolean {
-  return readSiteSettings().adminLoginRateLimitBanEnabled;
-}
-
-export function getAdminAllowedIps(): string[] {
-  const settings = readSiteSettings();
-  return splitList(settings.adminAllowedIps || process.env.ADMIN_ALLOWED_IPS || "");
-}
-
-export function getAdminBlockedIps(): string[] {
-  const settings = readSiteSettings();
-  return splitList(settings.adminBlockedIps || process.env.ADMIN_BLOCKED_IPS || "");
 }
 
 export function getConfiguredPaths() {

@@ -1,6 +1,9 @@
 import { getDb } from "./db";
 import type { Novel } from "./books";
 
+export type TagVisibility = "public" | "member" | "hidden";
+export type TagAudience = "public" | "member" | "admin";
+
 export type Tag = {
   id: number;
   parentId: number | null;
@@ -9,6 +12,7 @@ export type Tag = {
   description: string;
   aliases: string[];
   sortOrder: number;
+  visibility: TagVisibility;
   isVisible: boolean;
   createdAt: string;
   updatedAt: string;
@@ -52,7 +56,7 @@ type TagRow = {
   description: string;
   aliases: string;
   sort_order: number;
-  is_visible: number;
+  visibility: TagVisibility;
   created_at: string;
   updated_at: string;
 };
@@ -66,10 +70,60 @@ function toTag(row: TagRow): Tag {
     description: row.description,
     aliases: parseStoredAliases(row.aliases),
     sortOrder: row.sort_order,
-    isVisible: row.is_visible === 1,
+    visibility: row.visibility,
+    isVisible: row.visibility !== "hidden",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function resolveAudience(options: { audience?: TagAudience; includeHidden?: boolean } = {}): TagAudience {
+  return options.includeHidden ? "admin" : options.audience || "public";
+}
+
+function visibilityCondition(alias: string, audience: TagAudience): string {
+  if (audience === "admin") {
+    return "1 = 1";
+  }
+  return audience === "member"
+    ? `${alias}.visibility IN ('public', 'member')`
+    : `${alias}.visibility = 'public'`;
+}
+
+function normalizeTagVisibility(value: unknown, legacyVisible?: boolean): TagVisibility {
+  if (value === "member" || value === "hidden") {
+    return value;
+  }
+  if (value === "public") {
+    return "public";
+  }
+  return legacyVisible === false ? "hidden" : "public";
+}
+
+function visibilityRank(value: TagVisibility): number {
+  return value === "public" ? 0 : value === "member" ? 1 : 2;
+}
+
+function clampVisibilityToParent(value: TagVisibility, parentId: number | null): TagVisibility {
+  if (!parentId) {
+    return value;
+  }
+  const parent = getDb().prepare("SELECT visibility FROM tags WHERE id = ?").get(parentId) as { visibility: TagVisibility } | undefined;
+  return parent && visibilityRank(value) < visibilityRank(parent.visibility) ? parent.visibility : value;
+}
+
+function clampDescendantVisibility(parentId: number, visibility: TagVisibility) {
+  getDb().prepare(
+    `WITH RECURSIVE descendants(id) AS (
+       SELECT id FROM tags WHERE parent_id = ?
+       UNION ALL
+       SELECT t.id FROM tags t INNER JOIN descendants d ON t.parent_id = d.id
+     )
+     UPDATE tags
+     SET visibility = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id IN (SELECT id FROM descendants)
+       AND CASE visibility WHEN 'public' THEN 0 WHEN 'member' THEN 1 ELSE 2 END < ?`,
+  ).run(parentId, visibility, visibilityRank(visibility));
 }
 
 function parseStoredAliases(value: string): string[] {
@@ -103,6 +157,19 @@ function normalizeParentId(value: number | string | null | undefined, currentId 
     return null;
   }
   const found = getDb().prepare("SELECT 1 AS found FROM tags WHERE id = ?").get(numericValue);
+  if (found && currentId > 0) {
+    const createsCycle = getDb().prepare(
+      `WITH RECURSIVE descendants(id) AS (
+         SELECT id FROM tags WHERE parent_id = ?
+         UNION ALL
+         SELECT t.id FROM tags t INNER JOIN descendants d ON t.parent_id = d.id
+       )
+       SELECT 1 AS found FROM descendants WHERE id = ?`,
+    ).get(currentId, numericValue);
+    if (createsCycle) {
+      throw new Error("父标签不能选择当前标签的子级");
+    }
+  }
   return found ? numericValue : null;
 }
 
@@ -146,37 +213,41 @@ function ensureUniqueSlug(base: string, exceptId = 0): string {
   return candidate;
 }
 
-export function listTags(options: { includeHidden?: boolean } = {}): Tag[] {
+export function listTags(options: { audience?: TagAudience; includeHidden?: boolean } = {}): Tag[] {
+  const audience = resolveAudience(options);
   const rows = getDb()
     .prepare(
-      `SELECT id, parent_id, name, slug, description, aliases, sort_order, is_visible, created_at, updated_at
+      `SELECT id, parent_id, name, slug, description, aliases, sort_order, visibility, created_at, updated_at
        FROM tags
-       ${options.includeHidden ? "" : "WHERE is_visible = 1"}
+       WHERE ${visibilityCondition("tags", audience)}
        ORDER BY sort_order ASC, name COLLATE NOCASE ASC, id ASC`,
     )
     .all() as TagRow[];
   return rows.map(toTag);
 }
 
-export function getTagBySlug(slug: string): Tag | null {
+export function getTagBySlug(slug: string, options: { audience?: TagAudience; includeHidden?: boolean } = {}): Tag | null {
+  const audience = resolveAudience(options);
   const row = getDb()
     .prepare(
-      `SELECT id, parent_id, name, slug, description, aliases, sort_order, is_visible, created_at, updated_at
+      `SELECT id, parent_id, name, slug, description, aliases, sort_order, visibility, created_at, updated_at
        FROM tags
-       WHERE slug = ? AND is_visible = 1`,
+       WHERE slug = ? AND ${visibilityCondition("tags", audience)}`,
     )
     .get(slug) as TagRow | undefined;
   return row ? toTag(row) : null;
 }
 
-export function listVisibleTagsBySlugs(slugs: string[]): Tag[] {
+export function listVisibleTagsBySlugs(slugs: string[], options: { audience?: TagAudience } = {}): Tag[] {
+  const audience = resolveAudience(options);
   const requested = Array.from(new Set(slugs.map((slug) => slug.trim()).filter(Boolean))).slice(0, 40);
   if (!requested.length) return [];
   const rows = getDb()
     .prepare(
-      `SELECT id, parent_id, name, slug, description, aliases, sort_order, is_visible, created_at, updated_at
+      `SELECT id, parent_id, name, slug, description, aliases, sort_order, visibility, created_at, updated_at
        FROM tags
-       WHERE is_visible = 1 AND slug IN (${requested.map(() => "?").join(",")})`,
+       WHERE ${visibilityCondition("tags", audience)}
+         AND slug IN (${requested.map(() => "?").join(",")})`,
     )
     .all(...requested) as TagRow[];
   const bySlug = new Map(rows.map((row) => [row.slug, toTag(row)]));
@@ -190,6 +261,7 @@ export function createTag(input: {
   description?: string;
   aliases?: string | string[];
   sortOrder?: number | string;
+  visibility?: TagVisibility;
   isVisible?: boolean;
 }): Tag {
   const name = normalizeTagName(input.name);
@@ -201,16 +273,16 @@ export function createTag(input: {
   const description = (input.description || "").trim().slice(0, MAX_TAG_DESCRIPTION_LENGTH);
   const aliases = JSON.stringify(parseTagAliases(input.aliases, name));
   const sortOrder = normalizeSortOrder(input.sortOrder);
-  const visible = input.isVisible === false ? 0 : 1;
+  const visibility = clampVisibilityToParent(normalizeTagVisibility(input.visibility, input.isVisible), parentId);
   const result = getDb()
     .prepare(
-      `INSERT INTO tags (parent_id, name, slug, description, aliases, sort_order, is_visible)
+      `INSERT INTO tags (parent_id, name, slug, description, aliases, sort_order, visibility)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
-    .run(parentId, name, slug, description, aliases, sortOrder, visible);
+    .run(parentId, name, slug, description, aliases, sortOrder, visibility);
   const created = getDb()
     .prepare(
-      `SELECT id, parent_id, name, slug, description, aliases, sort_order, is_visible, created_at, updated_at
+      `SELECT id, parent_id, name, slug, description, aliases, sort_order, visibility, created_at, updated_at
        FROM tags
        WHERE id = ?`,
     )
@@ -226,6 +298,7 @@ export function updateTag(input: {
   description?: string;
   aliases?: string | string[];
   sortOrder?: number | string;
+  visibility?: TagVisibility;
   isVisible?: boolean;
 }): boolean {
   const id = Number(input.id);
@@ -241,15 +314,25 @@ export function updateTag(input: {
   const description = (input.description || "").trim().slice(0, MAX_TAG_DESCRIPTION_LENGTH);
   const aliases = JSON.stringify(parseTagAliases(input.aliases, name));
   const sortOrder = normalizeSortOrder(input.sortOrder);
-  const visible = input.isVisible === false ? 0 : 1;
-  const result = getDb()
-    .prepare(
-      `UPDATE tags
-       SET parent_id = ?, name = ?, slug = ?, description = ?, aliases = ?, sort_order = ?, is_visible = ?, updated_at = CURRENT_TIMESTAMP
-       WHERE id = ?`,
-    )
-    .run(parentId, name, slug, description, aliases, sortOrder, visible, id);
-  return result.changes > 0;
+  const visibility = clampVisibilityToParent(normalizeTagVisibility(input.visibility, input.isVisible), parentId);
+  const db = getDb();
+  db.exec("BEGIN");
+  let changed = 0;
+  try {
+    changed = Number(db
+      .prepare(
+        `UPDATE tags
+         SET parent_id = ?, name = ?, slug = ?, description = ?, aliases = ?, sort_order = ?, visibility = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+      )
+      .run(parentId, name, slug, description, aliases, sortOrder, visibility, id).changes);
+    clampDescendantVisibility(id, visibility);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+  return changed > 0;
 }
 
 export function deleteTag(id: number): boolean {
@@ -257,20 +340,28 @@ export function deleteTag(id: number): boolean {
   return result.changes > 0;
 }
 
-export function listTagsForNovel(novelId: number, options: { includeHidden?: boolean } = {}): Tag[] {
+export function listTagsForNovel(
+  novelId: number,
+  options: { audience?: TagAudience; includeHidden?: boolean } = {},
+): Tag[] {
+  const audience = resolveAudience(options);
   const rows = getDb()
     .prepare(
-      `SELECT t.id, t.parent_id, t.name, t.slug, t.description, t.aliases, t.sort_order, t.is_visible, t.created_at, t.updated_at
+      `SELECT t.id, t.parent_id, t.name, t.slug, t.description, t.aliases, t.sort_order, t.visibility, t.created_at, t.updated_at
        FROM tags t
        INNER JOIN novel_tags nt ON nt.tag_id = t.id
-       WHERE nt.novel_id = ? ${options.includeHidden ? "" : "AND t.is_visible = 1"}
+       WHERE nt.novel_id = ? AND ${visibilityCondition("t", audience)}
        ORDER BY t.sort_order ASC, t.name COLLATE NOCASE ASC, t.id ASC`,
     )
     .all(novelId) as TagRow[];
   return rows.map(toTag);
 }
 
-export function listTagsForNovels(novelIds: number[], options: { includeHidden?: boolean } = {}): Map<number, Tag[]> {
+export function listTagsForNovels(
+  novelIds: number[],
+  options: { audience?: TagAudience; includeHidden?: boolean } = {},
+): Map<number, Tag[]> {
+  const audience = resolveAudience(options);
   const uniqueIds = Array.from(new Set(novelIds.filter((id) => Number.isInteger(id) && id > 0)));
   if (!uniqueIds.length) {
     return new Map();
@@ -278,10 +369,11 @@ export function listTagsForNovels(novelIds: number[], options: { includeHidden?:
 
   const rows = getDb()
     .prepare(
-      `SELECT nt.novel_id, t.id, t.parent_id, t.name, t.slug, t.description, t.aliases, t.sort_order, t.is_visible, t.created_at, t.updated_at
+      `SELECT nt.novel_id, t.id, t.parent_id, t.name, t.slug, t.description, t.aliases, t.sort_order, t.visibility, t.created_at, t.updated_at
        FROM novel_tags nt
        INNER JOIN tags t ON t.id = nt.tag_id
-       WHERE nt.novel_id IN (${uniqueIds.map(() => "?").join(",")}) ${options.includeHidden ? "" : "AND t.is_visible = 1"}
+       WHERE nt.novel_id IN (${uniqueIds.map(() => "?").join(",")})
+         AND ${visibilityCondition("t", audience)}
        ORDER BY nt.novel_id ASC, t.sort_order ASC, t.name COLLATE NOCASE ASC, t.id ASC`,
     )
     .all(...uniqueIds) as Array<TagRow & { novel_id: number }>;
@@ -307,7 +399,7 @@ function withCounts(tags: Tag[], counts = getTagCounts()): TagWithCount[] {
   return tags.map((tag) => ({ ...tag, directCount: counts.get(tag.id) || 0 }));
 }
 
-export function listTagGroups(options: { includeHidden?: boolean } = {}): TagGroup[] {
+export function listTagGroups(options: { audience?: TagAudience; includeHidden?: boolean } = {}): TagGroup[] {
   const tags = withCounts(listTags(options));
   const byParent = new Map<number, TagWithCount[]>();
   const roots: TagWithCount[] = [];
@@ -408,8 +500,12 @@ function normalizePage(page: number, totalPages: number): number {
   return Math.min(Math.floor(page), Math.max(totalPages, 1));
 }
 
-export function listNovelsByTag(tagId: number, params: { page?: number; pageSize?: number } = {}): TaggedNovelListResult {
+export function listNovelsByTag(
+  tagId: number,
+  params: { page?: number; pageSize?: number; audience?: TagAudience } = {},
+): TaggedNovelListResult {
   const db = getDb();
+  const audience = resolveAudience(params);
   const pageSize = Math.min(Math.max(Math.floor(params.pageSize || 15), 1), 100);
   const totalBooks = db
     .prepare(
@@ -417,7 +513,7 @@ export function listNovelsByTag(tagId: number, params: { page?: number; pageSize
        FROM novels n
        INNER JOIN novel_tags nt ON nt.novel_id = n.id
        INNER JOIN tags t ON t.id = nt.tag_id
-       WHERE t.id = ? AND t.is_visible = 1`,
+       WHERE t.id = ? AND ${visibilityCondition("t", audience)}`,
     )
     .get(tagId) as { count: number };
   const totalPages = Math.max(1, Math.ceil(totalBooks.count / pageSize));
@@ -429,7 +525,7 @@ export function listNovelsByTag(tagId: number, params: { page?: number; pageSize
        FROM novels n
        INNER JOIN novel_tags nt ON nt.novel_id = n.id
        INNER JOIN tags t ON t.id = nt.tag_id
-       WHERE t.id = ? AND t.is_visible = 1
+       WHERE t.id = ? AND ${visibilityCondition("t", audience)}
        ORDER BY n.title COLLATE NOCASE ASC, n.id ASC
        LIMIT ? OFFSET ?`,
     )
@@ -443,12 +539,12 @@ export function listNovelsByTag(tagId: number, params: { page?: number; pageSize
   };
 }
 
-function resolveVisibleTagFilterIds(tagIds: number[], excludeTagIds: number[] = []) {
+function resolveVisibleTagFilterIds(tagIds: number[], excludeTagIds: number[] = [], audience: TagAudience = "public") {
   const db = getDb();
   const requestedIds = Array.from(new Set(tagIds.filter((id) => Number.isInteger(id) && id > 0))).slice(0, 20);
   const validIds = requestedIds.length
     ? (db
-        .prepare(`SELECT id FROM tags WHERE is_visible = 1 AND id IN (${requestedIds.map(() => "?").join(",")})`)
+        .prepare(`SELECT id FROM tags WHERE ${visibilityCondition("tags", audience)} AND id IN (${requestedIds.map(() => "?").join(",")})`)
         .all(...requestedIds) as Array<{ id: number }>).map((row) => row.id)
     : [];
   const requestedExcludedIds = Array.from(new Set(
@@ -456,7 +552,7 @@ function resolveVisibleTagFilterIds(tagIds: number[], excludeTagIds: number[] = 
   )).slice(0, 20);
   const validExcludedIds = requestedExcludedIds.length
     ? (db
-        .prepare(`SELECT id FROM tags WHERE is_visible = 1 AND id IN (${requestedExcludedIds.map(() => "?").join(",")})`)
+        .prepare(`SELECT id FROM tags WHERE ${visibilityCondition("tags", audience)} AND id IN (${requestedExcludedIds.map(() => "?").join(",")})`)
         .all(...requestedExcludedIds) as Array<{ id: number }>).map((row) => row.id)
     : [];
   return { validIds, validExcludedIds, hasInvalidIncluded: requestedIds.length !== validIds.length };
@@ -464,10 +560,11 @@ function resolveVisibleTagFilterIds(tagIds: number[], excludeTagIds: number[] = 
 
 export function listNovelsByTagIntersection(
   tagIds: number[],
-  params: { page?: number; pageSize?: number; q?: string; excludeTagIds?: number[] } = {},
+  params: { page?: number; pageSize?: number; q?: string; excludeTagIds?: number[]; audience?: TagAudience } = {},
 ): TagIntersectionListResult {
   const db = getDb();
-  const { validIds, validExcludedIds, hasInvalidIncluded } = resolveVisibleTagFilterIds(tagIds, params.excludeTagIds);
+  const audience = resolveAudience(params);
+  const { validIds, validExcludedIds, hasInvalidIncluded } = resolveVisibleTagFilterIds(tagIds, params.excludeTagIds, audience);
   const query = (params.q || "").normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, 80);
   const pageSize = Math.min(Math.max(Math.floor(params.pageSize || 15), 1), 100);
   if (hasInvalidIncluded || (!validIds.length && !query)) {
@@ -534,9 +631,10 @@ export function listNovelsByTagIntersection(
 
 export function listNovelIdsByTagFilters(
   tagIds: number[],
-  params: { q?: string; excludeTagIds?: number[] } = {},
+  params: { q?: string; excludeTagIds?: number[]; audience?: TagAudience } = {},
 ): number[] {
-  const { validIds, validExcludedIds, hasInvalidIncluded } = resolveVisibleTagFilterIds(tagIds, params.excludeTagIds);
+  const audience = resolveAudience(params);
+  const { validIds, validExcludedIds, hasInvalidIncluded } = resolveVisibleTagFilterIds(tagIds, params.excludeTagIds, audience);
   const query = (params.q || "").normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, 80);
   if (hasInvalidIncluded || (!validIds.length && !query && !validExcludedIds.length)) return [];
 

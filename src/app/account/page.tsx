@@ -1,15 +1,16 @@
-import { KeyRound, Save, Settings, UserRound } from "lucide-react";
+import { Check, CupSoda, KeyRound, Save, Sparkles, UserRound } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { DismissibleNotice } from "@/components/DismissibleNotice";
 import { AvatarUploadForm } from "@/components/AvatarUploadForm";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
-import { SiteHeader } from "@/components/SiteHeader";
+import { DismissibleNotice } from "@/components/DismissibleNotice";
+import { UserWorkspace, type UserWorkspaceKey } from "@/components/UserWorkspace";
 import { getNoticeDisplaySeconds, getUserAvatarMaxBytes } from "@/lib/config";
-import { getCurrentUser } from "@/lib/user-auth";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
+import { getCurrentUser } from "@/lib/user-auth";
+import { getDailyCheckinState, listSodaTransactions } from "@/lib/user-economy";
+import { getUserLevelDefinition, USER_PERMISSION_DEFINITIONS } from "@/lib/user-levels";
 import {
+  claimDailySodaAction,
   updateAccountDisplayNameAction,
   updateAccountPasswordAction,
 } from "./actions";
@@ -19,10 +20,15 @@ export const metadata: Metadata = { title: "用户中心", robots: NO_INDEX_ROBO
 
 type AccountPageProps = {
   searchParams: Promise<{
+    view?: string;
     notice?: string;
     tone?: "success" | "warning" | "error";
   }>;
 };
+
+function resolveView(value: string | undefined): Extract<UserWorkspaceKey, "profile" | "growth"> {
+  return value === "growth" ? "growth" : "profile";
+}
 
 export default async function AccountPage({ searchParams }: AccountPageProps) {
   const user = await getCurrentUser();
@@ -31,42 +37,30 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
   }
 
   const params = await searchParams;
+  const view = resolveView(params.view);
   const maxAvatarMb = (getUserAvatarMaxBytes() / 1024 / 1024).toFixed(1);
-  const noticeDisplaySeconds = getNoticeDisplaySeconds();
+  const level = getUserLevelDefinition(user.trustLevel);
+  const checkin = view === "growth" ? getDailyCheckinState(user.id) : null;
+  const transactions = view === "growth" ? listSodaTransactions(user.id, 12) : [];
+  const labels: Record<typeof view, string> = {
+    profile: "账户",
+    growth: "成长",
+  };
 
   return (
-    <main className="appShell">
-      <SiteHeader currentUser={user} />
-      <Breadcrumbs items={[{ label: "首页", href: "/" }, { label: "账户" }]} />
+    <UserWorkspace user={user} active={view} breadcrumb={labels[view]}>
       {params.notice ? (
         <DismissibleNotice
           message={params.notice}
           tone={params.tone}
           variant="search"
-          displaySeconds={noticeDisplaySeconds}
+          displaySeconds={getNoticeDisplaySeconds()}
         />
       ) : null}
 
-      <section className="accountLayout">
-        <input className="accountTabInput" id="account-tab-profile" name="accountTab" type="radio" defaultChecked />
-        <input className="accountTabInput" id="account-tab-security" name="accountTab" type="radio" />
-        <aside className="accountSideNav" aria-label="账户导航">
-          <label htmlFor="account-tab-profile">
-            <UserRound size={16} aria-hidden="true" />
-            账户资料
-          </label>
-          <label htmlFor="account-tab-security">
-            <KeyRound size={16} aria-hidden="true" />
-            账户安全
-          </label>
-          <Link href="/settings">
-            <Settings size={16} aria-hidden="true" />
-            阅读设置
-          </Link>
-        </aside>
-
-        <div className="accountContent">
-          <article className="userPanel accountPanel accountProfile" id="profile">
+      {view === "profile" ? (
+        <div className="accountOverview">
+          <article className="userPanel accountPanel accountProfile">
             <div className="accountProfileHeader">
               <div className="accountAvatar" aria-hidden="true">
                 {user.avatarPath ? <img src={user.avatarPath} alt="" /> : <UserRound size={34} />}
@@ -87,12 +81,12 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
             </form>
           </article>
 
-          <article className="userPanel accountPanel accountSecurity" id="security">
+          <article className="userPanel accountPanel accountSecurity" id="account-security">
             <div className="userPanelHeader">
               <KeyRound size={20} aria-hidden="true" />
               <div>
-                <h2>账户安全</h2>
-                <p>修改密码后，新密码会立即用于后续登录。</p>
+                <h1>账户安全</h1>
+                <p>更新密码后，其他登录状态会自动失效。</p>
               </div>
             </div>
             <form className="accountPasswordForm" action={updateAccountPasswordAction}>
@@ -111,9 +105,63 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
               <button className="accountActionButton" type="submit"><Save size={15} aria-hidden="true" />更新</button>
             </form>
           </article>
-
         </div>
-      </section>
-    </main>
+      ) : null}
+
+      {view === "growth" && checkin ? (
+        <article className="userPanel accountPanel accountGrowth">
+          <header className="accountGrowthHeader">
+            <div>
+              <span className="accountGrowthLevel"><Sparkles size={18} aria-hidden="true" />Lv.{user.trustLevel + 1}</span>
+              <h1>{level.name}</h1>
+            </div>
+            <div className="accountGrowthBalance">
+              <CupSoda size={18} aria-hidden="true" />
+              <span>苏打</span>
+              <strong>{user.sodaBalance}</strong>
+            </div>
+          </header>
+
+          <div className="accountPermissionList" aria-label="当前等级权限">
+            {USER_PERMISSION_DEFINITIONS.filter((permission) => level.permissions.includes(permission.key)).map((permission) => (
+              <span className="isEnabled" key={permission.key}>
+                <Check size={13} aria-hidden="true" />
+                {permission.label}
+              </span>
+            ))}
+          </div>
+
+          <form className="accountCheckin" action={claimDailySodaAction}>
+            <div>
+              <strong>{checkin.checkedIn ? "今日已签到" : "每日签到"}</strong>
+              <small>{checkin.checkedIn ? `获得 ${checkin.reward} 苏打` : "今日份惊喜等你开启"}</small>
+            </div>
+            <button type="submit" disabled={checkin.checkedIn}>
+              {checkin.checkedIn ? <Check size={16} aria-hidden="true" /> : <CupSoda size={16} aria-hidden="true" />}
+              {checkin.checkedIn ? "已完成" : "签到"}
+            </button>
+          </form>
+
+          <section className="accountSodaHistory">
+            <h2>苏打记录</h2>
+            {transactions.length ? (
+              <div>
+                {transactions.map((item) => (
+                  <article key={item.id}>
+                    <span>
+                      <strong>{item.note || item.source}</strong>
+                      <small>{new Date(item.createdAt).toLocaleString("zh-CN", { hour12: false })}</small>
+                    </span>
+                    <b className={item.amount > 0 ? "isPositive" : ""}>
+                      {item.amount > 0 ? "+" : ""}{item.amount}
+                    </b>
+                  </article>
+                ))}
+              </div>
+            ) : <p className="messageEmpty">暂无记录</p>}
+          </section>
+        </article>
+      ) : null}
+    </UserWorkspace>
   );
 }

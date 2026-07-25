@@ -21,6 +21,16 @@ export function GET() {
   if ((["video", "audio", "file"] as MediaKind[]).some(isMediaKindPublic)) {
     urls.push(absoluteSiteUrl("/sitemap/media.xml"));
   }
+  const publicAnnouncementCount = (getDb().prepare(
+    `SELECT COUNT(*) AS count
+     FROM announcements
+     WHERE status = 'published' AND audience = 'public'
+       AND published_at IS NOT NULL AND published_at <= CURRENT_TIMESTAMP
+       AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)`,
+  ).get() as { count: number }).count;
+  if (publicAnnouncementCount > 0) {
+    urls.push(absoluteSiteUrl("/sitemap/announcements.xml"));
+  }
 
   return sitemapResponse(renderSitemapIndex(urls));
 }

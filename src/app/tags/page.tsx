@@ -5,11 +5,11 @@ import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SiteHeader } from "@/components/SiteHeader";
 import { TagTrackedLink } from "@/components/TagTrackedLink";
-import { getAdminSession } from "@/lib/admin-auth";
 import { canAccessAdvancedTagSearch, isGuestTagLibraryNavEnabled, isTagLibraryEnabled } from "@/lib/config";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { listTagGroups } from "@/lib/tags";
 import { getCurrentUser } from "@/lib/user-auth";
+import { hasUserPermission } from "@/lib/user-levels";
 
 export const dynamic = "force-dynamic";
 
@@ -46,11 +46,14 @@ export default async function TagsPage() {
   if (!isTagLibraryEnabled()) {
     notFound();
   }
-  const [user, adminSession] = await Promise.all([getCurrentUser(), getAdminSession()]);
-  if (!user && !adminSession && !isGuestTagLibraryNavEnabled()) {
+  const user = await getCurrentUser();
+  if (!user && !isGuestTagLibraryNavEnabled()) {
     return <TagsLocked />;
   }
-  const groups = listTagGroups();
+  const audience = user?.role === "admin" ? "admin" : user ? "member" : "public";
+  const groups = listTagGroups({ audience });
+  const showAdvancedSearch = canAccessAdvancedTagSearch(false) ||
+    (canAccessAdvancedTagSearch(Boolean(user)) && hasUserPermission(user, "advanced_search"));
 
   return (
     <main className="appShell">
@@ -65,7 +68,7 @@ export default async function TagsPage() {
             <h1>所有标签</h1>
             <p>按分组浏览已打标签的小说。</p>
           </div>
-          {adminSession || canAccessAdvancedTagSearch(Boolean(user)) ? (
+          {showAdvancedSearch ? (
             <Link className="tagAdvancedSearchLink" href="/tags/search">
               <ListFilter size={16} aria-hidden="true" />
               高级搜索

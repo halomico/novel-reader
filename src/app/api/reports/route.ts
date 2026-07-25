@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserDailyReportLimit } from "@/lib/config";
 import { createContentReport, isContentReportCategory } from "@/lib/reports";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
+import { hasUserPermission } from "@/lib/user-levels";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,6 +14,9 @@ export async function POST(request: NextRequest) {
   }
   if (user.role !== "user") {
     return NextResponse.json({ ok: false, message: "管理员无需提交举报" }, { status: 403 });
+  }
+  if (!hasUserPermission(user, "content_report")) {
+    return NextResponse.json({ ok: false, message: "当前等级暂不能提交举报" }, { status: 403 });
   }
 
   let body: Record<string, unknown>;

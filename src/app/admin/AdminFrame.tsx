@@ -35,8 +35,11 @@ function titleFor(active: AdminFrameProps["active"]): string {
   if (active === "tags") {
     return "标签管理";
   }
-  if (active === "reports") {
-    return "内容举报";
+  if (active === "access") {
+    return "内容访问";
+  }
+  if (active === "station") {
+    return "站务中心";
   }
   if (active === "users") {
     return "用户管理";
@@ -83,7 +86,7 @@ export async function AdminFrame({ active, notice = "", tone, breadcrumbs, child
           <div className="adminTopActions">
             <ThemeToggle />
             <form action={logoutAdminAction}>
-              <button className="adminIconButton" type="submit" aria-label="退出登录" title="退出登录">
+              <button className="iconLink" type="submit" aria-label="退出登录" title="退出登录">
                 <LogOut size={20} aria-hidden="true" />
               </button>
             </form>

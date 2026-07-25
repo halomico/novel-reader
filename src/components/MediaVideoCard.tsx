@@ -15,10 +15,7 @@ export function MediaVideoCard({
 }: {
   asset: MediaAsset;
   thumbnail: {
-    mode: "single" | "carousel";
     singlePercent: number;
-    carouselFrames: number;
-    carouselIntervalSeconds: number;
   };
 }) {
   const title = displayTitle(asset.title, asset.fileName);
@@ -27,10 +24,7 @@ export function MediaVideoCard({
       <span className="mediaVideoPreview">
         <MediaVideoPreview
           id={asset.id}
-          mode={thumbnail.mode}
           singlePercent={thumbnail.singlePercent}
-          frameCount={thumbnail.carouselFrames}
-          intervalSeconds={thumbnail.carouselIntervalSeconds}
           sourceVersion={asset.mtimeMs}
         />
         <span className="mediaVideoPlay" aria-hidden="true"><Play size={20} fill="currentColor" /></span>

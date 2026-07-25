@@ -117,6 +117,31 @@ function cleanupObsoleteHistoryColumns(db: DatabaseSync) {
   }
 }
 
+function migrateTagVisibility(db: DatabaseSync) {
+  const columns = db.prepare("PRAGMA table_info(tags)").all() as Array<{ name: string }>;
+  const hasLegacyVisibility = columns.some((column) => column.name === "is_visible");
+  if (!columns.some((column) => column.name === "visibility")) {
+    db.exec("ALTER TABLE tags ADD COLUMN visibility TEXT NOT NULL DEFAULT 'public' CHECK(visibility IN ('public', 'member', 'hidden'));");
+  }
+  if (!hasLegacyVisibility) {
+    return;
+  }
+
+  db.exec("BEGIN");
+  try {
+    db.exec(`
+      UPDATE tags
+      SET visibility = CASE WHEN is_visible = 1 THEN 'public' ELSE 'hidden' END;
+      DROP INDEX IF EXISTS idx_tags_visible_sort;
+      ALTER TABLE tags DROP COLUMN is_visible;
+    `);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
 function migrateLegacySearchRateLimitBans(db: DatabaseSync) {
   const legacy = db
     .prepare("SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'search_rate_limit_bans'")
@@ -127,16 +152,234 @@ function migrateLegacySearchRateLimitBans(db: DatabaseSync) {
 
   db.exec("BEGIN");
   try {
+    db.exec("DROP TABLE search_rate_limit_bans;");
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+function migrateLegacyContentAccessBans(db: DatabaseSync) {
+  const legacy = db
+    .prepare("SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'rate_limit_bans'")
+    .get() as { found: number } | undefined;
+  if (!legacy) {
+    return;
+  }
+
+  db.exec("BEGIN");
+  try {
     db.exec(`
-      INSERT OR IGNORE INTO rate_limit_bans (category, ip, rule_id, is_permanent, banned_until, created_at, updated_at)
-      SELECT 'search', ip, rule_id, is_permanent, banned_until, created_at, updated_at
-      FROM search_rate_limit_bans;
-      DROP TABLE search_rate_limit_bans;
+      INSERT INTO content_access_rules (
+        target_type, target_value, scope, audience, source, reason, expires_at
+      )
+      SELECT
+        'ip',
+        ip,
+        'all',
+        'all',
+        'rate_limit',
+        '由旧版正文访问规则迁移',
+        CASE
+          WHEN is_permanent = 1 THEN (CAST(strftime('%s', 'now') AS INTEGER) * 1000) + 86400000
+          ELSE banned_until
+        END
+      FROM rate_limit_bans
+      WHERE category = 'content'
+        AND (is_permanent = 1 OR banned_until > CAST(strftime('%s', 'now') AS INTEGER) * 1000);
+
+      DROP TABLE rate_limit_bans;
     `);
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");
     throw error;
+  }
+}
+
+function migrateContentReportCategories(db: DatabaseSync) {
+  const table = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'content_reports'")
+    .get() as { sql?: string } | undefined;
+  if (!table?.sql || table.sql.includes("'title_error'")) {
+    return;
+  }
+
+  db.exec("BEGIN");
+  try {
+    db.exec(`
+      CREATE TABLE content_reports_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        novel_id INTEGER NOT NULL,
+        category TEXT NOT NULL CHECK(category IN ('title_error', 'tag_error', 'hotword_error', 'spam', 'other')),
+        details TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'resolved')),
+        resolved_by TEXT,
+        resolved_at TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE
+      );
+
+      INSERT INTO content_reports_new (
+        id, user_id, novel_id, category, details, status,
+        resolved_by, resolved_at, created_at, updated_at
+      )
+      SELECT
+        id, user_id, novel_id, category, details, status,
+        resolved_by, resolved_at, created_at, updated_at
+      FROM content_reports;
+
+      DROP TABLE content_reports;
+      ALTER TABLE content_reports_new RENAME TO content_reports;
+    `);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+function migrateUserEconomy(db: DatabaseSync) {
+  const columns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+  const needsTrustLevel = !columns.some((column) => column.name === "trust_level");
+  if (needsTrustLevel) {
+    db.exec("ALTER TABLE users ADD COLUMN trust_level INTEGER NOT NULL DEFAULT 0 CHECK(trust_level BETWEEN 0 AND 6);");
+    db.exec("UPDATE users SET trust_level = 2;");
+  }
+  if (!columns.some((column) => column.name === "soda_balance")) {
+    if (columns.some((column) => column.name === "cola_balance")) {
+      db.exec("ALTER TABLE users RENAME COLUMN cola_balance TO soda_balance;");
+    } else {
+      db.exec("ALTER TABLE users ADD COLUMN soda_balance INTEGER NOT NULL DEFAULT 0 CHECK(soda_balance >= 0);");
+    }
+  }
+
+  const legacyTransactions = db
+    .prepare("SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'user_cola_transactions'")
+    .get();
+  if (legacyTransactions) {
+    db.exec(`
+      INSERT OR IGNORE INTO user_soda_transactions (
+        id, user_id, amount, balance_after, source, note, created_at
+      )
+      SELECT id, user_id, amount, balance_after, source, note, created_at
+      FROM user_cola_transactions;
+      DROP TABLE user_cola_transactions;
+    `);
+  }
+}
+
+function migrateNovelRecommendations(db: DatabaseSync) {
+  const novelColumns = db.prepare("PRAGMA table_info(novels)").all() as Array<{ name: string }>;
+  const addedRecommendCount = !novelColumns.some((column) => column.name === "recommend_count");
+  if (addedRecommendCount) {
+    db.exec("ALTER TABLE novels ADD COLUMN recommend_count INTEGER NOT NULL DEFAULT 0 CHECK(recommend_count >= 0);");
+  }
+
+  let recommendationColumns = db.prepare("PRAGMA table_info(novel_recommendations)").all() as Array<{ name: string }>;
+  const needsDailyKey = !recommendationColumns.some((column) => column.name === "recommendation_date");
+  if (needsDailyKey) {
+    const spentColumn = recommendationColumns.some((column) => column.name === "soda_spent")
+      ? "soda_spent"
+      : recommendationColumns.some((column) => column.name === "cola_spent")
+        ? "cola_spent"
+        : "0";
+    db.exec("BEGIN");
+    try {
+      db.exec(`
+        CREATE TABLE novel_recommendations_new (
+          novel_id INTEGER NOT NULL,
+          user_id INTEGER NOT NULL,
+          recommendation_date TEXT NOT NULL,
+          soda_spent INTEGER NOT NULL DEFAULT 0 CHECK(soda_spent >= 0),
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY(novel_id, user_id, recommendation_date),
+          FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE,
+          FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        INSERT OR IGNORE INTO novel_recommendations_new (
+          novel_id, user_id, recommendation_date, soda_spent, created_at
+        )
+        SELECT novel_id, user_id, date(created_at), ${spentColumn}, created_at
+        FROM novel_recommendations;
+
+        DROP TABLE novel_recommendations;
+        ALTER TABLE novel_recommendations_new RENAME TO novel_recommendations;
+      `);
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+    recommendationColumns = db.prepare("PRAGMA table_info(novel_recommendations)").all() as Array<{ name: string }>;
+  }
+  if (!recommendationColumns.some((column) => column.name === "soda_spent")) {
+    if (recommendationColumns.some((column) => column.name === "cola_spent")) {
+      db.exec("ALTER TABLE novel_recommendations RENAME COLUMN cola_spent TO soda_spent;");
+    } else {
+      db.exec("ALTER TABLE novel_recommendations ADD COLUMN soda_spent INTEGER NOT NULL DEFAULT 0 CHECK(soda_spent >= 0);");
+    }
+  }
+
+  if (addedRecommendCount || needsDailyKey) {
+    db.exec(`
+      UPDATE novels
+      SET recommend_count = (
+            SELECT COUNT(*) FROM novel_recommendations r
+            WHERE r.novel_id = novels.id
+          );
+    `);
+  }
+
+  db.exec(`
+    DROP TRIGGER IF EXISTS novel_recommendations_delete_count;
+
+    CREATE INDEX IF NOT EXISTS idx_novel_recommendations_novel_time
+      ON novel_recommendations(novel_id, created_at DESC);
+
+    CREATE TRIGGER IF NOT EXISTS novel_recommendations_insert_count
+    AFTER INSERT ON novel_recommendations
+    BEGIN
+      UPDATE novels
+      SET recommend_count = recommend_count + 1
+      WHERE id = NEW.novel_id;
+    END;
+  `);
+}
+
+function seedUserLevels(db: DatabaseSync) {
+  const defaults = [
+    [0, "新用户", ["content_report", "station_message", "novel_feedback"]],
+    [1, "基础", ["content_report", "station_message", "novel_feedback"]],
+    [2, "成员", ["content_report", "station_message", "novel_feedback", "advanced_search"]],
+    [3, "活跃", ["content_report", "station_message", "novel_feedback", "advanced_search"]],
+    [4, "资深", ["content_report", "station_message", "novel_feedback", "advanced_search"]],
+    [5, "核心", ["content_report", "station_message", "novel_feedback", "advanced_search"]],
+    [6, "荣誉", ["content_report", "station_message", "novel_feedback", "advanced_search"]],
+  ] as const;
+  const insert = db.prepare(
+    "INSERT OR IGNORE INTO user_levels (level, name, permissions) VALUES (?, ?, ?)",
+  );
+  for (const [level, name, permissions] of defaults) {
+    insert.run(level, name, JSON.stringify(permissions));
+  }
+
+  const migrationKey = "user_level_defaults_v2";
+  const migrated = db.prepare("SELECT 1 AS found FROM app_metadata WHERE key = ?").get(migrationKey);
+  if (!migrated) {
+    const levelZero = db.prepare("SELECT permissions FROM user_levels WHERE level = 0").get() as
+      | { permissions: string }
+      | undefined;
+    if (levelZero?.permissions === JSON.stringify(["content_report", "station_message"])) {
+      db.prepare("UPDATE user_levels SET permissions = ?, updated_at = CURRENT_TIMESTAMP WHERE level = 0")
+        .run(JSON.stringify(defaults[0][2]));
+    }
+    db.prepare("INSERT INTO app_metadata (key, value) VALUES (?, '1')").run(migrationKey);
   }
 }
 
@@ -147,6 +390,12 @@ function initialize(db: DatabaseSync) {
   cleanupLegacySearchTables(db);
   migrateNovelsAllowDuplicateTitles(db);
   db.exec(`
+    CREATE TABLE IF NOT EXISTS app_metadata (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS novels (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
@@ -157,6 +406,7 @@ function initialize(db: DatabaseSync) {
       mtime_ms INTEGER NOT NULL,
       word_count INTEGER NOT NULL DEFAULT 0,
       visit_count INTEGER NOT NULL DEFAULT 0,
+      recommend_count INTEGER NOT NULL DEFAULT 0 CHECK(recommend_count >= 0),
       last_accessed_at TEXT,
       last_accessed_ip TEXT,
       last_accessed_user_agent TEXT,
@@ -174,12 +424,10 @@ function initialize(db: DatabaseSync) {
       description TEXT NOT NULL DEFAULT '',
       aliases TEXT NOT NULL DEFAULT '[]',
       sort_order INTEGER NOT NULL DEFAULT 0,
-      is_visible INTEGER NOT NULL DEFAULT 1,
+      visibility TEXT NOT NULL DEFAULT 'public' CHECK(visibility IN ('public', 'member', 'hidden')),
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
-
-    CREATE INDEX IF NOT EXISTS idx_tags_visible_sort ON tags(is_visible, sort_order, name);
 
     CREATE TABLE IF NOT EXISTS novel_tags (
       novel_id INTEGER NOT NULL,
@@ -222,6 +470,8 @@ function initialize(db: DatabaseSync) {
       avatar_path TEXT,
       status TEXT NOT NULL DEFAULT 'active',
       role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user', 'admin')),
+      trust_level INTEGER NOT NULL DEFAULT 0 CHECK(trust_level BETWEEN 0 AND 6),
+      soda_balance INTEGER NOT NULL DEFAULT 0 CHECK(soda_balance >= 0),
       search_rate_limit_per_minute INTEGER,
       registration_ip TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -359,7 +609,7 @@ function initialize(db: DatabaseSync) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
       novel_id INTEGER NOT NULL,
-      category TEXT NOT NULL CHECK(category IN ('tag_error', 'hotword_error', 'spam', 'other')),
+      category TEXT NOT NULL CHECK(category IN ('title_error', 'tag_error', 'hotword_error', 'spam', 'other')),
       details TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'resolved')),
       resolved_by TEXT,
@@ -374,18 +624,142 @@ function initialize(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_content_reports_user_time ON content_reports(user_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_content_reports_novel_time ON content_reports(novel_id, created_at DESC);
 
-    CREATE TABLE IF NOT EXISTS rate_limit_bans (
-      category TEXT NOT NULL,
-      ip TEXT NOT NULL,
-      rule_id TEXT NOT NULL,
-      is_permanent INTEGER NOT NULL DEFAULT 0,
-      banned_until INTEGER,
+    CREATE TABLE IF NOT EXISTS novel_recommendations (
+      novel_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      recommendation_date TEXT NOT NULL,
+      soda_spent INTEGER NOT NULL DEFAULT 0 CHECK(soda_spent >= 0),
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY(category, ip)
+      PRIMARY KEY(novel_id, user_id, recommendation_date),
+      FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
-    CREATE INDEX IF NOT EXISTS idx_rate_limit_bans_category_until ON rate_limit_bans(category, banned_until);
+    CREATE INDEX IF NOT EXISTS idx_novel_recommendations_novel_time
+      ON novel_recommendations(novel_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS user_levels (
+      level INTEGER PRIMARY KEY CHECK(level BETWEEN 0 AND 6),
+      name TEXT NOT NULL,
+      permissions TEXT NOT NULL DEFAULT '[]',
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS user_checkins (
+      user_id INTEGER NOT NULL,
+      checkin_date TEXT NOT NULL,
+      reward INTEGER NOT NULL CHECK(reward BETWEEN 1 AND 20),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(user_id, checkin_date),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS user_soda_transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      amount INTEGER NOT NULL,
+      balance_after INTEGER NOT NULL CHECK(balance_after >= 0),
+      source TEXT NOT NULL,
+      note TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_user_soda_transactions_user_time
+      ON user_soda_transactions(user_id, created_at DESC, id DESC);
+
+    CREATE TABLE IF NOT EXISTS announcements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL DEFAULT '',
+      audience TEXT NOT NULL DEFAULT 'public' CHECK(audience IN ('public', 'member')),
+      importance TEXT NOT NULL DEFAULT 'normal' CHECK(importance IN ('normal', 'important')),
+      status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'published', 'archived')),
+      published_at TEXT,
+      expires_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_announcements_visible
+      ON announcements(status, audience, importance, published_at, expires_at);
+
+    CREATE TABLE IF NOT EXISTS announcement_reads (
+      announcement_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      read_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(announcement_id, user_id),
+      FOREIGN KEY(announcement_id) REFERENCES announcements(id) ON DELETE CASCADE,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS station_threads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      subject TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'closed')),
+      user_last_read_message_id INTEGER NOT NULL DEFAULT 0,
+      admin_last_read_message_id INTEGER NOT NULL DEFAULT 0,
+      last_message_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_station_threads_user_time
+      ON station_threads(user_id, last_message_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_station_threads_status_time
+      ON station_threads(status, last_message_at DESC);
+
+    CREATE TABLE IF NOT EXISTS station_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      thread_id INTEGER NOT NULL,
+      author_role TEXT NOT NULL CHECK(author_role IN ('user', 'admin')),
+      author_user_id INTEGER,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(thread_id) REFERENCES station_threads(id) ON DELETE CASCADE,
+      FOREIGN KEY(author_user_id) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_station_messages_thread
+      ON station_messages(thread_id, id);
+
+    CREATE TABLE IF NOT EXISTS content_access_rules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      target_type TEXT NOT NULL CHECK(target_type IN ('ip', 'cidr', 'country')),
+      target_value TEXT NOT NULL,
+      scope TEXT NOT NULL DEFAULT 'all' CHECK(scope IN ('all', 'novel', 'media')),
+      audience TEXT NOT NULL DEFAULT 'all' CHECK(audience IN ('all', 'guest')),
+      source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual', 'rate_limit')),
+      reason TEXT NOT NULL DEFAULT '',
+      expires_at INTEGER,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_content_access_rules_match
+      ON content_access_rules(enabled, scope, audience, target_type, target_value);
+    CREATE INDEX IF NOT EXISTS idx_content_access_rules_expiry
+      ON content_access_rules(expires_at);
+
+    CREATE TABLE IF NOT EXISTS content_access_policies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      scope TEXT NOT NULL DEFAULT 'all' CHECK(scope IN ('all', 'novel', 'media')),
+      audience TEXT NOT NULL DEFAULT 'guest' CHECK(audience IN ('all', 'guest')),
+      window_seconds INTEGER NOT NULL,
+      max_requests INTEGER NOT NULL,
+      block_seconds INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_content_access_policies_enabled
+      ON content_access_policies(enabled, scope, audience);
 
     CREATE TABLE IF NOT EXISTS video_categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -436,6 +810,12 @@ function initialize(db: DatabaseSync) {
 
   `);
   migrateLegacySearchRateLimitBans(db);
+  migrateTagVisibility(db);
+  migrateLegacyContentAccessBans(db);
+  migrateContentReportCategories(db);
+  migrateUserEconomy(db);
+  migrateNovelRecommendations(db);
+  seedUserLevels(db);
   migrateNovelsContentHash(db);
   addColumnIfMissing(db, "novels", "word_count", "word_count INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(db, "novels", "visit_count", "visit_count INTEGER NOT NULL DEFAULT 0");
@@ -460,11 +840,17 @@ function initialize(db: DatabaseSync) {
   addColumnIfMissing(db, "search_query_events", "result_novel_count", "result_novel_count INTEGER");
   cleanupObsoleteHistoryColumns(db);
   db.exec("DROP INDEX IF EXISTS idx_novel_tags_tag_novel;");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_novels_title_nocase_id ON novels(title COLLATE NOCASE, id);");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_tags_visibility_sort ON tags(visibility, sort_order, name);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_novels_title_hash ON novels(title, content_hash);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_novels_last_accessed ON novels(last_accessed_at);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_novels_last_accessed_ip ON novels(last_accessed_ip);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_users_registration_ip_created ON users(registration_ip, created_at);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_users_role ON users(role, status);");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_users_trust_level ON users(trust_level, status);");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_content_reports_status_time ON content_reports(status, created_at DESC);");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_content_reports_user_time ON content_reports(user_id, created_at DESC);");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_content_reports_novel_time ON content_reports(novel_id, created_at DESC);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_analytics_events_media_time ON analytics_events(media_id, created_at);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_analytics_events_tag_time ON analytics_events(tag_id, created_at);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_media_assets_video_category ON media_assets(kind, category_id, updated_at DESC);");

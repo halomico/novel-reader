@@ -529,8 +529,8 @@ textarea {
   z-index: 80;
   display: grid;
   width: max-content;
-  min-width: 116px;
-  max-width: min(176px, calc(100vw - 24px));
+  min-width: 96px;
+  max-width: min(156px, calc(100vw - 24px));
   gap: 3px;
   padding: 6px;
   border: 1px solid var(--border);
@@ -572,7 +572,7 @@ textarea {
 .userMenuIdentity > span:last-child {
   display: grid;
   min-width: 0;
-  max-width: 94px;
+  max-width: 70px;
 }
 
 .userMenuIdentity small,
@@ -592,15 +592,36 @@ textarea {
   font-size: 13px;
 }
 
+.userMenuGrowthMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  color: var(--muted);
+}
+
+.userMenuGrowthMeta i {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.userMenuGrowthMeta svg {
+  color: var(--accent);
+}
+
 .userMenuPanel a,
 .userMenuPanel button {
   display: flex;
   width: 100%;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   border: 0;
   border-radius: 7px;
-  padding: 7px 9px;
+  padding: 7px 8px;
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -624,31 +645,12 @@ textarea {
 
 :root[data-top-menu="hide"] .userMenuPrimaryNav,
 :root[data-ui-mode="minimal"] .siteHeader:not(.isHomeHeader) .userMenuPrimaryNav {
-  display: block;
-}
-
-.userMenuPrimaryNavToggle .userMenuPrimaryNavChevron {
-  margin-left: auto;
-  transition: transform 150ms ease;
-}
-
-.userMenuPrimaryNav.isOpen .userMenuPrimaryNavChevron {
-  transform: rotate(180deg);
-}
-
-.userMenuPrimaryNavLinks {
   display: grid;
-  gap: 2px;
-  padding: 2px 0 2px 16px;
+  gap: 3px;
 }
 
-.userMenuPrimaryNavLinks a {
-  padding-block: 6px;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.userMenuPrimaryNavLinks a[aria-current="page"] {
+.userMenuPrimaryNav a[aria-current="page"] {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
   color: var(--accent);
 }
 
@@ -692,23 +694,27 @@ textarea {
 }
 
 .homePortalCard.is-tags {
-  --portal-accent: var(--tag-color);
+  --portal-accent: color-mix(in srgb, #7859a5 84%, var(--text));
+}
+
+.homePortalCard.is-announcement {
+  --portal-accent: color-mix(in srgb, #b56b25 84%, var(--text));
 }
 
 .homePortalCard.is-video {
-  --portal-accent: #a33f5b;
+  --portal-accent: color-mix(in srgb, #3279a8 84%, var(--text));
 }
 
 .homePortalCard.is-audio {
-  --portal-accent: #28796f;
+  --portal-accent: color-mix(in srgb, #287b6d 84%, var(--text));
 }
 
 .homePortalCard.is-file {
-  --portal-accent: #6765a5;
+  --portal-accent: color-mix(in srgb, #5d6fa3 84%, var(--text));
 }
 
 .homePortalCard.is-random {
-  --portal-accent: #a16a24;
+  --portal-accent: color-mix(in srgb, #52794e 84%, var(--text));
 }
 
 .homePortalCard:hover,
@@ -1654,23 +1660,42 @@ button.pageNumber {
   margin-left: auto;
 }
 
-.readerReportAction > button {
+.readerReportAction > button,
+.readerFeedbackActions > button {
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   place-items: center;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: 6px;
   padding: 0;
-  background: color-mix(in srgb, var(--surface-strong) 38%, transparent);
+  background: transparent;
   color: var(--muted);
   cursor: pointer;
 }
 
 .readerReportAction > button:hover,
-.readerReportAction > button:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+.readerReportAction > button:focus-visible,
+.readerFeedbackActions > button:hover,
+.readerFeedbackActions > button:focus-visible,
+.readerFeedbackActions > button.isActive {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--accent);
+}
+
+.readerFeedbackActions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 40px;
+}
+
+.readerFeedbackActions .readerReportAction {
+  margin-left: 0;
+}
+
+.readerFeedbackActions + .readerHotwordLinks {
+  margin-top: 20px;
 }
 
 .readerReportBackdrop {
@@ -1813,6 +1838,7 @@ button.pageNumber {
   font-size: var(--reader-font-size);
   font-weight: 700;
   line-height: 1.35;
+  white-space: nowrap;
 }
 
 .readerTagLinks a:hover,
@@ -1872,7 +1898,7 @@ button.pageNumber {
 }
 
 :root[data-reader-tags="collapsed"][data-ui-mode="standard"] .readerTagsBlock:not(.isExpanded) .readerTagLinks {
-  max-height: var(--reader-tags-collapsed-height, calc(var(--reader-font-size) * 2.7 + 22px));
+  max-height: calc(var(--reader-font-size) * 2.7 + 23px);
   overflow: hidden;
 }
 
@@ -3726,6 +3752,15 @@ mark {
   display: none;
 }
 
+.accountOverview {
+  display: grid;
+  gap: 16px;
+}
+
+.accountOverview .accountPanel {
+  display: grid;
+}
+
 #account-tab-profile:checked ~ .accountContent .accountProfile,
 #account-tab-security:checked ~ .accountContent .accountSecurity {
   display: grid;
@@ -3808,18 +3843,23 @@ mark {
 .accountActionButton,
 .avatarPicker .accountActionButton {
   display: inline-flex;
-  min-height: 30px;
+  min-height: 28px;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
   border: 1px solid color-mix(in srgb, var(--accent) 74%, var(--border));
   border-radius: 5px;
-  padding: 5px 10px;
+  padding: 4px 9px;
   background: var(--accent);
   color: #fffaf2;
   cursor: pointer;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 650;
+}
+
+.accountContent .userPanel .accountActionButton {
+  min-height: 28px;
+  padding: 4px 9px;
 }
 
 .avatarPicker .accountActionButton {
@@ -6617,6 +6657,93 @@ a.analyticsSearchTag:focus-visible {
   font-size: 12px;
 }
 
+.adminHomeCardOrder {
+  display: grid;
+  gap: 7px;
+  margin-top: 5px;
+}
+
+.adminHomeCardOrderHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.adminHomeCardOrderHeading strong {
+  font-size: 12px;
+}
+
+.adminHomeCardOrderHeading small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.adminHomeCardOrderList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.adminHomeCardOrderRow {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 7px 5px 10px;
+}
+
+.adminHomeCardOrderRow:nth-child(odd) {
+  border-right: 1px solid var(--border);
+}
+
+.adminHomeCardOrderRow:nth-child(n + 3) {
+  border-top: 1px solid var(--border);
+}
+
+.adminHomeCardOrderRow > span,
+.adminHomeCardOrderRow > div {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adminHomeCardOrderRow > span {
+  min-width: 0;
+  font-size: 12px;
+}
+
+.adminHomeCardOrderRow > span svg {
+  color: var(--accent);
+}
+
+.adminHomeCardOrderRow button {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.adminHomeCardOrderRow button:hover,
+.adminHomeCardOrderRow button:focus-visible {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+}
+
+.adminHomeCardOrderRow button:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+
 .adminMediaPanel {
   min-width: 0;
 }
@@ -7683,7 +7810,7 @@ a.analyticsSearchTag:focus-visible {
   }
 
   :root[data-ui-mode="standard"] .readerShell .userMenuPrimaryNav {
-    display: block;
+    display: grid;
   }
 
   .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen):not(.isDefaultOpen),
@@ -8190,6 +8317,18 @@ a.analyticsSearchTag:focus-visible {
     border-top: 1px solid var(--border);
   }
 
+  .adminHomeCardOrderList {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .adminHomeCardOrderRow:nth-child(odd) {
+    border-right: 0;
+  }
+
+  .adminHomeCardOrderRow:nth-child(n + 2) {
+    border-top: 1px solid var(--border);
+  }
+
   .adminMediaDescriptionField,
   .adminMediaUploadFields.hasArtist .adminMediaDescriptionField,
   .adminMediaUploadFields.hasCategory .adminMediaDescriptionField {
@@ -8397,6 +8536,660 @@ a.analyticsSearchTag:focus-visible {
   }
 }
 
+/* Frontend account workspace and soda economy */
+.headerMessageLink {
+  position: relative;
+}
+
+.headerUnreadDot {
+  position: absolute;
+  top: 5px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--surface);
+  border-radius: 50%;
+  background: #c53443;
+}
+
+.userWorkspaceShell {
+  width: min(1180px, calc(100% - 32px));
+}
+
+.userWorkspaceLayout {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  align-items: start;
+  gap: 30px;
+  margin: 16px 0 64px;
+}
+
+.userWorkspaceSidebar {
+  position: sticky;
+  top: 72px;
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+  border-right: 1px solid var(--border);
+  padding-right: 20px;
+}
+
+.userWorkspaceIdentity {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.userWorkspaceIdentity > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.userWorkspaceIdentity strong {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.userWorkspaceAvatar {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  overflow: hidden;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--muted);
+}
+
+.userWorkspaceAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.userWorkspaceGrowth {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.userWorkspaceGrowth small {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.userWorkspaceGrowth svg {
+  color: var(--accent);
+}
+
+.userWorkspaceSidebar nav {
+  display: grid;
+  gap: 2px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.userWorkspaceSidebar nav a,
+.userWorkspaceSidebar form button {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 5px;
+  padding: 7px 9px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+
+.userWorkspaceSidebar nav a:hover,
+.userWorkspaceSidebar nav a:focus-visible,
+.userWorkspaceSidebar nav a.isActive {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--accent);
+}
+
+.userWorkspaceSidebar form {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.userWorkspaceSidebar form button {
+  width: 100%;
+}
+
+.userWorkspaceSidebar form button:hover,
+.userWorkspaceSidebar form button:focus-visible {
+  color: #b42318;
+}
+
+.userWorkspaceContent {
+  width: min(100%, 840px);
+  min-width: 0;
+}
+
+.userWorkspaceContent .messagesPage {
+  margin-top: 0;
+}
+
+.accountGrowth {
+  display: grid;
+  gap: 22px;
+}
+
+.accountGrowthHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 18px;
+}
+
+.accountGrowthHeader h1 {
+  margin: 5px 0 0;
+  font-size: 22px;
+}
+
+.accountGrowthLevel,
+.accountGrowthBalance {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+}
+
+.accountGrowthLevel {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.accountGrowthBalance strong {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.accountGrowthBalance span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.accountPermissionList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.accountPermissionList > span {
+  display: inline-flex;
+  min-height: 27px;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 9px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.accountPermissionList > span.isEnabled {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  color: var(--accent);
+}
+
+.accountCheckin {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-block: 1px solid var(--border);
+  padding: 12px 2px;
+}
+
+.accountCheckin > div {
+  display: grid;
+  gap: 3px;
+}
+
+.accountCheckin small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.accountCheckin button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 5px;
+  padding: 6px 12px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 680;
+}
+
+.accountCheckin button:disabled {
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
+  color: var(--muted);
+  cursor: default;
+}
+
+.accountSodaHistory h2 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.accountSodaHistory > div {
+  display: grid;
+}
+
+.accountSodaHistory article {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--border);
+  padding: 8px 2px;
+}
+
+.accountSodaHistory article > span {
+  display: grid;
+  gap: 2px;
+}
+
+.accountSodaHistory article small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.accountSodaHistory article b {
+  color: var(--muted);
+}
+
+.accountSodaHistory article b.isPositive {
+  color: #1f7a4d;
+}
+
+.novelRecommendationControl,
+.readerReportAction {
+  position: relative;
+  display: inline-flex;
+}
+
+.novelRecommendationControl > button {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.novelRecommendationControl > button:hover,
+.novelRecommendationControl > button:focus-visible,
+.novelRecommendationControl > button.isActive {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+}
+
+.novelRecommendationControl > button:disabled {
+  cursor: default;
+}
+
+.readerActionToast {
+  position: absolute;
+  z-index: 4;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  width: max-content;
+  max-width: min(260px, 80vw);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px 9px;
+  background: var(--surface-strong, var(--surface));
+  box-shadow: 0 6px 18px rgb(20 28 34 / 12%);
+  color: var(--text);
+  font-size: 12px;
+  transform: translateX(-50%);
+}
+
+/* Compact admin controls */
+.adminSelectControl {
+  display: inline-grid;
+  width: min(100%, 240px);
+  max-width: 100%;
+}
+
+.adminSelectControl select {
+  width: 100%;
+  min-height: 34px;
+  border-radius: 6px;
+  padding: 6px 32px 6px 10px !important;
+}
+
+.adminSelectControl > svg {
+  right: 10px;
+}
+
+.adminPaletteSelectRow .adminSelectControl,
+.adminAccessModeRow > .adminSelectControl,
+.accessRuleEditor .adminSelectControl,
+.accessPolicyEditor .adminSelectControl {
+  width: 100%;
+}
+
+.adminStationReports {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.adminAnnouncementFields {
+  grid-template-columns: repeat(3, minmax(140px, 200px));
+  justify-content: start;
+}
+
+.adminAnnouncementFields .adminSelectControl {
+  width: 100%;
+}
+
+.accessCreateDisclosure,
+.accessRuleDisclosure {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface-strong) 22%, transparent);
+}
+
+.accessCreateDisclosure > summary,
+.accessRuleDisclosure > summary {
+  display: grid;
+  min-height: 42px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 11px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.accessCreateDisclosure > summary {
+  grid-template-columns: minmax(0, 1fr) auto;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.accessCreateDisclosure > summary > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.accessRuleDisclosure > summary {
+  grid-template-columns: minmax(140px, 1.2fr) 110px minmax(120px, 1fr) auto;
+  font-size: 12px;
+}
+
+.accessCreateDisclosure > summary::-webkit-details-marker,
+.accessRuleDisclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.accessCreateDisclosure[open] > summary,
+.accessRuleDisclosure[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.accessCreateDisclosure[open] > summary > svg,
+.accessRuleDisclosure[open] > summary > svg {
+  transform: rotate(180deg);
+}
+
+.accessRuleDisclosure > summary small {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accessRuleEditor,
+.accessPolicyEditor {
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  border: 0;
+  padding: 12px;
+}
+
+.accessRuleEditor.isCreate {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.accessTargetField,
+.accessReasonField {
+  grid-column: span 2;
+}
+
+.accessRuleEditor > .adminCompactButton,
+.accessRuleEditor > .accessDeleteButton {
+  align-self: end;
+  justify-self: start;
+}
+
+.accessPolicyEditor {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.adminUserHeaderActions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.adminUserGrowthFields,
+.adminBookBasicFields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 190px);
+  gap: 10px;
+}
+
+.adminUserStatusForm .adminSelectControl {
+  width: 78px;
+}
+
+.adminUserStatusForm .adminSelectControl select {
+  min-height: 28px;
+  padding: 3px 22px 3px 9px !important;
+}
+
+.adminUserStatusForm .adminSelectControl > svg {
+  right: 6px;
+  width: 13px;
+}
+
+.adminBookRecommendationCount {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--accent);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.adminUserLevelsForm {
+  display: grid;
+  gap: 14px;
+}
+
+.adminUserLevelList {
+  display: grid;
+  gap: 0;
+}
+
+.adminUserLevelRow {
+  display: grid;
+  grid-template-columns: 58px minmax(140px, 220px) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 11px 0;
+}
+
+.adminUserLevelIndex {
+  grid-column: 1;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.adminUserLevelName {
+  grid-column: 2;
+}
+
+.adminUserLevelName input {
+  width: 100%;
+  min-height: 34px;
+}
+
+.adminUserLevelPermissions {
+  display: flex;
+  grid-column: 3;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.adminUserLevelPermissions label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.adminUserLevelPermissions input {
+  width: 14px;
+  height: 14px;
+}
+
+@media (min-width: 821px) {
+  .userWorkspaceShell .userMenu {
+    display: none;
+  }
+}
+
+@media (max-width: 820px) {
+  .userWorkspaceShell {
+    width: min(100% - 24px, 1180px);
+  }
+
+  .userWorkspaceLayout {
+    display: block;
+    margin-top: 8px;
+  }
+
+  .userWorkspaceSidebar {
+    display: none;
+  }
+
+  .userWorkspaceContent {
+    width: 100%;
+  }
+
+  .adminUserHeaderActions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .adminUserHeaderActions .adminTitleSearchForm {
+    flex: 1 1 260px;
+  }
+
+  .adminUserLevelRow {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .adminUserLevelPermissions {
+    grid-column: 1 / -1;
+    padding-left: 60px;
+  }
+
+  .accessRuleEditor,
+  .accessPolicyEditor {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .accountGrowthHeader,
+  .accountCheckin {
+    align-items: flex-start;
+  }
+
+  .adminAnnouncementFields,
+  .adminUserGrowthFields,
+  .adminBookBasicFields,
+  .accessRuleEditor,
+  .accessPolicyEditor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .accessRuleDisclosure > summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .accessRuleDisclosure > summary > span:nth-child(2),
+  .accessRuleDisclosure > summary > small {
+    grid-column: 1;
+  }
+
+  .accessRuleDisclosure > summary > svg {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .accessTargetField,
+  .accessReasonField {
+    grid-column: auto;
+  }
+
+  .adminUserLevelRow {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .adminUserLevelPermissions {
+    padding-left: 0;
+  }
+}
+
 @media (min-width: 821px) and (max-width: 1060px) {
   .siteHeader.hasPrimaryNav,
   :root[data-ui-mode="minimal"] .siteHeader.hasPrimaryNav {
@@ -8494,5 +9287,847 @@ a.analyticsSearchTag:focus-visible {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+}
+
+/* Version 2: restrained shared surfaces for access, messages, and authentication. */
+.siteHeader.isAuthHeader {
+  grid-template-columns: minmax(0, 1fr) auto;
+  border-bottom: 1px solid var(--border);
+}
+
+.adminLoginShell {
+  display: block;
+  min-height: 100dvh;
+  place-items: initial;
+}
+
+.srOnly {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+}
+
+.siteHeader.isAuthHeader .headerTools {
+  grid-column: 2;
+  width: auto;
+}
+
+.siteHeader.isAuthHeader .brand {
+  font-size: 21px;
+}
+
+.siteHeader.isAuthHeader + .authPage,
+.siteHeader.isAuthHeader ~ .authPage {
+  min-height: calc(100dvh - 112px);
+  align-content: center;
+  margin-top: 0;
+  padding: 36px 0 72px;
+}
+
+.authPanel,
+.adminLoginPanel {
+  width: min(380px, 100%);
+  gap: 16px;
+  padding: 24px;
+  box-shadow: 0 10px 28px rgb(31 45 54 / 8%);
+}
+
+.authPanel .userPanelHeader {
+  display: block;
+  padding-bottom: 2px;
+}
+
+.authPanel .userPanelHeader h1 {
+  font-size: 21px;
+  font-weight: 720;
+}
+
+.authPanel input,
+.adminLoginForm input {
+  min-height: 42px;
+  border-radius: 6px;
+  padding: 9px 11px;
+  background: var(--surface);
+}
+
+.authPanel .authRemember input {
+  min-height: 15px;
+}
+
+.authPanel input:focus,
+.adminLoginForm input:focus {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
+  outline: 0;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.authPanel .authPrimaryButton,
+.adminLoginForm button {
+  width: 100%;
+  min-height: 40px;
+  justify-self: stretch;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 14px;
+}
+
+.authSwitchText {
+  text-align: center;
+}
+
+.userMenuUnreadDot,
+.messageUnreadDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.userMenuPanel a {
+  position: relative;
+}
+
+.userMenuPanel .userMenuUnreadDot {
+  margin-left: auto;
+}
+
+.messagesShell {
+  width: min(960px, calc(100% - 32px));
+}
+
+.messagesPage,
+.announcementDetail {
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.messagesHeader {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.messagesHeader h1,
+.announcementDetail h1 {
+  margin: 0;
+  font-family: var(--font-title);
+  font-size: 22px;
+  line-height: 1.3;
+}
+
+.messagesHeader h1 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.messagesTabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.messagesTabs a {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.messagesTabs a:hover,
+.messagesTabs a:focus-visible,
+.messagesTabs a.isActive {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+}
+
+.announcementList,
+.stationThreadList {
+  display: grid;
+}
+
+.announcementListItem,
+.stationThreadList > a {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 64px;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  padding: 11px 2px;
+}
+
+.announcementListItem:hover strong,
+.announcementListItem:focus-visible strong,
+.stationThreadList > a:hover strong,
+.stationThreadList > a:focus-visible strong {
+  color: var(--accent);
+}
+
+.announcementListItem > span:nth-child(2),
+.stationThreadList > a > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.announcementListItem strong,
+.stationThreadList strong {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.announcementListItem small,
+.stationThreadList small,
+.messageEmpty,
+.adminInlineEmpty {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.announcementMarker {
+  width: 4px;
+  height: 22px;
+  border-radius: 2px;
+  background: var(--border-strong, var(--border));
+}
+
+.announcementMarker.isImportant {
+  background: var(--accent);
+}
+
+.messageEmpty,
+.adminInlineEmpty {
+  margin: 0;
+  padding: 22px 2px;
+}
+
+.stationConversation,
+.announcementDetail {
+  display: grid;
+  gap: 18px;
+  padding: 22px 0;
+}
+
+.stationConversation > header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.stationConversation > header h2 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stationConversation > header > a,
+.stationConversation > header > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.stationConversation > header > span {
+  margin-left: auto;
+}
+
+.stationMessageList {
+  display: grid;
+  gap: 0;
+  border-block: 1px solid var(--border);
+}
+
+.stationMessageList article {
+  display: grid;
+  gap: 6px;
+  border-bottom: 1px solid var(--border);
+  padding: 14px 2px;
+}
+
+.stationMessageList article:last-child {
+  border-bottom: 0;
+}
+
+.stationMessageList article.isAdmin {
+  border-left: 2px solid color-mix(in srgb, var(--accent) 58%, transparent);
+  padding-left: 12px;
+}
+
+.stationMessageList small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.stationMessageList p,
+.announcementBody {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.stationReplyForm,
+.stationNewThread form {
+  display: grid;
+  gap: 10px;
+}
+
+.stationReplyForm textarea,
+.stationNewThread input,
+.stationNewThread textarea,
+.adminAnnouncementEditor input,
+.adminAnnouncementEditor textarea,
+.accessRuleEditor input,
+.accessPolicyEditor input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 9px 10px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.stationReplyForm textarea,
+.stationNewThread textarea,
+.adminAnnouncementEditor textarea {
+  resize: vertical;
+}
+
+.stationReplyForm button,
+.stationNewThread button {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 34px;
+  align-items: center;
+  gap: 6px;
+  justify-self: end;
+  border: 0;
+  border-radius: 5px;
+  padding: 6px 11px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.stationNewThread {
+  margin-top: 18px;
+  border-block: 1px solid var(--border);
+}
+
+.stationNewThread summary {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  gap: 7px;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 680;
+  list-style: none;
+}
+
+.stationNewThread summary::-webkit-details-marker {
+  display: none;
+}
+
+.stationNewThread form {
+  padding: 2px 0 16px;
+}
+
+.stationNewThread label,
+.adminAnnouncementEditor label,
+.accessRuleEditor label,
+.accessPolicyEditor label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.announcementDetail > header {
+  display: grid;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 18px;
+}
+
+.announcementDetail > header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.announcementBody {
+  font-size: 16px;
+}
+
+.accessAdminPanel,
+.stationAdminPanel {
+  padding: 0;
+}
+
+.accessAdminPanel > .adminPanelHeader,
+.stationAdminPanel > .adminPanelHeader {
+  margin: 0;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.accessSection {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.accessSectionHeading h3,
+.accessGeneratedList h4 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.accessSectionHeading p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.accessRuleList,
+.accessPolicyList,
+.accessGeneratedList {
+  display: grid;
+  gap: 7px;
+}
+
+.accessRuleEditor {
+  display: grid;
+  grid-template-columns: minmax(100px, 0.7fr) minmax(220px, 1.7fr) minmax(150px, 1fr);
+  align-items: end;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding: 10px 0 2px;
+}
+
+.accessRuleEditor.isCreate {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--surface-strong) 32%, transparent);
+}
+
+.accessRuleEditor select,
+.accessPolicyEditor select {
+  min-height: 37px;
+}
+
+.accessTypeField,
+.accessAudienceField {
+  grid-column: 1;
+}
+
+.accessTargetField,
+.accessReasonField {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.accessScopeField,
+.accessExpiresField {
+  grid-column: 3;
+}
+
+.accessRuleActions {
+  display: flex;
+  grid-column: 1 / -1;
+  min-height: 37px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  padding-top: 2px;
+}
+
+.accessEnabledField {
+  display: inline-flex !important;
+  min-height: 37px;
+  align-items: center;
+  align-self: center;
+  gap: 6px !important;
+  color: var(--text) !important;
+}
+
+.accessEnabledField input {
+  width: 14px;
+  height: 14px;
+}
+
+.adminCompactButton {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 5px;
+  padding: 6px 10px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.accessDeleteButton {
+  color: #b42318;
+}
+
+.accessDisclosure {
+  padding: 0;
+}
+
+.accessDisclosure > summary {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.accessDisclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.accessDisclosure > summary > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.accessDisclosure > summary small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.accessDisclosure[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.accessDisclosure > .accessPolicyList,
+.accessDisclosure > .accessGeneratedList {
+  padding: 14px 16px;
+}
+
+.accessPolicyEditor {
+  display: grid;
+  grid-template-columns: minmax(130px, 1.35fr) 130px 110px repeat(3, minmax(88px, 0.7fr)) auto auto auto;
+  align-items: end;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 0 10px;
+}
+
+.accessPolicyEditor.isCreate {
+  border-bottom: 0;
+  padding-top: 4px;
+}
+
+.accessGeneratedRow {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 100px minmax(140px, 1fr) 180px auto;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  padding: 8px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.accessRuleTarget {
+  color: var(--text);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+
+.adminStationLayout,
+.adminAnnouncementLayout {
+  display: grid;
+  grid-template-columns: minmax(190px, 260px) minmax(0, 1fr);
+  min-height: 540px;
+}
+
+.adminStationThreadList,
+.adminAnnouncementList {
+  display: grid;
+  align-content: start;
+  border-right: 1px solid var(--border);
+}
+
+.adminStationThreadList > a,
+.adminAnnouncementList > a {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  padding: 11px 13px;
+}
+
+.adminStationThreadList > a {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.adminStationThreadList > a.isActive,
+.adminAnnouncementList > a.isActive {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--accent);
+}
+
+.adminStationThreadList strong,
+.adminAnnouncementList strong {
+  display: block;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminStationThreadList small,
+.adminAnnouncementList small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.adminStationConversation,
+.adminAnnouncementEditor {
+  min-width: 0;
+  padding: 16px;
+}
+
+.adminStationConversation > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.adminStationConversation h2,
+.adminStationConversation h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.adminAnnouncementEditor {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.adminAnnouncementEditor > h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.adminAnnouncementFields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(110px, 1fr));
+  gap: 10px;
+}
+
+.adminTagTreePreview .tagChip.is-public {
+  color: #237a4b;
+}
+
+.adminTagTreePreview .tagChip.is-member {
+  border-style: dashed;
+  color: #8a641f;
+}
+
+.adminTagTreePreview .tagChip.is-hidden {
+  color: var(--muted);
+  opacity: 0.68;
+}
+
+@media (max-width: 1040px) {
+  .accessPolicyEditor {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .accessPolicyEditor .accessTargetField,
+  .accessPolicyEditor .accessReasonField {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 820px) {
+  .siteHeader.isAuthHeader {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .siteHeader.isAuthHeader .brand {
+    display: inline-flex;
+  }
+
+  .siteHeader.isAuthHeader .headerTools {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .siteHeader.isAuthHeader + .authPage,
+  .siteHeader.isAuthHeader ~ .authPage {
+    min-height: calc(100dvh - 96px);
+    padding: 26px 0 48px;
+  }
+
+  .authPanel,
+  .adminLoginPanel {
+    padding: 20px;
+  }
+
+  .homePortalShell {
+    display: grid;
+  }
+
+  .messagesShell {
+    width: min(100% - 24px, 960px);
+  }
+
+  .messagesHeader {
+    min-height: 58px;
+  }
+
+  .messagesHeader h1 {
+    font-size: 20px;
+  }
+
+  .messagesTabs {
+    gap: 12px;
+  }
+
+  .adminStationLayout,
+  .adminAnnouncementLayout {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .adminStationThreadList,
+  .adminAnnouncementList {
+    max-height: 260px;
+    overflow-y: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .accessPolicyEditor {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .accessRuleEditor {
+    grid-template-columns: minmax(110px, 0.7fr) minmax(0, 1.3fr);
+  }
+
+  .accessTypeField,
+  .accessScopeField {
+    grid-column: 1;
+  }
+
+  .accessTargetField,
+  .accessAudienceField {
+    grid-column: 2;
+  }
+
+  .accessReasonField,
+  .accessExpiresField,
+  .accessRuleActions,
+  .accessPolicyEditor .accessTargetField,
+  .accessPolicyEditor .accessReasonField {
+    grid-column: span 2;
+  }
+
+  .accessGeneratedRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .accessGeneratedRow > span:not(.accessRuleTarget),
+  .accessGeneratedRow > time {
+    grid-column: 1;
+  }
+
+  .accessGeneratedRow > form {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
+@media (max-width: 520px) {
+  .authPanel .authRemember input {
+    min-height: 13px;
+  }
+
+  .authPanel,
+  .adminLoginPanel {
+    border: 0;
+    border-inline: 0;
+    padding-inline: 2px;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .messagesHeader {
+    align-items: flex-end;
+  }
+
+  .messagesTabs a {
+    min-height: 38px;
+  }
+
+  .accessRuleEditor,
+  .accessPolicyEditor,
+  .adminAnnouncementFields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .accessTypeField,
+  .accessTargetField,
+  .accessScopeField,
+  .accessAudienceField,
+  .accessReasonField,
+  .accessExpiresField,
+  .accessRuleActions {
+    grid-column: auto;
+  }
+
+  .accessRuleActions {
+    justify-content: flex-start;
   }
 }

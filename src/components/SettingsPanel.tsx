@@ -388,9 +388,11 @@ export function SettingsPanel({
         </section>
       </div>
 
-      <div className="previewReader" aria-label="阅读效果预览">
-        <p>{previewText}</p>
-      </div>
+      {previewText ? (
+        <div className="previewReader" aria-label="阅读效果预览">
+          <p>{previewText}</p>
+        </div>
+      ) : null}
     </section>
   );
 }

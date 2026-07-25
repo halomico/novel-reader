@@ -17,12 +17,6 @@ type MediaMaintenanceGlobal = typeof globalThis & {
 
 function firstThumbnailOptions() {
   const settings = getVideoThumbnailSettings();
-  if (settings.mode === "carousel") {
-    return {
-      fraction: 1 / (settings.carouselFrames + 1),
-      cacheKey: `carousel-${settings.carouselFrames}-0`,
-    };
-  }
   return {
     fraction: settings.singlePercent / 100,
     cacheKey: `single-${settings.singlePercent}`,

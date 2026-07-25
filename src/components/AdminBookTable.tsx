@@ -6,6 +6,7 @@ import {
   ArrowUpDown,
   ChevronDown,
   ChevronUp,
+  CupSoda,
   Eye,
   EyeOff,
   GripVertical,
@@ -24,8 +25,7 @@ import { deleteNovelsAction, togglePinnedNovelAction } from "@/app/admin/actions
 import { LocalDateTime } from "@/components/LocalDateTime";
 import { ResultCount } from "@/components/ResultCount";
 import { usePersistentSelection } from "@/components/usePersistentSelection";
-import type { AdminBookSortDir, AdminBookSortKey } from "@/lib/admin-books";
-import type { Novel } from "@/lib/books";
+import type { AdminBookSortDir, AdminBookSortKey, AdminNovel } from "@/lib/admin-books";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) {
@@ -181,7 +181,7 @@ export function AdminBookTable({
   pinnedIds,
   returnPath,
 }: {
-  books: Novel[];
+  books: AdminNovel[];
   page: number;
   totalPages: number;
   totalBooks: number;
@@ -321,7 +321,7 @@ export function AdminBookTable({
     );
   }
 
-  function renderCell(book: Novel, column: BookColumn) {
+  function renderCell(book: AdminNovel, column: BookColumn) {
     if (column.key === "title") {
       const isPinned = pinnedSet.has(book.id);
       return (
@@ -329,6 +329,12 @@ export function AdminBookTable({
           <Link className="adminBookReadLink" href={`/books/${book.id}`} title={`阅读 ${book.title}`}>
             {book.title}
           </Link>
+          {book.recommend_count > 0 ? (
+            <span className="adminBookRecommendationCount" title={`${book.recommend_count} 次苏打推荐`}>
+              <CupSoda size={12} aria-hidden="true" />
+              {book.recommend_count}
+            </span>
+          ) : null}
           <Link
             className="adminBookEditLink"
             href={`/admin/books/${book.id}/edit?returnPath=${encodeURIComponent(returnPath)}`}

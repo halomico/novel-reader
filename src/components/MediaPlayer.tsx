@@ -31,7 +31,7 @@ export function MediaPlayer({
       className="mediaVideoPlayer"
       controls
       playsInline
-      poster={`${mediaBasePath}/thumbnail?frame=0&v=${encodeURIComponent(posterVersion)}`}
+      poster={`${mediaBasePath}/thumbnail?v=${encodeURIComponent(posterVersion)}`}
       preload="none"
       onPlay={recordPlay}
     >

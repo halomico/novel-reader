@@ -205,23 +205,8 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
             <form action={saveAdminMediaDisplaySettingsAction}>
               <input name="returnPath" type="hidden" value={returnPath} />
               <label>
-                <span>封面模式</span>
-                <select name="videoThumbnailMode" defaultValue={settings.videoThumbnailMode}>
-                  <option value="single">单图</option>
-                  <option value="carousel">轮播图</option>
-                </select>
-              </label>
-              <label>
-                <span>单图截图位置 / %</span>
+                <span>封面截图位置 / %</span>
                 <input name="videoThumbnailSinglePercent" type="number" min="1" max="99" defaultValue={settings.videoThumbnailSinglePercent} />
-              </label>
-              <label>
-                <span>轮播张数</span>
-                <input name="videoThumbnailCarouselFrames" type="number" min="2" max="8" defaultValue={settings.videoThumbnailCarouselFrames} />
-              </label>
-              <label>
-                <span>每张停留 / 秒</span>
-                <input name="videoThumbnailCarouselIntervalSeconds" type="number" min="1" max="15" defaultValue={settings.videoThumbnailCarouselIntervalSeconds} />
               </label>
               <label>
                 <span>详情页推荐数量</span>
@@ -314,10 +299,7 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
               categoryParam={categoryParam}
               view={view}
               thumbnail={{
-                mode: settings.videoThumbnailMode,
                 singlePercent: settings.videoThumbnailSinglePercent,
-                carouselFrames: settings.videoThumbnailCarouselFrames,
-                carouselIntervalSeconds: settings.videoThumbnailCarouselIntervalSeconds,
               }}
             />
             {!result.assets.length && !directFolders.length ? (

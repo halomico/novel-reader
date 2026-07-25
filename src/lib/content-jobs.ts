@@ -165,10 +165,12 @@ function scheduleJob(runner: () => Promise<void>) {
   }, 0);
 }
 
-export function getContentJob(id: string): ContentJobSnapshot | null {
+export function getContentJob(id: string, includeResults = false): ContentJobSnapshot | null {
   cleanupJobs();
   const job = getJobs().get(id);
-  return job ? { ...job, results: job.results ? [...job.results] : undefined } : null;
+  if (!job) return null;
+  const snapshot = { ...job, results: undefined };
+  return includeResults && job.results ? { ...snapshot, results: [...job.results] } : snapshot;
 }
 
 export function countActiveContentJobs(kind?: JobKind): number {

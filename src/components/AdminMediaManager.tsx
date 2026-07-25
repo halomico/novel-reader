@@ -132,10 +132,7 @@ export function AdminMediaManager({
   categoryParam?: string;
   view?: "table" | "grid";
   thumbnail: {
-    mode: "single" | "carousel";
     singlePercent: number;
-    carouselFrames: number;
-    carouselIntervalSeconds: number;
   };
 }) {
   const router = useRouter();
@@ -407,10 +404,7 @@ export function AdminMediaManager({
                     <div className="adminMediaVideoThumbnail">
                       <MediaVideoPreview
                         id={asset.id}
-                        mode={thumbnail.mode}
                         singlePercent={thumbnail.singlePercent}
-                        frameCount={thumbnail.carouselFrames}
-                        intervalSeconds={thumbnail.carouselIntervalSeconds}
                         sourceVersion={asset.mtimeMs}
                         admin
                       />

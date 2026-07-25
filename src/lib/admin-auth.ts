@@ -10,16 +10,11 @@ import {
   getAdminUsername,
 } from "./config";
 import { verifyPassword } from "./password";
-import type { UserProfile } from "./users";
 
 export type AdminSession = {
   username: string;
   expiresAt: number;
 };
-
-function getAdminSiteCookieName(): string {
-  return `${getAdminCookieName()}_site`;
-}
 
 function sha256(value: string): string {
   return crypto.createHash("sha256").update(value).digest("hex");
@@ -99,19 +94,13 @@ export function verifyAdminCredentials(username: string, password: string): bool
   return safeEqual(password, getAdminPassword());
 }
 
-export async function getAdminSession(currentUser?: UserProfile | null): Promise<AdminSession | null> {
+export async function getAdminSession(): Promise<AdminSession | null> {
   const cookieStore = await cookies();
-  if (isAdminSecurityConfigured()) {
-    const token = cookieStore.get(getAdminCookieName())?.value || cookieStore.get(getAdminSiteCookieName())?.value;
-    const legacySession = token ? parseSessionToken(token) : null;
-    if (legacySession) {
-      return legacySession;
-    }
+  if (!isAdminSecurityConfigured()) {
+    return null;
   }
-
-  const { getCurrentUser } = await import("./user-auth");
-  const user = currentUser === undefined ? await getCurrentUser() : currentUser;
-  return user?.role === "admin" ? { username: user.username, expiresAt: Date.now() + 60_000 } : null;
+  const token = cookieStore.get(getAdminCookieName())?.value;
+  return token ? parseSessionToken(token) : null;
 }
 
 export async function setAdminSession(username: string) {
@@ -126,12 +115,12 @@ export async function setAdminSession(username: string) {
     path: "/admin",
     maxAge,
   });
-  cookieStore.set(getAdminSiteCookieName(), token, {
+  cookieStore.set(`${getAdminCookieName()}_site`, "", {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge,
+    maxAge: 0,
   });
 }
 
@@ -144,5 +133,5 @@ export async function clearAdminSession() {
     maxAge: 0,
   };
   cookieStore.set(getAdminCookieName(), "", { ...options, path: "/admin" });
-  cookieStore.set(getAdminSiteCookieName(), "", { ...options, path: "/" });
+  cookieStore.set(`${getAdminCookieName()}_site`, "", { ...options, path: "/" });
 }

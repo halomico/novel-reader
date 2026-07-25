@@ -5,9 +5,10 @@ import { buildTitleSearchSql, type Novel } from "./books";
 
 export type AdminBookSortKey = "title" | "file_name" | "size_bytes" | "word_count" | "updated_at" | "visit_count" | "last_accessed_at";
 export type AdminBookSortDir = "asc" | "desc";
+export type AdminNovel = Novel & { recommend_count: number };
 
 export type AdminBookListResult = {
-  books: Novel[];
+  books: AdminNovel[];
   page: number;
   pageSize: number;
   totalBooks: number;
@@ -33,7 +34,7 @@ function normalizePage(page: number, totalPages: number): number {
   return Math.min(Math.floor(page), Math.max(totalPages, 1));
 }
 
-function toPlainNovel(book: Novel): Novel {
+function toPlainNovel(book: AdminNovel): AdminNovel {
   return {
     id: book.id,
     title: book.title,
@@ -49,6 +50,7 @@ function toPlainNovel(book: Novel): Novel {
     last_accessed_user_agent: book.last_accessed_user_agent,
     created_at: book.created_at,
     updated_at: book.updated_at,
+    recommend_count: book.recommend_count,
   };
 }
 
@@ -115,13 +117,13 @@ export function listAdminBooks(params: { page?: number; q?: string; pageSize?: n
     const offset = (page - 1) * pageSize;
     const books = db
       .prepare(
-        `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
+        `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, recommend_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
          FROM novels
          WHERE ${search.whereSql}
          ORDER BY ${orderBy}
          LIMIT ? OFFSET ?`,
       )
-      .all(...search.values, pageSize, offset) as Novel[];
+      .all(...search.values, pageSize, offset) as AdminNovel[];
 
     return {
       books: books.map(toPlainNovel),
@@ -141,12 +143,12 @@ export function listAdminBooks(params: { page?: number; q?: string; pageSize?: n
   const offset = (page - 1) * pageSize;
   const books = db
     .prepare(
-      `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
+      `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, recommend_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
        FROM novels
        ORDER BY ${orderBy}
        LIMIT ? OFFSET ?`,
     )
-    .all(pageSize, offset) as Novel[];
+    .all(pageSize, offset) as AdminNovel[];
 
   return {
     books: books.map(toPlainNovel),

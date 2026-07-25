@@ -9,6 +9,7 @@ import {
   parseMediaByteRange,
   type MediaAsset,
 } from "./media";
+import { createSignedMediaUrl } from "./media-signing";
 
 export type ResolvedMediaDelivery = {
   asset: MediaAsset;
@@ -26,6 +27,15 @@ function contentDisposition(asset: MediaAsset, download: boolean): string {
 }
 
 export function mediaDeliveryUrl(asset: MediaAsset, download = false): string {
+  const remoteUrl = createSignedMediaUrl({
+    storedName: asset.storedName,
+    mimeType: asset.mimeType,
+    fileName: asset.fileName,
+    download,
+  });
+  if (remoteUrl) {
+    return remoteUrl;
+  }
   const params = new URLSearchParams({ id: String(asset.id), v: String(Math.floor(asset.mtimeMs)) });
   if (download) {
     params.set("download", "1");

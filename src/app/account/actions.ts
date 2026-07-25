@@ -7,15 +7,14 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getClientIp } from "@/lib/admin-access";
-import { verifyAdminCredentials } from "@/lib/admin-auth";
 import {
-  getAdminUsername,
   getUserAvatarMaxBytes,
   getUserDailyRegistrationLimitPerIp,
   isUserLoginEnabled,
   isUserRegistrationEnabled,
 } from "@/lib/config";
 import { verifyHumanRequest } from "@/lib/human-verification";
+import { claimDailySoda } from "@/lib/user-economy";
 import {
   clearCurrentUserSession,
   createUserSession,
@@ -31,11 +30,9 @@ import {
   getUserPasswordHashById,
   removeAvatarFile,
   normalizeUsername,
-  recordUserLogin,
   updateUserDisplayName,
   updateUserPasswordHash,
   updateUserAvatar,
-  upsertLegacyAdminUser,
   validateDisplayName,
   validatePassword,
   validateUsername,
@@ -181,20 +178,6 @@ export async function loginUserAction(formData: FormData) {
     authNotice("/login", verification.message, "warning", loginValues);
   }
 
-  const configuredAdminUsername = getAdminUsername();
-  if (configuredAdminUsername && normalizeUsername(username) === normalizeUsername(configuredAdminUsername)) {
-    if (!verifyAdminCredentials(configuredAdminUsername, password)) {
-      authNotice("/login", "用户名或密码不正确", "warning", loginValues);
-    }
-    const adminUserId = upsertLegacyAdminUser(
-      configuredAdminUsername,
-      hashUserPassword(crypto.randomBytes(48).toString("base64url")),
-    );
-    recordUserLogin(adminUserId, clientIp, headerStore.get("user-agent") || "");
-    await createUserSession(adminUserId, clientIp, headerStore.get("user-agent") || "", rememberLogin);
-    redirect("/account");
-  }
-
   const result = await loginUser(username, password, rememberLogin);
   if (!result.ok) {
     authNotice("/login", result.message, "warning", loginValues);
@@ -291,9 +274,6 @@ export async function updateAccountPasswordAction(formData: FormData) {
   const newPassword = String(formData.get("newPassword") || "");
   const confirmPassword = String(formData.get("confirmPassword") || "");
   const passwordError = validatePassword(newPassword);
-  if (normalizeUsername(user.username) === normalizeUsername(getAdminUsername())) {
-    authNotice("/account", "请在后台系统设置中修改管理员密码", "warning");
-  }
   if (passwordError) {
     authNotice("/account", passwordError, "warning");
   }
@@ -311,5 +291,23 @@ export async function updateAccountPasswordAction(formData: FormData) {
   const headerStore = await headers();
   await createUserSession(user.id, getClientIp(headerStore), headerStore.get("user-agent") || "");
   revalidatePath("/account");
-  authNotice("/account", "密码已更新");
+  authNotice("/account", "密码已更新", "success");
+}
+
+export async function claimDailySodaAction() {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+  const result = claimDailySoda(user.id);
+  if (!result.ok) {
+    authNotice("/account", "签到失败，请稍后重试", "error", { view: "growth" });
+  }
+  revalidatePath("/account");
+  authNotice(
+    "/account",
+    result.alreadyCheckedIn ? `今日已签到，获得 ${result.reward} 苏打` : `签到成功，获得 ${result.reward} 苏打`,
+    "success",
+    { view: "growth" },
+  );
 }

@@ -125,9 +125,9 @@ export default async function AdminTagsPage({ searchParams }: AdminTagsPageProps
                     <div className="tagChipCloud">
                       {group.tags.map((tag) => (
                         <Link
-                          className={`${tag.isVisible ? "tagChip" : "tagChip isMuted"}${selectedTag?.id === tag.id ? " isActive" : ""}`}
+                          className={`tagChip is-${tag.visibility}${selectedTag?.id === tag.id ? " isActive" : ""}`}
                           href={managerHref(tag.id, query)}
-                          title={`编辑 ${tag.name}`}
+                          title={`编辑 ${tag.name}（${tag.visibility === "public" ? "公开" : tag.visibility === "member" ? "登录可见" : "隐藏"}）`}
                           key={tag.id}
                         >
                           <span>{tag.name}</span>
@@ -173,6 +173,14 @@ export default async function AdminTagsPage({ searchParams }: AdminTagsPageProps
                   <span>排序</span>
                   <input name="sortOrder" type="number" defaultValue={selectedTag.sortOrder} />
                 </label>
+                <label>
+                  <span>可见范围</span>
+                  <select name="visibility" defaultValue={selectedTag.visibility}>
+                    <option value="public">公开</option>
+                    <option value="member">登录可见</option>
+                    <option value="hidden">隐藏</option>
+                  </select>
+                </label>
               </div>
               <label className="adminTagAliasesField">
                 <span>别名</span>
@@ -182,13 +190,7 @@ export default async function AdminTagsPage({ searchParams }: AdminTagsPageProps
                 <span>描述</span>
                 <textarea name="description" rows={5} maxLength={240} defaultValue={selectedTag.description} placeholder="说明标签含义、范围或使用边界" />
               </label>
-              <label className="adminSwitchLabel">
-                <span>
-                  <strong>启用展示</strong>
-                  <small>关闭后前台标签页和阅读页不会展示这个标签。</small>
-                </span>
-                <input name="isVisible" type="checkbox" defaultChecked={selectedTag.isVisible} />
-              </label>
+              <small className="adminFieldHint">子标签不会比父级更公开；隐藏标签仅后台可见。</small>
               <div className="adminTagEditorActions">
                 <button type="submit">保存</button>
                 <button className="adminDangerButton" type="submit" formAction={deleteAdminTagAction} formNoValidate>
@@ -222,6 +224,14 @@ export default async function AdminTagsPage({ searchParams }: AdminTagsPageProps
                 <span>排序</span>
                 <input name="sortOrder" type="number" defaultValue="0" />
               </label>
+              <label>
+                <span>可见范围</span>
+                <select name="visibility" defaultValue="public">
+                  <option value="public">公开</option>
+                  <option value="member">登录可见</option>
+                  <option value="hidden">隐藏</option>
+                </select>
+              </label>
             </div>
             <label>
               <span>别名</span>
@@ -231,13 +241,7 @@ export default async function AdminTagsPage({ searchParams }: AdminTagsPageProps
               <span>描述</span>
               <textarea name="description" rows={4} maxLength={240} placeholder="说明标签含义、范围或使用边界" />
             </label>
-            <label className="adminSwitchLabel">
-              <span>
-                <strong>启用展示</strong>
-                <small>关闭后前台标签页和阅读页不会展示这个标签。</small>
-              </span>
-              <input name="isVisible" type="checkbox" defaultChecked />
-            </label>
+            <small className="adminFieldHint">子标签不会比父级更公开；隐藏标签仅后台可见。</small>
             <button type="submit">创建标签</button>
           </form>
         </details>

@@ -9,9 +9,9 @@ import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { AdminReaderActions } from "@/components/AdminReaderActions";
 import { ReaderTagLinks } from "@/components/ReaderTagLinks";
 import { ReportNovelButton } from "@/components/ReportNovelButton";
+import { NovelRecommendationButton } from "@/components/NovelRecommendationButton";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getClientIp } from "@/lib/admin-access";
-import { getAdminSession } from "@/lib/admin-auth";
 import { recordAnalyticsEvent } from "@/lib/analytics";
 import { getNovelById, readNovelSegments, type Novel } from "@/lib/books";
 import {
@@ -27,7 +27,9 @@ import { listHotwordsForNovel, listTagsForNovel } from "@/lib/tags";
 import { isNovelPinned } from "@/lib/pinned-novels";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { getCurrentUser } from "@/lib/user-auth";
+import { hasUserPermission } from "@/lib/user-levels";
 import { recordNovelVisit, recordReadingHistory } from "@/lib/users";
+import { getNovelRecommendationState } from "@/lib/recommendations";
 
 export const dynamic = "force-dynamic";
 
@@ -152,18 +154,22 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
     notFound();
   }
 
-  const [user, adminSession] = await Promise.all([getCurrentUser(), getAdminSession()]);
-  const authenticated = Boolean(user || adminSession);
-  if (!adminSession && !canAccessNovelLibrary(Boolean(user))) {
+  const user = await getCurrentUser();
+  const authenticated = Boolean(user);
+  if (!canAccessNovelLibrary(authenticated)) {
     notFound();
   }
 
   const headerStore = await headers();
-  const access = checkContentAccess(headerStore);
+  const access = checkContentAccess(headerStore, {
+    scope: "novel",
+    authenticated,
+    admin: user?.role === "admin",
+  });
   if (!access.allowed) {
     return (
       <main className="readerShell">
-        <SiteHeader />
+        <SiteHeader currentUser={user} />
         <section className="emptyState">
           <h2>{access.message}</h2>
         </section>
@@ -174,8 +180,12 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
   const hitSegment = Number(query.hit);
   const showTags = isTagLibraryEnabled() && (authenticated || isGuestTagLibraryNavEnabled());
   const showHotwords = areHotwordLinksEnabled() && (authenticated || areGuestHotwordLinksEnabled());
-  const tags = showTags ? listTagsForNovel(book.id) : [];
+  const tagAudience = user?.role === "admin" ? "admin" : user ? "member" : "public";
+  const tags = showTags ? listTagsForNovel(book.id, { audience: tagAudience }) : [];
   const hotwords = showHotwords ? listHotwordsForNovel(book.id) : [];
+  const recommendation = user ? getNovelRecommendationState(user.id, book.id) : null;
+  const canRecommend = hasUserPermission(user, "novel_feedback");
+  const canReport = user?.role === "user" && hasUserPermission(user, "content_report");
 
   return (
     <main className="readerShell">
@@ -193,16 +203,25 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
         <header className="readerTitle">
           <BookOpenText size={26} aria-hidden="true" />
           <h1>{book.title}</h1>
-          {adminSession ? (
+          {user?.role === "admin" ? (
             <AdminReaderActions bookId={book.id} title={book.title} isPinned={isNovelPinned(book.id)} />
-          ) : user ? (
-            <ReportNovelButton novelId={book.id} title={book.title} />
           ) : null}
         </header>
         <ReaderTagLinks tags={tags.map(({ id: tagId, name, slug }) => ({ id: tagId, name, slug }))} />
         <Suspense fallback={<ReaderContentLoading />}>
           <ReaderContent book={book} hitSegment={hitSegment} requestHeaders={headerStore} user={user} />
         </Suspense>
+        {user && (canRecommend || canReport) ? (
+          <div className="readerFeedbackActions" aria-label="文章操作">
+            {canRecommend && recommendation ? (
+              <NovelRecommendationButton
+                novelId={book.id}
+                initialRecommended={recommendation.recommended}
+              />
+            ) : null}
+            {canReport ? <ReportNovelButton novelId={book.id} title={book.title} /> : null}
+          </div>
+        ) : null}
         <ReaderHotwordLinks hotwords={hotwords} novelId={book.id} />
       </article>
     </main>

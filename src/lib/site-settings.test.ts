@@ -3,7 +3,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { canAccessAdvancedTagSearch, canAccessNovelLibrary, isAdvancedTagSearchPublic, isNovelLibraryPublic } from "./config";
+import type { HomePortalCardKey } from "./home-portal";
+import {
+  canAccessAdvancedTagSearch,
+  canAccessHomeAnnouncementCard,
+  canAccessNovelLibrary,
+  getSettingsPreviewText,
+  isAdvancedTagSearchPublic,
+  isNovelLibraryPublic,
+} from "./config";
 import { readSiteSettings, writeSiteSettings } from "./site-settings";
 
 test("atomically replaces an existing settings file", () => {
@@ -59,6 +67,34 @@ test("normalizes the configured user default palette", () => {
     assert.equal(readSiteSettings().defaultPalette, "sakura");
     fs.writeFileSync(process.env.ADMIN_SETTINGS_PATH, JSON.stringify({ defaultPalette: "invalid" }), "utf8");
     assert.equal(readSiteSettings().defaultPalette, "default");
+  } finally {
+    if (previousPath === undefined) {
+      delete process.env.ADMIN_SETTINGS_PATH;
+    } else {
+      process.env.ADMIN_SETTINGS_PATH = previousPath;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("preserves an empty settings preview and normalizes home portal settings", () => {
+  const previousPath = process.env.ADMIN_SETTINGS_PATH;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-home-portal-"));
+  process.env.ADMIN_SETTINGS_PATH = path.join(tempDir, "admin-settings.json");
+
+  try {
+    writeSiteSettings({
+      ...readSiteSettings(),
+      settingsPreviewText: "",
+      announcementCardEnabled: true,
+      guestAnnouncementCardEnabled: false,
+      homePortalOrder: ["random", "novels", "random"] as HomePortalCardKey[],
+    });
+    const settings = readSiteSettings();
+    assert.equal(getSettingsPreviewText(), "");
+    assert.deepEqual(settings.homePortalOrder.slice(0, 3), ["random", "novels", "announcement"]);
+    assert.equal(canAccessHomeAnnouncementCard(false), false);
+    assert.equal(canAccessHomeAnnouncementCard(true), true);
   } finally {
     if (previousPath === undefined) {
       delete process.env.ADMIN_SETTINGS_PATH;

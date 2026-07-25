@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getAdminAccessState } from "@/lib/admin-access";
-import { persistBlockedIp } from "@/lib/admin-ban";
 import { clearAdminSession, getAdminSession, setAdminSession, verifyAdminCredentials } from "@/lib/admin-auth";
 import { recordAdminLogin } from "@/lib/admin-login-records";
 import {
@@ -18,10 +17,9 @@ import {
   getUserDailyRegistrationLimitPerIp,
   isAdminLoginRateLimitEnabled,
   getUserAvatarMaxBytes,
-  shouldAdminLoginRateLimitBan,
 } from "@/lib/config";
 import { cancelContentJobs } from "@/lib/content-jobs";
-import { deleteIpRateLimitBans, parseIpRateLimitBanKey, type IpRateLimitBanKey } from "@/lib/ip-rate-limit";
+import { normalizeHomePortalOrder } from "@/lib/home-portal";
 import {
   createVideoCategory,
   createMediaFolder,
@@ -48,7 +46,7 @@ import { replacePinnedNovels, togglePinnedNovel } from "@/lib/pinned-novels";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { validateSearchKeyword } from "@/lib/search";
 import { detectSiteIconFormat, MAX_SITE_ICON_BYTES, removeSiteIconFile, writeSiteIconFile } from "@/lib/site-icon";
-import { normalizeIpRateLimitRules, readSiteSettings, type SiteSettings, writeSiteSettings } from "@/lib/site-settings";
+import { readSiteSettings, type SiteSettings, writeSiteSettings } from "@/lib/site-settings";
 import { isColorPalette, normalizeReaderLineHeight, normalizeReaderTagsMode } from "@/lib/ui-preferences";
 import {
   createTag,
@@ -60,8 +58,11 @@ import {
   setNovelTags,
   updateTag,
 } from "@/lib/tags";
-import { clearCurrentUserSession, deleteUserSessions, hashUserPassword } from "@/lib/user-auth";
+import { deleteUserSessions, hashUserPassword } from "@/lib/user-auth";
+import { saveUserLevelDefinition } from "@/lib/user-levels";
+import { updateUserGrowth } from "@/lib/user-economy";
 import { setContentReportStatus } from "@/lib/reports";
+import { setNovelRecommendationCount } from "@/lib/recommendations";
 import {
   clearBrowseHistory,
   createUserRecord,
@@ -197,17 +198,8 @@ function mediaAccessModeField(formData: FormData, name: string): "off" | "user" 
   return value === "user" || value === "public" ? value : "off";
 }
 
-function rateLimitRulesField(formData: FormData, name: string, label: string): SiteSettings["contentRateLimitRules"] {
-  let rules: SiteSettings["contentRateLimitRules"] = [];
-  try {
-    rules = normalizeIpRateLimitRules(JSON.parse(String(formData.get(name) || "[]")));
-  } catch {
-    adminNotice(`${label}规则格式无效`, "warning", "/admin/settings");
-  }
-  if (rules.length === 0) {
-    adminNotice(`至少保留一条${label}规则`, "warning", "/admin/settings");
-  }
-  return rules;
+function userLevelField(formData: FormData): number {
+  return Math.min(Math.max(Math.floor(Number(formData.get("trustLevel")) || 1) - 1, 0), 6);
 }
 
 function isUsernameConflict(error: unknown): boolean {
@@ -230,8 +222,7 @@ export async function loginAdminAction(formData: FormData) {
       windowMs: 60_000,
     });
     if (!limit.allowed) {
-      const blocked = shouldAdminLoginRateLimitBan() && persistBlockedIp(access.clientIp);
-      loginNotice(blocked ? "登录太频繁，当前 IP 已加入黑名单" : `登录太频繁，请 ${limit.retryAfterSeconds} 秒后再试`, username);
+      loginNotice(`登录太频繁，请 ${limit.retryAfterSeconds} 秒后再试`, username);
     }
   }
 
@@ -250,13 +241,14 @@ export async function loginAdminAction(formData: FormData) {
 
 export async function logoutAdminAction() {
   await clearAdminSession();
-  await clearCurrentUserSession();
   redirect("/admin/login");
 }
 
 export async function updateContentReportStatusAction(formData: FormData) {
   const requestedReturnPath = String(formData.get("returnPath") || "");
-  const returnPath = requestedReturnPath.startsWith("/admin/reports") ? requestedReturnPath : "/admin/reports";
+  const returnPath = requestedReturnPath.startsWith("/admin/station?view=reports")
+    ? requestedReturnPath
+    : "/admin/station?view=reports";
   const session = await requireAdminRequest();
   const reportId = Number(formData.get("reportId"));
   const status = formData.get("status") === "open" ? "open" : "resolved";
@@ -264,6 +256,7 @@ export async function updateContentReportStatusAction(formData: FormData) {
     adminNotice("举报记录不存在", "warning", returnPath);
   }
   revalidatePath("/admin/reports");
+  revalidatePath("/admin/station");
   adminNotice(status === "resolved" ? "举报已处理" : "举报已重新打开", "success", returnPath);
 }
 
@@ -405,6 +398,8 @@ function tagOperationMessage(error: unknown): string {
 
 export async function saveAdminTagAction(formData: FormData) {
   const tagId = Number(formData.get("tagId") || 0);
+  const visibilityValue = formData.get("visibility");
+  const visibility = visibilityValue === "member" || visibilityValue === "hidden" ? visibilityValue : "public";
   let returnPath = tagManagerReturnPath(formData, Number.isInteger(tagId) && tagId > 0 ? tagId : undefined);
   await requireAdminRequest();
   try {
@@ -417,7 +412,7 @@ export async function saveAdminTagAction(formData: FormData) {
         description: String(formData.get("description") || ""),
         aliases: String(formData.get("aliases") || ""),
         sortOrder: String(formData.get("sortOrder") || "0"),
-        isVisible: formData.get("isVisible") === "on",
+        visibility,
       });
       if (!updated) {
         adminNotice("标签不存在", "warning", returnPath);
@@ -430,7 +425,7 @@ export async function saveAdminTagAction(formData: FormData) {
         description: String(formData.get("description") || ""),
         aliases: String(formData.get("aliases") || ""),
         sortOrder: String(formData.get("sortOrder") || "0"),
-        isVisible: formData.get("isVisible") === "on",
+        visibility,
       });
       returnPath = tagManagerReturnPath(formData, created.id);
     }
@@ -524,6 +519,10 @@ export async function saveNovelEditorAction(formData: FormData) {
     }
     setNovelTags(bookId, tagIds);
     setNovelHotwords(bookId, hotwords);
+    setNovelRecommendationCount(
+      bookId,
+      intField(formData, "recommendationCount", 0, 0, 2_000_000_000),
+    );
   } catch (error) {
     adminNotice(error instanceof Error ? error.message : "小说保存失败，请检查小说目录权限", "warning", editorPath);
   }
@@ -611,16 +610,12 @@ export async function saveAdminSettingsAction(formData: FormData) {
   }
 
   const userAvatarMaxMb = numberField(formData, "userAvatarMaxMb", getUserAvatarMaxBytes() / 1024 ** 2, 0.1, 10);
-  const contentRateLimitRules = rateLimitRulesField(formData, "contentRateLimitRules", "正文限速").map((rule) => ({
-    ...rule,
-    scope: "all" as const,
-    queryType: "all" as const,
-  }));
   const novelAccessMode = mediaAccessModeField(formData, "novelAccessMode");
   const videoAccessMode = mediaAccessModeField(formData, "videoAccessMode");
   const audioAccessMode = mediaAccessModeField(formData, "audioAccessMode");
   const fileAccessMode = mediaAccessModeField(formData, "fileAccessMode");
   const tagAccessMode = mediaAccessModeField(formData, "tagAccessMode");
+  const announcementCardAccessMode = mediaAccessModeField(formData, "announcementCardAccessMode");
   const advancedTagAccessMode = mediaAccessModeField(formData, "advancedTagAccessMode");
   const hotwordAccessMode = mediaAccessModeField(formData, "hotwordAccessMode");
   const defaultPalette = String(formData.get("defaultPalette") || "default");
@@ -651,11 +646,8 @@ export async function saveAdminSettingsAction(formData: FormData) {
     adminUsername,
     adminPasswordHash: newPassword ? hashPassword(newPassword) : previous.adminPasswordHash,
     adminPasswordSha256: newPassword ? "" : previous.adminPasswordSha256,
-    adminAllowedIps: String(formData.get("adminAllowedIps") || "").trim(),
-    adminBlockedIps: String(formData.get("adminBlockedIps") || "").trim(),
     adminLoginRateLimitPerMinute: intField(formData, "adminLoginRateLimitPerMinute", previous.adminLoginRateLimitPerMinute || 6, 1, 120),
     adminLoginRateLimitEnabled: formData.get("adminLoginRateLimitEnabled") === "on",
-    adminLoginRateLimitBanEnabled: formData.get("adminLoginRateLimitBanEnabled") === "on",
     catalogPageSize: intField(formData, "catalogPageSize", previous.catalogPageSize || getCatalogPageSize(), 1, 100),
     searchResultsPageSize: intField(formData, "searchResultsPageSize", previous.searchResultsPageSize || getSearchResultsPageSize(), 1, 100),
     adminBookPageSize: intField(formData, "adminBookPageSize", previous.adminBookPageSize || getAdminBookPageSize(), 1, 200),
@@ -683,7 +675,6 @@ export async function saveAdminSettingsAction(formData: FormData) {
         ? formData.get("audioDefaultPlaybackMode") as "stop" | "repeat-one"
         : "next",
     globalSearchMaxResults: intField(formData, "globalSearchMaxResults", previous.globalSearchMaxResults || getGlobalSearchMaxResults(), 1, 1000),
-    contentRateLimitRules,
     userLoginEnabled: formData.get("userLoginEnabled") === "on",
     userRegistrationEnabled: formData.get("userRegistrationEnabled") === "on",
     userDailyRegistrationLimitPerIp: intField(
@@ -695,6 +686,14 @@ export async function saveAdminSettingsAction(formData: FormData) {
     ),
     userDailyReportLimit: intField(formData, "userDailyReportLimit", previous.userDailyReportLimit || 50, 1, 500),
     userAvatarMaxBytes: Math.floor(userAvatarMaxMb * 1024 ** 2),
+    stationDisplayName: String(formData.get("stationDisplayName") || "站务")
+      .normalize("NFKC")
+      .replace(/\s+/gu, " ")
+      .trim()
+      .slice(0, 20) || "站务",
+    announcementCardEnabled: announcementCardAccessMode !== "off",
+    guestAnnouncementCardEnabled: announcementCardAccessMode === "public",
+    homePortalOrder: normalizeHomePortalOrder(formData.get("homePortalOrder")),
     analyticsEnabled: formData.get("analyticsEnabled") === "on",
     analyticsRealtimeLimit: intField(formData, "analyticsRealtimeLimit", previous.analyticsRealtimeLimit || 300, 30, 2000),
     novelLibraryEnabled: novelAccessMode !== "off",
@@ -711,7 +710,6 @@ export async function saveAdminSettingsAction(formData: FormData) {
     guestTagLibraryNavEnabled: tagAccessMode === "public",
     guestAdvancedTagSearchEnabled: advancedTagAccessMode === "public",
     guestHotwordLinksEnabled: hotwordAccessMode === "public",
-    contentBlockHeadlessBrowsers: formData.get("contentBlockHeadlessBrowsers") === "on",
     frontendSearchConcurrencyLimit: intField(
       formData,
       "frontendSearchConcurrencyLimit",
@@ -920,26 +918,13 @@ export async function saveAdminMediaDisplaySettingsAction(formData: FormData) {
   const previous = readSiteSettings();
   const next: SiteSettings = {
     ...previous,
-    videoThumbnailMode: formData.get("videoThumbnailMode") === "carousel" ? "carousel" : "single",
     videoThumbnailSinglePercent: intField(formData, "videoThumbnailSinglePercent", previous.videoThumbnailSinglePercent, 1, 99),
-    videoThumbnailCarouselFrames: intField(formData, "videoThumbnailCarouselFrames", previous.videoThumbnailCarouselFrames, 2, 8),
-    videoThumbnailCarouselIntervalSeconds: intField(
-      formData,
-      "videoThumbnailCarouselIntervalSeconds",
-      previous.videoThumbnailCarouselIntervalSeconds,
-      1,
-      15,
-    ),
     relatedVideoCount: intField(formData, "relatedVideoCount", previous.relatedVideoCount, 0, 20),
     relatedVideoMode: formData.get("relatedVideoMode") === "random" ? "random" : "next",
   };
   try {
     writeSiteSettings(next);
-    if (
-      previous.videoThumbnailMode !== next.videoThumbnailMode ||
-      previous.videoThumbnailSinglePercent !== next.videoThumbnailSinglePercent ||
-      previous.videoThumbnailCarouselFrames !== next.videoThumbnailCarouselFrames
-    ) {
+    if (previous.videoThumbnailSinglePercent !== next.videoThumbnailSinglePercent) {
       clearMediaThumbnails();
       scheduleMissingMediaPreparation();
     }
@@ -1048,19 +1033,6 @@ export async function deleteAdminMediaFolderAction(formData: FormData) {
   );
 }
 
-export async function deleteIpRateLimitBanAction(formData: FormData) {
-  await requireAdminRequest();
-  const requestedValues = [...formData.getAll("rateLimitBanKeys"), ...formData.getAll("rateLimitBanKey")];
-  const bans = requestedValues.map(parseIpRateLimitBanKey).filter((ban): ban is IpRateLimitBanKey => ban !== null);
-  if (bans.length === 0) {
-    adminNotice("请选择要解除的封禁记录", "warning", "/admin/settings");
-  }
-
-  const deleted = deleteIpRateLimitBans(bans);
-  revalidatePath("/admin/settings");
-  adminNotice(deleted ? `已解除 ${deleted} 条封禁记录` : "所选封禁记录已不存在", deleted ? "success" : "warning", "/admin/settings");
-}
-
 export async function createAdminUserAction(formData: FormData) {
   const returnPath = listReturnPath(formData, "/admin/users");
   await requireAdminRequest();
@@ -1090,6 +1062,8 @@ export async function createAdminUserAction(formData: FormData) {
       passwordHash: hashUserPassword(password),
       status,
       role,
+      trustLevel: userLevelField(formData),
+      sodaBalance: Math.max(Math.floor(Number(formData.get("sodaBalance")) || 0), 0),
     });
   } catch (error) {
     if (isUsernameConflict(error)) {
@@ -1105,12 +1079,14 @@ export async function createAdminUserAction(formData: FormData) {
 
 export async function updateAdminUserAction(formData: FormData) {
   const returnPath = listReturnPath(formData, "/admin/users");
-  await requireAdminRequest();
+  const session = await requireAdminRequest();
   const userId = Number(formData.get("userId"));
   const displayName = String(formData.get("displayName") || "").trim();
   const status = formData.get("status") === "disabled" ? "disabled" : "active";
   const role = formData.get("role") === "admin" ? "admin" : "user";
   const newPassword = String(formData.get("newPassword") || "");
+  const trustLevel = userLevelField(formData);
+  const sodaBalance = Math.max(Math.floor(Number(formData.get("sodaBalance")) || 0), 0);
 
   if (!Number.isInteger(userId) || userId < 1) {
     adminNotice("用户不存在", "warning", returnPath);
@@ -1135,12 +1111,47 @@ export async function updateAdminUserAction(formData: FormData) {
   if (!updated) {
     adminNotice("用户不存在", "warning", returnPath);
   }
+  updateUserGrowth({
+    userId,
+    trustLevel,
+    sodaBalance,
+    adminName: session.username,
+  });
   if (newPassword || status === "disabled" || previousUser?.role !== role) {
     deleteUserSessions(userId);
   }
   revalidatePath("/admin/users");
   revalidatePath(`/admin/users/${userId}`);
   adminNotice("用户已更新", "success", returnPath);
+}
+
+export async function saveUserLevelsAction(formData: FormData) {
+  await requireAdminRequest();
+  const levels = Array.from({ length: 7 }, (_, level) => ({
+    level,
+    name: String(formData.get(`levelName:${level}`) || "").trim(),
+    permissions: formData.getAll(`permissions:${level}`).map(String),
+  }));
+  if (levels.some((level) => !level.name)) {
+    adminNotice("等级名称不能为空", "warning", "/admin/users/levels");
+  }
+  let saved = 0;
+  for (const level of levels) {
+    if (saveUserLevelDefinition({
+      level: level.level,
+      name: level.name,
+      permissions: level.permissions,
+    })) {
+      saved += 1;
+    }
+  }
+  if (saved !== 7) {
+    adminNotice("等级名称不能为空", "warning", "/admin/users/levels");
+  }
+  revalidatePath("/account");
+  revalidatePath("/admin/users");
+  revalidatePath("/admin/users/levels");
+  adminNotice("等级权限已保存", "success", "/admin/users/levels");
 }
 
 export async function updateAdminUserStatusAction(formData: FormData) {

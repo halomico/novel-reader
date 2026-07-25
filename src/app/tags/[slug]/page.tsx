@@ -23,14 +23,16 @@ type TagPageProps = {
 };
 
 export async function generateMetadata({ params, searchParams }: TagPageProps): Promise<Metadata> {
-  const tag = getTagBySlug((await params).slug);
+  const user = await getCurrentUser();
+  const audience = user?.role === "admin" ? "admin" : user ? "member" : "public";
+  const tag = getTagBySlug((await params).slug, { audience });
   if (!tag) {
     return { title: "标签不存在", robots: NO_INDEX_ROBOTS };
   }
   const pageValue = Number((await searchParams).page || 1);
   const page = Number.isInteger(pageValue) && pageValue > 1 ? pageValue : 1;
   const canonical = canonicalPagePath(`/tags/${tag.slug}`, page);
-  const isPublic = isTagLibraryEnabled() && isGuestTagLibraryNavEnabled();
+  const isPublic = tag.visibility === "public" && isTagLibraryEnabled() && isGuestTagLibraryNavEnabled();
   const description = tag.description || `浏览“${tag.name}”标签下的小说。`;
   return {
     title: page > 1 ? `${tag.name} 第 ${page} 页` : tag.name,
@@ -63,15 +65,17 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
   }
   const { slug } = await params;
   const query = await searchParams;
-  const tag = getTagBySlug(slug);
+  const audience = user?.role === "admin" ? "admin" : user ? "member" : "public";
+  const tag = getTagBySlug(slug, { audience });
   if (!tag) {
     notFound();
   }
   const result = listNovelsByTag(tag.id, {
     page: Number(query.page || "1"),
     pageSize: getCatalogPageSize(),
+    audience,
   });
-  const tagsByNovel = listTagsForNovels(result.books.map((book) => book.id));
+  const tagsByNovel = listTagsForNovels(result.books.map((book) => book.id), { audience });
   const returnHref = `/tags/${tag.slug}?page=${result.page}`;
 
   return (
