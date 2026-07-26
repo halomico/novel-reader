@@ -5,14 +5,17 @@ import { getDb } from "./db";
 import { checkRateLimit, clearRateLimitBucketsByPrefix } from "./rate-limit";
 
 export type ContentAccessScope = "all" | "novel" | "media";
+export type ContentAccessRequestScope = "site" | "novel" | "media";
 export type ContentAccessAudience = "all" | "guest";
 export type ContentAccessTargetType = "ip" | "cidr" | "country" | "crawler";
+export type ContentAccessMatchMode = "include" | "exclude";
 export type ContentAccessRuleSource = "manual" | "rate_limit";
 
 export type ContentAccessRule = {
   id: number;
   targetType: ContentAccessTargetType;
   targetValue: string;
+  matchMode: ContentAccessMatchMode;
   scope: ContentAccessScope;
   audience: ContentAccessAudience;
   source: ContentAccessRuleSource;
@@ -55,6 +58,7 @@ type ContentAccessRuleRow = {
   id: number;
   target_type: ContentAccessTargetType;
   target_value: string;
+  match_mode: ContentAccessMatchMode;
   scope: ContentAccessScope;
   audience: ContentAccessAudience;
   source: ContentAccessRuleSource;
@@ -99,6 +103,7 @@ function toRule(row: ContentAccessRuleRow): ContentAccessRule {
     id: row.id,
     targetType: row.target_type,
     targetValue: row.target_value,
+    matchMode: row.match_mode,
     scope: row.scope,
     audience: row.audience,
     source: row.source,
@@ -148,6 +153,10 @@ function normalizeTargetType(value: unknown): ContentAccessTargetType {
   return "ip";
 }
 
+function normalizeMatchMode(type: ContentAccessTargetType, value: unknown): ContentAccessMatchMode {
+  return type === "country" && value === "exclude" ? "exclude" : "include";
+}
+
 function normalizeTargetValue(type: ContentAccessTargetType, value: unknown): string {
   if (type === "crawler") {
     return "known";
@@ -170,11 +179,20 @@ function normalizeTargetValue(type: ContentAccessTargetType, value: unknown): st
     return `${parts[0].toLowerCase()}/${prefix}`;
   }
 
-  const country = text.toUpperCase();
-  if (!/^(?:[A-Z]{2}|T1)$/.test(country)) {
-    throw new ContentAccessInputError("国家代码应为两位 ISO 代码，也可使用 XX 或 T1");
+  const countries = [...new Set(
+    text
+      .split(/[\s,，、]+/)
+      .map((item) => item.trim().toUpperCase())
+      .filter(Boolean),
+  )];
+  if (
+    !countries.length ||
+    countries.length > 32 ||
+    countries.some((country) => !/^(?:[A-Z]{2}|T1)$/.test(country))
+  ) {
+    throw new ContentAccessInputError("请选择 1 至 32 个有效国家代码");
   }
-  return country;
+  return countries.sort().join(",");
 }
 
 function clearContentAccessCache() {
@@ -241,7 +259,7 @@ function readActiveAccessConfig(now: number) {
 
   const rules = (getDb()
     .prepare(
-      `SELECT id, target_type, target_value, scope, audience, source, reason, expires_at,
+      `SELECT id, target_type, target_value, match_mode, scope, audience, source, reason, expires_at,
               enabled, created_by, created_at, updated_at
        FROM content_access_rules
        WHERE enabled = 1 AND (expires_at IS NULL OR expires_at > ?)
@@ -267,7 +285,7 @@ export function getRequestCountry(headers: HeaderReader): string {
   return /^(?:[A-Z]{2}|T1)$/.test(value) ? value : "unknown";
 }
 
-function scopeMatches(configured: ContentAccessScope, requested: Exclude<ContentAccessScope, "all">): boolean {
+function scopeMatches(configured: ContentAccessScope, requested: ContentAccessRequestScope): boolean {
   return configured === "all" || configured === requested;
 }
 
@@ -282,6 +300,10 @@ export function hasScopedContentAccessRules(
   return readActiveAccessConfig(now).rules.some((rule) => scopeMatches(rule.scope, scope));
 }
 
+export function hasGlobalContentAccessRules(now = Date.now()): boolean {
+  return readActiveAccessConfig(now).rules.some((rule) => rule.scope === "all");
+}
+
 export function isLikelyCrawler(userAgent: string): boolean {
   return /bot|crawler|spider|slurp|bingpreview|facebookexternalhit|bytespider|yandex|baiduspider|sogou|headless|phantom|selenium|playwright/i
     .test(userAgent);
@@ -293,7 +315,7 @@ function ruleMatches(
     ip: string;
     country: string;
     userAgent: string;
-    scope: Exclude<ContentAccessScope, "all">;
+    scope: ContentAccessRequestScope;
     authenticated: boolean;
   },
 ): boolean {
@@ -301,7 +323,8 @@ function ruleMatches(
     return false;
   }
   if (rule.targetType === "country") {
-    return context.country === rule.targetValue;
+    const matches = rule.targetValue.split(",").includes(context.country);
+    return rule.matchMode === "exclude" ? !matches : matches;
   }
   if (rule.targetType === "crawler") {
     return isLikelyCrawler(context.userAgent);
@@ -354,7 +377,7 @@ function saveTemporaryRateLimitRule(params: {
 export function checkContentAccess(
   headers: HeaderReader,
   options: {
-    scope?: Exclude<ContentAccessScope, "all">;
+    scope?: ContentAccessRequestScope;
     authenticated?: boolean;
     admin?: boolean;
     rateLimit?: boolean;
@@ -389,7 +412,7 @@ export function checkContentAccess(
     }
     return {
       allowed: false,
-      message: "当前网络暂不能访问该内容",
+      message: scope === "site" ? "当前网络暂不能访问本站" : "当前网络暂不能访问该内容",
       status: 403,
       ruleId: blockedBy.id,
     };
@@ -431,7 +454,7 @@ export function checkContentAccess(
 export function getContentAccessRule(id: number): ContentAccessRule | null {
   const row = getDb()
     .prepare(
-      `SELECT id, target_type, target_value, scope, audience, source, reason, expires_at,
+      `SELECT id, target_type, target_value, match_mode, scope, audience, source, reason, expires_at,
               enabled, created_by, created_at, updated_at
        FROM content_access_rules WHERE id = ?`,
     )
@@ -444,7 +467,7 @@ export function listContentAccessRules(limit = 300): ContentAccessRule[] {
   const safeLimit = cleanInt(limit, 300, 1, 1_000);
   return (getDb()
     .prepare(
-      `SELECT id, target_type, target_value, scope, audience, source, reason, expires_at,
+      `SELECT id, target_type, target_value, match_mode, scope, audience, source, reason, expires_at,
               enabled, created_by, created_at, updated_at
        FROM content_access_rules
        ORDER BY enabled DESC, source ASC, expires_at IS NULL DESC, expires_at DESC, id DESC
@@ -457,6 +480,7 @@ export function saveContentAccessRule(input: {
   id?: number;
   targetType: unknown;
   targetValue: unknown;
+  matchMode?: unknown;
   scope?: unknown;
   audience?: unknown;
   reason?: unknown;
@@ -467,6 +491,7 @@ export function saveContentAccessRule(input: {
   const id = cleanInt(input.id, 0, 0, Number.MAX_SAFE_INTEGER);
   const targetType = normalizeTargetType(input.targetType);
   const targetValue = normalizeTargetValue(targetType, input.targetValue);
+  const matchMode = normalizeMatchMode(targetType, input.matchMode);
   const scope = normalizeScope(input.scope);
   const audience = normalizeAudience(input.audience);
   const reason = String(input.reason || "").trim().slice(0, 120);
@@ -477,19 +502,29 @@ export function saveContentAccessRule(input: {
   if (id > 0) {
     const result = db.prepare(
       `UPDATE content_access_rules
-       SET target_type = ?, target_value = ?, scope = ?, audience = ?, reason = ?,
+       SET target_type = ?, target_value = ?, match_mode = ?, scope = ?, audience = ?, reason = ?,
            expires_at = ?, enabled = ?, updated_at = CURRENT_TIMESTAMP
        WHERE id = ? AND source = 'manual'`,
-    ).run(targetType, targetValue, scope, audience, reason, expiresAt, enabled, id);
+    ).run(targetType, targetValue, matchMode, scope, audience, reason, expiresAt, enabled, id);
     if (!result.changes) {
       throw new ContentAccessInputError("访问规则不存在或不可编辑");
     }
   } else {
     const result = db.prepare(
       `INSERT INTO content_access_rules
-        (target_type, target_value, scope, audience, source, reason, expires_at, enabled, created_by)
-       VALUES (?, ?, ?, ?, 'manual', ?, ?, ?, ?)`,
-    ).run(targetType, targetValue, scope, audience, reason, expiresAt, enabled, String(input.createdBy || "").slice(0, 64));
+        (target_type, target_value, match_mode, scope, audience, source, reason, expires_at, enabled, created_by)
+       VALUES (?, ?, ?, ?, ?, 'manual', ?, ?, ?, ?)`,
+    ).run(
+      targetType,
+      targetValue,
+      matchMode,
+      scope,
+      audience,
+      reason,
+      expiresAt,
+      enabled,
+      String(input.createdBy || "").slice(0, 64),
+    );
     clearContentAccessCache();
     return getContentAccessRule(Number(result.lastInsertRowid))!;
   }

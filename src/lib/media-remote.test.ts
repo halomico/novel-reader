@@ -118,7 +118,12 @@ test("uploads directly to the media node while the main app keeps only the index
     const signedPlaybackUrl = delivery.mediaDeliveryUrl(asset, true);
     const playback = await fetch(signedPlaybackUrl);
     assert.equal(playback.status, 200);
+    assert.equal(playback.headers.get("cache-control"), "private, max-age=300");
     assert.equal(Buffer.from(await playback.arrayBuffer()).toString(), content.toString());
+    const publicPlayback = await fetch(delivery.mediaDeliveryUrl(asset, false, { publiclyAccessible: true }));
+    assert.equal(publicPlayback.status, 200);
+    assert.equal(publicPlayback.headers.get("cache-control"), "public, max-age=3600, immutable");
+    assert.equal(publicPlayback.headers.get("cloudflare-cdn-cache-control"), "public, max-age=3600");
     const range = await fetch(signedPlaybackUrl, { headers: { Range: "bytes=0-5" } });
     assert.equal(range.status, 206);
     assert.equal(range.headers.get("content-range"), `bytes 0-5/${content.length}`);

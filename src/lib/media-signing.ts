@@ -9,10 +9,12 @@ export type SignedMediaPayload = {
   download: boolean;
   mimeType: string;
   fileName: string;
+  publiclyAccessible: boolean;
 };
 
 const MEDIA_PATH_PREFIX = "/media-file/";
 const THUMBNAIL_PATH_PREFIX = "/media-thumbnail/";
+const MEDIA_SIGNATURE_BUCKET_MAX_SECONDS = 60 * 60;
 const THUMBNAIL_SIGNATURE_BUCKET_MAX_SECONDS = 60 * 60;
 
 export type SignedMediaThumbnailPayload = {
@@ -44,7 +46,7 @@ function decodeValue(value: string, maxBytes: number): string | null {
 
 function payloadText(payload: SignedMediaPayload): string {
   return [
-    "v2",
+    "v3",
     payload.storedName,
     String(payload.expiresAt),
     String(payload.mtimeMs),
@@ -52,6 +54,7 @@ function payloadText(payload: SignedMediaPayload): string {
     payload.download ? "1" : "0",
     payload.mimeType,
     payload.fileName,
+    payload.publiclyAccessible ? "1" : "0",
   ].join("\n");
 }
 
@@ -70,17 +73,24 @@ export function createSignedMediaUrl(input: {
   mtimeMs: number;
   sizeBytes: number;
   download: boolean;
+  publiclyAccessible?: boolean;
   now?: number;
 }): string {
   const config = getRemoteMediaStorageConfig();
+  const nowSeconds = Math.floor((input.now ?? Date.now()) / 1_000);
+  const publiclyAccessible = Boolean(input.publiclyAccessible && !input.download);
+  const bucketSeconds = Math.min(config.ttlSeconds, MEDIA_SIGNATURE_BUCKET_MAX_SECONDS);
   const payload: SignedMediaPayload = {
     storedName: input.storedName,
-    expiresAt: Math.floor((input.now ?? Date.now()) / 1_000) + config.ttlSeconds,
+    expiresAt: publiclyAccessible
+      ? Math.floor(nowSeconds / bucketSeconds) * bucketSeconds + config.ttlSeconds + bucketSeconds
+      : nowSeconds + config.ttlSeconds,
     mtimeMs: Math.floor(input.mtimeMs),
     sizeBytes: Math.floor(input.sizeBytes),
     download: input.download,
     mimeType: input.mimeType,
     fileName: input.fileName,
+    publiclyAccessible,
   };
   const params = new URLSearchParams({
     exp: String(payload.expiresAt),
@@ -89,6 +99,7 @@ export function createSignedMediaUrl(input: {
     dl: payload.download ? "1" : "0",
     mt: encodeValue(payload.mimeType),
     fn: encodeValue(payload.fileName),
+    public: payload.publiclyAccessible ? "1" : "0",
     sig: signature(payload, signingSecret()),
   });
   return `${config.publicUrl}${MEDIA_PATH_PREFIX}${encodedStoredName(payload.storedName)}?${params.toString()}`;
@@ -118,7 +129,7 @@ export function verifySignedMediaUrl(url: URL, now = Date.now(), secret = signin
   if (
     !Number.isInteger(expiresAt) ||
     expiresAt <= Math.floor(now / 1_000) ||
-    expiresAt > Math.floor(now / 1_000) + 86_400 + 60 ||
+    expiresAt > Math.floor(now / 1_000) + 86_400 + MEDIA_SIGNATURE_BUCKET_MAX_SECONDS + 60 ||
     !Number.isInteger(mtimeMs) ||
     mtimeMs <= 0 ||
     !Number.isInteger(sizeBytes) ||
@@ -138,6 +149,7 @@ export function verifySignedMediaUrl(url: URL, now = Date.now(), secret = signin
     download: url.searchParams.get("dl") === "1",
     mimeType,
     fileName,
+    publiclyAccessible: url.searchParams.get("public") === "1",
   };
   const expected = signature(payload, secret);
   try {

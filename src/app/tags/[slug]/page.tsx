@@ -1,11 +1,13 @@
-import { Eye, EyeOff, Tags } from "lucide-react";
+import { Tags } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { CatalogBookGrid } from "@/components/CatalogBookGrid";
 import { Pagination } from "@/components/Pagination";
 import { ResultCount } from "@/components/ResultCount";
 import { SiteHeader } from "@/components/SiteHeader";
+import { TagVisibilityControl } from "@/components/TagVisibilityControl";
 import { getCatalogPageSize, isGuestTagLibraryNavEnabled, isTagLibraryEnabled } from "@/lib/config";
 import { getTagBySlug, listNovelsByTag, listTagsForNovels } from "@/lib/tags";
 import { canonicalPagePath, NO_INDEX_ROBOTS } from "@/lib/seo";
@@ -117,14 +119,16 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
             <input name="tagId" type="hidden" value={tag.id} />
             <input name="hidden" type="hidden" value={isExplicitlyHidden ? "0" : "1"} />
             <input name="returnPath" type="hidden" value={`/tags/${tag.slug}`} />
-            <button
-              type="submit"
-              disabled={isHiddenByGroup}
-              aria-label={isExplicitlyHidden ? "恢复标签" : isHiddenByGroup ? "标签已随分组隐藏" : "隐藏标签"}
-              title={isExplicitlyHidden ? "恢复标签" : isHiddenByGroup ? "已随分组隐藏" : "隐藏标签"}
-            >
-              {isExplicitlyHidden ? <Eye size={17} aria-hidden="true" /> : <EyeOff size={17} aria-hidden="true" />}
-            </button>
+            {isHiddenByGroup ? (
+              <Link className="tagInheritedVisibility" href="/tags?hidden=1" title="前往已隐藏标签">
+                随分组隐藏
+              </Link>
+            ) : (
+              <TagVisibilityControl
+                visible={!isExplicitlyHidden}
+                label={isExplicitlyHidden ? "显示此标签" : "隐藏此标签"}
+              />
+            )}
           </form>
         ) : null}
       </section>

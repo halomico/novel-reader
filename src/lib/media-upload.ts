@@ -21,6 +21,7 @@ import {
   type MediaAsset,
   type MediaKind,
 } from "./media";
+import { optimizeMediaFileFastStart } from "./media-processing";
 
 export { MEDIA_UPLOAD_CHUNK_BYTES, MEDIA_UPLOAD_MAX_BYTES };
 
@@ -322,7 +323,18 @@ async function finishMediaUploadUnlocked(uploadId: string): Promise<MediaAsset> 
   );
   const finalPath = mediaFilePath(storedName);
   fs.mkdirSync(path.dirname(finalPath), { recursive: true });
+  if (session.kind === "video") {
+    try {
+      await optimizeMediaFileFastStart(sourcePath, path.extname(storedName));
+    } catch (error) {
+      throw new MediaUploadError(
+        error instanceof Error ? `视频渐进播放优化失败：${error.message}` : "视频渐进播放优化失败",
+        422,
+      );
+    }
+  }
   fs.renameSync(sourcePath, finalPath);
+  const finalStat = fs.statSync(finalPath);
   let asset: MediaAsset;
   try {
     asset = createMediaAsset({
@@ -334,8 +346,8 @@ async function finishMediaUploadUnlocked(uploadId: string): Promise<MediaAsset> 
       fileName: path.basename(storedName),
       storedName,
       mimeType: session.mimeType,
-      sizeBytes: session.sizeBytes,
-      mtimeMs: Math.floor(fs.statSync(finalPath).mtimeMs),
+      sizeBytes: finalStat.size,
+      mtimeMs: Math.floor(finalStat.mtimeMs),
     });
   } catch (error) {
     fs.rmSync(finalPath, { force: true });

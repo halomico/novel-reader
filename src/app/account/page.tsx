@@ -2,12 +2,17 @@ import { Check, CupSoda, KeyRound, Save, Sparkles, UserRound } from "lucide-reac
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { AvatarUploadForm } from "@/components/AvatarUploadForm";
+import { CheckinLeaderboardDialog } from "@/components/CheckinLeaderboardDialog";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
 import { UserWorkspace, type UserWorkspaceKey } from "@/components/UserWorkspace";
 import { getNoticeDisplaySeconds, getUserAvatarMaxBytes } from "@/lib/config";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { getCurrentUser } from "@/lib/user-auth";
-import { getDailyCheckinState, listSodaTransactions } from "@/lib/user-economy";
+import {
+  getDailyCheckinState,
+  listDailyCheckinLeaderboard,
+  listSodaTransactions,
+} from "@/lib/user-economy";
 import { getUserGrowthProgress, USER_PERMISSION_DEFINITIONS } from "@/lib/user-levels";
 import {
   claimDailySodaAction,
@@ -23,6 +28,7 @@ type AccountPageProps = {
     view?: string;
     notice?: string;
     tone?: "success" | "warning" | "error";
+    checkin?: string;
   }>;
 };
 
@@ -43,6 +49,8 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
   const level = growth.current;
   const checkin = view === "growth" ? getDailyCheckinState(user.id) : null;
   const transactions = view === "growth" ? listSodaTransactions(user.id, 12) : [];
+  const showCheckinDialog = view === "growth" && params.checkin === "1" && Boolean(checkin?.checkedIn);
+  const checkinLeaderboard = showCheckinDialog ? listDailyCheckinLeaderboard() : null;
   const labels: Record<typeof view, string> = {
     profile: "账户",
     growth: "成长",
@@ -50,7 +58,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
 
   return (
     <UserWorkspace user={user} active={view} breadcrumb={labels[view]}>
-      {params.notice ? (
+      {params.notice && !showCheckinDialog ? (
         <DismissibleNotice
           message={params.notice}
           tone={params.tone}
@@ -160,14 +168,27 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
           </div>
 
           <form className="accountCheckin" action={claimDailySodaAction}>
-            <div>
+            <div className="accountCheckinCopy">
               <strong>{checkin.checkedIn ? "今日已签到" : "每日签到"}</strong>
               <small>{checkin.checkedIn ? `获得 ${checkin.reward} 苏打` : "今日份惊喜等你开启"}</small>
             </div>
-            <button type="submit" disabled={checkin.checkedIn}>
-              {checkin.checkedIn ? <Check size={16} aria-hidden="true" /> : <CupSoda size={16} aria-hidden="true" />}
-              {checkin.checkedIn ? "已完成" : "签到"}
-            </button>
+            <div className="accountCheckinActions">
+              <CheckinLeaderboardDialog
+                reward={checkin.reward}
+                currentUserId={user.id}
+                entries={checkinLeaderboard}
+                autoOpen={showCheckinDialog}
+              />
+              <button
+                className="accountCheckinButton"
+                type="submit"
+                disabled={checkin.checkedIn}
+                aria-label={checkin.checkedIn ? "今日已签到" : "试试手气"}
+                title={checkin.checkedIn ? "今日已签到" : "试试手气"}
+              >
+                {checkin.checkedIn ? "已签到" : "试试手气"}
+              </button>
+            </div>
           </form>
 
           <section className="accountSodaHistory">

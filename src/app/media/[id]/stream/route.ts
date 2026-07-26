@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
-import { getMediaAsset, isMediaKindAccessible } from "@/lib/media";
+import { getMediaAsset, isMediaKindAccessible, isMediaKindPublic } from "@/lib/media";
 import { mediaDeliveryUrl } from "@/lib/media-delivery";
-import { checkContentAccess } from "@/lib/content-access";
+import { checkContentAccess, hasScopedContentAccessRules } from "@/lib/content-access";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +30,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
   let location: string;
   try {
-    location = mediaDeliveryUrl(asset);
+    location = mediaDeliveryUrl(asset, false, {
+      publiclyAccessible: isMediaKindPublic(asset.kind) && !hasScopedContentAccessRules("media"),
+    });
   } catch {
     return new Response(null, { status: 503 });
   }

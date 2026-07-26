@@ -13,7 +13,7 @@ import {
   type MediaNodeUploadRequest,
   type MediaNodeUploadStart,
 } from "./media-node-protocol";
-import { generateVideoThumbnailFile, probeMediaDurationFile } from "./media-processing";
+import { generateVideoThumbnailFile, optimizeMediaFileFastStart, probeMediaDurationFile } from "./media-processing";
 import { normalizeMediaStoragePath, resolveMediaStoragePath } from "./media-storage-path";
 
 type UploadSession = MediaNodeUploadRequest & {
@@ -141,6 +141,7 @@ export class MediaNodeStore {
   private manifestSnapshot?: ManifestSnapshot;
   private readonly sessions = new Map<string, UploadSession>();
   private readonly uploadLocks = new Map<string, Promise<void>>();
+  private readonly durationJobs = new Map<string, Promise<number>>();
   private readonly thumbnailJobs = new Map<string, Promise<string>>();
   private readonly thumbnailQueue: Array<() => void> = [];
   private activeThumbnailJobs = 0;
@@ -398,6 +399,16 @@ export class MediaNodeStore {
     const finalPath = this.mediaPath(finalStoredName);
     fs.mkdirSync(path.dirname(finalPath), { recursive: true });
     if (fs.existsSync(sourcePath)) {
+      if (session.kind === "video") {
+        try {
+          await optimizeMediaFileFastStart(sourcePath, path.posix.extname(finalStoredName));
+        } catch (error) {
+          throw new MediaNodeStoreError(
+            error instanceof Error ? `视频渐进播放优化失败：${error.message}` : "视频渐进播放优化失败",
+            422,
+          );
+        }
+      }
       fs.renameSync(sourcePath, finalPath);
     } else if (!fs.existsSync(finalPath)) {
       throw new MediaNodeStoreError("上传文件不存在", 404);
@@ -632,23 +643,39 @@ export class MediaNodeStore {
     if (!storedName) throw new MediaNodeStoreError("资源路径无效");
     try {
       const sourcePath = this.mediaPath(storedName);
-      if (expected) {
-        const stat = await fs.promises.stat(sourcePath);
-        if (
-          stat.size !== Math.floor(expected.sizeBytes) ||
-          Math.floor(stat.mtimeMs) !== Math.floor(expected.mtimeMs)
-        ) {
-          throw new MediaNodeStoreError("资源版本已变化", 409);
+      const stat = await fs.promises.stat(sourcePath);
+      if (
+        expected &&
+        (stat.size !== Math.floor(expected.sizeBytes) ||
+          Math.floor(stat.mtimeMs) !== Math.floor(expected.mtimeMs))
+      ) {
+        throw new MediaNodeStoreError("资源版本已变化", 409);
+      }
+      const cacheIdentity = `${storedName}:${Math.floor(stat.mtimeMs)}:${stat.size}`;
+      const existingJob = this.durationJobs.get(cacheIdentity);
+      if (existingJob) return existingJob;
+      const job = probeMediaDurationFile(sourcePath);
+      this.durationJobs.set(cacheIdentity, job);
+      try {
+        return await job;
+      } finally {
+        if (this.durationJobs.get(cacheIdentity) === job) {
+          this.durationJobs.delete(cacheIdentity);
         }
       }
-      return await probeMediaDurationFile(sourcePath);
     } catch (error) {
       if (error instanceof MediaNodeStoreError) throw error;
       throw new MediaNodeStoreError("无法读取媒体时长", 422);
     }
   }
 
-  async thumbnail(params: { storedName: string; mtimeMs: number; sizeBytes: number; percent: number }): Promise<string> {
+  async thumbnail(params: {
+    storedName: string;
+    mtimeMs: number;
+    sizeBytes: number;
+    percent: number;
+    durationSeconds?: number | null;
+  }): Promise<string> {
     const sourcePath = this.mediaPath(params.storedName);
     let stat: fs.Stats;
     try {
@@ -683,10 +710,13 @@ export class MediaNodeStore {
       } catch {
         // Another queued request has not generated the thumbnail yet.
       }
-      const durationSeconds = await this.probeDuration(params.storedName, {
-        mtimeMs: params.mtimeMs,
-        sizeBytes: params.sizeBytes,
-      });
+      const durationSeconds =
+        Number.isFinite(params.durationSeconds) && Number(params.durationSeconds) > 0
+          ? Number(params.durationSeconds)
+          : await this.probeDuration(params.storedName, {
+              mtimeMs: params.mtimeMs,
+              sizeBytes: params.sizeBytes,
+            });
       return generateVideoThumbnailFile({
         sourcePath,
         targetPath,
@@ -697,6 +727,29 @@ export class MediaNodeStore {
     this.thumbnailJobs.set(cacheIdentity, job);
     void job.finally(() => this.thumbnailJobs.delete(cacheIdentity)).catch(() => undefined);
     return job;
+  }
+
+  prewarmThumbnail(params: {
+    storedName: string;
+    mtimeMs: number;
+    sizeBytes: number;
+    percent: number;
+    durationSeconds?: number | null;
+  }): boolean {
+    const storedName = normalizeMediaStoragePath(params.storedName);
+    if (!storedName || !storedName.startsWith("video/")) {
+      throw new MediaNodeStoreError("封面预热目标无效");
+    }
+    void this.thumbnail({
+      storedName,
+      mtimeMs: Math.floor(params.mtimeMs),
+      sizeBytes: Math.floor(params.sizeBytes),
+      percent: Math.min(Math.max(Math.floor(params.percent), 1), 99),
+      durationSeconds: params.durationSeconds,
+    }).catch((error) => {
+      console.warn("[media-node] thumbnail warmup failed", storedName, error);
+    });
+    return true;
   }
 
   clearThumbnails(): number {

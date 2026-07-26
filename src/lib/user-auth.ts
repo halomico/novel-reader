@@ -4,6 +4,7 @@ import { cookies, headers } from "next/headers";
 import { cache } from "react";
 import { getClientIp } from "./admin-access";
 import { getDb } from "./db";
+import { assignDefaultAvatarIfMissing } from "./default-avatars";
 import { hashPassword, verifyPassword } from "./password";
 import { getUserPasswordRow, recordUserLogin, type UserProfile } from "./users";
 
@@ -128,9 +129,18 @@ export async function loginUser(
   const headerStore = await headers();
   const ip = getClientIp(headerStore);
   const userAgent = headerStore.get("user-agent") || "";
+  const avatarPath = assignDefaultAvatarIfMissing(row.id, row.avatar_path);
   recordUserLogin(row.id, ip, userAgent);
   await createUserSession(row.id, ip, userAgent, persistent);
-  return { ok: true, user: toUserProfile({ ...row, last_login_at: new Date().toISOString(), last_login_ip: ip }) };
+  return {
+    ok: true,
+    user: toUserProfile({
+      ...row,
+      avatar_path: avatarPath,
+      last_login_at: new Date().toISOString(),
+      last_login_ip: ip,
+    }),
+  };
 }
 
 async function readCurrentUser(): Promise<UserProfile | null> {

@@ -1,6 +1,16 @@
 "use client";
 
-import { Bookmark, CupSoda, KeyRound, LogOut, Menu, MessageCircle, Settings, Sparkles, UserPlus, UserRound } from "lucide-react";
+import {
+  Bookmark,
+  KeyRound,
+  LogOut,
+  Menu,
+  MessageCircle,
+  Settings,
+  Sparkles,
+  UserPlus,
+  UserRound,
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { logoutUserAction } from "@/app/account/actions";
@@ -13,7 +23,6 @@ type HeaderUserMenuProps = {
         displayName: string;
         avatarPath: string | null;
         trustLevel: number;
-        sodaBalance: number;
       }
     | null;
   loginEnabled: boolean;
@@ -84,22 +93,14 @@ export function HeaderUserMenu({
         <div className={user ? "userMenuPanel hasIdentity" : "userMenuPanel"}>
           {user ? (
             <>
-              <div className="userMenuIdentity">
+              <Link className="userMenuIdentity" href="/account" onClick={closeMenu}>
                 <span className="userMenuAvatar" aria-hidden="true">
-                  {user.avatarPath ? <img src={user.avatarPath} alt="" /> : <UserRound size={17} />}
+                  {user.avatarPath ? <img src={user.avatarPath} alt="" /> : <UserRound size={18} />}
                 </span>
                 <span>
-                  <small>当前账户</small>
                   <strong>{user.displayName}</strong>
-                  <span className="userMenuGrowthMeta">
-                    <i title="等级"><Sparkles size={11} aria-hidden="true" />Lv.{user.trustLevel}</i>
-                    <i title="苏打余额"><CupSoda size={12} aria-hidden="true" />{user.sodaBalance}</i>
-                  </span>
+                  <small>Lv.{user.trustLevel}</small>
                 </span>
-              </div>
-              <Link href="/account" onClick={closeMenu}>
-                <UserRound size={16} aria-hidden="true" />
-                账户
               </Link>
               <Link href="/account?view=growth" onClick={closeMenu}>
                 <Sparkles size={16} aria-hidden="true" />

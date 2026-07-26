@@ -5,7 +5,12 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { getDb } from "./db";
-import { claimDailySoda, drawDailySoda, getDailyCheckinState } from "./user-economy";
+import {
+  claimDailySoda,
+  drawDailySoda,
+  getDailyCheckinState,
+  listDailyCheckinLeaderboard,
+} from "./user-economy";
 
 function withTempDatabase(t: TestContext) {
   const previousDatabasePath = process.env.DATABASE_PATH;
@@ -71,5 +76,36 @@ test("daily check-in grants soda once per site day", (t) => {
   assert.deepEqual(
     { ...(db.prepare("SELECT trust_level, soda_balance, soda_experience FROM users WHERE id = ?").get(userId) as object) },
     { trust_level: 1, soda_balance: 14, soda_experience: 14 },
+  );
+});
+
+test("daily check-in leaderboard orders active users by today's reward", (t) => {
+  withTempDatabase(t);
+  const db = getDb();
+  const users = [
+    { username: "reader-a", displayName: "甲", reward: [99, 11] },
+    { username: "reader-b", displayName: "乙", reward: [0, 4] },
+    { username: "reader-c", displayName: "丙", reward: [95, 0] },
+  ].map((item) => ({
+    ...item,
+    id: Number(db
+      .prepare("INSERT INTO users (username, display_name, password_hash) VALUES (?, ?, 'hash')")
+      .run(item.username, item.displayName).lastInsertRowid),
+  }));
+  const today = new Date("2026-07-27T04:00:00.000Z");
+
+  for (const user of users) {
+    claimDailySoda(user.id, today, sequenceRandom(...user.reward));
+  }
+
+  assert.deepEqual(
+    listDailyCheckinLeaderboard(today, 2).map((entry) => ({
+      displayName: entry.displayName,
+      reward: entry.reward,
+    })),
+    [
+      { displayName: "甲", reward: 20 },
+      { displayName: "丙", reward: 9 },
+    ],
   );
 });

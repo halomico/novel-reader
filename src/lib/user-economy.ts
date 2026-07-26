@@ -11,6 +11,13 @@ export type SodaTransaction = {
   createdAt: string;
 };
 
+export type DailyCheckinLeaderboardEntry = {
+  userId: number;
+  displayName: string;
+  avatarPath: string | null;
+  reward: number;
+};
+
 type RandomInt = (maxExclusive: number) => number;
 
 export function getSiteDateKey(now = new Date()): string {
@@ -36,6 +43,33 @@ export function getDailyCheckinState(userId: number, now = new Date()): {
     .prepare("SELECT reward FROM user_checkins WHERE user_id = ? AND checkin_date = ?")
     .get(userId, getSiteDateKey(now)) as { reward: number } | undefined;
   return { checkedIn: Boolean(row), reward: row?.reward || 0 };
+}
+
+export function listDailyCheckinLeaderboard(
+  now = new Date(),
+  limit = 50,
+): DailyCheckinLeaderboardEntry[] {
+  const safeLimit = Math.min(Math.max(Math.floor(limit), 1), 100);
+  return (getDb()
+    .prepare(
+      `SELECT c.user_id, u.display_name, u.avatar_path, c.reward
+       FROM user_checkins c
+       JOIN users u ON u.id = c.user_id
+       WHERE c.checkin_date = ? AND u.status = 'active'
+       ORDER BY c.reward DESC, c.created_at ASC, c.user_id ASC
+       LIMIT ?`,
+    )
+    .all(getSiteDateKey(now), safeLimit) as Array<{
+    user_id: number;
+    display_name: string;
+    avatar_path: string | null;
+    reward: number;
+  }>).map((row) => ({
+    userId: row.user_id,
+    displayName: row.display_name,
+    avatarPath: row.avatar_path,
+    reward: row.reward,
+  }));
 }
 
 export function claimDailySoda(

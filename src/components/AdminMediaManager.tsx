@@ -330,6 +330,9 @@ export function AdminMediaManager({
             setMessage(`正在上传 ${fileIndex + 1}/${uploadFiles.length} · ${file.name}`);
           }
 
+          setMessage(
+            `${kind === "video" ? "正在优化并保存" : "正在保存"} ${fileIndex + 1}/${uploadFiles.length} · ${file.name}`,
+          );
           await finishUploadTask(uploadId);
           uploadedBytes += file.size;
           completedFiles += 1;

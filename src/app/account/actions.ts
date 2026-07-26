@@ -312,6 +312,6 @@ export async function claimDailySodaAction() {
     "/account",
     result.alreadyCheckedIn ? `今日已签到，获得 ${result.reward} 苏打` : `签到成功，获得 ${result.reward} 苏打`,
     "success",
-    { view: "growth" },
+    { view: "growth", checkin: "1" },
   );
 }

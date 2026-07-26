@@ -1,10 +1,9 @@
-import crypto from "node:crypto";
-import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import "dotenv/config";
 import { getMediaDir } from "../src/lib/config";
 import { inspectMp4AtomLayout } from "../src/lib/mp4-faststart";
+import { optimizeMediaFileFastStart } from "../src/lib/media-processing";
 
 const SUPPORTED_EXTENSIONS = new Set([".mp4", ".m4v", ".mov"]);
 const dryRun = process.argv.includes("--dry-run");
@@ -23,74 +22,30 @@ function listVideoFiles(directory: string): string[] {
   return files;
 }
 
-function availableBytes(directory: string): number {
-  const stat = fs.statfsSync(directory);
-  return Number(stat.bavail) * Number(stat.bsize);
-}
-
-function runFfmpeg(sourcePath: string, targetPath: string): Promise<void> {
-  const ffmpeg = process.env.FFMPEG_PATH || "ffmpeg";
-  return new Promise((resolve, reject) => {
-    const child = spawn(
-      ffmpeg,
-      ["-hide_banner", "-loglevel", "warning", "-y", "-i", sourcePath, "-map", "0", "-c", "copy", "-map_metadata", "0", "-movflags", "+faststart", targetPath],
-      { stdio: "inherit", windowsHide: true },
-    );
-    child.once("error", reject);
-    child.once("exit", (code) => code === 0 ? resolve() : reject(new Error(`ffmpeg exited with code ${code ?? "unknown"}`)));
-  });
-}
-
 async function optimizeFile(filePath: string): Promise<"optimized" | "skipped"> {
   const layout = inspectMp4AtomLayout(filePath);
   if (layout.fastStart) {
-    console.log(`skip  ${path.relative(getMediaDir(), filePath)} (already faststart)`);
+    console.log(`skip  ${path.relative(mediaRoot, filePath)} (already faststart)`);
     return "skipped";
   }
   if (layout.moovOffset === null || layout.mdatOffset === null) {
     throw new Error("not a supported MP4/MOV container");
   }
-  console.log(`${dryRun ? "check" : "start"} ${path.relative(getMediaDir(), filePath)}`);
+  console.log(`${dryRun ? "check" : "start"} ${path.relative(mediaRoot, filePath)}`);
   if (dryRun) {
     return "skipped";
   }
 
-  const stat = fs.statSync(filePath);
-  if (availableBytes(path.dirname(filePath)) < stat.size + 256 * 1024 * 1024) {
-    throw new Error("insufficient free disk space for the temporary remux file");
-  }
-  const extension = path.extname(filePath);
-  const tempPath = path.join(path.dirname(filePath), `.${path.basename(filePath, extension)}.faststart-${crypto.randomBytes(6).toString("hex")}${extension}`);
-  const replacePath = `${filePath}.faststart-replace`;
-  try {
-    await runFfmpeg(filePath, tempPath);
-    if (!inspectMp4AtomLayout(tempPath).fastStart) {
-      throw new Error("ffmpeg output still has the moov atom after media data");
-    }
-    fs.renameSync(filePath, replacePath);
-    try {
-      fs.renameSync(tempPath, filePath);
-    } catch (error) {
-      fs.renameSync(replacePath, filePath);
-      throw error;
-    }
-    try {
-      fs.rmSync(replacePath, { force: true });
-    } catch {
-      console.warn(`warn  temporary replacement file remains: ${replacePath}`);
-    }
-    console.log(`done  ${path.relative(getMediaDir(), filePath)}`);
-    return "optimized";
-  } finally {
-    fs.rmSync(tempPath, { force: true });
-    if (fs.existsSync(replacePath) && !fs.existsSync(filePath)) {
-      fs.renameSync(replacePath, filePath);
-    }
-  }
+  const result = await optimizeMediaFileFastStart(filePath);
+  if (result !== "optimized") throw new Error("not a supported MP4/MOV container");
+  console.log(`done  ${path.relative(mediaRoot, filePath)}`);
+  return "optimized";
 }
 
+const mediaRoot = path.resolve(process.env.MEDIA_NODE_DIR || getMediaDir());
+
 async function main() {
-  const videoDirectory = path.join(getMediaDir(), "video");
+  const videoDirectory = path.join(mediaRoot, "video");
   fs.mkdirSync(videoDirectory, { recursive: true });
   const files = listVideoFiles(videoDirectory);
   let optimized = 0;
@@ -100,10 +55,13 @@ async function main() {
       if (await optimizeFile(filePath) === "optimized") optimized += 1;
     } catch (error) {
       failed += 1;
-      console.error(`fail  ${path.relative(getMediaDir(), filePath)}: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(`fail  ${path.relative(mediaRoot, filePath)}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
   console.log(`summary: ${optimized} optimized, ${files.length - optimized - failed} skipped, ${failed} failed`);
+  if (optimized > 0) {
+    console.log("next: run media synchronization in the main admin after all files finish");
+  }
   if (failed) process.exitCode = 1;
 }
 

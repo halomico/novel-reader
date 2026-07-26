@@ -373,14 +373,14 @@ export function SettingsPanel({
                 {canConfigureReaderHotwords ? (
                   <label className="settingToggle">
                     <input type="checkbox" checked={showReaderHotwords} onChange={(event) => changeReaderHotwords(event.target.checked)} />
-                    <span className="settingToggleTrack" aria-hidden="true" />
                     <span>文末热词</span>
+                    <span className="settingToggleTrack" aria-hidden="true"><span /></span>
                   </label>
                 ) : null}
                 <label className="settingToggle">
                   <input type="checkbox" checked={showTopMenu} onChange={(event) => changeTopMenu(event.target.checked)} />
-                  <span className="settingToggleTrack" aria-hidden="true" />
                   <span>顶部导航</span>
+                  <span className="settingToggleTrack" aria-hidden="true"><span /></span>
                 </label>
               </div>
             </div>

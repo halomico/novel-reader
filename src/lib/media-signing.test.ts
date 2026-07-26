@@ -57,6 +57,7 @@ test("signs media URLs and rejects tampering or expiry", () => {
       mtimeMs: 123_456,
       sizeBytes: 987_654,
       download: false,
+      publiclyAccessible: false,
       mimeType: "video/mp4",
       fileName: "测试.mp4",
     });
@@ -66,6 +67,26 @@ test("signs media URLs and rejects tampering or expiry", () => {
     staleVersion.searchParams.set("v", "123457");
     assert.equal(verifySignedMediaUrl(staleVersion, 1_000_000), null);
     assert.equal(verifySignedMediaUrl(new URL(signed), 1_601_000), null);
+  });
+});
+
+test("keeps public media signatures stable within a cache bucket", () => {
+  withMediaEnvironment({}, () => {
+    const input = {
+      storedName: "video/public.mp4",
+      mimeType: "video/mp4",
+      fileName: "public.mp4",
+      mtimeMs: 123_456,
+      sizeBytes: 987_654,
+      download: false,
+      publiclyAccessible: true,
+    };
+    const signed = createSignedMediaUrl({ ...input, now: 1_000_000 });
+    assert.equal(createSignedMediaUrl({ ...input, now: 1_100_000 }), signed);
+    assert.equal(verifySignedMediaUrl(new URL(signed), 1_000_000)?.publiclyAccessible, true);
+    const tampered = new URL(signed);
+    tampered.searchParams.set("public", "0");
+    assert.equal(verifySignedMediaUrl(tampered, 1_000_000), null);
   });
 });
 

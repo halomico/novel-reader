@@ -29,16 +29,16 @@ async function requireAdmin() {
   return session;
 }
 
-function optionalExpiry(value: FormDataEntryValue | null): number | null {
+function optionalExpiryMinutes(value: FormDataEntryValue | null): number | null {
   const text = String(value || "").trim();
   if (!text) {
     return null;
   }
-  const timestamp = new Date(text).getTime();
-  if (!Number.isFinite(timestamp) || timestamp <= Date.now()) {
-    throw new ContentAccessInputError("到期时间必须晚于当前时间");
+  const minutes = Number(text);
+  if (!Number.isInteger(minutes) || minutes < 1 || minutes > 525_600) {
+    throw new ContentAccessInputError("持续时间应为 1 至 525600 分钟");
   }
-  return timestamp;
+  return Date.now() + minutes * 60_000;
 }
 
 export async function saveContentAccessRuleAction(formData: FormData) {
@@ -48,10 +48,11 @@ export async function saveContentAccessRuleAction(formData: FormData) {
       id: Number(formData.get("id") || 0),
       targetType: formData.get("targetType"),
       targetValue: formData.get("targetValue"),
+      matchMode: formData.get("matchMode"),
       scope: formData.get("scope"),
       audience: formData.get("audience"),
       reason: formData.get("reason"),
-      expiresAt: optionalExpiry(formData.get("expiresAt")),
+      expiresAt: optionalExpiryMinutes(formData.get("durationMinutes")),
       enabled: formData.get("enabled") === "on",
       createdBy: session.username,
     });
@@ -78,9 +79,9 @@ export async function saveContentAccessPolicyAction(formData: FormData) {
       enabled: formData.get("enabled") === "on",
       scope: formData.get("scope"),
       audience: formData.get("audience"),
-      windowSeconds: formData.get("windowSeconds"),
+      windowSeconds: Number(formData.get("windowMinutes") || 1) * 60,
       maxRequests: formData.get("maxRequests"),
-      blockSeconds: formData.get("blockSeconds"),
+      blockSeconds: Number(formData.get("blockMinutes") || 5) * 60,
     });
   } catch (error) {
     accessNotice(error instanceof ContentAccessInputError ? error.message : "频率规则保存失败", "warning");

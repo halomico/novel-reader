@@ -118,7 +118,6 @@ export async function SiteHeader({
                   displayName: user.displayName,
                   avatarPath: user.avatarPath,
                   trustLevel: user.trustLevel,
-                  sodaBalance: user.sodaBalance,
                 } : null}
                 unreadMessages={unreadCount}
                 loginEnabled={loginEnabled}

@@ -257,6 +257,7 @@ function migrateContentAccessCrawlerTarget(db: DatabaseSync) {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         target_type TEXT NOT NULL CHECK(target_type IN ('ip', 'cidr', 'country', 'crawler')),
         target_value TEXT NOT NULL,
+        match_mode TEXT NOT NULL DEFAULT 'include' CHECK(match_mode IN ('include', 'exclude')),
         scope TEXT NOT NULL DEFAULT 'all' CHECK(scope IN ('all', 'novel', 'media')),
         audience TEXT NOT NULL DEFAULT 'all' CHECK(audience IN ('all', 'guest')),
         source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual', 'rate_limit')),
@@ -284,6 +285,15 @@ function migrateContentAccessCrawlerTarget(db: DatabaseSync) {
     db.exec("ROLLBACK");
     throw error;
   }
+}
+
+function migrateContentAccessMatchMode(db: DatabaseSync) {
+  addColumnIfMissing(
+    db,
+    "content_access_rules",
+    "match_mode",
+    "match_mode TEXT NOT NULL DEFAULT 'include' CHECK(match_mode IN ('include', 'exclude'))",
+  );
 }
 
 function migrateUserEconomy(db: DatabaseSync) {
@@ -834,6 +844,7 @@ function initialize(db: DatabaseSync) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       target_type TEXT NOT NULL CHECK(target_type IN ('ip', 'cidr', 'country', 'crawler')),
       target_value TEXT NOT NULL,
+      match_mode TEXT NOT NULL DEFAULT 'include' CHECK(match_mode IN ('include', 'exclude')),
       scope TEXT NOT NULL DEFAULT 'all' CHECK(scope IN ('all', 'novel', 'media')),
       audience TEXT NOT NULL DEFAULT 'all' CHECK(audience IN ('all', 'guest')),
       source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual', 'rate_limit')),
@@ -844,11 +855,6 @@ function initialize(db: DatabaseSync) {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
-
-    CREATE INDEX IF NOT EXISTS idx_content_access_rules_match
-      ON content_access_rules(enabled, scope, audience, target_type, target_value);
-    CREATE INDEX IF NOT EXISTS idx_content_access_rules_expiry
-      ON content_access_rules(expires_at);
 
     CREATE TABLE IF NOT EXISTS content_access_policies (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -919,6 +925,13 @@ function initialize(db: DatabaseSync) {
   migrateLegacyContentAccessBans(db);
   migrateContentReportCategories(db);
   migrateContentAccessCrawlerTarget(db);
+  migrateContentAccessMatchMode(db);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_content_access_rules_match
+      ON content_access_rules(enabled, scope, audience, target_type, target_value);
+    CREATE INDEX IF NOT EXISTS idx_content_access_rules_expiry
+      ON content_access_rules(expires_at);
+  `);
   migrateUserEconomy(db);
   migrateNovelRecommendations(db);
   seedUserLevels(db);

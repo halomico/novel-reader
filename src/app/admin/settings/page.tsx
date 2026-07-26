@@ -4,6 +4,7 @@ import { BookOpen, ChevronRight, Clapperboard, File, Globe2, Headphones, ListFil
 import { AdminPaletteField } from "@/components/AdminPaletteField";
 import { AdminSelect } from "@/components/AdminSelect";
 import { HomeCardOrderField } from "@/components/HomeCardOrderField";
+import { SiteIconFilePicker } from "@/components/SiteIconFilePicker";
 import { getAdminBookStats } from "@/lib/admin-books";
 import {
   getAdminBookPageSize,
@@ -110,11 +111,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               <Globe2 size={24} aria-hidden="true" />
             )}
           </div>
-          <label className="siteIconFileField">
-            <span>浏览器标签图标</span>
-            <input name="siteIcon" type="file" accept=".png,.jpg,.jpeg,.webp,.ico,image/png,image/jpeg,image/webp,image/x-icon" required />
-            <small>{settings.siteIconFileName ? `${settings.siteIconFileName}，最大 15 MB` : "PNG、JPG、WebP 或 ICO，最大 15 MB"}</small>
-          </label>
+          <SiteIconFilePicker />
           <div className="siteIconActions">
             <button className="adminMediaUploadButton" type="submit">
               <Upload size={15} aria-hidden="true" />

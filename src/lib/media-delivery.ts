@@ -27,7 +27,11 @@ function contentDisposition(asset: MediaAsset, download: boolean): string {
   return `${mode}; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(asset.fileName)}`;
 }
 
-export function mediaDeliveryUrl(asset: MediaAsset, download = false): string {
+export function mediaDeliveryUrl(
+  asset: MediaAsset,
+  download = false,
+  options: { publiclyAccessible?: boolean } = {},
+): string {
   if (isRemoteMediaStorage()) {
     return createSignedMediaUrl({
       storedName: asset.storedName,
@@ -36,6 +40,7 @@ export function mediaDeliveryUrl(asset: MediaAsset, download = false): string {
       mtimeMs: asset.mtimeMs,
       sizeBytes: asset.sizeBytes,
       download,
+      publiclyAccessible: Boolean(options.publiclyAccessible),
     });
   }
   const params = new URLSearchParams({ id: String(asset.id), v: String(Math.floor(asset.mtimeMs)) });

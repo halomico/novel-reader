@@ -163,7 +163,9 @@ async function serveSignedMedia(
   const end = range?.end ?? stat.size - 1;
   const headers: Record<string, string> = {
     "Accept-Ranges": "bytes",
-    "Cache-Control": "private, max-age=300",
+    "Cache-Control": payload.publiclyAccessible
+      ? "public, max-age=3600, immutable"
+      : "private, max-age=300",
     "Content-Disposition": contentDisposition(payload.fileName, payload.download),
     "Content-Length": String(end - start + 1),
     "Content-Type": payload.mimeType,
@@ -172,6 +174,9 @@ async function serveSignedMedia(
     "Last-Modified": lastModified,
     "X-Content-Type-Options": "nosniff",
   };
+  if (payload.publiclyAccessible) {
+    headers["Cloudflare-CDN-Cache-Control"] = "public, max-age=3600";
+  }
   if (range) headers["Content-Range"] = `bytes ${start}-${end}/${stat.size}`;
   if (!range && request.headers["if-none-match"] === etag) {
     delete headers["Content-Length"];
@@ -356,6 +361,17 @@ export function createMediaNodeServer(options: MediaNodeServerOptions): http.Ser
               sizeBytes: Number(body.sizeBytes),
             }),
           });
+          return;
+        }
+        if (url.pathname === "/control/thumbnails/prewarm" && request.method === "POST") {
+          const body = await readJson<{
+            storedName: string;
+            mtimeMs: number;
+            sizeBytes: number;
+            percent: number;
+            durationSeconds?: number | null;
+          }>(request);
+          json(response, 202, { ok: true, queued: store.prewarmThumbnail(body) });
           return;
         }
         if (url.pathname === "/control/thumbnails" && request.method === "DELETE") {

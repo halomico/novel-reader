@@ -174,12 +174,13 @@ test("removes legacy search tables and the retired content index database", asyn
     assert.equal(legacyBanTable, undefined);
     const migratedBan = db
       .prepare(
-        `SELECT target_type, target_value, scope, audience, source, expires_at
+        `SELECT target_type, target_value, match_mode, scope, audience, source, expires_at
          FROM content_access_rules WHERE target_value = '198.51.100.8'`,
       )
       .get() as {
         target_type: string;
         target_value: string;
+        match_mode: string;
         scope: string;
         audience: string;
         source: string;
@@ -189,6 +190,7 @@ test("removes legacy search tables and the retired content index database", asyn
       {
         targetType: migratedBan.target_type,
         targetValue: migratedBan.target_value,
+        matchMode: migratedBan.match_mode,
         scope: migratedBan.scope,
         audience: migratedBan.audience,
         source: migratedBan.source,
@@ -196,6 +198,7 @@ test("removes legacy search tables and the retired content index database", asyn
       {
         targetType: "ip",
         targetValue: "198.51.100.8",
+        matchMode: "include",
         scope: "all",
         audience: "all",
         source: "rate_limit",

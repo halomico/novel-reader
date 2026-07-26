@@ -1,10 +1,11 @@
-import { Eye, EyeOff, ListFilter, Tags } from "lucide-react";
+import { ListFilter, Tags } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SiteHeader } from "@/components/SiteHeader";
 import { TagTrackedLink } from "@/components/TagTrackedLink";
+import { TagVisibilityControl } from "@/components/TagVisibilityControl";
 import { canAccessAdvancedTagSearch, isGuestTagLibraryNavEnabled, isTagLibraryEnabled } from "@/lib/config";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { listEffectivelyHiddenTagIds, listExplicitlyHiddenTagIds } from "@/lib/tag-preferences";
@@ -58,8 +59,13 @@ export default async function TagsPage({ searchParams }: { searchParams: Promise
   const effectiveHidden = user ? listEffectivelyHiddenTagIds(user.id) : new Set<number>();
   const explicitHidden = user ? listExplicitlyHiddenTagIds(user.id) : new Set<number>();
   const groups = listTagGroups({ audience }).flatMap((group) => {
-    if (!showHidden && group.group && effectiveHidden.has(group.group.id)) return [];
-    const tags = showHidden ? group.tags : group.tags.filter((tag) => !effectiveHidden.has(tag.id));
+    if (showHidden) {
+      const groupIsHidden = Boolean(group.group && explicitHidden.has(group.group.id));
+      const tags = group.tags.filter((tag) => explicitHidden.has(tag.id));
+      return groupIsHidden || tags.length ? [{ ...group, tags }] : [];
+    }
+    if (group.group && effectiveHidden.has(group.group.id)) return [];
+    const tags = group.tags.filter((tag) => !effectiveHidden.has(tag.id));
     return tags.length || (group.group && !group.tags.length) ? [{ ...group, tags }] : [];
   });
   const showAdvancedSearch = canAccessAdvancedTagSearch(false) ||
@@ -69,7 +75,7 @@ export default async function TagsPage({ searchParams }: { searchParams: Promise
     <main className="appShell">
       <SiteHeader currentUser={user} />
       <Breadcrumbs items={[{ label: "首页", href: "/" }, { label: "标签" }]} />
-      <section className="tagLibrary">
+      <section className={`tagLibrary${showHidden ? " isManagingHidden" : ""}`}>
         <header className="tagLibraryHeader">
           <span className="tagLibraryIcon" aria-hidden="true">
             <Tags size={23} />
@@ -84,40 +90,57 @@ export default async function TagsPage({ searchParams }: { searchParams: Promise
               高级搜索
             </Link>
           ) : null}
-          {user ? (
-            <Link className="tagHiddenToggle" href={showHidden ? "/tags" : "/tags?hidden=1"} title={showHidden ? "返回可见标签" : "查看已隐藏标签"}>
-              {showHidden ? <Eye size={16} aria-hidden="true" /> : <EyeOff size={16} aria-hidden="true" />}
-              <span>{showHidden ? "可见标签" : "已隐藏"}</span>
-            </Link>
-          ) : null}
         </header>
+
+        {user ? (
+          <nav className="tagPreferenceTabs" aria-label="标签显示状态">
+            <Link className={showHidden ? "" : "isActive"} href="/tags">浏览</Link>
+            <Link className={showHidden ? "isActive" : ""} href="/tags?hidden=1">
+              已隐藏
+              {explicitHidden.size ? <small>{explicitHidden.size}</small> : null}
+            </Link>
+          </nav>
+        ) : null}
 
         {groups.length ? (
           <div className="tagGroupStack">
             {groups.map((group) => {
-              const tags = visibleGroupTags(group);
+              const tags = showHidden ? group.tags : visibleGroupTags(group);
+              const groupIsExplicitlyHidden = Boolean(group.group && explicitHidden.has(group.group.id));
               return (
                 <section className={`tagGroupBlock${group.group && effectiveHidden.has(group.group.id) ? " isUserHidden" : ""}`} key={group.group?.id || "ungrouped"}>
                   <div className="tagGroupHeader">
                     <h2>{group.group?.name || "未分组"}</h2>
-                    {user && group.group ? (
+                    {user && group.group && (!showHidden || groupIsExplicitlyHidden) ? (
                       <form action={setTagPreferenceAction}>
                         <input name="tagId" type="hidden" value={group.group.id} />
-                        <input name="hidden" type="hidden" value={explicitHidden.has(group.group.id) ? "0" : "1"} />
+                        <input name="hidden" type="hidden" value={groupIsExplicitlyHidden ? "0" : "1"} />
                         <input name="returnPath" type="hidden" value={showHidden ? "/tags?hidden=1" : "/tags"} />
-                        <button
-                          type="submit"
-                          aria-label={explicitHidden.has(group.group.id) ? `恢复 ${group.group.name}` : `隐藏 ${group.group.name}`}
-                          title={explicitHidden.has(group.group.id) ? "恢复分组" : "隐藏分组"}
-                        >
-                          {explicitHidden.has(group.group.id)
-                            ? <Eye size={15} aria-hidden="true" />
-                            : <EyeOff size={15} aria-hidden="true" />}
-                        </button>
+                        <TagVisibilityControl
+                          visible={!groupIsExplicitlyHidden}
+                          label={groupIsExplicitlyHidden ? `显示分组 ${group.group.name}` : `隐藏分组 ${group.group.name}`}
+                        />
                       </form>
                     ) : null}
                   </div>
-                  {tags.length ? (
+                  {showHidden && tags.length ? (
+                    <div className="tagPreferenceList">
+                      {tags.map((tag) => (
+                        <div className="tagPreferenceRow" key={tag.id}>
+                          <TagTrackedLink className="tagChip isUserHidden" slug={tag.slug}>
+                            <span>{tag.name}</span>
+                            <small>{tag.directCount}</small>
+                          </TagTrackedLink>
+                          <form action={setTagPreferenceAction}>
+                            <input name="tagId" type="hidden" value={tag.id} />
+                            <input name="hidden" type="hidden" value="0" />
+                            <input name="returnPath" type="hidden" value="/tags?hidden=1" />
+                            <TagVisibilityControl visible={false} label={`显示标签 ${tag.name}`} />
+                          </form>
+                        </div>
+                      ))}
+                    </div>
+                  ) : tags.length ? (
                     <div className="tagChipCloud">
                       {tags.map((tag) => (
                         <TagTrackedLink className={`tagChip${effectiveHidden.has(tag.id) ? " isUserHidden" : ""}`} slug={tag.slug} key={tag.id}>
@@ -126,16 +149,16 @@ export default async function TagsPage({ searchParams }: { searchParams: Promise
                         </TagTrackedLink>
                       ))}
                     </div>
-                  ) : (
+                  ) : !groupIsExplicitlyHidden ? (
                     <p className="tagEmptyText">暂无子标签。</p>
-                  )}
+                  ) : null}
                 </section>
               );
             })}
           </div>
         ) : (
           <section className="emptyState">
-            <h2>暂无标签</h2>
+            <h2>{showHidden ? "没有隐藏标签" : "暂无标签"}</h2>
           </section>
         )}
       </section>

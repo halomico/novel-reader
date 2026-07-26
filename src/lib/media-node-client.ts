@@ -74,7 +74,7 @@ export async function finishRemoteMediaUpload(uploadId: string): Promise<MediaNo
   const result = await controlRequest<{ receipt: MediaNodeUploadReceipt }>(
     `/control/uploads/${encodeURIComponent(uploadId)}/finish`,
     { method: "POST" },
-    30_000,
+    10 * 60_000,
   );
   return result.receipt;
 }
@@ -180,6 +180,22 @@ export async function probeRemoteMediaDuration(asset: {
     throw new MediaNodeClientError("媒体节点未返回有效时长");
   }
   return duration;
+}
+
+export async function prewarmRemoteMediaThumbnail(asset: {
+  storedName: string;
+  mtimeMs: number;
+  sizeBytes: number;
+  durationSeconds?: number | null;
+}, percent: number): Promise<boolean> {
+  const result = await controlRequest<{ queued: boolean }>("/control/thumbnails/prewarm", {
+    method: "POST",
+    body: JSON.stringify({
+      ...asset,
+      percent: Math.min(Math.max(Math.floor(percent), 1), 99),
+    }),
+  });
+  return Boolean(result.queued);
 }
 
 export async function clearRemoteMediaThumbnails(): Promise<number> {

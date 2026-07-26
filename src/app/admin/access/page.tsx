@@ -25,14 +25,25 @@ type AccessPageProps = {
   }>;
 };
 
-function localDateTime(timestamp: number | null): string {
-  if (!timestamp) return "";
-  const date = new Date(timestamp - new Date(timestamp).getTimezoneOffset() * 60_000);
-  return date.toISOString().slice(0, 16);
+function remainingMinutes(timestamp: number | null): number | null {
+  return timestamp ? Math.max(0, Math.ceil((timestamp - Date.now()) / 60_000)) : null;
 }
 
 function scopeLabel(scope: ContentAccessRule["scope"]): string {
-  return scope === "novel" ? "正文" : scope === "media" ? "媒体" : "正文与媒体";
+  return scope === "novel" ? "仅正文" : scope === "media" ? "仅媒体" : "全站";
+}
+
+function targetLabel(rule: ContentAccessRule): string {
+  if (rule.targetType === "crawler") return "已识别爬虫";
+  if (rule.targetType !== "country") return rule.targetValue;
+  const countries = rule.targetValue.split(",").join("、");
+  return `${rule.matchMode === "exclude" ? "不在" : "位于"} ${countries}`;
+}
+
+function durationLabel(expiresAt: number | null): string {
+  const minutes = remainingMinutes(expiresAt);
+  if (minutes === null) return "长期有效";
+  return minutes > 0 ? `剩余 ${minutes} 分钟` : "已到期";
 }
 
 function RuleEditor({ rule }: { rule?: ContentAccessRule }) {
@@ -43,9 +54,7 @@ function RuleEditor({ rule }: { rule?: ContentAccessRule }) {
         <span className="accessRuleTarget">{rule.targetValue}</span>
         <span>{scopeLabel(rule.scope)}</span>
         <span>{rule.reason || "频率保护"}</span>
-        <time dateTime={rule.expiresAt ? new Date(rule.expiresAt).toISOString() : undefined}>
-          {rule.expiresAt ? new Date(rule.expiresAt).toLocaleString("zh-CN", { hour12: false }) : "待管理员处理"}
-        </time>
+        <span>{durationLabel(rule.expiresAt)}</span>
         <form action={deleteContentAccessRuleAction}>
           <input name="id" type="hidden" value={rule.id} />
           <button className="adminIconButton" type="submit" title="解除" aria-label={`解除 ${rule.targetValue}`}>
@@ -57,33 +66,55 @@ function RuleEditor({ rule }: { rule?: ContentAccessRule }) {
   }
 
   return (
-    <form className={rule ? "accessRuleEditor" : "accessRuleEditor isCreate"} action={saveContentAccessRuleAction}>
+    <form className={rule ? "accessRuleBuilder" : "accessRuleBuilder isCreate"} action={saveContentAccessRuleAction}>
       {rule ? <input name="id" type="hidden" value={rule.id} /> : null}
-      <ContentAccessTargetFields defaultType={rule?.targetType} defaultValue={rule?.targetValue} />
-      <label className="accessScopeField">
-        <span>范围</span>
-        <AdminSelect name="scope" defaultValue={rule?.scope || "all"}>
-          <option value="all">正文与媒体</option>
-          <option value="novel">仅正文</option>
-          <option value="media">仅媒体</option>
-        </AdminSelect>
-      </label>
-      <label className="accessAudienceField">
-        <span>对象</span>
-        <AdminSelect name="audience" defaultValue={rule?.audience || "all"}>
-          <option value="all">全部访客</option>
-          <option value="guest">仅未登录</option>
-        </AdminSelect>
-      </label>
-      <label className="accessReasonField">
-        <span>备注</span>
-        <input name="reason" defaultValue={rule?.reason || ""} maxLength={120} placeholder="可选" />
-      </label>
-      <label className="accessExpiresField">
-        <span>到期</span>
-        <input name="expiresAt" type="datetime-local" defaultValue={localDateTime(rule?.expiresAt || null)} />
-      </label>
-      <div className="accessRuleActions">
+      <section className="accessConditionBuilder">
+        <span className="accessBuilderLabel">当请求匹配</span>
+        <div className="accessConditionRow">
+          <ContentAccessTargetFields
+            defaultType={rule?.targetType}
+            defaultValue={rule?.targetValue}
+            defaultMatchMode={rule?.matchMode}
+          />
+        </div>
+      </section>
+      <section className="accessRuleContext">
+        <label>
+          <span>范围</span>
+          <AdminSelect name="scope" defaultValue={rule?.scope || "all"}>
+            <option value="all">全站</option>
+            <option value="novel">仅正文</option>
+            <option value="media">仅媒体</option>
+          </AdminSelect>
+        </label>
+        <label>
+          <span>对象</span>
+          <AdminSelect name="audience" defaultValue={rule?.audience || "all"}>
+            <option value="all">全部访客</option>
+            <option value="guest">仅未登录</option>
+          </AdminSelect>
+        </label>
+        <label>
+          <span>持续时间</span>
+          <span className="accessNumberUnit">
+            <input
+              name="durationMinutes"
+              type="number"
+              min="1"
+              max="525600"
+              defaultValue={remainingMinutes(rule?.expiresAt || null) || ""}
+              placeholder="留空为长期"
+            />
+            <small>分钟</small>
+          </span>
+        </label>
+        <label className="accessReasonField">
+          <span>备注</span>
+          <input name="reason" defaultValue={rule?.reason || ""} maxLength={120} placeholder="可选" />
+        </label>
+      </section>
+      <footer className="accessRuleActions">
+        <span className="accessRuleOutcome">命中后阻止访问</span>
         <label className="accessEnabledField">
           <input name="enabled" type="checkbox" defaultChecked={rule?.enabled ?? true} />
           <span>启用</span>
@@ -103,7 +134,7 @@ function RuleEditor({ rule }: { rule?: ContentAccessRule }) {
             <Trash2 size={16} aria-hidden="true" />
           </button>
         ) : null}
-      </div>
+      </footer>
     </form>
   );
 }
@@ -121,7 +152,7 @@ export default async function AdminAccessPage({ searchParams }: AccessPageProps)
         <header className="adminPanelHeader">
           <div>
             <h2>内容访问</h2>
-            <p>只控制小说正文与媒体内容。站点入口、后台和网络防护请在 Cloudflare 管理。</p>
+            <p>应用层前台访问规则。后台始终保留恢复入口，边缘 WAF 与挑战仍在 Cloudflare 管理。</p>
           </div>
           <ShieldCheck size={20} aria-hidden="true" />
         </header>
@@ -130,7 +161,7 @@ export default async function AdminAccessPage({ searchParams }: AccessPageProps)
           <div className="accessSectionHeading">
             <div>
               <h3>封禁规则</h3>
-              <p>支持 IP、CIDR、Cloudflare 国家代码和已识别爬虫。</p>
+              <p>按字段、运算符和值匹配请求；国家判断依赖 Cloudflare 的 CF-IPCountry 请求头。</p>
             </div>
           </div>
           <details className="accessCreateDisclosure">
@@ -144,9 +175,9 @@ export default async function AdminAccessPage({ searchParams }: AccessPageProps)
             {manualRules.length ? manualRules.map((rule) => (
               <details className="accessRuleDisclosure" key={rule.id}>
                 <summary>
-                  <span className="accessRuleTarget">{rule.targetValue}</span>
+                  <span className="accessRuleTarget">{targetLabel(rule)}</span>
                   <span>{scopeLabel(rule.scope)}</span>
-                  <small>{rule.enabled ? "启用" : "停用"}{rule.reason ? ` · ${rule.reason}` : ""}</small>
+                  <small>{rule.enabled ? "启用" : "停用"} · {durationLabel(rule.expiresAt)}{rule.reason ? ` · ${rule.reason}` : ""}</small>
                   <ChevronDown size={15} aria-hidden="true" />
                 </summary>
                 <RuleEditor rule={rule} />
@@ -173,7 +204,7 @@ export default async function AdminAccessPage({ searchParams }: AccessPageProps)
                 <label>
                   <span>范围</span>
                   <AdminSelect name="scope" defaultValue={policy.scope}>
-                    <option value="all">正文与媒体</option>
+                    <option value="all">全站</option>
                     <option value="novel">仅正文</option>
                     <option value="media">仅媒体</option>
                   </AdminSelect>
@@ -186,16 +217,16 @@ export default async function AdminAccessPage({ searchParams }: AccessPageProps)
                   </AdminSelect>
                 </label>
                 <label>
-                  <span>窗口 / 秒</span>
-                  <input name="windowSeconds" type="number" min="1" max="86400" defaultValue={policy.windowSeconds} />
+                  <span>窗口 / 分钟</span>
+                  <input name="windowMinutes" type="number" min="1" max="1440" defaultValue={Math.max(1, Math.ceil(policy.windowSeconds / 60))} />
                 </label>
                 <label>
                   <span>请求上限</span>
                   <input name="maxRequests" type="number" min="1" max="100000" defaultValue={policy.maxRequests} />
                 </label>
                 <label>
-                  <span>暂停 / 秒</span>
-                  <input name="blockSeconds" type="number" min="60" max="31536000" defaultValue={policy.blockSeconds} />
+                  <span>暂停 / 分钟</span>
+                  <input name="blockMinutes" type="number" min="1" max="525600" defaultValue={Math.max(1, Math.ceil(policy.blockSeconds / 60))} />
                 </label>
                 <label className="accessEnabledField">
                   <input name="enabled" type="checkbox" defaultChecked={policy.enabled} />
@@ -220,7 +251,7 @@ export default async function AdminAccessPage({ searchParams }: AccessPageProps)
               <label>
                 <span>范围</span>
                 <AdminSelect name="scope" defaultValue="all">
-                  <option value="all">正文与媒体</option>
+                  <option value="all">全站</option>
                   <option value="novel">仅正文</option>
                   <option value="media">仅媒体</option>
                 </AdminSelect>
@@ -232,9 +263,9 @@ export default async function AdminAccessPage({ searchParams }: AccessPageProps)
                   <option value="all">全部访客</option>
                 </AdminSelect>
               </label>
-              <label><span>窗口 / 秒</span><input name="windowSeconds" type="number" min="1" max="86400" defaultValue="60" /></label>
+              <label><span>窗口 / 分钟</span><input name="windowMinutes" type="number" min="1" max="1440" defaultValue="1" /></label>
               <label><span>请求上限</span><input name="maxRequests" type="number" min="1" max="100000" defaultValue="60" /></label>
-              <label><span>暂停 / 秒</span><input name="blockSeconds" type="number" min="60" max="31536000" defaultValue="300" /></label>
+              <label><span>暂停 / 分钟</span><input name="blockMinutes" type="number" min="1" max="525600" defaultValue="5" /></label>
               <input name="enabled" type="hidden" value="on" />
               <button className="adminCompactButton" type="submit"><Save size={15} aria-hidden="true" />保存</button>
             </form>

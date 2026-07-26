@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import {
   checkContentAccess,
+  hasGlobalContentAccessRules,
   hasScopedContentAccessRules,
   listContentAccessPolicies,
   listContentAccessRules,
@@ -61,7 +62,8 @@ test("matches structured content access rules by audience and scope", (t) => {
   assert.equal(hasScopedContentAccessRules("novel"), false);
   saveContentAccessRule({
     targetType: "country",
-    targetValue: "DE",
+    targetValue: "DE, FR",
+    matchMode: "include",
     scope: "novel",
     audience: "all",
   });
@@ -74,6 +76,8 @@ test("matches structured content access rules by audience and scope", (t) => {
   );
   assert.equal(checkContentAccess(requestHeaders("203.0.113.8"), { scope: "novel" }).allowed, true);
   assert.equal(checkContentAccess(requestHeaders("198.51.100.2", "DE"), { scope: "novel" }).allowed, false);
+  assert.equal(checkContentAccess(requestHeaders("198.51.100.2", "FR"), { scope: "novel" }).allowed, false);
+  assert.equal(checkContentAccess(requestHeaders("198.51.100.2", "US"), { scope: "novel" }).allowed, true);
   assert.equal(checkContentAccess(requestHeaders("198.51.100.2", "DE"), { scope: "novel", admin: true }).allowed, true);
 
   saveContentAccessRule({
@@ -84,6 +88,27 @@ test("matches structured content access rules by audience and scope", (t) => {
   });
   assert.equal(checkContentAccess(requestHeaders("198.51.100.3", "US", "ExampleBot/1.0"), { scope: "novel" }).allowed, false);
   assert.equal(checkContentAccess(requestHeaders("198.51.100.3", "US", "Mozilla/5.0"), { scope: "novel" }).allowed, true);
+});
+
+test("supports whole-site country allowlists without affecting the admin bypass", (t) => {
+  withTempDatabase(t);
+  assert.equal(hasGlobalContentAccessRules(), false);
+  const rule = saveContentAccessRule({
+    targetType: "country",
+    targetValue: "CN,HK,MO",
+    matchMode: "exclude",
+    scope: "all",
+    audience: "all",
+  });
+  assert.equal(rule.targetValue, "CN,HK,MO");
+  assert.equal(rule.matchMode, "exclude");
+  assert.equal(hasGlobalContentAccessRules(), true);
+  assert.equal(checkContentAccess(requestHeaders("198.51.100.4", "CN"), { scope: "site" }).allowed, true);
+  assert.equal(checkContentAccess(requestHeaders("198.51.100.4", "US"), { scope: "site" }).allowed, false);
+  assert.equal(
+    checkContentAccess(requestHeaders("198.51.100.4", "US"), { scope: "site", admin: true }).allowed,
+    true,
+  );
 });
 
 test("creates a temporary rule after a configured access policy is exceeded", (t) => {
