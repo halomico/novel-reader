@@ -68,4 +68,8 @@ test("daily check-in grants soda once per site day", (t) => {
     balance: 14,
     alreadyCheckedIn: false,
   });
+  assert.deepEqual(
+    { ...(db.prepare("SELECT trust_level, soda_balance, soda_experience FROM users WHERE id = ?").get(userId) as object) },
+    { trust_level: 1, soda_balance: 14, soda_experience: 14 },
+  );
 });

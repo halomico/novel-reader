@@ -60,7 +60,7 @@ export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; re
                       <small>
                         {user.displayName}
                         {user.role === "admin" ? " · 前台管理员" : ""}
-                        {" · "}Lv.{user.trustLevel + 1} · 苏打 {user.sodaBalance}
+                        {" · "}Lv.{user.trustLevel} · 苏打 {user.sodaBalance}
                       </small>
                     </span>
                   </td>
@@ -141,7 +141,7 @@ export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; re
           role="presentation"
           onMouseDown={(event) => event.target === event.currentTarget && setEditingUser(null)}
         >
-          <form className="adminMediaEditDialog adminUserEditDialog" action={updateAdminUserAction} role="dialog" aria-modal="true" aria-labelledby="admin-user-edit-title">
+          <form className="adminMediaEditDialog adminUserEditDialog" action={updateAdminUserAction} role="dialog" aria-modal="true" aria-labelledby="admin-user-edit-title" key={editingUser.id}>
             <header>
               <div>
                 <h3 id="admin-user-edit-title">编辑用户</h3>
@@ -167,12 +167,12 @@ export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; re
             </label>
             <div className="adminUserGrowthFields">
               <label>
-                <span>等级</span>
-                <input name="trustLevel" type="number" min="1" max="7" defaultValue={editingUser.trustLevel + 1} />
-              </label>
-              <label>
                 <span>苏打余额</span>
                 <input name="sodaBalance" type="number" min="0" max="1000000000" defaultValue={editingUser.sodaBalance} />
+              </label>
+              <label>
+                <span>累计苏打</span>
+                <input name="sodaExperience" type="number" min="0" max="1000000000" defaultValue={editingUser.sodaExperience} />
               </label>
             </div>
             <label>

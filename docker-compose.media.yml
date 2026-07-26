@@ -10,10 +10,13 @@ services:
       MEDIA_NODE_DIR: /app/data/media
       MEDIA_NODE_PORT: 3100
       MEDIA_SIGNING_SECRET: ${MEDIA_SIGNING_SECRET}
+      MEDIA_CONTROL_SECRET: ${MEDIA_CONTROL_SECRET}
+      FFMPEG_PATH: ${FFMPEG_PATH:-ffmpeg}
+      FFPROBE_PATH: ${FFPROBE_PATH:-ffprobe}
     ports:
       - "127.0.0.1:${MEDIA_NODE_PORT:-3100}:3100"
     volumes:
-      - ./data/media:/app/data/media:ro
+      - ./data/media:/app/data/media
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 30s

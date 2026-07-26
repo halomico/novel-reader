@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import {
   checkContentAccess,
+  hasScopedContentAccessRules,
   listContentAccessPolicies,
   listContentAccessRules,
   saveContentAccessPolicy,
@@ -42,8 +43,8 @@ function withTempDatabase(t: TestContext) {
   });
 }
 
-function requestHeaders(ip: string, country = "US"): Headers {
-  return new Headers({ "cf-connecting-ip": ip, "cf-ipcountry": country });
+function requestHeaders(ip: string, country = "US", userAgent = ""): Headers {
+  return new Headers({ "cf-connecting-ip": ip, "cf-ipcountry": country, "user-agent": userAgent });
 }
 
 test("matches structured content access rules by audience and scope", (t) => {
@@ -56,12 +57,15 @@ test("matches structured content access rules by audience and scope", (t) => {
     audience: "guest",
     reason: "test",
   });
+  assert.equal(hasScopedContentAccessRules("media"), true);
+  assert.equal(hasScopedContentAccessRules("novel"), false);
   saveContentAccessRule({
     targetType: "country",
     targetValue: "DE",
     scope: "novel",
     audience: "all",
   });
+  assert.equal(hasScopedContentAccessRules("novel"), true);
 
   assert.equal(checkContentAccess(requestHeaders("203.0.113.8"), { scope: "media" }).allowed, false);
   assert.equal(
@@ -71,6 +75,15 @@ test("matches structured content access rules by audience and scope", (t) => {
   assert.equal(checkContentAccess(requestHeaders("203.0.113.8"), { scope: "novel" }).allowed, true);
   assert.equal(checkContentAccess(requestHeaders("198.51.100.2", "DE"), { scope: "novel" }).allowed, false);
   assert.equal(checkContentAccess(requestHeaders("198.51.100.2", "DE"), { scope: "novel", admin: true }).allowed, true);
+
+  saveContentAccessRule({
+    targetType: "crawler",
+    targetValue: "",
+    scope: "all",
+    audience: "guest",
+  });
+  assert.equal(checkContentAccess(requestHeaders("198.51.100.3", "US", "ExampleBot/1.0"), { scope: "novel" }).allowed, false);
+  assert.equal(checkContentAccess(requestHeaders("198.51.100.3", "US", "Mozilla/5.0"), { scope: "novel" }).allowed, true);
 });
 
 test("creates a temporary rule after a configured access policy is exceeded", (t) => {

@@ -10131,3 +10131,442 @@ a.analyticsSearchTag:focus-visible {
     justify-content: flex-start;
   }
 }
+
+/* Account, station, favorites, and personal tag preferences. */
+.userWorkspaceContent > .accountPanel {
+  display: grid;
+}
+
+.accountProfile {
+  width: 100%;
+  justify-items: stretch;
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.accountProfileHeader {
+  padding: 18px;
+}
+
+.accountFormSections {
+  display: grid;
+  border-top: 1px solid var(--border);
+}
+
+.accountFormSection {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+}
+
+.accountFormSection + .accountFormSection {
+  border-top: 1px solid var(--border);
+}
+
+.accountFormSection > header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.accountFormSection > header > div {
+  display: grid;
+  gap: 2px;
+}
+
+.accountFormSection h2 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.accountFormSection header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.accountFormSection .accountProfileForm,
+.accountFormSection .accountPasswordForm {
+  display: grid;
+  width: 100%;
+  align-items: end;
+  border: 0;
+  padding: 0;
+}
+
+.accountFormSection .accountProfileForm {
+  grid-template-columns: minmax(180px, 280px) auto;
+}
+
+.accountFormSection .accountPasswordForm {
+  grid-template-columns: repeat(3, minmax(140px, 1fr)) auto;
+}
+
+.accountFormSection .accountProfileForm label,
+.accountFormSection .accountPasswordForm label {
+  width: auto;
+}
+
+.accountFormSection .accountActionButton {
+  width: fit-content;
+  min-height: 28px;
+  justify-self: start;
+  padding: 4px 9px;
+  font-size: 12px;
+}
+
+.accountLevelProgress {
+  display: grid;
+  gap: 8px;
+}
+
+.accountLevelProgress > header,
+.accountLevelProgress > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.accountLevelProgress > header strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.accountLevelProgressTrack {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--border));
+}
+
+.accountLevelProgressTrack > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 220ms ease;
+}
+
+.headerUnreadDot {
+  top: 6px;
+  right: 5px;
+  width: 5px;
+  height: 5px;
+  border: 0;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+.novelFavoriteControl {
+  position: relative;
+  display: inline-flex;
+}
+
+.novelFavoriteControl > button {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.novelFavoriteControl > button:hover,
+.novelFavoriteControl > button:focus-visible,
+.novelFavoriteControl > button.isActive {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+}
+
+.novelFavoriteControl > button:disabled {
+  cursor: default;
+}
+
+.favoriteLibrary {
+  display: grid;
+  gap: 16px;
+}
+
+.userContentHeader {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.userContentHeader > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.userContentHeader h1 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.tagHiddenToggle {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 5px;
+  margin-left: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tagHiddenToggle:hover,
+.tagHiddenToggle:focus-visible {
+  color: var(--accent);
+}
+
+.tagGroupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tagGroupHeader form,
+.tagPreferenceAction {
+  display: inline-flex;
+}
+
+.tagGroupHeader button,
+.tagPreferenceAction button {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tagGroupHeader button:hover,
+.tagGroupHeader button:focus-visible,
+.tagPreferenceAction button:hover,
+.tagPreferenceAction button:focus-visible {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+}
+
+.tagPreferenceAction {
+  margin-left: auto;
+}
+
+.tagPreferenceAction button:disabled {
+  opacity: 0.48;
+  cursor: default;
+}
+
+.tagGroupBlock.isUserHidden,
+.tagChip.isUserHidden {
+  opacity: 0.62;
+}
+
+.tagChip.isUserHidden {
+  border-style: dashed;
+}
+
+.adminUserLevelRow {
+  grid-template-columns: 58px minmax(120px, 190px) minmax(115px, 150px) minmax(0, 1fr);
+}
+
+.adminUserLevelThreshold {
+  display: grid;
+  grid-column: 3;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.adminUserLevelThreshold input {
+  width: 100%;
+  min-height: 34px;
+}
+
+.adminUserLevelThreshold small {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.adminUserLevelPermissions {
+  grid-column: 4;
+}
+
+.announcementBody {
+  white-space: normal;
+}
+
+.announcementBody > :first-child {
+  margin-top: 0;
+}
+
+.announcementBody > :last-child {
+  margin-bottom: 0;
+}
+
+.announcementBody p,
+.announcementBody ul,
+.announcementBody ol,
+.announcementBody blockquote,
+.announcementBody pre {
+  margin: 0 0 0.9em;
+}
+
+.announcementBody ul,
+.announcementBody ol {
+  padding-left: 1.5em;
+}
+
+.announcementBody a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.announcementBody blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 12px;
+  color: var(--muted);
+}
+
+.announcementBody code {
+  border-radius: 4px;
+  padding: 0.12em 0.32em;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  font-size: 0.9em;
+}
+
+.announcementBody pre {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 11px;
+  background: var(--surface);
+}
+
+.announcementBody pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.adminStationThreadActions,
+.adminReportRowActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.adminDangerIconButton {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.adminDangerIconButton:hover,
+.adminDangerIconButton:focus-visible {
+  background: color-mix(in srgb, #b42318 8%, transparent);
+  color: #b42318;
+}
+
+.accessFixedTarget {
+  display: flex;
+  min-height: 37px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--surface-strong) 34%, var(--surface));
+  color: var(--muted);
+}
+
+.adminTopActions .iconLink,
+.adminMobileMenu > .iconLink {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+@media (max-width: 820px) {
+  .adminUserLevelRow {
+    grid-template-columns: 48px minmax(120px, 1fr) minmax(110px, 150px);
+  }
+
+  .adminUserLevelThreshold {
+    grid-column: 3;
+  }
+
+  .adminUserLevelPermissions {
+    grid-column: 1 / -1;
+    padding-left: 60px;
+  }
+}
+
+@media (max-width: 620px) {
+  .accountProfileHeader {
+    grid-template-columns: 54px minmax(0, 1fr);
+    padding: 15px;
+  }
+
+  .accountAvatar {
+    width: 54px;
+    height: 54px;
+  }
+
+  .accountProfileHeader .avatarUploadForm {
+    grid-column: 2;
+  }
+
+  .accountFormSection {
+    padding: 15px;
+  }
+
+  .accountFormSection .accountProfileForm,
+  .accountFormSection .accountPasswordForm {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .accountGrowthHeader {
+    flex-direction: column;
+  }
+
+  .adminUserLevelRow {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .adminUserLevelThreshold {
+    grid-column: 2;
+  }
+
+  .adminUserLevelPermissions {
+    padding-left: 0;
+  }
+
+  .tagHiddenToggle span {
+    display: none;
+  }
+}

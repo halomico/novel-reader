@@ -8,9 +8,11 @@ test("uploads media in chunks, records it, and removes the stored file", async (
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-media-"));
   const previousDatabasePath = process.env.DATABASE_PATH;
   const previousMediaDir = process.env.MEDIA_DIR;
+  const previousStorageMode = process.env.MEDIA_STORAGE_MODE;
   const previousSettingsPath = process.env.ADMIN_SETTINGS_PATH;
   process.env.DATABASE_PATH = path.join(tempDir, "novels.db");
   process.env.MEDIA_DIR = path.join(tempDir, "media");
+  process.env.MEDIA_STORAGE_MODE = "local";
   process.env.ADMIN_SETTINGS_PATH = path.join(tempDir, "settings.json");
   let closeDatabase: (() => void) | null = null;
 
@@ -34,7 +36,7 @@ test("uploads media in chunks, records it, and removes the stored file", async (
     const legacyAsset = media.getMediaAsset(Number(legacyResult.lastInsertRowid))!;
     assert.equal(legacyAsset.storedName.startsWith("audio/"), true);
     assert.equal(fs.existsSync(media.mediaFilePath(legacyAsset.storedName)), true);
-    media.createMediaFolder("audio", "", "测试专辑");
+    await media.createMediaFolder("audio", "", "测试专辑");
     const source = Buffer.from("ID3-media-test");
     const started = upload.startMediaUpload({
       kind: "audio",
@@ -46,17 +48,18 @@ test("uploads media in chunks, records it, and removes the stored file", async (
       mimeType: "audio/mpeg",
       sizeBytes: source.length,
     });
-    assert.equal(upload.appendMediaUploadChunk(started.uploadId, 0, source.subarray(0, 5)), 5);
-    assert.equal(upload.appendMediaUploadChunk(started.uploadId, 5, source.subarray(5)), source.length);
+    assert.equal(await upload.appendMediaUploadChunk(started.uploadId, 0, source.subarray(0, 5)), 5);
+    assert.equal(await upload.appendMediaUploadChunk(started.uploadId, 5, source.subarray(5)), source.length);
 
-    const asset = upload.finishMediaUpload(started.uploadId);
+    const asset = await upload.finishMediaUpload(started.uploadId);
     const storedPath = media.mediaFilePath(asset.storedName);
     assert.equal(asset.kind, "audio");
     assert.equal(asset.artist, "测试作者");
     assert.equal(asset.folder, "测试专辑");
     assert.equal(asset.fileName, "测试音频.mp3");
     assert.equal(fs.readFileSync(storedPath).toString(), source.toString());
-    assert.equal(media.updateMediaAsset(asset.id, "新标题", "新作者", "新简介"), true);
+    assert.equal((await upload.finishMediaUpload(started.uploadId)).id, asset.id);
+    assert.equal(await media.updateMediaAsset(asset.id, "新标题", "新作者", "新简介"), true);
     assert.equal(media.getMediaAsset(asset.id)?.artist, "新作者");
     assert.equal(media.getMediaAsset(asset.id)?.fileName, "新标题.mp3");
     assert.equal(fs.existsSync(storedPath), false);
@@ -76,8 +79,8 @@ test("uploads media in chunks, records it, and removes the stored file", async (
       mimeType: "audio/mpeg",
       sizeBytes: secondSource.length,
     });
-    assert.equal(upload.appendMediaUploadChunk(secondStarted.uploadId, 0, secondSource), secondSource.length);
-    const secondAsset = upload.finishMediaUpload(secondStarted.uploadId);
+    assert.equal(await upload.appendMediaUploadChunk(secondStarted.uploadId, 0, secondSource), secondSource.length);
+    const secondAsset = await upload.finishMediaUpload(secondStarted.uploadId);
     const secondStoredPath = media.mediaFilePath(secondAsset.storedName);
     assert.equal(secondAsset.title, "second");
     assert.equal(secondAsset.artist, "测试作者");
@@ -114,7 +117,7 @@ test("uploads media in chunks, records it, and removes the stored file", async (
     assert.equal(albumFolder?.totalAssets, 2);
     assert.equal(albumFolder?.totalSizeBytes, source.length + secondSource.length);
     assert.equal(media.listMediaAssets({ query: "测试作者" }).totalAssets, 1);
-    assert.equal(media.renameMediaFolder("audio", "测试专辑", "已整理专辑"), "已整理专辑");
+    assert.equal(await media.renameMediaFolder("audio", "测试专辑", "已整理专辑"), "已整理专辑");
     assert.equal(media.getMediaAsset(asset.id)?.folder, "已整理专辑");
     assert.equal(media.listMediaAssets({ kind: "audio" }).totalAssets, 1);
     assert.equal(media.listMediaAssets({ kind: "audio", recursive: true }).totalAssets, 3);
@@ -134,15 +137,15 @@ test("uploads media in chunks, records it, and removes the stored file", async (
       mimeType: "video/mp4",
       sizeBytes: videoSource.length,
     });
-    upload.appendMediaUploadChunk(videoStarted.uploadId, 0, videoSource);
-    const videoAsset = upload.finishMediaUpload(videoStarted.uploadId);
+    await upload.appendMediaUploadChunk(videoStarted.uploadId, 0, videoSource);
+    const videoAsset = await upload.finishMediaUpload(videoStarted.uploadId);
     assert.equal(videoAsset.categoryId, animation.id);
     assert.equal(videoAsset.artist, "测试作者");
     assert.equal(media.listMediaAssets({ kind: "video", videoCategoryId: animation.id }).totalAssets, 1);
     assert.equal(media.listMediaAssets({ kind: "video", videoCategoryId: null }).totalAssets, 0);
     assert.equal(media.setVideoCategoryForAssets([videoAsset.id], technology.id), 1);
     assert.equal(media.getMediaAsset(videoAsset.id)?.categoryId, technology.id);
-    assert.equal(media.updateMediaAsset(videoAsset.id, "分类视频", "新视频作者", "视频分类测试", "", technology.id), true);
+    assert.equal(await media.updateMediaAsset(videoAsset.id, "分类视频", "新视频作者", "视频分类测试", "", technology.id), true);
     assert.equal(media.getMediaAsset(videoAsset.id)?.artist, "新视频作者");
     assert.equal(media.updateVideoCategory(technology.id, "数码", 15, true), true);
     assert.equal(media.listVideoCategories().find((item) => item.id === technology.id)?.videoCount, 1);
@@ -170,18 +173,20 @@ test("uploads media in chunks, records it, and removes the stored file", async (
     assert.equal(media.getMediaAsset(asset.id)?.playCount, 1);
     const renamedStoredPath = media.mediaFilePath(media.getMediaAsset(asset.id)!.storedName);
     const renamedSecondStoredPath = media.mediaFilePath(media.getMediaAsset(secondAsset.id)!.storedName);
-    assert.deepEqual(media.deleteMediaAssets([asset.id, secondAsset.id, legacyAsset.id, videoAsset.id]), { deleted: 4, fileDeleteFailures: 0 });
+    assert.deepEqual(await media.deleteMediaAssets([asset.id, secondAsset.id, legacyAsset.id, videoAsset.id]), { deleted: 4, fileDeleteFailures: 0 });
     assert.equal(fs.existsSync(storedPath), false);
     assert.equal(fs.existsSync(secondStoredPath), false);
     assert.equal(fs.existsSync(renamedStoredPath), false);
     assert.equal(fs.existsSync(renamedSecondStoredPath), false);
-    assert.equal(media.deleteMediaFolder("audio", "已整理专辑"), true);
+    assert.equal(await media.deleteMediaFolder("audio", "已整理专辑"), true);
   } finally {
     closeDatabase?.();
     if (previousDatabasePath === undefined) delete process.env.DATABASE_PATH;
     else process.env.DATABASE_PATH = previousDatabasePath;
     if (previousMediaDir === undefined) delete process.env.MEDIA_DIR;
     else process.env.MEDIA_DIR = previousMediaDir;
+    if (previousStorageMode === undefined) delete process.env.MEDIA_STORAGE_MODE;
+    else process.env.MEDIA_STORAGE_MODE = previousStorageMode;
     if (previousSettingsPath === undefined) delete process.env.ADMIN_SETTINGS_PATH;
     else process.env.ADMIN_SETTINGS_PATH = previousSettingsPath;
     fs.rmSync(tempDir, { recursive: true, force: true });

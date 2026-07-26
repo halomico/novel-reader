@@ -49,12 +49,52 @@ function formatDuration(durationSeconds: number | null): string {
     : `${Math.floor(totalMinutes / 60)}:${String(totalMinutes % 60).padStart(2, "0")}:${seconds}`;
 }
 
-async function responseJson(response: Response): Promise<{ ok?: boolean; message?: string; uploadId?: string; chunkBytes?: number }> {
+type UploadResponse = {
+  ok?: boolean;
+  message?: string;
+  uploadId?: string;
+  uploadUrl?: string;
+  uploadToken?: string;
+  chunkBytes?: number;
+  nextOffset?: number;
+};
+
+async function responseJson(response: Response): Promise<UploadResponse> {
   try {
-    return (await response.json()) as { ok?: boolean; message?: string; uploadId?: string; chunkBytes?: number };
+    return (await response.json()) as UploadResponse;
   } catch {
     return { message: "上传接口返回异常" };
   }
+}
+
+function uploadRequestHeaders(uploadToken: string | undefined, offset?: number): Record<string, string> {
+  return {
+    ...(uploadToken ? { Authorization: `Bearer ${uploadToken}` } : {}),
+    ...(offset === undefined
+      ? {}
+      : { "content-type": "application/octet-stream", "x-upload-offset": String(offset) }),
+  };
+}
+
+function waitForRetry(attempt: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, 400 * 2 ** attempt));
+}
+
+async function finishUploadTask(uploadId: string): Promise<void> {
+  let lastError = "资源保存失败";
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(`/admin/media/upload?action=finish&uploadId=${uploadId}`, { method: "POST" });
+      const data = await responseJson(response);
+      if (response.ok) return;
+      lastError = data.message || lastError;
+      if (response.status < 500) break;
+    } catch {
+      lastError = "保存响应中断";
+    }
+    if (attempt < 2) await waitForRetry(attempt);
+  }
+  throw new Error(lastError);
 }
 
 function AdminMediaFolderRow({ folder, onOpen }: { folder: MediaFolder; onOpen: () => void }) {
@@ -230,32 +270,67 @@ export function AdminMediaManager({
             }),
           });
           const startData = await responseJson(startResponse);
-          if (!startResponse.ok || !startData.uploadId || !startData.chunkBytes) {
+          if (!startResponse.ok || !startData.uploadId || !startData.chunkBytes || !startData.uploadUrl) {
             throw new Error(startData.message || "无法创建上传任务");
           }
           uploadId = startData.uploadId;
 
-          for (let offset = 0; offset < file.size; offset += startData.chunkBytes) {
+          let offset = 0;
+          while (offset < file.size) {
             const chunk = file.slice(offset, Math.min(offset + startData.chunkBytes, file.size));
-            const chunkResponse = await fetch(`/admin/media/upload?action=chunk&uploadId=${uploadId}`, {
-              method: "POST",
-              headers: { "content-type": "application/octet-stream", "x-upload-offset": String(offset) },
-              body: chunk,
-            });
-            const chunkData = await responseJson(chunkResponse);
-            if (!chunkResponse.ok) {
-              throw new Error(chunkData.message || "文件分片上传失败");
+            let nextOffset = offset;
+            let lastError = "文件分片上传失败";
+            for (let attempt = 0; attempt < 3 && nextOffset === offset; attempt += 1) {
+              try {
+                const chunkResponse = await fetch(startData.uploadUrl, {
+                  method: "POST",
+                  headers: uploadRequestHeaders(startData.uploadToken, offset),
+                  body: chunk,
+                });
+                const chunkData = await responseJson(chunkResponse);
+                if (
+                  chunkResponse.ok &&
+                  Number.isInteger(chunkData.nextOffset) &&
+                  chunkData.nextOffset! > offset &&
+                  chunkData.nextOffset! <= file.size
+                ) {
+                  nextOffset = chunkData.nextOffset!;
+                  break;
+                }
+                lastError = chunkData.message || lastError;
+              } catch {
+                lastError = "上传连接中断";
+              }
+
+              try {
+                const statusResponse = await fetch(startData.uploadUrl, {
+                  headers: uploadRequestHeaders(startData.uploadToken),
+                  cache: "no-store",
+                });
+                const statusData = await responseJson(statusResponse);
+                if (
+                  statusResponse.ok &&
+                  Number.isInteger(statusData.nextOffset) &&
+                  statusData.nextOffset! > offset &&
+                  statusData.nextOffset! <= file.size
+                ) {
+                  nextOffset = statusData.nextOffset!;
+                  break;
+                }
+              } catch {
+                // Retry the same chunk after a short delay.
+              }
+              if (attempt < 2) await waitForRetry(attempt);
             }
-            const nextOffset = Math.min(offset + chunk.size, file.size);
+            if (nextOffset === offset) {
+              throw new Error(lastError);
+            }
+            offset = nextOffset;
             setProgress(Math.round(((uploadedBytes + nextOffset) / totalBytes) * 100));
             setMessage(`正在上传 ${fileIndex + 1}/${uploadFiles.length} · ${file.name}`);
           }
 
-          const finishResponse = await fetch(`/admin/media/upload?action=finish&uploadId=${uploadId}`, { method: "POST" });
-          const finishData = await responseJson(finishResponse);
-          if (!finishResponse.ok) {
-            throw new Error(finishData.message || "资源保存失败");
-          }
+          await finishUploadTask(uploadId);
           uploadedBytes += file.size;
           completedFiles += 1;
           setProgress(Math.round((uploadedBytes / totalBytes) * 100));
@@ -600,7 +675,7 @@ export function AdminMediaManager({
 
       {editingAsset ? (
         <div className="adminMediaEditBackdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setEditingAsset(null)}>
-          <form className="adminMediaEditDialog" action={updateAdminMediaAction} role="dialog" aria-modal="true" aria-labelledby="admin-media-edit-title">
+          <form className="adminMediaEditDialog" action={updateAdminMediaAction} role="dialog" aria-modal="true" aria-labelledby="admin-media-edit-title" key={editingAsset.id}>
             <header>
               <div>
                 <h3 id="admin-media-edit-title">编辑资源</h3>

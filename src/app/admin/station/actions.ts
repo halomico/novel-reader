@@ -8,10 +8,12 @@ import { getAdminSession } from "@/lib/admin-auth";
 import {
   addStationReply,
   deleteAnnouncement,
+  deleteStationThread,
   saveAnnouncement,
   setStationThreadStatus,
   StationInputError,
 } from "@/lib/station";
+import { deleteContentReport } from "@/lib/reports";
 
 function safeReturnPath(formData: FormData): string {
   const path = String(formData.get("returnPath") || "/admin/station");
@@ -76,6 +78,25 @@ export async function deleteAnnouncementAction(formData: FormData) {
   revalidatePath("/messages");
   revalidatePath("/admin/station");
   stationNotice(deleted ? "公告已删除" : "公告已不存在", deleted ? "success" : "warning", "/admin/station?view=announcements");
+}
+
+export async function deleteStationThreadAction(formData: FormData) {
+  await requireAdmin();
+  const deleted = deleteStationThread(Number(formData.get("threadId")));
+  revalidatePath("/messages");
+  revalidatePath("/admin/station");
+  stationNotice(deleted ? "留言已删除" : "留言已不存在", deleted ? "success" : "warning", "/admin/station");
+}
+
+export async function deleteContentReportAction(formData: FormData) {
+  await requireAdmin();
+  const deleted = deleteContentReport(Number(formData.get("reportId")));
+  revalidatePath("/admin/station");
+  stationNotice(
+    deleted ? "举报记录已删除" : "举报记录已不存在",
+    deleted ? "success" : "warning",
+    safeReturnPath(formData),
+  );
 }
 
 export async function replyStationThreadAdminAction(formData: FormData) {

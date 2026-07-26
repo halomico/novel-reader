@@ -18,6 +18,8 @@ import { AdminFrame } from "../AdminFrame";
 import { updateContentReportStatusAction } from "../actions";
 import {
   deleteAnnouncementAction,
+  deleteContentReportAction,
+  deleteStationThreadAction,
   replyStationThreadAdminAction,
   saveAnnouncementAction,
   setStationThreadStatusAction,
@@ -120,12 +122,15 @@ export default async function AdminStationPage({ searchParams }: StationAdminPag
                       <h2>{selectedThread.subject}</h2>
                       <small>{selectedThread.displayName}（{selectedThread.username}）</small>
                     </div>
-                    <form action={setStationThreadStatusAction}>
+                    <form action={setStationThreadStatusAction} className="adminStationThreadActions">
                       <input name="threadId" type="hidden" value={selectedThread.id} />
                       <input name="returnPath" type="hidden" value={threadReturnPath} />
                       <input name="status" type="hidden" value={selectedThread.status === "open" ? "closed" : "open"} />
                       <button className="adminSecondaryButton" type="submit">
                         {selectedThread.status === "open" ? "结束" : "重新打开"}
+                      </button>
+                      <button className="adminDangerIconButton" type="submit" formAction={deleteStationThreadAction} title="删除留言" aria-label="删除留言">
+                        <Trash2 size={15} aria-hidden="true" />
                       </button>
                     </form>
                   </header>
@@ -197,20 +202,29 @@ export default async function AdminStationPage({ searchParams }: StationAdminPag
                       </td>
                       <td><LocalDateTime value={report.createdAt} /></td>
                       <td>
-                        <form action={updateContentReportStatusAction}>
-                          <input name="reportId" type="hidden" value={report.id} />
-                          <input name="status" type="hidden" value={report.status === "open" ? "resolved" : "open"} />
-                          <input name="returnPath" type="hidden" value={reportReturnPath} />
-                          <button
-                            className={report.status === "open" ? "adminReportStatusButton" : "adminReportStatusButton isResolved"}
-                            type="submit"
-                          >
-                            {report.status === "open"
-                              ? <Check size={14} aria-hidden="true" />
-                              : <RotateCcw size={14} aria-hidden="true" />}
-                            {report.status === "open" ? "处理" : "重开"}
-                          </button>
-                        </form>
+                        <div className="adminReportRowActions">
+                          <form action={updateContentReportStatusAction}>
+                            <input name="reportId" type="hidden" value={report.id} />
+                            <input name="status" type="hidden" value={report.status === "open" ? "resolved" : "open"} />
+                            <input name="returnPath" type="hidden" value={reportReturnPath} />
+                            <button
+                              className={report.status === "open" ? "adminReportStatusButton" : "adminReportStatusButton isResolved"}
+                              type="submit"
+                            >
+                              {report.status === "open"
+                                ? <Check size={14} aria-hidden="true" />
+                                : <RotateCcw size={14} aria-hidden="true" />}
+                              {report.status === "open" ? "处理" : "重开"}
+                            </button>
+                          </form>
+                          <form action={deleteContentReportAction}>
+                            <input name="reportId" type="hidden" value={report.id} />
+                            <input name="returnPath" type="hidden" value={reportReturnPath} />
+                            <button className="adminDangerIconButton" type="submit" title="删除举报" aria-label="删除举报">
+                              <Trash2 size={14} aria-hidden="true" />
+                            </button>
+                          </form>
+                        </div>
                       </td>
                     </tr>
                   )) : (
@@ -250,11 +264,11 @@ export default async function AdminStationPage({ searchParams }: StationAdminPag
                 </Link>
               ))}
             </nav>
-            <form className="adminAnnouncementEditor" action={saveAnnouncementAction}>
+            <form className="adminAnnouncementEditor" action={saveAnnouncementAction} key={selectedAnnouncement?.id || "new"}>
               {selectedAnnouncement ? <input name="id" type="hidden" value={selectedAnnouncement.id} /> : null}
               <input name="returnPath" type="hidden" value={announcementReturnPath} />
               <label><span>标题</span><input name="title" maxLength={80} defaultValue={selectedAnnouncement?.title || ""} required /></label>
-              <label><span>内容</span><textarea name="body" rows={9} maxLength={4000} defaultValue={selectedAnnouncement?.body || ""} required /></label>
+              <label><span>内容 · Markdown</span><textarea name="body" rows={9} maxLength={4000} defaultValue={selectedAnnouncement?.body || ""} required /></label>
               <div className="adminAnnouncementFields">
                 <label>
                   <span>可见范围</span>

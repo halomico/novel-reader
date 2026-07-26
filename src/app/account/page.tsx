@@ -8,7 +8,7 @@ import { getNoticeDisplaySeconds, getUserAvatarMaxBytes } from "@/lib/config";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { getCurrentUser } from "@/lib/user-auth";
 import { getDailyCheckinState, listSodaTransactions } from "@/lib/user-economy";
-import { getUserLevelDefinition, USER_PERMISSION_DEFINITIONS } from "@/lib/user-levels";
+import { getUserGrowthProgress, USER_PERMISSION_DEFINITIONS } from "@/lib/user-levels";
 import {
   claimDailySodaAction,
   updateAccountDisplayNameAction,
@@ -39,7 +39,8 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
   const params = await searchParams;
   const view = resolveView(params.view);
   const maxAvatarMb = (getUserAvatarMaxBytes() / 1024 / 1024).toFixed(1);
-  const level = getUserLevelDefinition(user.trustLevel);
+  const growth = getUserGrowthProgress(user.sodaExperience);
+  const level = growth.current;
   const checkin = view === "growth" ? getDailyCheckinState(user.id) : null;
   const transactions = view === "growth" ? listSodaTransactions(user.id, 12) : [];
   const labels: Record<typeof view, string> = {
@@ -59,60 +60,65 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
       ) : null}
 
       {view === "profile" ? (
-        <div className="accountOverview">
-          <article className="userPanel accountPanel accountProfile">
-            <div className="accountProfileHeader">
-              <div className="accountAvatar" aria-hidden="true">
-                {user.avatarPath ? <img src={user.avatarPath} alt="" /> : <UserRound size={34} />}
-              </div>
-              <div className="accountIdentity">
-                <h1>{user.displayName}</h1>
-                <p>@{user.username}</p>
-              </div>
-              <AvatarUploadForm maxAvatarMb={maxAvatarMb} />
+        <article className="userPanel accountPanel accountProfile">
+          <div className="accountProfileHeader">
+            <div className="accountAvatar" aria-hidden="true">
+              {user.avatarPath ? <img src={user.avatarPath} alt="" /> : <UserRound size={32} />}
             </div>
-
-            <form className="accountProfileForm" action={updateAccountDisplayNameAction}>
-              <label>
-                <span>显示名称</span>
-                <input name="displayName" defaultValue={user.displayName} maxLength={40} required />
-              </label>
-              <button className="accountActionButton" type="submit"><Save size={15} aria-hidden="true" />保存</button>
-            </form>
-          </article>
-
-          <article className="userPanel accountPanel accountSecurity" id="account-security">
-            <div className="userPanelHeader">
-              <KeyRound size={20} aria-hidden="true" />
-              <div>
-                <h1>账户安全</h1>
-                <p>更新密码后，其他登录状态会自动失效。</p>
-              </div>
+            <div className="accountIdentity">
+              <h1>{user.displayName}</h1>
+              <p>@{user.username}</p>
             </div>
-            <form className="accountPasswordForm" action={updateAccountPasswordAction}>
-              <label>
-                <span>当前密码</span>
-                <input name="currentPassword" type="password" autoComplete="current-password" required />
-              </label>
-              <label>
-                <span>新密码</span>
-                <input name="newPassword" type="password" autoComplete="new-password" minLength={6} maxLength={72} required />
-              </label>
-              <label>
-                <span>确认新密码</span>
-                <input name="confirmPassword" type="password" autoComplete="new-password" minLength={6} maxLength={72} required />
-              </label>
-              <button className="accountActionButton" type="submit"><Save size={15} aria-hidden="true" />更新</button>
-            </form>
-          </article>
-        </div>
+            <AvatarUploadForm maxAvatarMb={maxAvatarMb} />
+          </div>
+
+          <div className="accountFormSections">
+            <section className="accountFormSection">
+              <header>
+                <h2>资料</h2>
+              </header>
+              <form className="accountProfileForm" action={updateAccountDisplayNameAction}>
+                <label>
+                  <span>显示名称</span>
+                  <input name="displayName" defaultValue={user.displayName} maxLength={40} required />
+                </label>
+                <button className="accountActionButton" type="submit"><Save size={14} aria-hidden="true" />保存</button>
+              </form>
+            </section>
+
+            <section className="accountFormSection accountSecurity" id="account-security">
+              <header>
+                <KeyRound size={17} aria-hidden="true" />
+                <div>
+                  <h2>安全</h2>
+                  <p>更新后，其他登录状态会自动失效。</p>
+                </div>
+              </header>
+              <form className="accountPasswordForm" action={updateAccountPasswordAction}>
+                <label>
+                  <span>当前密码</span>
+                  <input name="currentPassword" type="password" autoComplete="current-password" required />
+                </label>
+                <label>
+                  <span>新密码</span>
+                  <input name="newPassword" type="password" autoComplete="new-password" minLength={6} maxLength={72} required />
+                </label>
+                <label>
+                  <span>确认密码</span>
+                  <input name="confirmPassword" type="password" autoComplete="new-password" minLength={6} maxLength={72} required />
+                </label>
+                <button className="accountActionButton" type="submit"><Save size={14} aria-hidden="true" />更新</button>
+              </form>
+            </section>
+          </div>
+        </article>
       ) : null}
 
       {view === "growth" && checkin ? (
         <article className="userPanel accountPanel accountGrowth">
           <header className="accountGrowthHeader">
             <div>
-              <span className="accountGrowthLevel"><Sparkles size={18} aria-hidden="true" />Lv.{user.trustLevel + 1}</span>
+              <span className="accountGrowthLevel"><Sparkles size={18} aria-hidden="true" />Lv.{user.trustLevel}</span>
               <h1>{level.name}</h1>
             </div>
             <div className="accountGrowthBalance">
@@ -121,6 +127,28 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
               <strong>{user.sodaBalance}</strong>
             </div>
           </header>
+
+          <section className="accountLevelProgress" aria-label="等级进度">
+            <header>
+              <span>累计成长</span>
+              <strong>
+                {growth.next ? `${growth.currentValue} / ${growth.targetValue}` : `${growth.currentValue}`}
+              </strong>
+            </header>
+            <div
+              className="accountLevelProgressTrack"
+              role="progressbar"
+              aria-valuemin={growth.current.sodaRequired}
+              aria-valuemax={growth.targetValue}
+              aria-valuenow={Math.min(growth.currentValue, growth.targetValue)}
+            >
+              <span style={{ width: `${growth.progress}%` }} />
+            </div>
+            <footer>
+              <span>Lv.{growth.current.level}</span>
+              <span>{growth.next ? `Lv.${growth.next.level} · ${growth.next.name}` : "已达最高等级"}</span>
+            </footer>
+          </section>
 
           <div className="accountPermissionList" aria-label="当前等级权限">
             {USER_PERMISSION_DEFINITIONS.filter((permission) => level.permissions.includes(permission.key)).map((permission) => (

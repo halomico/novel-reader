@@ -24,6 +24,7 @@ import {
   isTagLibraryEnabled,
 } from "@/lib/config";
 import { canonicalPagePath, NO_INDEX_ROBOTS } from "@/lib/seo";
+import { filterTagsByNovelForUser } from "@/lib/tag-preferences";
 import { listTagsForNovels } from "@/lib/tags";
 import { getCurrentUser } from "@/lib/user-auth";
 
@@ -95,9 +96,10 @@ export default async function NovelsPage({ searchParams }: NovelsPageProps) {
   }
   const showTags = isTagLibraryEnabled() && (authenticated || isGuestTagLibraryNavEnabled());
   const tagAudience = user?.role === "admin" ? "admin" : user ? "member" : "public";
-  const tagsByNovel = showTags
+  const sourceTagsByNovel = showTags
     ? listTagsForNovels(result.books.map((book) => book.id), { audience: tagAudience })
     : new Map();
+  const tagsByNovel = filterTagsByNovelForUser(sourceTagsByNovel, user?.id);
   const returnParams = new URLSearchParams();
   returnParams.set("page", String(result.page));
   if (result.query) {

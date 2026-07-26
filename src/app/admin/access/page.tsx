@@ -1,6 +1,7 @@
 import { ChevronDown, Clock3, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
 import type { Metadata } from "next";
 import { AdminSelect } from "@/components/AdminSelect";
+import { ContentAccessTargetFields } from "@/components/ContentAccessTargetFields";
 import {
   listContentAccessPolicies,
   listContentAccessRules,
@@ -58,18 +59,7 @@ function RuleEditor({ rule }: { rule?: ContentAccessRule }) {
   return (
     <form className={rule ? "accessRuleEditor" : "accessRuleEditor isCreate"} action={saveContentAccessRuleAction}>
       {rule ? <input name="id" type="hidden" value={rule.id} /> : null}
-      <label className="accessTypeField">
-        <span>类型</span>
-        <AdminSelect name="targetType" defaultValue={rule?.targetType || "ip"}>
-          <option value="ip">IP</option>
-          <option value="cidr">CIDR</option>
-          <option value="country">国家</option>
-        </AdminSelect>
-      </label>
-      <label className="accessTargetField">
-        <span>目标</span>
-        <input name="targetValue" defaultValue={rule?.targetValue || ""} placeholder="IP、网段或国家代码" required />
-      </label>
+      <ContentAccessTargetFields defaultType={rule?.targetType} defaultValue={rule?.targetValue} />
       <label className="accessScopeField">
         <span>范围</span>
         <AdminSelect name="scope" defaultValue={rule?.scope || "all"}>
@@ -140,7 +130,7 @@ export default async function AdminAccessPage({ searchParams }: AccessPageProps)
           <div className="accessSectionHeading">
             <div>
               <h3>封禁规则</h3>
-              <p>支持单个 IP、CIDR 网段和 Cloudflare 国家代码。</p>
+              <p>支持 IP、CIDR、Cloudflare 国家代码和已识别爬虫。</p>
             </div>
           </div>
           <details className="accessCreateDisclosure">

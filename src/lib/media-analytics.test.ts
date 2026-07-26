@@ -8,9 +8,11 @@ test("records media analytics and unified user browse history", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-media-analytics-"));
   const previousDatabasePath = process.env.DATABASE_PATH;
   const previousMediaDir = process.env.MEDIA_DIR;
+  const previousStorageMode = process.env.MEDIA_STORAGE_MODE;
   const previousSettingsPath = process.env.ADMIN_SETTINGS_PATH;
   process.env.DATABASE_PATH = path.join(tempDir, "novels.db");
   process.env.MEDIA_DIR = path.join(tempDir, "media");
+  process.env.MEDIA_STORAGE_MODE = "local";
   process.env.ADMIN_SETTINGS_PATH = path.join(tempDir, "settings.json");
   fs.writeFileSync(process.env.ADMIN_SETTINGS_PATH, JSON.stringify({ analyticsEnabled: true }));
   let closeDatabase: (() => void) | null = null;
@@ -104,6 +106,8 @@ test("records media analytics and unified user browse history", async () => {
     else process.env.DATABASE_PATH = previousDatabasePath;
     if (previousMediaDir === undefined) delete process.env.MEDIA_DIR;
     else process.env.MEDIA_DIR = previousMediaDir;
+    if (previousStorageMode === undefined) delete process.env.MEDIA_STORAGE_MODE;
+    else process.env.MEDIA_STORAGE_MODE = previousStorageMode;
     if (previousSettingsPath === undefined) delete process.env.ADMIN_SETTINGS_PATH;
     else process.env.ADMIN_SETTINGS_PATH = previousSettingsPath;
     fs.rmSync(tempDir, { recursive: true, force: true });

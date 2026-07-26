@@ -10,6 +10,7 @@ import { AdminReaderActions } from "@/components/AdminReaderActions";
 import { ReaderTagLinks } from "@/components/ReaderTagLinks";
 import { ReportNovelButton } from "@/components/ReportNovelButton";
 import { NovelRecommendationButton } from "@/components/NovelRecommendationButton";
+import { NovelFavoriteButton } from "@/components/NovelFavoriteButton";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getClientIp } from "@/lib/admin-access";
 import { recordAnalyticsEvent } from "@/lib/analytics";
@@ -23,9 +24,11 @@ import {
   isTagLibraryEnabled,
 } from "@/lib/config";
 import { checkContentAccess } from "@/lib/content-access";
+import { isNovelFavorite } from "@/lib/favorites";
 import { listHotwordsForNovel, listTagsForNovel } from "@/lib/tags";
 import { isNovelPinned } from "@/lib/pinned-novels";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
+import { filterTagsForUser } from "@/lib/tag-preferences";
 import { getCurrentUser } from "@/lib/user-auth";
 import { hasUserPermission } from "@/lib/user-levels";
 import { recordNovelVisit, recordReadingHistory } from "@/lib/users";
@@ -181,9 +184,11 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
   const showTags = isTagLibraryEnabled() && (authenticated || isGuestTagLibraryNavEnabled());
   const showHotwords = areHotwordLinksEnabled() && (authenticated || areGuestHotwordLinksEnabled());
   const tagAudience = user?.role === "admin" ? "admin" : user ? "member" : "public";
-  const tags = showTags ? listTagsForNovel(book.id, { audience: tagAudience }) : [];
+  const sourceTags = showTags ? listTagsForNovel(book.id, { audience: tagAudience }) : [];
+  const tags = filterTagsForUser(sourceTags, user?.id);
   const hotwords = showHotwords ? listHotwordsForNovel(book.id) : [];
   const recommendation = user ? getNovelRecommendationState(user.id, book.id) : null;
+  const favorite = user ? isNovelFavorite(user.id, book.id) : false;
   const canRecommend = hasUserPermission(user, "novel_feedback");
   const canReport = user?.role === "user" && hasUserPermission(user, "content_report");
 
@@ -211,8 +216,9 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
         <Suspense fallback={<ReaderContentLoading />}>
           <ReaderContent book={book} hitSegment={hitSegment} requestHeaders={headerStore} user={user} />
         </Suspense>
-        {user && (canRecommend || canReport) ? (
+        {user ? (
           <div className="readerFeedbackActions" aria-label="文章操作">
+            <NovelFavoriteButton novelId={book.id} initialFavorite={favorite} />
             {canRecommend && recommendation ? (
               <NovelRecommendationButton
                 novelId={book.id}

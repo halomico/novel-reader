@@ -6,7 +6,9 @@ import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { getDb } from "./db";
 import {
+  getUserGrowthProgress,
   getUserLevelDefinition,
+  getUserLevelForExperience,
   hasUserPermission,
   listUserLevelDefinitions,
   saveUserLevelDefinition,
@@ -32,15 +34,29 @@ test("stores seven configurable frontend levels and enforces their permissions",
   withTempDatabase(t);
   getDb();
   assert.equal(listUserLevelDefinitions().length, 7);
-  assert.equal(getUserLevelDefinition(0).permissions.includes("novel_feedback"), true);
+  assert.deepEqual(getUserLevelDefinition(0).permissions, []);
+  assert.equal(getUserLevelDefinition(1).permissions.includes("novel_feedback"), true);
+  assert.equal(getUserLevelForExperience(0), 1);
+  assert.equal(getUserLevelForExperience(49), 1);
+  assert.equal(getUserLevelForExperience(50), 2);
 
   assert.equal(saveUserLevelDefinition({
-    level: 0,
-    name: "访客成员",
+    level: 2,
+    name: "进阶成员",
+    sodaRequired: 75,
     permissions: ["content_report"],
   }), true);
-  assert.equal(getUserLevelDefinition(0).name, "访客成员");
-  assert.equal(hasUserPermission({ role: "user", trustLevel: 0 }, "content_report"), true);
-  assert.equal(hasUserPermission({ role: "user", trustLevel: 0 }, "novel_feedback"), false);
+  assert.equal(getUserLevelDefinition(2).name, "进阶成员");
+  assert.equal(getUserLevelDefinition(2).sodaRequired, 75);
+  assert.equal(getUserLevelForExperience(74), 1);
+  assert.equal(getUserLevelForExperience(75), 2);
+  assert.equal(hasUserPermission({ role: "user", trustLevel: 2 }, "content_report"), true);
+  assert.equal(hasUserPermission({ role: "user", trustLevel: 2 }, "novel_feedback"), false);
   assert.equal(hasUserPermission({ role: "admin", trustLevel: 0 }, "novel_feedback"), true);
+
+  const progress = getUserGrowthProgress(100);
+  assert.equal(progress.current.level, 2);
+  assert.equal(progress.next?.level, 3);
+  assert.equal(progress.targetValue, 200);
+  assert.equal(progress.progress, 20);
 });

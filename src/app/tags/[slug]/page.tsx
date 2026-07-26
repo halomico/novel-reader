@@ -1,4 +1,4 @@
-import { Tags } from "lucide-react";
+import { Eye, EyeOff, Tags } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
@@ -9,7 +9,13 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { getCatalogPageSize, isGuestTagLibraryNavEnabled, isTagLibraryEnabled } from "@/lib/config";
 import { getTagBySlug, listNovelsByTag, listTagsForNovels } from "@/lib/tags";
 import { canonicalPagePath, NO_INDEX_ROBOTS } from "@/lib/seo";
+import {
+  filterTagsByNovelForUser,
+  listEffectivelyHiddenTagIds,
+  listExplicitlyHiddenTagIds,
+} from "@/lib/tag-preferences";
 import { getCurrentUser } from "@/lib/user-auth";
+import { setTagPreferenceAction } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -75,8 +81,15 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
     pageSize: getCatalogPageSize(),
     audience,
   });
-  const tagsByNovel = listTagsForNovels(result.books.map((book) => book.id), { audience });
+  const tagsByNovel = filterTagsByNovelForUser(
+    listTagsForNovels(result.books.map((book) => book.id), { audience }),
+    user?.id,
+  );
   const returnHref = `/tags/${tag.slug}?page=${result.page}`;
+  const effectiveHidden = user ? listEffectivelyHiddenTagIds(user.id) : new Set<number>();
+  const explicitHidden = user ? listExplicitlyHiddenTagIds(user.id) : new Set<number>();
+  const isExplicitlyHidden = explicitHidden.has(tag.id);
+  const isHiddenByGroup = effectiveHidden.has(tag.id) && !isExplicitlyHidden;
 
   return (
     <main className="appShell catalogShell">
@@ -99,6 +112,21 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
             <ResultCount count={result.totalBooks} />
           </div>
         </div>
+        {user ? (
+          <form className="tagPreferenceAction" action={setTagPreferenceAction}>
+            <input name="tagId" type="hidden" value={tag.id} />
+            <input name="hidden" type="hidden" value={isExplicitlyHidden ? "0" : "1"} />
+            <input name="returnPath" type="hidden" value={`/tags/${tag.slug}`} />
+            <button
+              type="submit"
+              disabled={isHiddenByGroup}
+              aria-label={isExplicitlyHidden ? "恢复标签" : isHiddenByGroup ? "标签已随分组隐藏" : "隐藏标签"}
+              title={isExplicitlyHidden ? "恢复标签" : isHiddenByGroup ? "已随分组隐藏" : "隐藏标签"}
+            >
+              {isExplicitlyHidden ? <Eye size={17} aria-hidden="true" /> : <EyeOff size={17} aria-hidden="true" />}
+            </button>
+          </form>
+        ) : null}
       </section>
 
       {result.books.length > 0 ? (

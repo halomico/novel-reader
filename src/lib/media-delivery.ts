@@ -10,6 +10,7 @@ import {
   type MediaAsset,
 } from "./media";
 import { createSignedMediaUrl } from "./media-signing";
+import { isRemoteMediaStorage } from "./media-storage-config";
 
 export type ResolvedMediaDelivery = {
   asset: MediaAsset;
@@ -27,14 +28,15 @@ function contentDisposition(asset: MediaAsset, download: boolean): string {
 }
 
 export function mediaDeliveryUrl(asset: MediaAsset, download = false): string {
-  const remoteUrl = createSignedMediaUrl({
-    storedName: asset.storedName,
-    mimeType: asset.mimeType,
-    fileName: asset.fileName,
-    download,
-  });
-  if (remoteUrl) {
-    return remoteUrl;
+  if (isRemoteMediaStorage()) {
+    return createSignedMediaUrl({
+      storedName: asset.storedName,
+      mimeType: asset.mimeType,
+      fileName: asset.fileName,
+      mtimeMs: asset.mtimeMs,
+      sizeBytes: asset.sizeBytes,
+      download,
+    });
   }
   const params = new URLSearchParams({ id: String(asset.id), v: String(Math.floor(asset.mtimeMs)) });
   if (download) {
@@ -99,6 +101,9 @@ export function authorizeMediaDelivery(delivery: ResolvedMediaDelivery, authenti
 }
 
 export async function serveMediaDelivery(request: NextRequest, delivery: ResolvedMediaDelivery): Promise<Response> {
+  if (isRemoteMediaStorage()) {
+    return new Response(null, { status: 404 });
+  }
   const filePath = mediaFilePath(delivery.asset.storedName);
   let stat: fs.Stats;
   try {

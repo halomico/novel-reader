@@ -25,11 +25,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     });
   }
   incrementMediaDownloadCount(asset.id);
+  let location: string;
+  try {
+    location = mediaDeliveryUrl(asset, true);
+  } catch {
+    return new Response(null, { status: 503 });
+  }
   return new Response(null, {
     status: 307,
     headers: {
       "Cache-Control": "private, no-store",
-      Location: mediaDeliveryUrl(asset, true),
+      Location: location,
       Vary: "Cookie",
     },
   });

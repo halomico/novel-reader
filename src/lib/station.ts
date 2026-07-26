@@ -244,6 +244,10 @@ export function deleteAnnouncement(id: number): boolean {
   return getDb().prepare("DELETE FROM announcements WHERE id = ?").run(id).changes > 0;
 }
 
+export function deleteStationThread(id: number): boolean {
+  return getDb().prepare("DELETE FROM station_threads WHERE id = ?").run(id).changes > 0;
+}
+
 export function markAnnouncementRead(userId: number, announcementId: number) {
   getDb().prepare(
     `INSERT INTO announcement_reads (announcement_id, user_id)
@@ -373,6 +377,31 @@ export function markStationThreadRead(threadId: number, reader: "user" | "admin"
     .get(threadId) as { id: number };
   const column = reader === "admin" ? "admin_last_read_message_id" : "user_last_read_message_id";
   getDb().prepare(`UPDATE station_threads SET ${column} = ? WHERE id = ?`).run(latest.id, threadId);
+}
+
+export function markAllUserMessagesRead(userId: number) {
+  const db = getDb();
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.prepare(
+      `INSERT OR IGNORE INTO announcement_reads (announcement_id, user_id)
+       SELECT a.id, ?
+       FROM announcements a
+       WHERE ${visibleAnnouncementWhere(true)}`,
+    ).run(userId);
+    db.prepare(
+      `UPDATE station_threads
+       SET user_last_read_message_id = COALESCE(
+         (SELECT MAX(m.id) FROM station_messages m WHERE m.thread_id = station_threads.id),
+         user_last_read_message_id
+       )
+       WHERE user_id = ?`,
+    ).run(userId);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 }
 
 export function setStationThreadStatus(id: number, status: "open" | "closed"): boolean {

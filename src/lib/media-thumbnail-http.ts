@@ -4,6 +4,8 @@ import type { NextRequest } from "next/server";
 import { getVideoThumbnailSettings } from "./config";
 import type { MediaAsset } from "./media";
 import { ensureMediaThumbnail, mediaThumbnailEtag } from "./media-thumbnail";
+import { createSignedMediaThumbnailUrl } from "./media-signing";
+import { isRemoteMediaStorage, MediaStorageConfigurationError } from "./media-storage-config";
 
 export function mediaThumbnailCacheHeaders(publiclyAccessible: boolean): Record<string, string> {
   if (publiclyAccessible) {
@@ -25,6 +27,22 @@ export async function serveMediaThumbnail(
 ): Promise<Response> {
   try {
     const settings = getVideoThumbnailSettings();
+    if (isRemoteMediaStorage()) {
+      const remoteUrl = createSignedMediaThumbnailUrl({
+        storedName: asset.storedName,
+        mtimeMs: asset.mtimeMs,
+        sizeBytes: asset.sizeBytes,
+        percent: settings.singlePercent,
+        publiclyAccessible,
+      });
+      return new Response(null, {
+        status: 307,
+        headers: {
+          ...mediaThumbnailRedirectCacheHeaders(publiclyAccessible),
+          Location: remoteUrl,
+        },
+      });
+    }
     const options = {
       fraction: settings.singlePercent / 100,
       cacheKey: `single-${settings.singlePercent}`,
@@ -47,7 +65,23 @@ export async function serveMediaThumbnail(
         "Content-Type": "image/jpeg",
       },
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof MediaStorageConfigurationError) {
+      return new Response(null, { status: 503 });
+    }
     return new Response(null, { status: 404 });
   }
+}
+
+export function mediaThumbnailRedirectCacheHeaders(publiclyAccessible: boolean): Record<string, string> {
+  if (publiclyAccessible) {
+    return {
+      "Cache-Control": "public, max-age=300",
+      "Cloudflare-CDN-Cache-Control": "public, max-age=300",
+    };
+  }
+  return {
+    "Cache-Control": "private, max-age=300",
+    Vary: "Cookie",
+  };
 }

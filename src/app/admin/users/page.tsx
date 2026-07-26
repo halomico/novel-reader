@@ -94,12 +94,12 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
               </AdminSelect>
             </label>
             <label>
-              <span>等级</span>
-              <input name="trustLevel" type="number" min="1" max="7" defaultValue="1" />
+              <span>苏打余额</span>
+              <input name="sodaBalance" type="number" min="0" max="1000000000" defaultValue="0" />
             </label>
             <label>
-              <span>苏打</span>
-              <input name="sodaBalance" type="number" min="0" max="1000000000" defaultValue="0" />
+              <span>累计苏打</span>
+              <input name="sodaExperience" type="number" min="0" max="1000000000" defaultValue="0" />
             </label>
             <button type="submit"><UserPlus size={15} aria-hidden="true" />创建用户</button>
           </form>

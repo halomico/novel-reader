@@ -17,6 +17,7 @@ import {
 } from "@/lib/config";
 import { validateSearchKeyword } from "@/lib/search";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
+import { filterTagsByNovelForUser, listEffectivelyHiddenTagIds } from "@/lib/tag-preferences";
 import { listNovelsByTagIntersection, listTagGroups, listTagsForNovels } from "@/lib/tags";
 import { getCurrentUser } from "@/lib/user-auth";
 import { hasUserPermission } from "@/lib/user-levels";
@@ -43,9 +44,11 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
   if (!canUseAdvancedSearch) notFound();
 
   const audience = user?.role === "admin" ? "admin" : user ? "member" : "public";
+  const hiddenTagIds = user ? listEffectivelyHiddenTagIds(user.id) : new Set<number>();
   const sourceGroups = listTagGroups({ audience });
   const groups: AdvancedTagGroup[] = sourceGroups.flatMap((group) => {
-    const tags = group.tags.length ? group.tags : group.group ? [group.group] : [];
+    const tags = (group.tags.length ? group.tags : group.group ? [group.group] : [])
+      .filter((tag) => !hiddenTagIds.has(tag.id));
     return tags.length
       ? [{
           label: group.group?.name || "未分组",
@@ -72,7 +75,9 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
         audience,
       })
     : null;
-  const tagsByNovel = result ? listTagsForNovels(result.books.map((book) => book.id), { audience }) : new Map();
+  const tagsByNovel = result
+    ? filterTagsByNovelForUser(listTagsForNovels(result.books.map((book) => book.id), { audience }), user?.id)
+    : new Map();
   const returnParams = new URLSearchParams();
   if (selectedSlugs.length) returnParams.set("tags", selectedSlugs.join(","));
   if (excludedSlugs.length) returnParams.set("exclude", excludedSlugs.join(","));

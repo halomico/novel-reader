@@ -5,6 +5,10 @@ import path from "node:path";
 import test from "node:test";
 import type { HomePortalCardKey } from "./home-portal";
 import {
+  isHomePortalCardVisible,
+  resolveHomePortalAccessMode,
+} from "./home-portal";
+import {
   canAccessAdvancedTagSearch,
   canAccessHomeAnnouncementCard,
   canAccessNovelLibrary,
@@ -43,6 +47,10 @@ test("atomically replaces an existing settings file", () => {
     assert.equal(defaults.catalogPromotionOrder, "manual-first");
     assert.equal(defaults.audioDefaultPlaybackMode, "next");
     assert.equal(defaults.userDailyReportLimit, 50);
+    assert.equal(defaults.announcementCardTarget, "list");
+    assert.equal(defaults.adminIpAllowlistEnabled, false);
+    assert.deepEqual(defaults.adminAllowedNetworks, []);
+    assert.deepEqual(defaults.publicDisplayHomeCards, []);
     writeSiteSettings({ ...defaults, siteName: "第一次" });
     writeSiteSettings({ ...readSiteSettings(), siteName: "第二次" });
     assert.equal(readSiteSettings().siteName, "第二次");
@@ -88,6 +96,10 @@ test("preserves an empty settings preview and normalizes home portal settings", 
       settingsPreviewText: "",
       announcementCardEnabled: true,
       guestAnnouncementCardEnabled: false,
+      announcementCardTarget: "latest",
+      adminIpAllowlistEnabled: true,
+      adminAllowedNetworks: ["203.0.113.8", "203.0.113.0/24", "203.0.113.8"],
+      publicDisplayHomeCards: ["announcement", "video"],
       homePortalOrder: ["random", "novels", "random"] as HomePortalCardKey[],
     });
     const settings = readSiteSettings();
@@ -95,6 +107,9 @@ test("preserves an empty settings preview and normalizes home portal settings", 
     assert.deepEqual(settings.homePortalOrder.slice(0, 3), ["random", "novels", "announcement"]);
     assert.equal(canAccessHomeAnnouncementCard(false), false);
     assert.equal(canAccessHomeAnnouncementCard(true), true);
+    assert.equal(settings.announcementCardTarget, "latest");
+    assert.deepEqual(settings.adminAllowedNetworks, ["203.0.113.8", "203.0.113.0/24"]);
+    assert.deepEqual(settings.publicDisplayHomeCards, ["announcement", "video"]);
   } finally {
     if (previousPath === undefined) {
       delete process.env.ADMIN_SETTINGS_PATH;
@@ -103,6 +118,19 @@ test("preserves an empty settings preview and normalizes home portal settings", 
     }
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
+});
+
+test("separates public home-card display from public content access", () => {
+  const publicMode = resolveHomePortalAccessMode(true, true, false);
+  const previewMode = resolveHomePortalAccessMode(true, false, true);
+  const memberMode = resolveHomePortalAccessMode(true, false, false);
+  assert.equal(publicMode, "public");
+  assert.equal(previewMode, "preview");
+  assert.equal(memberMode, "member");
+  assert.equal(isHomePortalCardVisible(previewMode, false), true);
+  assert.equal(isHomePortalCardVisible(memberMode, false), false);
+  assert.equal(isHomePortalCardVisible(memberMode, true), true);
+  assert.equal(isHomePortalCardVisible(resolveHomePortalAccessMode(false, true, true), true), false);
 });
 
 test("clamps the configured reader font size to 8 through 25", () => {

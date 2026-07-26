@@ -1,29 +1,12 @@
-import { execFile } from "node:child_process";
 import { mediaFilePath, saveMediaDuration, type MediaAsset } from "./media";
+import { probeRemoteMediaDuration } from "./media-node-client";
+import { probeMediaDurationFile } from "./media-processing";
+import { isRemoteMediaStorage } from "./media-storage-config";
 
 type MediaMetadataGlobal = typeof globalThis & {
   mediaDurationJobs?: Map<string, Promise<number>>;
   mediaDurationQueue?: Promise<void>;
 };
-
-function probeDuration(sourcePath: string): Promise<number> {
-  const ffprobe = process.env.FFPROBE_PATH || "ffprobe";
-  return new Promise((resolve, reject) => {
-    execFile(
-      ffprobe,
-      ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", sourcePath],
-      { encoding: "utf8", maxBuffer: 1024 * 1024, timeout: 15_000 },
-      (error, stdout) => {
-        const duration = Number(stdout.trim());
-        if (error || !Number.isFinite(duration) || duration <= 0) {
-          reject(error || new Error("无法读取媒体时长"));
-          return;
-        }
-        resolve(duration);
-      },
-    );
-  });
-}
 
 export function ensureMediaDuration(asset: MediaAsset): Promise<number> {
   if (asset.durationSeconds && asset.durationSeconds > 0) {
@@ -44,7 +27,9 @@ export function ensureMediaDuration(asset: MediaAsset): Promise<number> {
 
   const previous = state.mediaDurationQueue || Promise.resolve();
   const job = previous.catch(() => undefined).then(async () => {
-    const duration = await probeDuration(mediaFilePath(asset.storedName));
+    const duration = isRemoteMediaStorage()
+      ? await probeRemoteMediaDuration(asset)
+      : await probeMediaDurationFile(mediaFilePath(asset.storedName));
     saveMediaDuration(asset.id, duration);
     return duration;
   });
@@ -61,29 +46,6 @@ export function scheduleMediaDurations(assets: MediaAsset[]) {
     }
     void ensureMediaDuration(asset).catch(() => undefined);
   }
-}
-
-export async function loadMediaDurations(assets: MediaAsset[], concurrency = 3): Promise<MediaAsset[]> {
-  const result = assets.map((asset) => ({ ...asset }));
-  let nextIndex = 0;
-  const worker = async () => {
-    while (nextIndex < result.length) {
-      const index = nextIndex;
-      nextIndex += 1;
-      const asset = result[index];
-      if (asset.kind === "file" || asset.durationSeconds) {
-        continue;
-      }
-      try {
-        asset.durationSeconds = await ensureMediaDuration(asset);
-      } catch {
-        asset.durationSeconds = null;
-      }
-    }
-  };
-  const workers = Math.min(Math.max(Math.floor(concurrency), 1), result.length);
-  await Promise.all(Array.from({ length: workers }, worker));
-  return result;
 }
 
 export function formatMediaDuration(durationSeconds: number | null): string {

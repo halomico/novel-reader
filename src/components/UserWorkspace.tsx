@@ -1,4 +1,4 @@
-import { CupSoda, LogOut, MessageCircle, Settings, Sparkles, UserRound } from "lucide-react";
+import { Bookmark, CupSoda, LogOut, MessageCircle, Settings, Sparkles, UserRound } from "lucide-react";
 import Link from "next/link";
 import { logoutUserAction } from "@/app/account/actions";
 import type { UserProfile } from "@/lib/users";
@@ -7,11 +7,12 @@ import { getUserLevelDefinition } from "@/lib/user-levels";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { SiteHeader } from "./SiteHeader";
 
-export type UserWorkspaceKey = "profile" | "growth" | "messages" | "settings";
+export type UserWorkspaceKey = "profile" | "growth" | "favorites" | "messages" | "settings";
 
 const NAV_ITEMS = [
   { key: "profile", href: "/account", label: "账户", icon: UserRound },
   { key: "growth", href: "/account?view=growth", label: "成长", icon: Sparkles },
+  { key: "favorites", href: "/favorites", label: "收藏", icon: Bookmark },
   { key: "messages", href: "/messages", label: "消息", icon: MessageCircle },
   { key: "settings", href: "/settings", label: "设置", icon: Settings },
 ] as const;
@@ -43,7 +44,7 @@ export function UserWorkspace({
             <span>
               <strong>{user.displayName}</strong>
               <span className="userWorkspaceGrowth">
-                <small title={level.name}><Sparkles size={12} aria-hidden="true" />Lv.{user.trustLevel + 1}</small>
+                <small title={level.name}><Sparkles size={12} aria-hidden="true" />Lv.{user.trustLevel}</small>
                 <small title="苏打余额"><CupSoda size={12} aria-hidden="true" />{user.sodaBalance}</small>
               </span>
             </span>

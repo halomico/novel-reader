@@ -173,3 +173,7 @@ export function setContentReportStatus(id: number, status: ContentReportStatus, 
         .run(id);
   return Number(result.changes) > 0;
 }
+
+export function deleteContentReport(id: number): boolean {
+  return getDb().prepare("DELETE FROM content_reports WHERE id = ?").run(id).changes > 0;
+}

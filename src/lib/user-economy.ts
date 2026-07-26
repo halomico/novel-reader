@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { getDb } from "./db";
+import { getUserLevelForExperience } from "./user-levels";
 
 export type SodaTransaction = {
   id: number;
@@ -47,8 +48,8 @@ export function claimDailySoda(
   db.exec("BEGIN IMMEDIATE");
   try {
     const user = db
-      .prepare("SELECT status, soda_balance FROM users WHERE id = ?")
-      .get(userId) as { status: string; soda_balance: number } | undefined;
+      .prepare("SELECT status, soda_balance, soda_experience FROM users WHERE id = ?")
+      .get(userId) as { status: string; soda_balance: number; soda_experience: number } | undefined;
     if (!user || user.status !== "active") {
       db.exec("ROLLBACK");
       return { ok: false };
@@ -68,10 +69,15 @@ export function claimDailySoda(
 
     const reward = drawDailySoda(randomInt);
     const balance = user.soda_balance + reward;
+    const experience = user.soda_experience + reward;
+    const trustLevel = getUserLevelForExperience(experience);
     db.prepare("INSERT INTO user_checkins (user_id, checkin_date, reward) VALUES (?, ?, ?)")
       .run(userId, date, reward);
-    db.prepare("UPDATE users SET soda_balance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-      .run(balance, userId);
+    db.prepare(
+      `UPDATE users
+       SET soda_balance = ?, soda_experience = ?, trust_level = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+    ).run(balance, experience, trustLevel, userId);
     db.prepare(
       `INSERT INTO user_soda_transactions (user_id, amount, balance_after, source, note)
        VALUES (?, ?, ?, 'daily_checkin', '每日签到')`,
@@ -113,12 +119,13 @@ export function listSodaTransactions(userId: number, limit = 20): SodaTransactio
 
 export function updateUserGrowth(input: {
   userId: number;
-  trustLevel: number;
   sodaBalance: number;
+  sodaExperience: number;
   adminName: string;
 }): boolean {
-  const trustLevel = Math.min(Math.max(Math.floor(input.trustLevel), 0), 6);
   const sodaBalance = Math.min(Math.max(Math.floor(input.sodaBalance), 0), 2_000_000_000);
+  const sodaExperience = Math.min(Math.max(Math.floor(input.sodaExperience), sodaBalance, 0), 2_000_000_000);
+  const trustLevel = getUserLevelForExperience(sodaExperience);
   const db = getDb();
   db.exec("BEGIN IMMEDIATE");
   try {
@@ -131,9 +138,9 @@ export function updateUserGrowth(input: {
     }
     db.prepare(
       `UPDATE users
-       SET trust_level = ?, soda_balance = ?, updated_at = CURRENT_TIMESTAMP
+       SET trust_level = ?, soda_balance = ?, soda_experience = ?, updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-    ).run(trustLevel, sodaBalance, input.userId);
+    ).run(trustLevel, sodaBalance, sodaExperience, input.userId);
     const difference = sodaBalance - current.soda_balance;
     if (difference !== 0) {
       db.prepare(

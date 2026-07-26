@@ -9,6 +9,7 @@ import {
 } from "./media";
 import { scheduleMediaDurations } from "./media-metadata";
 import { ensureMediaThumbnail } from "./media-thumbnail";
+import { isRemoteMediaStorage } from "./media-storage-config";
 
 type MediaMaintenanceGlobal = typeof globalThis & {
   mediaMaintenanceStarted?: boolean;
@@ -26,7 +27,7 @@ function firstThumbnailOptions() {
 export function scheduleMediaPreparation(assets: MediaAsset[]) {
   const videos = assets.filter((asset) => asset.kind === "video");
   scheduleMediaDurations(assets);
-  if (!videos.length) {
+  if (!videos.length || isRemoteMediaStorage()) {
     return;
   }
   const thumbnailOptions = firstThumbnailOptions();

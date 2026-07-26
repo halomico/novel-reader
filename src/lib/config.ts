@@ -155,6 +155,10 @@ export function canAccessHomeAnnouncementCard(authenticated: boolean): boolean {
   return settings.announcementCardEnabled && (authenticated || settings.guestAnnouncementCardEnabled);
 }
 
+export function getAnnouncementCardTarget(): "list" | "latest" {
+  return readSiteSettings().announcementCardTarget;
+}
+
 export function getHomePortalOrder(): HomePortalCardKey[] {
   return readSiteSettings().homePortalOrder;
 }

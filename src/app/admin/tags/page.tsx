@@ -153,7 +153,7 @@ export default async function AdminTagsPage({ searchParams }: AdminTagsPageProps
             {selectedTag ? <Pencil size={16} aria-hidden="true" /> : null}
           </div>
           {selectedTag ? (
-            <form className={selectedTag.parentId ? "adminTagEditorForm" : "adminTagEditorForm isRoot"} action={saveAdminTagAction}>
+            <form className={selectedTag.parentId ? "adminTagEditorForm" : "adminTagEditorForm isRoot"} action={saveAdminTagAction} key={selectedTag.id}>
               <input name="tagId" type="hidden" value={selectedTag.id} />
               <input name="returnPath" type="hidden" value={managerReturnPath(selectedTag.id, query)} />
               <div className="adminTagFormGrid">

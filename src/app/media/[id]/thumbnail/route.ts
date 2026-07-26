@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { checkContentAccess } from "@/lib/content-access";
+import { checkContentAccess, hasScopedContentAccessRules } from "@/lib/content-access";
 import { getMediaAsset, isMediaKindAccessible } from "@/lib/media";
 import { serveMediaThumbnail } from "@/lib/media-thumbnail-http";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
@@ -23,5 +23,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return new Response(null, { status: 404 });
   }
 
-  return serveMediaThumbnail(request, asset, isMediaKindAccessible(asset.kind, false));
+  const publiclyCacheable = isMediaKindAccessible(asset.kind, false) && !hasScopedContentAccessRules("media");
+  return serveMediaThumbnail(request, asset, publiclyCacheable);
 }

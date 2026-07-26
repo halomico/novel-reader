@@ -1,5 +1,6 @@
-# Independent media node. Keep port 3100 private and expose only this site.
+# Independent media node. Keep port 3100 private; the browser only uses
+# /media-upload, /media-file and /media-thumbnail. /control is protected
+# by MEDIA_CONTROL_SECRET and can additionally be restricted to the main IP.
 media.example.com {
-    encode zstd gzip
     reverse_proxy 127.0.0.1:3100
 }

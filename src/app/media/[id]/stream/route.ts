@@ -28,11 +28,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (requestedVersion && Math.floor(Number(requestedVersion)) !== Math.floor(asset.mtimeMs)) {
     return new Response(null, { status: 404 });
   }
+  let location: string;
+  try {
+    location = mediaDeliveryUrl(asset);
+  } catch {
+    return new Response(null, { status: 503 });
+  }
   return new Response(null, {
     status: 307,
     headers: {
       "Cache-Control": "private, no-store",
-      Location: mediaDeliveryUrl(asset),
+      Location: location,
       Vary: "Cookie",
     },
   });

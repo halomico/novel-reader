@@ -1,10 +1,9 @@
-import crypto from "node:crypto";
-import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { getMediaDir } from "./config";
 import { mediaFilePath, type MediaAsset } from "./media";
 import { ensureMediaDuration } from "./media-metadata";
+import { generateVideoThumbnailFile } from "./media-processing";
 
 type ThumbnailGlobal = typeof globalThis & {
   mediaThumbnailJobs?: Map<string, Promise<string>>;
@@ -25,18 +24,6 @@ export type MediaThumbnailOptions = {
 
 const THUMBNAIL_CONCURRENCY = 2;
 const THUMBNAIL_PROFILE = "v2";
-
-function execFileText(command: string, args: string[], timeout: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile(command, args, { encoding: "utf8", maxBuffer: 1024 * 1024, timeout }, (error, stdout) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve(stdout);
-    });
-  });
-}
 
 export function thumbnailSeekSeconds(durationSeconds: number, fraction = 1 / 3): number {
   return Number.isFinite(durationSeconds) && durationSeconds > 0 && Number.isFinite(fraction) && fraction > 0 && fraction < 1
@@ -65,44 +52,12 @@ async function generateMediaThumbnail(asset: MediaAsset, options: MediaThumbnail
     // A missing or stale thumbnail is generated below.
   }
 
-  const ffmpeg = process.env.FFMPEG_PATH || "ffmpeg";
-  const seekSeconds = thumbnailSeekSeconds(await ensureMediaDuration(asset), options.fraction);
-  if (!seekSeconds) {
-    throw new Error("无法读取视频时长");
-  }
-
-  await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
-  const tempPath = path.join(path.dirname(targetPath), `${asset.id}-${crypto.randomBytes(6).toString("hex")}.tmp.jpg`);
-  try {
-    await execFileText(
-      ffmpeg,
-      [
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-y",
-        "-ss",
-        seekSeconds.toFixed(3),
-        "-i",
-        sourcePath,
-        "-map",
-        "0:v:0",
-        "-frames:v",
-        "1",
-        "-vf",
-        "scale=640:-2:force_original_aspect_ratio=decrease",
-        "-q:v",
-        "5",
-        tempPath,
-      ],
-      20_000,
-    );
-    await fs.promises.rm(targetPath, { force: true });
-    await fs.promises.rename(tempPath, targetPath);
-    return targetPath;
-  } finally {
-    await fs.promises.rm(tempPath, { force: true });
-  }
+  return generateVideoThumbnailFile({
+    sourcePath,
+    targetPath,
+    durationSeconds: await ensureMediaDuration(asset),
+    fraction: options.fraction,
+  });
 }
 
 function runNextThumbnailJobs() {
@@ -149,18 +104,6 @@ export function ensureMediaThumbnail(
   jobs.set(key, job);
   void job.finally(() => jobs.delete(key)).catch(() => undefined);
   return job;
-}
-
-export function removeMediaThumbnail(id: number) {
-  const directory = path.join(getMediaDir(), ".thumbnails");
-  if (!fs.existsSync(directory)) {
-    return;
-  }
-  for (const fileName of fs.readdirSync(directory)) {
-    if (fileName === `${id}.jpg` || fileName.startsWith(`${id}-`)) {
-      fs.rmSync(path.join(directory, fileName), { force: true });
-    }
-  }
 }
 
 export function clearMediaThumbnails(): number {

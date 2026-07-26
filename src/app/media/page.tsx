@@ -158,13 +158,19 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
   const folders = kind === "video" ? [] : listMediaFolders(kind);
   const EmptyIcon = KIND_ICONS[kind];
   const segments = result.folder ? result.folder.split("/") : [];
-  const childFolders = result.query
-    ? []
-    : sortMediaFolders(
-        folders.filter((folder) => folder.path.split("/").slice(0, -1).join("/") === result.folder),
-        sortBy,
-        sortOrder,
-      );
+  const normalizedFolderTerms = result.query.normalize("NFKC").toLocaleLowerCase().split(" ").filter(Boolean);
+  const folderSearchPrefix = result.folder ? `${result.folder}/` : "";
+  const childFolders = sortMediaFolders(
+    folders.filter((folder) => {
+      if (result.query) {
+        return folder.path.startsWith(folderSearchPrefix) &&
+          normalizedFolderTerms.every((term) => folder.path.normalize("NFKC").toLocaleLowerCase().includes(term));
+      }
+      return folder.path.split("/").slice(0, -1).join("/") === result.folder;
+    }),
+    sortBy,
+    sortOrder,
+  );
   const folderPageSize = 36;
   const folderTotalPages = Math.max(1, Math.ceil(childFolders.length / folderPageSize));
   const folderPage = Math.min(Math.max(Math.floor(Number(params.folderPage || 1)), 1), folderTotalPages);
@@ -243,7 +249,9 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
         <div className="mediaExplorerContent">
             {result.query ? (
               <p className="mediaSearchSummary">
-                “{result.query}” · {kind === "video" ? `共 ${result.totalAssets} 项` : `当前目录及子目录共 ${result.totalAssets} 项`}
+                “{result.query}” · {kind === "video"
+                  ? `共 ${result.totalAssets} 项`
+                  : `共 ${childFolders.length} 个文件夹、${result.totalAssets} 项资源`}
               </p>
             ) : null}
 
@@ -259,7 +267,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
                       href={kind === "audio"
                         ? mediaHref(kind, folder.path)
                         : mediaHref(kind, folder.path, "", "", sortBy, sortOrder)}
-                      name={folder.name}
+                      name={result.query ? folder.path : folder.name}
                       sizeLabel={kind === "audio" ? `${folder.totalAssets} 项` : formatBytes(folder.totalSizeBytes)}
                       key={folder.path}
                     />

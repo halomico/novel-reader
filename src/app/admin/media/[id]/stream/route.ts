@@ -2,7 +2,8 @@ import { NextRequest } from "next/server";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
 import { getMediaAsset } from "@/lib/media";
-import { serveMediaDelivery } from "@/lib/media-delivery";
+import { mediaDeliveryUrl, serveMediaDelivery } from "@/lib/media-delivery";
+import { isRemoteMediaStorage } from "@/lib/media-storage-config";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,6 +20,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const requestedVersion = request.nextUrl.searchParams.get("v");
   if (requestedVersion && Math.floor(Number(requestedVersion)) !== Math.floor(asset.mtimeMs)) {
     return new Response(null, { status: 404 });
+  }
+  if (isRemoteMediaStorage()) {
+    try {
+      return new Response(null, {
+        status: 307,
+        headers: {
+          "Cache-Control": "private, no-store",
+          Location: mediaDeliveryUrl(asset),
+        },
+      });
+    } catch {
+      return new Response(null, { status: 503 });
+    }
   }
   return serveMediaDelivery(request, { asset, download: false });
 }

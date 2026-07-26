@@ -14,10 +14,9 @@ import {
   Settings,
   Tags,
   Users,
-  X,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ADMIN_SIDEBAR_STORAGE_KEY } from "@/lib/ui-preferences";
 
 export type AdminNavKey = "home" | "books" | "indexes" | "settings" | "users" | "analytics" | "media" | "tags" | "access" | "station";
@@ -107,10 +106,30 @@ export function AdminSidebarNavigation({ active, siteName }: { active: AdminNavK
 
 export function AdminMobileNavigation({ active }: { active: AdminNavKey }) {
   const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function closeOnOutsidePress(event: PointerEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", closeOnOutsidePress);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePress);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
 
   return (
     <div
       className="adminMobileMenu"
+      ref={menuRef}
       onBlur={(event) => {
         const nextTarget = event.relatedTarget instanceof Node ? event.relatedTarget : null;
         if (!event.currentTarget.contains(nextTarget)) {
@@ -119,14 +138,14 @@ export function AdminMobileNavigation({ active }: { active: AdminNavKey }) {
       }}
     >
       <button
-        className="adminIconButton"
+        className="iconLink"
         type="button"
         aria-label={open ? "关闭后台菜单" : "打开后台菜单"}
         aria-expanded={open}
         title="后台菜单"
         onClick={() => setOpen((current) => !current)}
       >
-        {open ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
+        <Menu size={20} aria-hidden="true" />
       </button>
       {open ? (
         <div className="adminMobileMenuPanel">

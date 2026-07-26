@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, Dices } from "lucide-react";
+import { ChevronRight, Dices, LockKeyhole } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { beginNavigationProgress } from "./NavigationProgress";
 
@@ -30,21 +30,30 @@ export function CatalogRandomButton() {
   );
 }
 
-export function CatalogRandomCard() {
+export function CatalogRandomCard({ loginRequired = false }: { loginRequired?: boolean }) {
   const router = useRouter();
 
   function openRandomSelection() {
     beginNavigationProgress();
-    router.push(randomCatalogHref());
+    const href = randomCatalogHref();
+    router.push(loginRequired ? `/login?${new URLSearchParams({ returnTo: href }).toString()}` : href);
   }
 
   return (
-    <button className="homePortalCard is-random" type="button" onClick={openRandomSelection}>
+    <button
+      className="homePortalCard is-random"
+      type="button"
+      onClick={openRandomSelection}
+      title={loginRequired ? "登录后可用" : undefined}
+      aria-label={loginRequired ? "随便看看，登录后可用" : undefined}
+    >
       <span className="homePortalCardIcon" aria-hidden="true">
         <Dices size={30} />
       </span>
       <strong>随便看看</strong>
-      <ChevronRight className="homePortalCardArrow" size={19} aria-hidden="true" />
+      {loginRequired
+        ? <LockKeyhole className="homePortalCardArrow" size={17} aria-hidden="true" />
+        : <ChevronRight className="homePortalCardArrow" size={19} aria-hidden="true" />}
     </button>
   );
 }

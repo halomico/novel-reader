@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
-import { getAdminAccessState } from "@/lib/admin-access";
+import { getAdminAccessState, getClientIp, matchesIpRule, normalizeAdminNetworkRules } from "@/lib/admin-access";
 import { clearAdminSession, getAdminSession, setAdminSession, verifyAdminCredentials } from "@/lib/admin-auth";
 import { recordAdminLogin } from "@/lib/admin-login-records";
 import {
@@ -19,7 +19,11 @@ import {
   getUserAvatarMaxBytes,
 } from "@/lib/config";
 import { cancelContentJobs } from "@/lib/content-jobs";
-import { normalizeHomePortalOrder } from "@/lib/home-portal";
+import {
+  HOME_PORTAL_CONTENT_CARD_KEYS,
+  normalizeHomePortalOrder,
+  type HomePortalAccessMode,
+} from "@/lib/home-portal";
 import {
   createVideoCategory,
   createMediaFolder,
@@ -40,6 +44,8 @@ import {
 } from "@/lib/media";
 import { scheduleMissingMediaPreparation } from "@/lib/media-maintenance";
 import { clearMediaThumbnails } from "@/lib/media-thumbnail";
+import { clearRemoteMediaThumbnails } from "@/lib/media-node-client";
+import { isRemoteMediaStorage } from "@/lib/media-storage-config";
 import { deleteNovelIds, renameNovelFile, updateNovelFile } from "@/lib/novel-files";
 import { hashPassword } from "@/lib/password";
 import { replacePinnedNovels, togglePinnedNovel } from "@/lib/pinned-novels";
@@ -59,7 +65,7 @@ import {
   updateTag,
 } from "@/lib/tags";
 import { deleteUserSessions, hashUserPassword } from "@/lib/user-auth";
-import { saveUserLevelDefinition } from "@/lib/user-levels";
+import { recalculateUserLevels, saveUserLevelDefinition } from "@/lib/user-levels";
 import { updateUserGrowth } from "@/lib/user-economy";
 import { setContentReportStatus } from "@/lib/reports";
 import { setNovelRecommendationCount } from "@/lib/recommendations";
@@ -198,8 +204,9 @@ function mediaAccessModeField(formData: FormData, name: string): "off" | "user" 
   return value === "user" || value === "public" ? value : "off";
 }
 
-function userLevelField(formData: FormData): number {
-  return Math.min(Math.max(Math.floor(Number(formData.get("trustLevel")) || 1) - 1, 0), 6);
+function homeCardAccessModeField(formData: FormData, name: string): HomePortalAccessMode {
+  const value = formData.get(name);
+  return value === "member" || value === "preview" || value === "public" ? value : "off";
 }
 
 function isUsernameConflict(error: unknown): boolean {
@@ -594,6 +601,7 @@ export async function batchUpdateNovelsAction(formData: FormData) {
 
 export async function saveAdminSettingsAction(formData: FormData) {
   await requireAdminRequest();
+  const headerStore = await headers();
   const previous = readSiteSettings();
   const adminUsername = String(formData.get("adminUsername") || "").trim();
   const newPassword = String(formData.get("newAdminPassword") || "");
@@ -610,15 +618,32 @@ export async function saveAdminSettingsAction(formData: FormData) {
   }
 
   const userAvatarMaxMb = numberField(formData, "userAvatarMaxMb", getUserAvatarMaxBytes() / 1024 ** 2, 0.1, 10);
-  const novelAccessMode = mediaAccessModeField(formData, "novelAccessMode");
-  const videoAccessMode = mediaAccessModeField(formData, "videoAccessMode");
-  const audioAccessMode = mediaAccessModeField(formData, "audioAccessMode");
-  const fileAccessMode = mediaAccessModeField(formData, "fileAccessMode");
-  const tagAccessMode = mediaAccessModeField(formData, "tagAccessMode");
-  const announcementCardAccessMode = mediaAccessModeField(formData, "announcementCardAccessMode");
+  const novelAccessMode = homeCardAccessModeField(formData, "novelAccessMode");
+  const videoAccessMode = homeCardAccessModeField(formData, "videoAccessMode");
+  const audioAccessMode = homeCardAccessModeField(formData, "audioAccessMode");
+  const fileAccessMode = homeCardAccessModeField(formData, "fileAccessMode");
+  const tagAccessMode = homeCardAccessModeField(formData, "tagAccessMode");
+  const announcementCardAccessMode = homeCardAccessModeField(formData, "announcementCardAccessMode");
   const advancedTagAccessMode = mediaAccessModeField(formData, "advancedTagAccessMode");
   const hotwordAccessMode = mediaAccessModeField(formData, "hotwordAccessMode");
+  const homeCardModes: Record<(typeof HOME_PORTAL_CONTENT_CARD_KEYS)[number], HomePortalAccessMode> = {
+    announcement: announcementCardAccessMode,
+    novels: novelAccessMode,
+    tags: tagAccessMode,
+    video: videoAccessMode,
+    audio: audioAccessMode,
+    file: fileAccessMode,
+  };
   const defaultPalette = String(formData.get("defaultPalette") || "default");
+  const adminAllowedNetworks = normalizeAdminNetworkRules(formData.get("adminAllowedNetworks"));
+  const adminIpAllowlistEnabled = formData.get("adminIpAllowlistEnabled") === "on";
+  const currentAdminIp = getClientIp(headerStore);
+  if (adminIpAllowlistEnabled && adminAllowedNetworks.length === 0) {
+    adminNotice("启用后台白名单前，请至少填写一个 IP 或 CIDR", "warning", "/admin/settings");
+  }
+  if (adminIpAllowlistEnabled && !adminAllowedNetworks.some((rule) => matchesIpRule(currentAdminIp, rule))) {
+    adminNotice(`当前后台 IP ${currentAdminIp} 不在白名单中，未保存以避免锁定后台`, "warning", "/admin/settings");
+  }
   const next: SiteSettings = {
     ...previous,
     siteName: String(formData.get("siteName") || "").trim(),
@@ -648,6 +673,8 @@ export async function saveAdminSettingsAction(formData: FormData) {
     adminPasswordSha256: newPassword ? "" : previous.adminPasswordSha256,
     adminLoginRateLimitPerMinute: intField(formData, "adminLoginRateLimitPerMinute", previous.adminLoginRateLimitPerMinute || 6, 1, 120),
     adminLoginRateLimitEnabled: formData.get("adminLoginRateLimitEnabled") === "on",
+    adminIpAllowlistEnabled,
+    adminAllowedNetworks,
     catalogPageSize: intField(formData, "catalogPageSize", previous.catalogPageSize || getCatalogPageSize(), 1, 100),
     searchResultsPageSize: intField(formData, "searchResultsPageSize", previous.searchResultsPageSize || getSearchResultsPageSize(), 1, 100),
     adminBookPageSize: intField(formData, "adminBookPageSize", previous.adminBookPageSize || getAdminBookPageSize(), 1, 200),
@@ -693,7 +720,9 @@ export async function saveAdminSettingsAction(formData: FormData) {
       .slice(0, 20) || "站务",
     announcementCardEnabled: announcementCardAccessMode !== "off",
     guestAnnouncementCardEnabled: announcementCardAccessMode === "public",
+    announcementCardTarget: formData.get("announcementCardTarget") === "latest" ? "latest" : "list",
     homePortalOrder: normalizeHomePortalOrder(formData.get("homePortalOrder")),
+    publicDisplayHomeCards: HOME_PORTAL_CONTENT_CARD_KEYS.filter((key) => homeCardModes[key] === "preview"),
     analyticsEnabled: formData.get("analyticsEnabled") === "on",
     analyticsRealtimeLimit: intField(formData, "analyticsRealtimeLimit", previous.analyticsRealtimeLimit || 300, 30, 2000),
     novelLibraryEnabled: novelAccessMode !== "off",
@@ -781,7 +810,7 @@ export async function updateAdminMediaAction(formData: FormData) {
     adminNotice("作者不能超过 80 个字符", "warning", returnPath);
   }
   try {
-    updateMediaAsset(
+    await updateMediaAsset(
       id,
       title,
       asset.kind === "file" ? "" : artist,
@@ -827,7 +856,7 @@ export async function batchUpdateAdminMediaAction(formData: FormData) {
       const asset = getMediaAsset(id);
       if (!asset) continue;
       const title = String(formData.get(`title-${id}`) || "").trim();
-      updateMediaAsset(
+      await updateMediaAsset(
         id,
         title,
         asset.kind === "file" ? "" : applyArtist ? artist : asset.artist,
@@ -925,7 +954,13 @@ export async function saveAdminMediaDisplaySettingsAction(formData: FormData) {
   try {
     writeSiteSettings(next);
     if (previous.videoThumbnailSinglePercent !== next.videoThumbnailSinglePercent) {
-      clearMediaThumbnails();
+      if (isRemoteMediaStorage()) {
+        await clearRemoteMediaThumbnails().catch((error) => {
+          console.warn("Failed to clear remote media thumbnails", error);
+        });
+      } else {
+        clearMediaThumbnails();
+      }
       scheduleMissingMediaPreparation();
     }
   } catch (error) {
@@ -951,7 +986,7 @@ export async function deleteAdminMediaAction(formData: FormData) {
   if (!ids.length) {
     adminNotice("请选择要删除的资源", "warning", returnPath);
   }
-  const result = deleteMediaAssets(ids);
+  const result = await deleteMediaAssets(ids);
   revalidatePath("/media");
   revalidatePath("/admin");
   revalidatePath("/admin/media");
@@ -969,7 +1004,7 @@ export async function syncAdminMediaAction(formData: FormData) {
     result = await syncMediaLibrary({ force: true });
     scheduleMissingMediaPreparation();
   } catch {
-    adminNotice("媒体目录同步失败，请检查目录权限和文件状态", "error", returnPath);
+    adminNotice("媒体同步失败，请检查存储目录或媒体节点状态", "error", returnPath);
   }
   revalidatePath("/media");
   revalidatePath("/admin/media");
@@ -984,7 +1019,7 @@ export async function createAdminMediaFolderAction(formData: FormData) {
   }
   let folder: string;
   try {
-    folder = createMediaFolder(kindValue, String(formData.get("parentFolder") || ""), String(formData.get("folderName") || ""));
+    folder = await createMediaFolder(kindValue, String(formData.get("parentFolder") || ""), String(formData.get("folderName") || ""));
   } catch (error) {
     adminNotice(mediaFolderMessage(error), "warning", mediaReturnPath(formData));
   }
@@ -1001,7 +1036,7 @@ export async function renameAdminMediaFolderAction(formData: FormData) {
   }
   let folder: string;
   try {
-    folder = renameMediaFolder(kindValue, String(formData.get("folder") || ""), String(formData.get("folderName") || ""));
+    folder = await renameMediaFolder(kindValue, String(formData.get("folder") || ""), String(formData.get("folderName") || ""));
   } catch (error) {
     adminNotice(mediaFolderMessage(error), "warning", mediaReturnPath(formData));
   }
@@ -1020,7 +1055,7 @@ export async function deleteAdminMediaFolderAction(formData: FormData) {
   const parent = folder.replace(/\\/g, "/").split("/").slice(0, -1).join("/");
   let deleted: boolean;
   try {
-    deleted = deleteMediaFolder(kindValue, folder);
+    deleted = await deleteMediaFolder(kindValue, folder);
   } catch (error) {
     adminNotice(mediaFolderMessage(error), "warning", mediaReturnPath(formData));
   }
@@ -1062,8 +1097,8 @@ export async function createAdminUserAction(formData: FormData) {
       passwordHash: hashUserPassword(password),
       status,
       role,
-      trustLevel: userLevelField(formData),
       sodaBalance: Math.max(Math.floor(Number(formData.get("sodaBalance")) || 0), 0),
+      sodaExperience: Math.max(Math.floor(Number(formData.get("sodaExperience")) || 0), 0),
     });
   } catch (error) {
     if (isUsernameConflict(error)) {
@@ -1085,8 +1120,8 @@ export async function updateAdminUserAction(formData: FormData) {
   const status = formData.get("status") === "disabled" ? "disabled" : "active";
   const role = formData.get("role") === "admin" ? "admin" : "user";
   const newPassword = String(formData.get("newPassword") || "");
-  const trustLevel = userLevelField(formData);
   const sodaBalance = Math.max(Math.floor(Number(formData.get("sodaBalance")) || 0), 0);
+  const sodaExperience = Math.max(Math.floor(Number(formData.get("sodaExperience")) || 0), sodaBalance, 0);
 
   if (!Number.isInteger(userId) || userId < 1) {
     adminNotice("用户不存在", "warning", returnPath);
@@ -1113,8 +1148,8 @@ export async function updateAdminUserAction(formData: FormData) {
   }
   updateUserGrowth({
     userId,
-    trustLevel,
     sodaBalance,
+    sodaExperience,
     adminName: session.username,
   });
   if (newPassword || status === "disabled" || previousUser?.role !== role) {
@@ -1130,16 +1165,21 @@ export async function saveUserLevelsAction(formData: FormData) {
   const levels = Array.from({ length: 7 }, (_, level) => ({
     level,
     name: String(formData.get(`levelName:${level}`) || "").trim(),
+    sodaRequired: level < 2 ? 0 : Math.max(Math.floor(Number(formData.get(`sodaRequired:${level}`)) || 0), 1),
     permissions: formData.getAll(`permissions:${level}`).map(String),
   }));
   if (levels.some((level) => !level.name)) {
     adminNotice("等级名称不能为空", "warning", "/admin/users/levels");
+  }
+  if (levels.some((level, index) => index > 1 && level.sodaRequired <= levels[index - 1].sodaRequired)) {
+    adminNotice("每一级所需累计苏打必须递增", "warning", "/admin/users/levels");
   }
   let saved = 0;
   for (const level of levels) {
     if (saveUserLevelDefinition({
       level: level.level,
       name: level.name,
+      sodaRequired: level.sodaRequired,
       permissions: level.permissions,
     })) {
       saved += 1;
@@ -1148,6 +1188,7 @@ export async function saveUserLevelsAction(formData: FormData) {
   if (saved !== 7) {
     adminNotice("等级名称不能为空", "warning", "/admin/users/levels");
   }
+  recalculateUserLevels();
   revalidatePath("/account");
   revalidatePath("/admin/users");
   revalidatePath("/admin/users/levels");

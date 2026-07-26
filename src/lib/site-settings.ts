@@ -4,7 +4,9 @@ import path from "node:path";
 import {
   DEFAULT_HOME_PORTAL_ORDER,
   normalizeHomePortalOrder,
+  normalizePublicDisplayHomeCards,
   type HomePortalCardKey,
+  type HomePortalContentCardKey,
 } from "./home-portal";
 import {
   isColorPalette,
@@ -18,6 +20,7 @@ import {
 export type AdminTheme = "system" | "light" | "dark";
 export type BrandLinkTarget = "home" | "novels";
 export type CatalogPromotionOrder = "manual-first" | "random-first";
+export type AnnouncementCardTarget = "list" | "latest";
 export type SiteIconMimeType = "" | "image/png" | "image/jpeg" | "image/webp" | "image/x-icon";
 export type RelatedVideoMode = "next" | "random";
 export type AudioPlaybackMode = "stop" | "next" | "repeat-one";
@@ -60,6 +63,8 @@ export type SiteSettings = {
   adminLoginRecords: AdminLoginRecord[];
   adminLoginRateLimitPerMinute: number;
   adminLoginRateLimitEnabled: boolean;
+  adminIpAllowlistEnabled: boolean;
+  adminAllowedNetworks: string[];
   adminTheme: AdminTheme;
   catalogPageSize: number;
   searchResultsPageSize: number;
@@ -83,7 +88,9 @@ export type SiteSettings = {
   stationDisplayName: string;
   announcementCardEnabled: boolean;
   guestAnnouncementCardEnabled: boolean;
+  announcementCardTarget: AnnouncementCardTarget;
   homePortalOrder: HomePortalCardKey[];
+  publicDisplayHomeCards: HomePortalContentCardKey[];
   analyticsEnabled: boolean;
   analyticsRealtimeLimit: number;
   novelLibraryEnabled: boolean;
@@ -120,7 +127,7 @@ type SiteSettingsGlobal = typeof globalThis & {
   siteSettingsCache?: SiteSettingsCache;
 };
 
-const SITE_SETTINGS_CACHE_SCHEMA_VERSION = 5;
+const SITE_SETTINGS_CACHE_SCHEMA_VERSION = 7;
 
 const DEFAULT_SETTINGS_PREVIEW_TEXT =
   process.env.SETTINGS_PREVIEW_TEXT?.trim() ||
@@ -171,6 +178,8 @@ const DEFAULT_SETTINGS: SiteSettings = {
   adminLoginRecords: [],
   adminLoginRateLimitPerMinute: 0,
   adminLoginRateLimitEnabled: true,
+  adminIpAllowlistEnabled: false,
+  adminAllowedNetworks: [],
   adminTheme: "system",
   catalogPageSize: 0,
   searchResultsPageSize: 0,
@@ -194,7 +203,9 @@ const DEFAULT_SETTINGS: SiteSettings = {
   stationDisplayName: "站务",
   announcementCardEnabled: true,
   guestAnnouncementCardEnabled: true,
+  announcementCardTarget: "list",
   homePortalOrder: DEFAULT_HOME_PORTAL_ORDER,
+  publicDisplayHomeCards: [],
   analyticsEnabled: false,
   analyticsRealtimeLimit: 0,
   novelLibraryEnabled: true,
@@ -269,6 +280,16 @@ function cleanCatalogPromotionOrder(value: unknown): CatalogPromotionOrder {
 
 function cleanBool(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function cleanStringList(value: unknown, limit = 100): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(
+    value
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean),
+  )).slice(0, limit);
 }
 
 export function normalizeIpRateLimitRules(value: unknown): IpRateLimitRule[] {
@@ -404,6 +425,8 @@ function readSiteSettingsFromDisk(): SiteSettings {
       adminLoginRecords: cleanLoginRecords(parsed.adminLoginRecords),
       adminLoginRateLimitPerMinute: cleanInt(parsed.adminLoginRateLimitPerMinute, DEFAULT_SETTINGS.adminLoginRateLimitPerMinute, 0, 120),
       adminLoginRateLimitEnabled: cleanBool(parsed.adminLoginRateLimitEnabled, DEFAULT_SETTINGS.adminLoginRateLimitEnabled),
+      adminIpAllowlistEnabled: cleanBool(parsed.adminIpAllowlistEnabled, DEFAULT_SETTINGS.adminIpAllowlistEnabled),
+      adminAllowedNetworks: cleanStringList(parsed.adminAllowedNetworks),
       adminTheme: cleanTheme(parsed.adminTheme),
       catalogPageSize: cleanInt(parsed.catalogPageSize, DEFAULT_SETTINGS.catalogPageSize, 0, 100),
       searchResultsPageSize: cleanInt(parsed.searchResultsPageSize, DEFAULT_SETTINGS.searchResultsPageSize, 0, 100),
@@ -445,7 +468,9 @@ function readSiteSettingsFromDisk(): SiteSettings {
         parsed.guestAnnouncementCardEnabled,
         DEFAULT_SETTINGS.guestAnnouncementCardEnabled,
       ),
+      announcementCardTarget: parsed.announcementCardTarget === "latest" ? "latest" : "list",
       homePortalOrder: normalizeHomePortalOrder(parsed.homePortalOrder),
+      publicDisplayHomeCards: normalizePublicDisplayHomeCards(parsed.publicDisplayHomeCards),
       analyticsEnabled: cleanBool(parsed.analyticsEnabled, DEFAULT_SETTINGS.analyticsEnabled),
       analyticsRealtimeLimit: cleanInt(parsed.analyticsRealtimeLimit, DEFAULT_SETTINGS.analyticsRealtimeLimit, 0, 2000),
       novelLibraryEnabled: cleanBool(parsed.novelLibraryEnabled, DEFAULT_SETTINGS.novelLibraryEnabled),

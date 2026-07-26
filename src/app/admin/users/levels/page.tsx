@@ -29,7 +29,7 @@ export default async function AdminUserLevelsPage({ searchParams }: AdminUserLev
         <header className="adminPanelHeader">
           <div>
             <h2>等级权限</h2>
-            <p>配置前台 Lv.1–Lv.7 的名称与可用功能。前台管理员不受此处限制。</p>
+            <p>Lv.0 为未登录访客，登录用户从 Lv.1 开始；等级按累计获得的苏打自动提升。</p>
           </div>
           <ShieldCheck size={20} aria-hidden="true" />
         </header>
@@ -37,7 +37,7 @@ export default async function AdminUserLevelsPage({ searchParams }: AdminUserLev
           <div className="adminUserLevelList">
             {levels.map((level) => (
               <section className="adminUserLevelRow" key={level.level}>
-                <strong className="adminUserLevelIndex">Lv.{level.level + 1}</strong>
+                <strong className="adminUserLevelIndex">Lv.{level.level}</strong>
                 <label className="adminUserLevelName">
                   <span className="srOnly">等级名称</span>
                   <input
@@ -47,6 +47,19 @@ export default async function AdminUserLevelsPage({ searchParams }: AdminUserLev
                     required
                   />
                 </label>
+                <label className="adminUserLevelThreshold">
+                  <span className="srOnly">所需累计苏打</span>
+                  <input
+                    name={`sodaRequired:${level.level}`}
+                    type="number"
+                    min={level.level < 2 ? 0 : 1}
+                    max="2000000000"
+                    defaultValue={level.sodaRequired}
+                    disabled={level.level < 2}
+                    aria-label={`Lv.${level.level} 所需累计苏打`}
+                  />
+                  <small>累计苏打</small>
+                </label>
                 <div className="adminUserLevelPermissions">
                   {USER_PERMISSION_DEFINITIONS.map((permission) => (
                     <label key={permission.key}>
@@ -55,6 +68,7 @@ export default async function AdminUserLevelsPage({ searchParams }: AdminUserLev
                         type="checkbox"
                         value={permission.key}
                         defaultChecked={level.permissions.includes(permission.key)}
+                        disabled={level.level === 0}
                       />
                       <span>{permission.label}</span>
                     </label>

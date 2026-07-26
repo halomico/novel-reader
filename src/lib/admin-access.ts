@@ -1,5 +1,6 @@
 ﻿import { BlockList, isIP } from "node:net";
 import { isAdminEnabled } from "./config";
+import { readSiteSettings } from "./site-settings";
 
 export type AdminAccessState = {
   allowed: boolean;
@@ -96,6 +97,33 @@ export function matchesIpRule(ip: string, rule: string): boolean {
   return matchesExactIp(ip, normalizedRule);
 }
 
+export function normalizeAdminNetworkRules(value: unknown): string[] {
+  const source = Array.isArray(value) ? value.map(String) : String(value || "").split(/[\n,，]+/u);
+  const rules: string[] = [];
+  for (const raw of source) {
+    const rule = raw.trim().toLowerCase();
+    if (!rule) continue;
+    if (rule.includes("/")) {
+      const [base, prefixText, extra] = rule.split("/");
+      const family = isIP(base || "");
+      const prefix = Number(prefixText);
+      if (
+        extra === undefined &&
+        (family === 4 || family === 6) &&
+        Number.isInteger(prefix) &&
+        prefix >= 0 &&
+        prefix <= (family === 4 ? 32 : 128)
+      ) {
+        rules.push(`${base}/${prefix}`);
+      }
+    } else if (isIP(rule)) {
+      rules.push(rule);
+    }
+    if (rules.length >= 100) break;
+  }
+  return Array.from(new Set(rules));
+}
+
 export function getClientIp(headers: Headers): string {
   const clientIp =
     headers.get("cf-connecting-ip")?.trim() ||
@@ -109,6 +137,13 @@ export function getAdminAccessState(headers: Headers): AdminAccessState {
   const clientIp = getClientIp(headers);
   if (!isAdminEnabled()) {
     return { allowed: false, clientIp, reason: "后台管理未启用" };
+  }
+  const settings = readSiteSettings();
+  if (
+    settings.adminIpAllowlistEnabled &&
+    !settings.adminAllowedNetworks.some((rule) => matchesIpRule(clientIp, rule))
+  ) {
+    return { allowed: false, clientIp, reason: "当前网络不在后台访问白名单" };
   }
 
   return { allowed: true, clientIp };

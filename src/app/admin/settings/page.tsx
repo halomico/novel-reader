@@ -1,6 +1,6 @@
 ﻿import { Settings } from "lucide-react";
 import type { Metadata } from "next";
-import { BookOpen, Clapperboard, File, Globe2, Headphones, ListFilter, Megaphone, Search, Tags, Trash2, Upload } from "lucide-react";
+import { BookOpen, ChevronRight, Clapperboard, File, Globe2, Headphones, ListFilter, Megaphone, Search, Tags, Trash2, Upload } from "lucide-react";
 import { AdminPaletteField } from "@/components/AdminPaletteField";
 import { AdminSelect } from "@/components/AdminSelect";
 import { HomeCardOrderField } from "@/components/HomeCardOrderField";
@@ -23,6 +23,10 @@ import {
   getSiteTitle,
 } from "@/lib/config";
 import { readSiteSettings } from "@/lib/site-settings";
+import {
+  resolveHomePortalAccessMode,
+  type HomePortalContentCardKey,
+} from "@/lib/home-portal";
 import { normalizeReaderLineHeight, READER_LINE_HEIGHTS } from "@/lib/ui-preferences";
 import {
   cancelFrontendSearchJobsAction,
@@ -50,6 +54,15 @@ type AdminSettingsPageProps = {
 function mediaAccessMode(enabled: boolean, guestEnabled: boolean): "off" | "user" | "public" {
   if (!enabled) return "off";
   return guestEnabled ? "public" : "user";
+}
+
+function homeCardAccessMode(
+  key: HomePortalContentCardKey,
+  enabled: boolean,
+  guestEnabled: boolean,
+  publicDisplayCards: readonly HomePortalContentCardKey[],
+) {
+  return resolveHomePortalAccessMode(enabled, guestEnabled, publicDisplayCards.includes(key));
 }
 
 export default async function AdminSettingsPage({ searchParams }: AdminSettingsPageProps) {
@@ -222,6 +235,22 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               </span>
               <input name="adminLoginRateLimitEnabled" type="checkbox" defaultChecked={settings.adminLoginRateLimitEnabled} />
             </label>
+            <label>
+              <span>后台访问白名单</span>
+              <textarea
+                name="adminAllowedNetworks"
+                rows={3}
+                defaultValue={settings.adminAllowedNetworks.join("\n")}
+                placeholder="每行一个 IP 或 CIDR"
+              />
+            </label>
+            <label className="adminSwitchLabel">
+              <span>
+                <strong>启用后台访问白名单</strong>
+                <small>仅限制后台入口；保存时会确认当前 IP 已包含在规则中。</small>
+              </span>
+              <input name="adminIpAllowlistEnabled" type="checkbox" defaultChecked={settings.adminIpAllowlistEnabled} />
+            </label>
           </details>
 
           <details className="adminSettingsSection adminSettingsDisclosure">
@@ -347,53 +376,66 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               <div className="adminAccessModeGrid">
                 <label className="adminAccessModeRow">
                   <span><BookOpen size={16} aria-hidden="true" /><strong>小说</strong></span>
-                  <AdminSelect name="novelAccessMode" defaultValue={mediaAccessMode(settings.novelLibraryEnabled, settings.guestLibraryNavEnabled)}>
-                    <option value="off">关闭</option>
+                  <AdminSelect name="novelAccessMode" defaultValue={homeCardAccessMode("novels", settings.novelLibraryEnabled, settings.guestLibraryNavEnabled, settings.publicDisplayHomeCards)}>
                     <option value="public">公开访问</option>
-                    <option value="user">登录可用</option>
+                    <option value="preview">公开展示</option>
+                    <option value="member">登录可见</option>
+                    <option value="off">关闭</option>
                   </AdminSelect>
                 </label>
                 <label className="adminAccessModeRow">
                   <span><Clapperboard size={16} aria-hidden="true" /><strong>视频</strong></span>
-                  <AdminSelect name="videoAccessMode" defaultValue={mediaAccessMode(settings.videoLibraryEnabled, settings.guestVideoNavEnabled)}>
-                    <option value="off">关闭</option>
+                  <AdminSelect name="videoAccessMode" defaultValue={homeCardAccessMode("video", settings.videoLibraryEnabled, settings.guestVideoNavEnabled, settings.publicDisplayHomeCards)}>
                     <option value="public">公开访问</option>
-                    <option value="user">登录可用</option>
+                    <option value="preview">公开展示</option>
+                    <option value="member">登录可见</option>
+                    <option value="off">关闭</option>
                   </AdminSelect>
                 </label>
                 <label className="adminAccessModeRow">
                   <span><Headphones size={16} aria-hidden="true" /><strong>音频</strong></span>
-                  <AdminSelect name="audioAccessMode" defaultValue={mediaAccessMode(settings.audioLibraryEnabled, settings.guestAudioNavEnabled)}>
-                    <option value="off">关闭</option>
+                  <AdminSelect name="audioAccessMode" defaultValue={homeCardAccessMode("audio", settings.audioLibraryEnabled, settings.guestAudioNavEnabled, settings.publicDisplayHomeCards)}>
                     <option value="public">公开访问</option>
-                    <option value="user">登录可用</option>
+                    <option value="preview">公开展示</option>
+                    <option value="member">登录可见</option>
+                    <option value="off">关闭</option>
                   </AdminSelect>
                 </label>
                 <label className="adminAccessModeRow">
                   <span><File size={16} aria-hidden="true" /><strong>文件</strong></span>
-                  <AdminSelect name="fileAccessMode" defaultValue={mediaAccessMode(settings.fileLibraryEnabled, settings.guestFileNavEnabled)}>
-                    <option value="off">关闭</option>
+                  <AdminSelect name="fileAccessMode" defaultValue={homeCardAccessMode("file", settings.fileLibraryEnabled, settings.guestFileNavEnabled, settings.publicDisplayHomeCards)}>
                     <option value="public">公开访问</option>
-                    <option value="user">登录可用</option>
+                    <option value="preview">公开展示</option>
+                    <option value="member">登录可见</option>
+                    <option value="off">关闭</option>
                   </AdminSelect>
                 </label>
                 <label className="adminAccessModeRow">
                   <span><Tags size={16} aria-hidden="true" /><strong>标签</strong></span>
-                  <AdminSelect name="tagAccessMode" defaultValue={mediaAccessMode(settings.tagLibraryEnabled, settings.guestTagLibraryNavEnabled)}>
-                    <option value="off">关闭</option>
+                  <AdminSelect name="tagAccessMode" defaultValue={homeCardAccessMode("tags", settings.tagLibraryEnabled, settings.guestTagLibraryNavEnabled, settings.publicDisplayHomeCards)}>
                     <option value="public">公开访问</option>
-                    <option value="user">登录可用</option>
+                    <option value="preview">公开展示</option>
+                    <option value="member">登录可见</option>
+                    <option value="off">关闭</option>
                   </AdminSelect>
                 </label>
                 <label className="adminAccessModeRow">
                   <span><Megaphone size={16} aria-hidden="true" /><strong>公告卡片</strong></span>
                   <AdminSelect
                     name="announcementCardAccessMode"
-                    defaultValue={mediaAccessMode(settings.announcementCardEnabled, settings.guestAnnouncementCardEnabled)}
+                    defaultValue={homeCardAccessMode("announcement", settings.announcementCardEnabled, settings.guestAnnouncementCardEnabled, settings.publicDisplayHomeCards)}
                   >
-                    <option value="off">关闭</option>
                     <option value="public">公开访问</option>
-                    <option value="user">登录可用</option>
+                    <option value="preview">公开展示</option>
+                    <option value="member">登录可见</option>
+                    <option value="off">关闭</option>
+                  </AdminSelect>
+                </label>
+                <label className="adminAccessModeRow">
+                  <span><ChevronRight size={16} aria-hidden="true" /><strong>公告跳转</strong></span>
+                  <AdminSelect name="announcementCardTarget" defaultValue={settings.announcementCardTarget}>
+                    <option value="list">公告列表</option>
+                    <option value="latest">最新公告</option>
                   </AdminSelect>
                 </label>
                 <label className="adminAccessModeRow">
@@ -413,6 +455,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                   </AdminSelect>
                 </label>
               </div>
+              <p className="adminFieldHint">公开展示仅让访客看到首页入口，内容仍需登录；登录可见会同时隐藏访客入口。</p>
               <HomeCardOrderField initialOrder={settings.homePortalOrder} />
             </div>
             <div className="adminFieldGrid">

@@ -11,6 +11,17 @@ import {
   isVideoLibraryEnabled,
 } from "./config";
 import { getDb } from "./db";
+import {
+  createRemoteMediaFolder,
+  deleteRemoteMediaAssets,
+  deleteRemoteMediaFolder,
+  MediaNodeClientError,
+  moveRemoteMediaAsset,
+  readRemoteMediaManifest,
+  renameRemoteMediaFolder,
+} from "./media-node-client";
+import { getRemoteMediaStorageConfig, isRemoteMediaStorage } from "./media-storage-config";
+import { normalizeMediaStoragePath, resolveMediaStoragePath } from "./media-storage-path";
 
 export type MediaKind = "video" | "audio" | "file";
 export type MediaSortBy = "name" | "duration" | "size" | "updated" | "plays";
@@ -120,7 +131,14 @@ type MediaGlobal = typeof globalThis & {
 export class MediaFolderError extends Error {}
 export class MediaCategoryError extends Error {}
 
-export const MEDIA_SYNC_INTERVAL_MS = 5 * 60 * 1_000;
+function remoteMediaError(error: unknown): never {
+  if (error instanceof MediaNodeClientError) {
+    throw new MediaFolderError(error.message);
+  }
+  throw error;
+}
+
+export const MEDIA_SYNC_INTERVAL_MS = 30 * 60 * 1_000;
 const MEDIA_KINDS: MediaKind[] = ["video", "audio", "file"];
 
 const MEDIA_MIME_TYPES: Record<string, string> = {
@@ -156,21 +174,7 @@ function toPosixPath(value: string): string {
 }
 
 export function normalizeMediaFolder(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return "";
-  }
-  const normalized = toPosixPath(value.trim()).replace(/^\/+|\/+$/g, "");
-  if (!normalized) {
-    return "";
-  }
-  if (normalized.length > 600 || normalized.includes("\u0000")) {
-    return null;
-  }
-  const segments = normalized.split("/");
-  if (segments.some((segment) => !segment || segment === "." || segment === "..")) {
-    return null;
-  }
-  return segments.join("/");
+  return normalizeMediaStoragePath(value);
 }
 
 function normalizeFolderName(value: string): string | null {
@@ -191,16 +195,11 @@ export function mediaStoredName(kind: MediaKind, folder: string, fileName: strin
 }
 
 export function mediaFilePath(storedName: string): string {
-  const normalized = normalizeMediaFolder(storedName);
-  if (!normalized) {
-    throw new MediaFolderError("资源路径无效");
+  try {
+    return resolveMediaStoragePath(getMediaDir(), storedName);
+  } catch (error) {
+    throw new MediaFolderError(error instanceof Error ? error.message : "资源路径无效");
   }
-  const root = path.resolve(getMediaDir());
-  const target = path.resolve(root, ...normalized.split("/"));
-  if (!target.startsWith(`${root}${path.sep}`)) {
-    throw new MediaFolderError("资源路径超出媒体目录");
-  }
-  return target;
 }
 
 export function mediaFolderFromStoredName(storedName: string, kind: MediaKind): string {
@@ -359,10 +358,6 @@ export function isMediaKindEnabled(kind: MediaKind): boolean {
   return isFileLibraryEnabled();
 }
 
-export function getEnabledMediaKinds(): MediaKind[] {
-  return MEDIA_KINDS.filter(isMediaKindEnabled);
-}
-
 export function isMediaKindPublic(kind: MediaKind): boolean {
   if (!isMediaKindEnabled(kind)) return false;
   if (kind === "video") return isGuestVideoNavEnabled();
@@ -422,7 +417,9 @@ function emptyFolderSnapshot(): MediaLibrarySyncState["folders"] {
 }
 
 function getMediaLibrarySyncState(): MediaLibrarySyncState {
-  const directory = path.resolve(getMediaDir());
+  const directory = isRemoteMediaStorage()
+    ? `remote:${getRemoteMediaStorageConfig().controlUrl}`
+    : path.resolve(getMediaDir());
   const globalState = globalThis as MediaGlobal;
   if (!globalState.mediaLibrarySyncState || globalState.mediaLibrarySyncState.directory !== directory) {
     globalState.mediaLibrarySyncState = {
@@ -561,7 +558,18 @@ function migrateGeneratedMediaFileNames() {
   }
 }
 
-async function scanMediaFiles(): Promise<ScannedMediaLibrary> {
+async function scanMediaFiles(refreshRemote = false): Promise<ScannedMediaLibrary> {
+  if (isRemoteMediaStorage()) {
+    const manifest = await readRemoteMediaManifest(refreshRemote);
+    return {
+      files: new Map(manifest.files.map((file) => [file.storedName, file])),
+      folders: {
+        video: manifest.folders.filter((folder) => folder.kind === "video").map(({ path: folderPath, mtimeMs }) => ({ path: folderPath, mtimeMs })),
+        audio: manifest.folders.filter((folder) => folder.kind === "audio").map(({ path: folderPath, mtimeMs }) => ({ path: folderPath, mtimeMs })),
+        file: manifest.folders.filter((folder) => folder.kind === "file").map(({ path: folderPath, mtimeMs }) => ({ path: folderPath, mtimeMs })),
+      },
+    };
+  }
   const files = new Map<string, ScannedMediaFile>();
   const folders = emptyFolderSnapshot();
   const visit = async (kind: MediaKind, directory: string, relativeFolder = "") => {
@@ -604,6 +612,9 @@ async function scanMediaFiles(): Promise<ScannedMediaLibrary> {
 }
 
 function removeThumbnailFile(id: number) {
+  if (isRemoteMediaStorage()) {
+    return;
+  }
   const directory = path.join(getMediaDir(), ".thumbnails");
   if (!fs.existsSync(directory)) {
     return;
@@ -615,20 +626,23 @@ function removeThumbnailFile(id: number) {
   }
 }
 
-async function performMediaLibrarySync(state: MediaLibrarySyncState): Promise<MediaSyncResult> {
+async function performMediaLibrarySync(state: MediaLibrarySyncState, force = false): Promise<MediaSyncResult> {
   const startedAt = Date.now();
-  ensureMediaDirectories();
-  if (!state.prepared) {
+  if (!isRemoteMediaStorage()) {
+    ensureMediaDirectories();
+  }
+  if (!state.prepared && !isRemoteMediaStorage()) {
     migrateFlatMediaAssets();
     migrateGeneratedMediaFileNames();
     state.prepared = true;
   }
-  const scannedLibrary = await scanMediaFiles();
+  const scannedLibrary = await scanMediaFiles(force);
   const scanned = scannedLibrary.files;
   const db = getDb();
   const rows = db.prepare("SELECT * FROM media_assets").all() as MediaRow[];
   const existing = new Map(rows.map((row) => [row.stored_name, row]));
-  const missingRows = rows.filter((row) => {
+  const remoteStorage = isRemoteMediaStorage();
+  const missingRows = remoteStorage ? [] : rows.filter((row) => {
     if (scanned.has(row.stored_name)) {
       return false;
     }
@@ -752,7 +766,7 @@ export function syncMediaLibrary(options: { force?: boolean } = {}): Promise<Med
     return Promise.resolve({ added: 0, updated: 0, removed: 0 });
   }
 
-  const job = performMediaLibrarySync(state);
+  const job = performMediaLibrarySync(state, Boolean(options.force));
   state.running = job;
   void job.finally(() => {
     if (state.running === job) {
@@ -773,12 +787,16 @@ export function createMediaAsset(params: {
   mimeType: string;
   sizeBytes: number;
   mtimeMs?: number;
+  durationSeconds?: number | null;
 }): MediaAsset {
   const categoryId = params.kind === "video" ? resolveVideoCategoryId(params.categoryId) : null;
   const result = getDb()
     .prepare(
-      `INSERT INTO media_assets (kind, category_id, title, artist, description, file_name, stored_name, mime_type, size_bytes, mtime_ms)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO media_assets (
+         kind, category_id, title, artist, description, file_name, stored_name,
+         mime_type, size_bytes, mtime_ms, duration_seconds
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       params.kind,
@@ -791,6 +809,7 @@ export function createMediaAsset(params: {
       params.mimeType,
       params.sizeBytes,
       params.mtimeMs || 0,
+      params.durationSeconds && params.durationSeconds > 0 ? params.durationSeconds : null,
     );
   return getMediaAsset(Number(result.lastInsertRowid))!;
 }
@@ -800,6 +819,13 @@ export function getMediaAsset(id: number): MediaAsset | null {
     return null;
   }
   const row = getDb().prepare("SELECT * FROM media_assets WHERE id = ?").get(id) as MediaRow | undefined;
+  return row ? toAsset(row) : null;
+}
+
+export function getMediaAssetByStoredName(storedNameValue: string): MediaAsset | null {
+  const storedName = normalizeMediaFolder(storedNameValue);
+  if (!storedName) return null;
+  const row = getDb().prepare("SELECT * FROM media_assets WHERE stored_name = ?").get(storedName) as MediaRow | undefined;
   return row ? toAsset(row) : null;
 }
 
@@ -886,7 +912,8 @@ export function listMediaAssets(params: {
   sortBy?: MediaSortBy;
   sortOrder?: MediaSortOrder;
 } = {}): { assets: MediaAsset[]; page: number; totalPages: number; totalAssets: number; query: string; folder: string } {
-  const query = (params.query || "").trim().slice(0, 100);
+  const query = (params.query || "").normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, 100);
+  const queryTerms = query.split(" ").filter(Boolean).slice(0, 8);
   const pageSize = Math.min(Math.max(Math.floor(params.pageSize || 18), 1), 100);
   const sortBy = normalizeMediaSortBy(params.sortBy);
   const sortOrder = normalizeMediaSortOrder(params.sortOrder, sortBy);
@@ -906,9 +933,9 @@ export function listMediaAssets(params: {
       values.push(resolveVideoCategoryId(params.videoCategoryId)!);
     }
   }
-  if (query) {
+  for (const term of queryTerms) {
     filters.push("(title LIKE ? ESCAPE '\\' OR file_name LIKE ? ESCAPE '\\' OR artist LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' OR stored_name LIKE ? ESCAPE '\\')");
-    const escaped = `%${escapeLike(query)}%`;
+    const escaped = `%${escapeLike(term)}%`;
     values.push(escaped, escaped, escaped, escaped, escaped);
   }
   const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
@@ -1031,18 +1058,28 @@ export function mediaFolderExists(kind: MediaKind, folder: string): boolean {
   }
 }
 
-export function createMediaFolder(kind: MediaKind, parent: string, nameValue: string): string {
-  ensureMediaDirectories();
+export async function createMediaFolder(kind: MediaKind, parent: string, nameValue: string): Promise<string> {
   const normalizedParent = normalizeMediaFolder(parent);
   const name = normalizeFolderName(nameValue);
   if (normalizedParent === null || !name) {
     throw new MediaFolderError("文件夹名称无效");
   }
+  const folder = [normalizedParent, name].filter(Boolean).join("/");
+  if (isRemoteMediaStorage()) {
+    try {
+      const createdFolder = await createRemoteMediaFolder(kind, folder);
+      markMediaLibraryDirty();
+      rememberMediaFolder(kind, createdFolder);
+      return createdFolder;
+    } catch (error) {
+      remoteMediaError(error);
+    }
+  }
+  ensureMediaDirectories();
   const parentPath = mediaFolderAbsolutePath(kind, normalizedParent);
   if (!fs.statSync(parentPath).isDirectory()) {
     throw new MediaFolderError("上级文件夹不存在");
   }
-  const folder = [normalizedParent, name].filter(Boolean).join("/");
   const targetPath = mediaFolderAbsolutePath(kind, folder);
   if (fs.existsSync(targetPath)) {
     throw new MediaFolderError("文件夹已存在");
@@ -1053,7 +1090,7 @@ export function createMediaFolder(kind: MediaKind, parent: string, nameValue: st
   return folder;
 }
 
-export function renameMediaFolder(kind: MediaKind, folderValue: string, nameValue: string): string {
+export async function renameMediaFolder(kind: MediaKind, folderValue: string, nameValue: string): Promise<string> {
   const folder = normalizeMediaFolder(folderValue);
   const name = normalizeFolderName(nameValue);
   if (!folder || !name) {
@@ -1065,22 +1102,30 @@ export function renameMediaFolder(kind: MediaKind, folderValue: string, nameValu
   if (nextFolder === folder) {
     return folder;
   }
-  const sourcePath = mediaFolderAbsolutePath(kind, folder);
-  const targetPath = mediaFolderAbsolutePath(kind, nextFolder);
-  if (!fs.existsSync(sourcePath)) {
-    throw new MediaFolderError("文件夹不存在");
-  }
-  if (fs.existsSync(targetPath)) {
-    throw new MediaFolderError("同名文件夹已存在");
-  }
-
   const oldPrefix = `${kind}/${folder}/`;
   const nextPrefix = `${kind}/${nextFolder}/`;
   const rows = getDb().prepare("SELECT id, stored_name FROM media_assets WHERE stored_name LIKE ? ESCAPE '\\'").all(`${escapeLike(oldPrefix)}%`) as Array<{
     id: number;
     stored_name: string;
   }>;
-  fs.renameSync(sourcePath, targetPath);
+  const remoteStorage = isRemoteMediaStorage();
+  const sourcePath = remoteStorage ? "" : mediaFolderAbsolutePath(kind, folder);
+  const targetPath = remoteStorage ? "" : mediaFolderAbsolutePath(kind, nextFolder);
+  if (remoteStorage) {
+    try {
+      await renameRemoteMediaFolder(kind, folder, nextFolder);
+    } catch (error) {
+      remoteMediaError(error);
+    }
+  } else {
+    if (!fs.existsSync(sourcePath)) {
+      throw new MediaFolderError("文件夹不存在");
+    }
+    if (fs.existsSync(targetPath)) {
+      throw new MediaFolderError("同名文件夹已存在");
+    }
+    fs.renameSync(sourcePath, targetPath);
+  }
   const db = getDb();
   db.exec("BEGIN");
   try {
@@ -1091,7 +1136,11 @@ export function renameMediaFolder(kind: MediaKind, folderValue: string, nameValu
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");
-    fs.renameSync(targetPath, sourcePath);
+    if (remoteStorage) {
+      await renameRemoteMediaFolder(kind, nextFolder, folder).catch(() => undefined);
+    } else {
+      fs.renameSync(targetPath, sourcePath);
+    }
     throw error;
   }
   markMediaLibraryDirty();
@@ -1099,10 +1148,22 @@ export function renameMediaFolder(kind: MediaKind, folderValue: string, nameValu
   return nextFolder;
 }
 
-export function deleteMediaFolder(kind: MediaKind, folderValue: string): boolean {
+export async function deleteMediaFolder(kind: MediaKind, folderValue: string): Promise<boolean> {
   const folder = normalizeMediaFolder(folderValue);
   if (!folder) {
     throw new MediaFolderError("不能删除分类根目录");
+  }
+  if (isRemoteMediaStorage()) {
+    try {
+      const deleted = await deleteRemoteMediaFolder(kind, folder);
+      if (deleted) {
+        markMediaLibraryDirty();
+        forgetMediaFolder(kind, folder);
+      }
+      return deleted;
+    } catch (error) {
+      remoteMediaError(error);
+    }
   }
   const targetPath = mediaFolderAbsolutePath(kind, folder);
   if (!fs.existsSync(targetPath)) {
@@ -1117,44 +1178,14 @@ export function deleteMediaFolder(kind: MediaKind, folderValue: string): boolean
   return true;
 }
 
-export function moveMediaAsset(id: number, folderValue: string): boolean {
-  const asset = getMediaAsset(id);
-  const folder = normalizeMediaFolder(folderValue);
-  if (!asset || folder === null) {
-    return false;
-  }
-  const targetDirectory = mediaFolderAbsolutePath(asset.kind, folder);
-  if (!fs.existsSync(targetDirectory) || !fs.statSync(targetDirectory).isDirectory()) {
-    throw new MediaFolderError("目标文件夹不存在");
-  }
-  const nextStoredName = mediaStoredName(asset.kind, folder, path.basename(asset.storedName));
-  if (nextStoredName === asset.storedName) {
-    return true;
-  }
-  const sourcePath = mediaFilePath(asset.storedName);
-  const targetPath = mediaFilePath(nextStoredName);
-  if (fs.existsSync(targetPath)) {
-    throw new MediaFolderError("目标文件夹存在同名文件");
-  }
-  fs.renameSync(sourcePath, targetPath);
-  try {
-    getDb().prepare("UPDATE media_assets SET stored_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(nextStoredName, id);
-  } catch (error) {
-    fs.renameSync(targetPath, sourcePath);
-    throw error;
-  }
-  markMediaLibraryDirty();
-  return true;
-}
-
-export function updateMediaAsset(
+export async function updateMediaAsset(
   id: number,
   titleValue: string,
   artist: string,
   description: string,
   folderValue?: string,
   categoryValue?: unknown,
-): boolean {
+): Promise<boolean> {
   const asset = getMediaAsset(id);
   if (!asset) {
     return false;
@@ -1165,23 +1196,30 @@ export function updateMediaAsset(
   if (!title) {
     throw new MediaFolderError("名称无效，不能包含文件路径字符");
   }
-  if (folder === null || !mediaFolderExists(asset.kind, folder)) {
+  const remoteStorage = isRemoteMediaStorage();
+  if (folder === null || (!remoteStorage && !mediaFolderExists(asset.kind, folder))) {
     throw new MediaFolderError("目标文件夹不存在");
   }
   const categoryId = asset.kind === "video" && categoryValue !== undefined ? resolveVideoCategoryId(categoryValue) : asset.categoryId;
 
   const nextFileName = `${title}${extension}`;
   const nextStoredName = mediaStoredName(asset.kind, folder, nextFileName);
-  const sourcePath = mediaFilePath(asset.storedName);
-  const targetPath = mediaFilePath(nextStoredName);
-  const samePathIgnoringCase = sourcePath.toLowerCase() === targetPath.toLowerCase();
-  if (nextStoredName !== asset.storedName && fs.existsSync(targetPath) && !samePathIgnoringCase) {
+  const sourcePath = remoteStorage ? "" : mediaFilePath(asset.storedName);
+  const targetPath = remoteStorage ? "" : mediaFilePath(nextStoredName);
+  const samePathIgnoringCase = !remoteStorage && sourcePath.toLowerCase() === targetPath.toLowerCase();
+  if (!remoteStorage && nextStoredName !== asset.storedName && fs.existsSync(targetPath) && !samePathIgnoringCase) {
     throw new MediaFolderError("目标文件夹存在同名文件");
   }
 
   let moved = false;
   if (nextStoredName !== asset.storedName) {
-    if (samePathIgnoringCase) {
+    if (remoteStorage) {
+      try {
+        await moveRemoteMediaAsset(asset.storedName, nextStoredName);
+      } catch (error) {
+        remoteMediaError(error);
+      }
+    } else if (samePathIgnoringCase) {
       const temporaryPath = `${sourcePath}.${crypto.randomBytes(6).toString("hex")}.rename`;
       fs.renameSync(sourcePath, temporaryPath);
       try {
@@ -1217,7 +1255,11 @@ export function updateMediaAsset(
   } catch (error) {
     db.exec("ROLLBACK");
     if (moved) {
-      fs.renameSync(targetPath, sourcePath);
+      if (remoteStorage) {
+        await moveRemoteMediaAsset(nextStoredName, asset.storedName).catch(() => undefined);
+      } else {
+        fs.renameSync(targetPath, sourcePath);
+      }
     }
     throw error;
   }
@@ -1231,7 +1273,7 @@ export function incrementMediaDownloadCount(id: number): boolean {
   return getDb().prepare("UPDATE media_assets SET download_count = download_count + 1 WHERE id = ?").run(id).changes > 0;
 }
 
-export function deleteMediaAssets(ids: number[]): { deleted: number; fileDeleteFailures: number } {
+export async function deleteMediaAssets(ids: number[]): Promise<{ deleted: number; fileDeleteFailures: number }> {
   const uniqueIds = Array.from(new Set(ids.filter((id) => Number.isInteger(id) && id > 0)));
   if (!uniqueIds.length) {
     return { deleted: 0, fileDeleteFailures: 0 };
@@ -1243,13 +1285,29 @@ export function deleteMediaAssets(ids: number[]): { deleted: number; fileDeleteF
   }>;
   const deletedIds: number[] = [];
   let fileDeleteFailures = 0;
-  for (const row of rows) {
+  if (isRemoteMediaStorage()) {
     try {
-      fs.rmSync(mediaFilePath(row.stored_name), { force: true });
-      removeThumbnailFile(row.id);
-      deletedIds.push(row.id);
-    } catch {
-      fileDeleteFailures += 1;
+      const result = await deleteRemoteMediaAssets(rows.map((row) => row.stored_name));
+      const deletedNames = new Set(result.deletedStoredNames);
+      for (const row of rows) {
+        if (deletedNames.has(row.stored_name)) {
+          deletedIds.push(row.id);
+        } else {
+          fileDeleteFailures += 1;
+        }
+      }
+    } catch (error) {
+      remoteMediaError(error);
+    }
+  } else {
+    for (const row of rows) {
+      try {
+        fs.rmSync(mediaFilePath(row.stored_name), { force: true });
+        removeThumbnailFile(row.id);
+        deletedIds.push(row.id);
+      } catch {
+        fileDeleteFailures += 1;
+      }
     }
   }
   if (!deletedIds.length) {

@@ -11,7 +11,7 @@
     "index:search": "tsx scripts/build-content-search-index.ts",
     "optimize:media": "tsx scripts/optimize-media.ts",
     "media:serve": "tsx scripts/media-node.ts",
-    "test": "node --import tsx --test src/lib/filename.test.ts src/lib/books.test.ts src/lib/text.test.ts src/lib/search-query.test.ts src/lib/content-search-scanner.node.test.ts src/lib/content-search-index.test.ts src/lib/search.test.ts src/lib/content-search-cache.test.ts src/lib/db.test.ts src/lib/admin-access.test.ts src/lib/content-access.test.ts src/lib/date-time.test.ts src/lib/analytics.test.ts src/lib/search-analytics.test.ts src/lib/rate-limit.test.ts src/lib/media.test.ts src/lib/media-thumbnail.test.ts src/lib/media-metadata.test.ts src/lib/media-upload.test.ts src/lib/media-analytics.test.ts src/lib/media-signing.test.ts src/lib/mp4-faststart.test.ts src/lib/site-icon.test.ts src/lib/site-settings.test.ts src/lib/tags.test.ts src/lib/recommendations.test.ts src/lib/user-economy.test.ts src/lib/user-levels.test.ts src/lib/station.test.ts src/lib/reports.test.ts src/lib/ui-preferences.test.ts src/lib/human-verification.test.ts src/lib/seo.test.ts src/lib/sitemap.test.ts src/lib/password.test.ts"
+    "test": "node --import tsx --test src/lib/filename.test.ts src/lib/books.test.ts src/lib/text.test.ts src/lib/search-query.test.ts src/lib/content-search-scanner.node.test.ts src/lib/content-search-index.test.ts src/lib/search.test.ts src/lib/content-search-cache.test.ts src/lib/db.test.ts src/lib/admin-access.test.ts src/lib/content-access.test.ts src/lib/date-time.test.ts src/lib/analytics.test.ts src/lib/search-analytics.test.ts src/lib/rate-limit.test.ts src/lib/media.test.ts src/lib/media-thumbnail.test.ts src/lib/media-metadata.test.ts src/lib/media-upload.test.ts src/lib/media-remote.test.ts src/lib/media-analytics.test.ts src/lib/media-signing.test.ts src/lib/media-storage-config.test.ts src/lib/mp4-faststart.test.ts src/lib/site-icon.test.ts src/lib/site-settings.test.ts src/lib/tags.test.ts src/lib/tag-preferences.test.ts src/lib/favorites.test.ts src/lib/recommendations.test.ts src/lib/user-economy.test.ts src/lib/user-levels.test.ts src/lib/station.test.ts src/lib/reports.test.ts src/lib/ui-preferences.test.ts src/lib/human-verification.test.ts src/lib/return-path.test.ts src/lib/seo.test.ts src/lib/sitemap.test.ts src/lib/password.test.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
@@ -20,6 +20,7 @@
     "next": "^15.5.21",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
     "sharp": "^0.35.3"
   },
   "devDependencies": {

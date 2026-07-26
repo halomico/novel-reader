@@ -20,6 +20,7 @@ type SessionUserRow = {
   role: string;
   trust_level: number;
   soda_balance: number;
+  soda_experience: number;
   registration_ip: string | null;
   created_at: string;
   updated_at: string;
@@ -39,8 +40,9 @@ function toUserProfile(row: SessionUserRow): UserProfile {
     avatarPath: row.avatar_path,
     status: row.status === "disabled" ? "disabled" : "active",
     role: row.role === "admin" ? "admin" : "user",
-    trustLevel: Math.min(Math.max(Math.floor(row.trust_level || 0), 0), 6),
+    trustLevel: Math.min(Math.max(Math.floor(row.trust_level || 1), 1), 6),
     sodaBalance: Math.max(Math.floor(row.soda_balance || 0), 0),
+    sodaExperience: Math.max(Math.floor(row.soda_experience || 0), 0),
     registrationIp: row.registration_ip,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -70,7 +72,7 @@ function readUserFromSessionValue(value: string | undefined): UserProfile | null
   const row = getDb()
     .prepare(
       `SELECT u.id, u.username, u.display_name, u.avatar_path, u.status, u.role,
-              u.trust_level, u.soda_balance,
+              u.trust_level, u.soda_balance, u.soda_experience,
               u.registration_ip, u.created_at, u.updated_at, u.last_login_at, u.last_login_ip
        FROM user_sessions s
        JOIN users u ON u.id = s.user_id

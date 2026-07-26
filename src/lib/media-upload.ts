@@ -2,9 +2,12 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { getMediaDir } from "./config";
+import { MEDIA_UPLOAD_CHUNK_BYTES, MEDIA_UPLOAD_MAX_BYTES } from "./media-node-protocol";
 import {
   availableMediaStoredName,
   createMediaAsset,
+  deleteMediaAssets,
+  getMediaAsset,
   isMediaKind,
   MediaCategoryError,
   mediaFolderExists,
@@ -19,11 +22,9 @@ import {
   type MediaKind,
 } from "./media";
 
-export const MEDIA_UPLOAD_CHUNK_BYTES = 8 * 1024 * 1024;
-export const MEDIA_UPLOAD_MAX_BYTES = 5 * 1024 * 1024 * 1024;
+export { MEDIA_UPLOAD_CHUNK_BYTES, MEDIA_UPLOAD_MAX_BYTES };
 
-type UploadSession = {
-  id: string;
+export type PreparedMediaUpload = {
   kind: MediaKind;
   categoryId: number | null;
   title: string;
@@ -32,13 +33,36 @@ type UploadSession = {
   storedName: string;
   mimeType: string;
   sizeBytes: number;
+};
+
+type UploadSession = PreparedMediaUpload & {
+  id: string;
   createdAt: number;
 };
+
+type CompletedUpload = {
+  assetId: number;
+  completedAt: number;
+};
+
+const localUploadLocks = new Map<string, Promise<void>>();
 
 export class MediaUploadError extends Error {
   constructor(message: string, readonly status = 400) {
     super(message);
   }
+}
+
+function withLocalUploadLock<T>(uploadId: string, task: () => Promise<T>): Promise<T> {
+  const previous = localUploadLocks.get(uploadId) || Promise.resolve();
+  const current = previous.catch(() => undefined).then(task);
+  const settled = current.then(() => undefined, () => undefined);
+  localUploadLocks.set(uploadId, settled);
+  return current.finally(() => {
+    if (localUploadLocks.get(uploadId) === settled) {
+      localUploadLocks.delete(uploadId);
+    }
+  });
 }
 
 function uploadTempDir(): string {
@@ -55,6 +79,31 @@ function sessionPath(uploadId: string): string {
 
 function partialPath(uploadId: string): string {
   return path.join(uploadTempDir(), `${uploadId}.part`);
+}
+
+function completedPath(uploadId: string): string {
+  return path.join(uploadTempDir(), `${uploadId}.complete.json`);
+}
+
+function writeJsonAtomic(filePath: string, value: unknown) {
+  const temporaryPath = `${filePath}.${crypto.randomBytes(6).toString("hex")}.tmp`;
+  fs.writeFileSync(temporaryPath, JSON.stringify(value), { encoding: "utf8", flag: "wx", mode: 0o600 });
+  try {
+    fs.renameSync(temporaryPath, filePath);
+  } catch (error) {
+    fs.rmSync(temporaryPath, { force: true });
+    throw error;
+  }
+}
+
+function readCompletedUpload(uploadId: string): MediaAsset | null {
+  if (!validUploadId(uploadId)) return null;
+  try {
+    const completed = JSON.parse(fs.readFileSync(completedPath(uploadId), "utf8")) as CompletedUpload;
+    return Number.isInteger(completed.assetId) ? getMediaAsset(completed.assetId) : null;
+  } catch {
+    return null;
+  }
 }
 
 function cleanTitle(value: string, fileName: string): string {
@@ -106,15 +155,21 @@ function pruneStaleUploads(now = Date.now()) {
     return;
   }
   for (const fileName of fs.readdirSync(tempDir)) {
-    if (!fileName.endsWith(".json")) {
+    const completed = fileName.endsWith(".complete.json");
+    const session = /^[a-f0-9]{32}\.json$/.test(fileName);
+    if (!completed && !session) {
       continue;
     }
-    const uploadId = path.basename(fileName, ".json");
+    const uploadId = completed
+      ? fileName.slice(0, -".complete.json".length)
+      : path.basename(fileName, ".json");
     try {
       const stat = fs.statSync(path.join(tempDir, fileName));
-      if (now - stat.mtimeMs > 24 * 60 * 60 * 1000) {
-        fs.rmSync(sessionPath(uploadId), { force: true });
-        fs.rmSync(partialPath(uploadId), { force: true });
+      if (now - stat.mtimeMs > 24 * 60 * 60 * 1000 && !localUploadLocks.has(uploadId)) {
+        fs.rmSync(path.join(tempDir, fileName), { force: true });
+        if (session) {
+          fs.rmSync(partialPath(uploadId), { force: true });
+        }
       }
     } catch {
       // Another request may have completed this upload while stale tasks are pruned.
@@ -133,6 +188,34 @@ export function startMediaUpload(params: {
   mimeType: string;
   sizeBytes: number;
 }): { uploadId: string; chunkBytes: number } {
+  const prepared = prepareMediaUpload(params, { requireLocalFolder: true });
+  fs.mkdirSync(uploadTempDir(), { recursive: true });
+  pruneStaleUploads();
+  const uploadId = crypto.randomBytes(16).toString("hex");
+  const session: UploadSession = {
+    ...prepared,
+    id: uploadId,
+    createdAt: Date.now(),
+  };
+  fs.writeFileSync(sessionPath(uploadId), JSON.stringify(session), { encoding: "utf8", flag: "wx", mode: 0o600 });
+  fs.writeFileSync(partialPath(uploadId), Buffer.alloc(0), { flag: "wx", mode: 0o600 });
+  return { uploadId, chunkBytes: MEDIA_UPLOAD_CHUNK_BYTES };
+}
+
+export function prepareMediaUpload(
+  params: {
+    kind: unknown;
+    categoryId?: unknown;
+    title: string;
+    artist?: string;
+    description: string;
+    folder?: string;
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+  },
+  options: { requireLocalFolder: boolean },
+): PreparedMediaUpload {
   if (!isMediaKind(params.kind)) {
     throw new MediaUploadError("资源类型无效");
   }
@@ -144,7 +227,7 @@ export function startMediaUpload(params: {
     throw new MediaUploadError(params.kind === "file" ? "文件名无效" : "请选择浏览器可播放的常见媒体格式");
   }
   const folder = normalizeMediaFolder(params.folder || "");
-  if (folder === null || !mediaFolderExists(params.kind, folder)) {
+  if (folder === null || (options.requireLocalFolder && !mediaFolderExists(params.kind, folder))) {
     throw new MediaUploadError("上传目标文件夹不存在");
   }
   let categoryId: number | null = null;
@@ -159,13 +242,9 @@ export function startMediaUpload(params: {
     }
   }
 
-  fs.mkdirSync(uploadTempDir(), { recursive: true });
-  pruneStaleUploads();
-  const uploadId = crypto.randomBytes(16).toString("hex");
   const title = cleanTitle(params.title, normalizedFile.fileName);
   const fileName = `${title}${normalizedFile.extension}`;
-  const session: UploadSession = {
-    id: uploadId,
+  return {
     kind: params.kind,
     categoryId,
     title,
@@ -174,30 +253,59 @@ export function startMediaUpload(params: {
     storedName: mediaStoredName(params.kind, folder, fileName),
     mimeType: normalizedFile.mimeType,
     sizeBytes: params.sizeBytes,
-    createdAt: Date.now(),
   };
-  fs.writeFileSync(sessionPath(uploadId), JSON.stringify(session), { encoding: "utf8", flag: "wx", mode: 0o600 });
-  fs.writeFileSync(partialPath(uploadId), Buffer.alloc(0), { flag: "wx", mode: 0o600 });
-  return { uploadId, chunkBytes: MEDIA_UPLOAD_CHUNK_BYTES };
 }
 
-export function appendMediaUploadChunk(uploadId: string, offset: number, buffer: Buffer): number {
-  const session = readSession(uploadId);
-  if (!Number.isInteger(offset) || offset < 0 || buffer.length <= 0 || buffer.length > MEDIA_UPLOAD_CHUNK_BYTES) {
-    throw new MediaUploadError("上传分片无效");
-  }
-  const currentSize = fs.statSync(partialPath(uploadId)).size;
-  if (currentSize !== offset) {
-    throw new MediaUploadError("上传进度已变化，请重新选择文件上传", 409);
-  }
-  if (currentSize + buffer.length > session.sizeBytes) {
-    throw new MediaUploadError("上传内容超过原文件大小");
-  }
-  fs.appendFileSync(partialPath(uploadId), buffer);
-  return currentSize + buffer.length;
+export function appendMediaUploadChunk(uploadId: string, offset: number, buffer: Buffer): Promise<number> {
+  return withLocalUploadLock(uploadId, async () => {
+    const session = readSession(uploadId);
+    if (!Number.isInteger(offset) || offset < 0 || buffer.length <= 0 || buffer.length > MEDIA_UPLOAD_CHUNK_BYTES) {
+      throw new MediaUploadError("上传分片无效");
+    }
+    let handle: fs.promises.FileHandle;
+    try {
+      handle = await fs.promises.open(partialPath(uploadId), "r+");
+    } catch {
+      throw new MediaUploadError("上传任务不存在或已完成", 404);
+    }
+    try {
+      const currentSize = (await handle.stat()).size;
+      if (currentSize !== offset) {
+        throw new MediaUploadError(`上传进度已变化:${currentSize}`, 409);
+      }
+      if (currentSize + buffer.length > session.sizeBytes) {
+        throw new MediaUploadError("上传内容超过原文件大小");
+      }
+      const result = await handle.write(buffer, 0, buffer.length, currentSize);
+      if (result.bytesWritten !== buffer.length) {
+        throw new MediaUploadError("上传分片写入不完整", 500);
+      }
+      void fs.promises.utimes(sessionPath(uploadId), new Date(), new Date()).catch(() => undefined);
+      return currentSize + result.bytesWritten;
+    } finally {
+      await handle.close();
+    }
+  });
 }
 
-export function finishMediaUpload(uploadId: string): MediaAsset {
+export function getMediaUploadOffset(uploadId: string): Promise<number> {
+  return withLocalUploadLock(uploadId, async () => {
+    readSession(uploadId);
+    try {
+      return (await fs.promises.stat(partialPath(uploadId))).size;
+    } catch {
+      throw new MediaUploadError("上传任务不存在或已完成", 404);
+    }
+  });
+}
+
+export function finishMediaUpload(uploadId: string): Promise<MediaAsset> {
+  return withLocalUploadLock(uploadId, async () => finishMediaUploadUnlocked(uploadId));
+}
+
+async function finishMediaUploadUnlocked(uploadId: string): Promise<MediaAsset> {
+  const completedAsset = readCompletedUpload(uploadId);
+  if (completedAsset) return completedAsset;
   const session = readSession(uploadId);
   const sourcePath = partialPath(uploadId);
   if (fs.statSync(sourcePath).size !== session.sizeBytes) {
@@ -234,6 +342,15 @@ export function finishMediaUpload(uploadId: string): MediaAsset {
     throw error;
   }
   try {
+    writeJsonAtomic(completedPath(uploadId), {
+      assetId: asset.id,
+      completedAt: Date.now(),
+    } satisfies CompletedUpload);
+  } catch (error) {
+    await deleteMediaAssets([asset.id]);
+    throw error;
+  }
+  try {
     fs.rmSync(sessionPath(uploadId), { force: true });
   } catch {
     // The completed resource remains valid even if stale upload metadata cannot be removed immediately.
@@ -241,12 +358,14 @@ export function finishMediaUpload(uploadId: string): MediaAsset {
   return asset;
 }
 
-export function cancelMediaUpload(uploadId: string): boolean {
-  if (!validUploadId(uploadId)) {
-    return false;
-  }
-  const found = fs.existsSync(sessionPath(uploadId)) || fs.existsSync(partialPath(uploadId));
-  fs.rmSync(sessionPath(uploadId), { force: true });
-  fs.rmSync(partialPath(uploadId), { force: true });
-  return found;
+export function cancelMediaUpload(uploadId: string): Promise<boolean> {
+  return withLocalUploadLock(uploadId, async () => {
+    if (!validUploadId(uploadId) || readCompletedUpload(uploadId)) {
+      return false;
+    }
+    const found = fs.existsSync(sessionPath(uploadId)) || fs.existsSync(partialPath(uploadId));
+    fs.rmSync(sessionPath(uploadId), { force: true });
+    fs.rmSync(partialPath(uploadId), { force: true });
+    return found;
+  });
 }

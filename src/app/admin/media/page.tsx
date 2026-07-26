@@ -126,8 +126,13 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
     audio: kind === "audio" ? listMediaFolders("audio") : [],
     file: kind === "file" ? listMediaFolders("file") : [],
   };
+  const normalizedFolderTerms = result.query.normalize("NFKC").toLocaleLowerCase().split(" ").filter(Boolean);
+  const folderSearchPrefix = result.folder ? `${result.folder}/` : "";
   const directFolders = sortMediaFolders(
-    folders[kind].filter((item) => item.path.split("/").slice(0, -1).join("/") === result.folder),
+    folders[kind].filter((item) => result.query
+      ? item.path.startsWith(folderSearchPrefix) &&
+        normalizedFolderTerms.every((term) => item.path.normalize("NFKC").toLocaleLowerCase().includes(term))
+      : item.path.split("/").slice(0, -1).join("/") === result.folder),
     sortBy,
     sortOrder,
   );

@@ -6,7 +6,7 @@ import { checkRateLimit, clearRateLimitBucketsByPrefix } from "./rate-limit";
 
 export type ContentAccessScope = "all" | "novel" | "media";
 export type ContentAccessAudience = "all" | "guest";
-export type ContentAccessTargetType = "ip" | "cidr" | "country";
+export type ContentAccessTargetType = "ip" | "cidr" | "country" | "crawler";
 export type ContentAccessRuleSource = "manual" | "rate_limit";
 
 export type ContentAccessRule = {
@@ -142,13 +142,16 @@ function normalizeAudience(value: unknown): ContentAccessAudience {
 }
 
 function normalizeTargetType(value: unknown): ContentAccessTargetType {
-  if (value === "cidr" || value === "country") {
+  if (value === "cidr" || value === "country" || value === "crawler") {
     return value;
   }
   return "ip";
 }
 
 function normalizeTargetValue(type: ContentAccessTargetType, value: unknown): string {
+  if (type === "crawler") {
+    return "known";
+  }
   const text = String(value || "").trim();
   if (type === "ip") {
     if (!isIP(text)) {
@@ -272,11 +275,24 @@ function audienceMatches(configured: ContentAccessAudience, authenticated: boole
   return configured === "all" || !authenticated;
 }
 
+export function hasScopedContentAccessRules(
+  scope: Exclude<ContentAccessScope, "all">,
+  now = Date.now(),
+): boolean {
+  return readActiveAccessConfig(now).rules.some((rule) => scopeMatches(rule.scope, scope));
+}
+
+export function isLikelyCrawler(userAgent: string): boolean {
+  return /bot|crawler|spider|slurp|bingpreview|facebookexternalhit|bytespider|yandex|baiduspider|sogou|headless|phantom|selenium|playwright/i
+    .test(userAgent);
+}
+
 function ruleMatches(
   rule: ContentAccessRule,
   context: {
     ip: string;
     country: string;
+    userAgent: string;
     scope: Exclude<ContentAccessScope, "all">;
     authenticated: boolean;
   },
@@ -286,6 +302,9 @@ function ruleMatches(
   }
   if (rule.targetType === "country") {
     return context.country === rule.targetValue;
+  }
+  if (rule.targetType === "crawler") {
+    return isLikelyCrawler(context.userAgent);
   }
   if (!isIP(context.ip)) {
     return false;
@@ -351,8 +370,9 @@ export function checkContentAccess(
   const authenticated = Boolean(options.authenticated);
   const ip = getClientIp(headers as Headers);
   const country = getRequestCountry(headers);
+  const userAgent = headers.get("user-agent") || "";
   const config = readActiveAccessConfig(now);
-  const context = { ip, country, scope, authenticated };
+  const context = { ip, country, userAgent, scope, authenticated };
   const blockedBy = config.rules.find((rule) => ruleMatches(rule, context));
   if (blockedBy) {
     if (blockedBy.source === "rate_limit") {

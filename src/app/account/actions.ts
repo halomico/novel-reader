@@ -14,6 +14,7 @@ import {
   isUserRegistrationEnabled,
 } from "@/lib/config";
 import { verifyHumanRequest } from "@/lib/human-verification";
+import { normalizeUserReturnPath } from "@/lib/return-path";
 import { claimDailySoda } from "@/lib/user-economy";
 import {
   clearCurrentUserSession,
@@ -98,15 +99,17 @@ function hasAvatarSignature(buffer: Buffer, extension: string): boolean {
 }
 
 export async function registerUserAction(formData: FormData) {
+  const returnTo = normalizeUserReturnPath(formData.get("returnTo"));
+  const returnValues = { returnTo };
   if (!isUserRegistrationEnabled()) {
-    authNotice("/register", "注册暂未开放", "warning");
+    authNotice("/register", "注册暂未开放", "warning", returnValues);
   }
 
   const headerStore = await headers();
   const clientIp = getClientIp(headerStore);
   const dailyLimit = getUserDailyRegistrationLimitPerIp();
   if (dailyLimit > 0 && countTodayRegistrationsForIp(clientIp) >= dailyLimit) {
-    authNotice("/register", `当前 IP 今日最多注册 ${dailyLimit} 个账号`, "warning");
+    authNotice("/register", `当前 IP 今日最多注册 ${dailyLimit} 个账号`, "warning", returnValues);
   }
 
   const username = normalizeUsername(cleanText(formData, "username"));
@@ -116,23 +119,23 @@ export async function registerUserAction(formData: FormData) {
 
   const usernameError = validateUsername(username);
   if (usernameError) {
-    authNotice("/register", usernameError, "warning");
+    authNotice("/register", usernameError, "warning", returnValues);
   }
   const displayNameError = validateDisplayName(displayName);
   if (displayNameError) {
-    authNotice("/register", displayNameError, "warning");
+    authNotice("/register", displayNameError, "warning", returnValues);
   }
   const passwordError = validatePassword(password);
   if (passwordError) {
-    authNotice("/register", passwordError, "warning");
+    authNotice("/register", passwordError, "warning", returnValues);
   }
   if (password !== confirmPassword) {
-    authNotice("/register", "两次输入的密码不一致", "warning");
+    authNotice("/register", "两次输入的密码不一致", "warning", returnValues);
   }
 
   const verification = await verifyHumanRequest(formData, "register", clientIp);
   if (!verification.ok) {
-    authNotice("/register", verification.message, "warning");
+    authNotice("/register", verification.message, "warning", returnValues);
   }
 
   try {
@@ -145,32 +148,33 @@ export async function registerUserAction(formData: FormData) {
     });
   } catch (error) {
     if (isUsernameConflict(error)) {
-      authNotice("/register", "用户名已存在", "warning");
+      authNotice("/register", "用户名已存在", "warning", returnValues);
     }
     console.error("Failed to create user", error);
-    authNotice("/register", "账号创建失败，请稍后重试", "error");
+    authNotice("/register", "账号创建失败，请稍后重试", "error", returnValues);
   }
 
   if (!isUserLoginEnabled()) {
-    authNotice("/login", "注册成功，登录暂未开放", "success");
+    authNotice("/login", "注册成功，登录暂未开放", "success", returnValues);
   }
 
   const result = await loginUser(username, password);
   if (!result.ok) {
-    authNotice("/register", result.message, "warning");
+    authNotice("/register", result.message, "warning", returnValues);
   }
-  redirect("/account");
+  redirect(returnTo);
 }
 
 export async function loginUserAction(formData: FormData) {
+  const returnTo = normalizeUserReturnPath(formData.get("returnTo"));
   if (!isUserLoginEnabled()) {
-    authNotice("/login", "登录暂未开放", "warning");
+    authNotice("/login", "登录暂未开放", "warning", { returnTo });
   }
 
   const username = cleanText(formData, "username");
   const password = String(formData.get("password") || "");
   const rememberLogin = formData.get("rememberLogin") === "on";
-  const loginValues = { username, remember: rememberLogin ? "1" : "0" };
+  const loginValues = { username, remember: rememberLogin ? "1" : "0", returnTo };
   const headerStore = await headers();
   const clientIp = getClientIp(headerStore);
   const verification = await verifyHumanRequest(formData, "login", clientIp);
@@ -182,7 +186,7 @@ export async function loginUserAction(formData: FormData) {
   if (!result.ok) {
     authNotice("/login", result.message, "warning", loginValues);
   }
-  redirect("/account");
+  redirect(returnTo);
 }
 
 export async function logoutUserAction() {

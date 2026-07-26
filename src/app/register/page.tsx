@@ -13,6 +13,7 @@ import {
 import { getCurrentUser } from "@/lib/user-auth";
 import { getTurnstileSiteKey } from "@/lib/human-verification";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
+import { normalizeUserReturnPath } from "@/lib/return-path";
 import { registerUserAction } from "../account/actions";
 
 export const dynamic = "force-dynamic";
@@ -22,16 +23,17 @@ type RegisterPageProps = {
   searchParams: Promise<{
     notice?: string;
     tone?: "success" | "warning" | "error";
+    returnTo?: string;
   }>;
 };
 
 export default async function RegisterPage({ searchParams }: RegisterPageProps) {
   const user = await getCurrentUser();
-  if (user) {
-    redirect("/account");
-  }
-
   const params = await searchParams;
+  const returnTo = normalizeUserReturnPath(params.returnTo);
+  if (user) {
+    redirect(returnTo);
+  }
   const loginEnabled = isUserLoginEnabled();
   const registrationEnabled = isUserRegistrationEnabled();
   const turnstileSiteKey = getTurnstileSiteKey();
@@ -51,6 +53,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
       ) : null}
       <section className="authPage">
         <form className="userPanel authPanel" action={registerUserAction}>
+          <input name="returnTo" type="hidden" value={returnTo} />
           <div className="userPanelHeader"><div><h1>注册</h1></div></div>
           <label>
             <span>用户名</span>
@@ -83,7 +86,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
           {!registrationEnabled ? <p className="authHint">注册暂未开放。</p> : null}
           {loginEnabled ? (
             <p className="authSwitchText">
-              已有账号？<Link href="/login">去登录</Link>
+              已有账号？<Link href={`/login?${new URLSearchParams({ returnTo }).toString()}`}>去登录</Link>
             </p>
           ) : null}
         </form>

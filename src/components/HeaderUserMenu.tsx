@@ -1,8 +1,8 @@
 "use client";
 
-import { CupSoda, KeyRound, LogOut, Menu, MessageCircle, Settings, Sparkles, UserPlus, UserRound } from "lucide-react";
+import { Bookmark, CupSoda, KeyRound, LogOut, Menu, MessageCircle, Settings, Sparkles, UserPlus, UserRound } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { logoutUserAction } from "@/app/account/actions";
 import type { MediaKind } from "@/lib/media";
 import { HeaderPrimaryNav } from "./HeaderPrimaryNav";
@@ -34,7 +34,26 @@ export function HeaderUserMenu({
   unreadMessages,
 }: HeaderUserMenuProps) {
   const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const hasNavigation = showLibrary || showTags || mediaKinds.length > 0;
+
+  useEffect(() => {
+    if (!open) return;
+    function closeOnOutsidePress(event: PointerEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", closeOnOutsidePress);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePress);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
 
   function closeMenu() {
     setOpen(false);
@@ -43,6 +62,7 @@ export function HeaderUserMenu({
   return (
     <div
       className="userMenu"
+      ref={menuRef}
       onBlur={(event) => {
         const nextTarget = event.relatedTarget instanceof Node ? event.relatedTarget : null;
         if (!event.currentTarget.contains(nextTarget)) {
@@ -72,7 +92,7 @@ export function HeaderUserMenu({
                   <small>当前账户</small>
                   <strong>{user.displayName}</strong>
                   <span className="userMenuGrowthMeta">
-                    <i title="等级"><Sparkles size={11} aria-hidden="true" />Lv.{user.trustLevel + 1}</i>
+                    <i title="等级"><Sparkles size={11} aria-hidden="true" />Lv.{user.trustLevel}</i>
                     <i title="苏打余额"><CupSoda size={12} aria-hidden="true" />{user.sodaBalance}</i>
                   </span>
                 </span>
@@ -84,6 +104,10 @@ export function HeaderUserMenu({
               <Link href="/account?view=growth" onClick={closeMenu}>
                 <Sparkles size={16} aria-hidden="true" />
                 成长
+              </Link>
+              <Link href="/favorites" onClick={closeMenu}>
+                <Bookmark size={16} aria-hidden="true" />
+                收藏
               </Link>
               <Link href="/messages" onClick={closeMenu}>
                 <MessageCircle size={16} aria-hidden="true" />

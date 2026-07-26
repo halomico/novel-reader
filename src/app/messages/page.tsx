@@ -10,6 +10,7 @@ import {
   listStationMessages,
   listUserStationThreads,
   listVisibleAnnouncements,
+  markAllUserMessagesRead,
   markStationThreadRead,
 } from "@/lib/station";
 import { getCurrentUser } from "@/lib/user-auth";
@@ -31,6 +32,7 @@ type MessagesPageProps = {
 export default async function MessagesPage({ searchParams }: MessagesPageProps) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  markAllUserMessagesRead(user.id);
   const params = await searchParams;
   const stationDisplayName = getStationDisplayName();
   const canMessageStation = hasUserPermission(user, "station_message");

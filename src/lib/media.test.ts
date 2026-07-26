@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
+import { DatabaseSync } from "node:sqlite";
+import test, { type TestContext } from "node:test";
 import {
   isMediaKindAccessible,
+  listMediaAssets,
+  listMediaFolders,
   normalizeMediaFile,
   normalizeMediaSortBy,
   normalizeMediaSortOrder,
@@ -12,8 +15,30 @@ import {
   sortMediaFolders,
   type MediaFolder,
 } from "./media";
+import { getDb } from "./db";
 import { naturalSortKey } from "./natural-sort";
 import { readSiteSettings, writeSiteSettings } from "./site-settings";
+
+function withTempDatabase(t: TestContext) {
+  const previousPath = process.env.DATABASE_PATH;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-media-search-"));
+  process.env.DATABASE_PATH = path.join(root, "novels.db");
+  const state = globalThis as typeof globalThis & {
+    novelReaderDb?: DatabaseSync;
+    mediaLibrarySyncState?: unknown;
+  };
+  state.novelReaderDb?.close();
+  delete state.novelReaderDb;
+  delete state.mediaLibrarySyncState;
+  t.after(() => {
+    state.novelReaderDb?.close();
+    delete state.novelReaderDb;
+    delete state.mediaLibrarySyncState;
+    if (previousPath === undefined) delete process.env.DATABASE_PATH;
+    else process.env.DATABASE_PATH = previousPath;
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+}
 
 test("applies public, signed-in, and disabled media access modes", (t) => {
   const originalSettingsPath = process.env.ADMIN_SETTINGS_PATH;
@@ -85,5 +110,27 @@ test("builds natural name keys for numbered media across pagination", () => {
   assert.deepEqual(
     names.sort((left, right) => naturalSortKey(left).localeCompare(naturalSortKey(right))),
     ["第1集", "第2集", "第02集", "第10集", "第100集"],
+  );
+});
+
+test("searches media recursively with multiple terms and exposes matching folders", (t) => {
+  withTempDatabase(t);
+  const db = getDb();
+  const insert = db.prepare(
+    `INSERT INTO media_assets
+      (kind, title, artist, description, file_name, stored_name, mime_type, size_bytes, mtime_ms)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  insert.run("audio", "星辰序曲", "林海", "", "track-01.mp3", "audio/归档/古典/track-01.mp3", "audio/mpeg", 100, 1);
+  insert.run("audio", "山风", "林海", "", "track-02.mp3", "audio/归档/民谣/track-02.mp3", "audio/mpeg", 100, 1);
+  insert.run("audio", "星辰终曲", "其他", "", "track-03.mp3", "audio/现场/track-03.mp3", "audio/mpeg", 100, 1);
+
+  const result = listMediaAssets({ kind: "audio", query: "古典 星辰", pageSize: 1 });
+  assert.equal(result.totalAssets, 1);
+  assert.equal(result.totalPages, 1);
+  assert.equal(result.assets[0].title, "星辰序曲");
+  assert.deepEqual(
+    listMediaFolders("audio").filter((folder) => folder.path.includes("归档")).map((folder) => folder.path),
+    ["归档", "归档/古典", "归档/民谣"],
   );
 });

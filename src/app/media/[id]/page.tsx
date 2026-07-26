@@ -109,19 +109,24 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
         <Breadcrumbs
           items={[
             { label: "首页", href: "/" },
-            { label: KIND_LABELS[asset.kind], href: listHref(asset.kind, listFolder) },
-            { label: title },
+            {
+              label: KIND_LABELS[asset.kind],
+              href: asset.kind === "audio" ? undefined : listHref(asset.kind, listFolder),
+            },
+            ...(asset.kind === "audio" ? [] : [{ label: title }]),
           ]}
         />
 
-        <header className="mediaDetailHeader">
-          <span className={`mediaAssetIcon is-${asset.kind}`} aria-hidden="true"><Icon size={23} /></span>
-          <div>
-            <span>{KIND_LABELS[asset.kind]}{asset.kind !== "video" && asset.folder ? ` · ${asset.folder}` : ""}</span>
-            <h1>{title}</h1>
-            {asset.kind === "audio" ? <p>{asset.artist || "未知作者"}</p> : asset.kind === "file" ? <p>{formatBytes(asset.sizeBytes)}</p> : null}
-          </div>
-        </header>
+        {asset.kind !== "audio" ? (
+          <header className="mediaDetailHeader">
+            <span className={`mediaAssetIcon is-${asset.kind}`} aria-hidden="true"><Icon size={23} /></span>
+            <div>
+              <span>{KIND_LABELS[asset.kind]}{asset.kind === "file" && asset.folder ? ` · ${asset.folder}` : ""}</span>
+              <h1>{title}</h1>
+              {asset.kind === "file" ? <p>{formatBytes(asset.sizeBytes)}</p> : null}
+            </div>
+          </header>
+        ) : null}
 
         {asset.kind === "video" ? (
           <div className="mediaVideoStage">

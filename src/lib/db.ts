@@ -243,6 +243,49 @@ function migrateContentReportCategories(db: DatabaseSync) {
   }
 }
 
+function migrateContentAccessCrawlerTarget(db: DatabaseSync) {
+  const table = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'content_access_rules'")
+    .get() as { sql?: string } | undefined;
+  if (!table?.sql || /target_type\s+IN\s*\([^)]*'crawler'/i.test(table.sql)) {
+    return;
+  }
+  db.exec("BEGIN");
+  try {
+    db.exec(`
+      CREATE TABLE content_access_rules_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        target_type TEXT NOT NULL CHECK(target_type IN ('ip', 'cidr', 'country', 'crawler')),
+        target_value TEXT NOT NULL,
+        scope TEXT NOT NULL DEFAULT 'all' CHECK(scope IN ('all', 'novel', 'media')),
+        audience TEXT NOT NULL DEFAULT 'all' CHECK(audience IN ('all', 'guest')),
+        source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual', 'rate_limit')),
+        reason TEXT NOT NULL DEFAULT '',
+        expires_at INTEGER,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_by TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      INSERT INTO content_access_rules_new (
+        id, target_type, target_value, scope, audience, source, reason,
+        expires_at, enabled, created_by, created_at, updated_at
+      )
+      SELECT id, target_type, target_value, scope, audience, source, reason,
+             expires_at, enabled, created_by, created_at, updated_at
+      FROM content_access_rules;
+
+      DROP TABLE content_access_rules;
+      ALTER TABLE content_access_rules_new RENAME TO content_access_rules;
+    `);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
 function migrateUserEconomy(db: DatabaseSync) {
   const columns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
   const needsTrustLevel = !columns.some((column) => column.name === "trust_level");
@@ -255,6 +298,42 @@ function migrateUserEconomy(db: DatabaseSync) {
       db.exec("ALTER TABLE users RENAME COLUMN cola_balance TO soda_balance;");
     } else {
       db.exec("ALTER TABLE users ADD COLUMN soda_balance INTEGER NOT NULL DEFAULT 0 CHECK(soda_balance >= 0);");
+    }
+  }
+  if (!columns.some((column) => column.name === "soda_experience")) {
+    db.exec("ALTER TABLE users ADD COLUMN soda_experience INTEGER NOT NULL DEFAULT 0 CHECK(soda_experience >= 0);");
+  }
+  addColumnIfMissing(db, "user_levels", "soda_required", "soda_required INTEGER NOT NULL DEFAULT 0 CHECK(soda_required >= 0)");
+
+  const levelMigrationKey = "user_level_schema_v3";
+  const levelMigrated = db.prepare("SELECT 1 AS found FROM app_metadata WHERE key = ?").get(levelMigrationKey);
+  if (!levelMigrated) {
+    db.exec("BEGIN");
+    try {
+      db.exec(`
+        UPDATE users
+        SET trust_level = MIN(COALESCE(trust_level, 0) + 1, 6);
+
+        UPDATE users
+        SET soda_experience = MAX(
+          soda_balance,
+          CASE trust_level
+            WHEN 2 THEN 50
+            WHEN 3 THEN 200
+            WHEN 4 THEN 500
+            WHEN 5 THEN 1200
+            WHEN 6 THEN 2500
+            ELSE 0
+          END
+        );
+
+        DELETE FROM user_levels;
+      `);
+      db.prepare("INSERT INTO app_metadata (key, value) VALUES (?, '1')").run(levelMigrationKey);
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
     }
   }
 
@@ -354,19 +433,19 @@ function migrateNovelRecommendations(db: DatabaseSync) {
 
 function seedUserLevels(db: DatabaseSync) {
   const defaults = [
-    [0, "新用户", ["content_report", "station_message", "novel_feedback"]],
-    [1, "基础", ["content_report", "station_message", "novel_feedback"]],
-    [2, "成员", ["content_report", "station_message", "novel_feedback", "advanced_search"]],
-    [3, "活跃", ["content_report", "station_message", "novel_feedback", "advanced_search"]],
-    [4, "资深", ["content_report", "station_message", "novel_feedback", "advanced_search"]],
-    [5, "核心", ["content_report", "station_message", "novel_feedback", "advanced_search"]],
-    [6, "荣誉", ["content_report", "station_message", "novel_feedback", "advanced_search"]],
+    [0, "访客", 0, []],
+    [1, "初见", 0, ["content_report", "station_message", "novel_feedback"]],
+    [2, "熟客", 50, ["content_report", "station_message", "novel_feedback", "advanced_search"]],
+    [3, "常驻", 200, ["content_report", "station_message", "novel_feedback", "advanced_search"]],
+    [4, "活跃", 500, ["content_report", "station_message", "novel_feedback", "advanced_search"]],
+    [5, "资深", 1200, ["content_report", "station_message", "novel_feedback", "advanced_search"]],
+    [6, "核心", 2500, ["content_report", "station_message", "novel_feedback", "advanced_search"]],
   ] as const;
   const insert = db.prepare(
-    "INSERT OR IGNORE INTO user_levels (level, name, permissions) VALUES (?, ?, ?)",
+    "INSERT OR IGNORE INTO user_levels (level, name, soda_required, permissions) VALUES (?, ?, ?, ?)",
   );
-  for (const [level, name, permissions] of defaults) {
-    insert.run(level, name, JSON.stringify(permissions));
+  for (const [level, name, sodaRequired, permissions] of defaults) {
+    insert.run(level, name, sodaRequired, JSON.stringify(permissions));
   }
 
   const migrationKey = "user_level_defaults_v2";
@@ -377,7 +456,7 @@ function seedUserLevels(db: DatabaseSync) {
       | undefined;
     if (levelZero?.permissions === JSON.stringify(["content_report", "station_message"])) {
       db.prepare("UPDATE user_levels SET permissions = ?, updated_at = CURRENT_TIMESTAMP WHERE level = 0")
-        .run(JSON.stringify(defaults[0][2]));
+        .run(JSON.stringify(defaults[0][3]));
     }
     db.prepare("INSERT INTO app_metadata (key, value) VALUES (?, '1')").run(migrationKey);
   }
@@ -470,8 +549,9 @@ function initialize(db: DatabaseSync) {
       avatar_path TEXT,
       status TEXT NOT NULL DEFAULT 'active',
       role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user', 'admin')),
-      trust_level INTEGER NOT NULL DEFAULT 0 CHECK(trust_level BETWEEN 0 AND 6),
+      trust_level INTEGER NOT NULL DEFAULT 1 CHECK(trust_level BETWEEN 0 AND 6),
       soda_balance INTEGER NOT NULL DEFAULT 0 CHECK(soda_balance >= 0),
+      soda_experience INTEGER NOT NULL DEFAULT 0 CHECK(soda_experience >= 0),
       search_rate_limit_per_minute INTEGER,
       registration_ip TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -641,6 +721,7 @@ function initialize(db: DatabaseSync) {
     CREATE TABLE IF NOT EXISTS user_levels (
       level INTEGER PRIMARY KEY CHECK(level BETWEEN 0 AND 6),
       name TEXT NOT NULL,
+      soda_required INTEGER NOT NULL DEFAULT 0 CHECK(soda_required >= 0),
       permissions TEXT NOT NULL DEFAULT '[]',
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -667,6 +748,30 @@ function initialize(db: DatabaseSync) {
 
     CREATE INDEX IF NOT EXISTS idx_user_soda_transactions_user_time
       ON user_soda_transactions(user_id, created_at DESC, id DESC);
+
+    CREATE TABLE IF NOT EXISTS user_novel_favorites (
+      user_id INTEGER NOT NULL,
+      novel_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(user_id, novel_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_user_novel_favorites_user_time
+      ON user_novel_favorites(user_id, created_at DESC, novel_id DESC);
+
+    CREATE TABLE IF NOT EXISTS user_hidden_tags (
+      user_id INTEGER NOT NULL,
+      tag_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(user_id, tag_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(tag_id) REFERENCES tags(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_user_hidden_tags_user
+      ON user_hidden_tags(user_id, tag_id);
 
     CREATE TABLE IF NOT EXISTS announcements (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -727,7 +832,7 @@ function initialize(db: DatabaseSync) {
 
     CREATE TABLE IF NOT EXISTS content_access_rules (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      target_type TEXT NOT NULL CHECK(target_type IN ('ip', 'cidr', 'country')),
+      target_type TEXT NOT NULL CHECK(target_type IN ('ip', 'cidr', 'country', 'crawler')),
       target_value TEXT NOT NULL,
       scope TEXT NOT NULL DEFAULT 'all' CHECK(scope IN ('all', 'novel', 'media')),
       audience TEXT NOT NULL DEFAULT 'all' CHECK(audience IN ('all', 'guest')),
@@ -813,6 +918,7 @@ function initialize(db: DatabaseSync) {
   migrateTagVisibility(db);
   migrateLegacyContentAccessBans(db);
   migrateContentReportCategories(db);
+  migrateContentAccessCrawlerTarget(db);
   migrateUserEconomy(db);
   migrateNovelRecommendations(db);
   seedUserLevels(db);

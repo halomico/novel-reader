@@ -9,11 +9,13 @@ import {
   addStationReply,
   countUserUnreadMessages,
   createStationThread,
+  deleteStationThread,
   getHomeAnnouncement,
   getStationThread,
   listStationMessages,
   listUserStationThreads,
   listVisibleAnnouncements,
+  markAllUserMessagesRead,
   markAnnouncementRead,
   markStationThreadRead,
   saveAnnouncement,
@@ -66,6 +68,8 @@ test("separates public and member announcements and tracks reads", (t) => {
   assert.equal(countUserUnreadMessages(userId), 2);
   markAnnouncementRead(userId, publicAnnouncement.id);
   assert.equal(countUserUnreadMessages(userId), 1);
+  markAllUserMessagesRead(userId);
+  assert.equal(countUserUnreadMessages(userId), 0);
 });
 
 test("keeps station messages private and updates unread state", (t) => {
@@ -84,4 +88,6 @@ test("keeps station messages private and updates unread state", (t) => {
   markStationThreadRead(threadId, "user", userId);
   assert.equal(getStationThread(threadId, { userId })?.unreadForUser, false);
   assert.equal(getStationThread(threadId, { userId: userId + 1 }), null);
+  assert.equal(deleteStationThread(threadId), true);
+  assert.equal(getStationThread(threadId, { admin: true }), null);
 });

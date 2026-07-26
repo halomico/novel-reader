@@ -1,6 +1,7 @@
 import { Bell } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { AnnouncementMarkdown } from "@/components/AnnouncementMarkdown";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getVisibleAnnouncement, markAnnouncementRead } from "@/lib/station";
@@ -45,7 +46,9 @@ export default async function AnnouncementPage({ params }: AnnouncementPageProps
             </time>
           </div>
         </header>
-        <div className="announcementBody">{announcement.body}</div>
+        <div className="announcementBody">
+          <AnnouncementMarkdown>{announcement.body}</AnnouncementMarkdown>
+        </div>
       </article>
     </main>
   );

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mediaThumbnailEtag, thumbnailSeekSeconds } from "./media-thumbnail";
-import { mediaThumbnailCacheHeaders } from "./media-thumbnail-http";
+import { mediaThumbnailCacheHeaders, mediaThumbnailRedirectCacheHeaders } from "./media-thumbnail-http";
 
 test("chooses the one-third point for video thumbnails", () => {
   assert.equal(thumbnailSeekSeconds(90), 30);
@@ -27,6 +27,14 @@ test("only allows edge caching for publicly accessible thumbnails", () => {
   });
   assert.deepEqual(mediaThumbnailCacheHeaders(false), {
     "Cache-Control": "private, max-age=86400, stale-while-revalidate=604800, immutable",
+    Vary: "Cookie",
+  });
+  assert.deepEqual(mediaThumbnailRedirectCacheHeaders(true), {
+    "Cache-Control": "public, max-age=300",
+    "Cloudflare-CDN-Cache-Control": "public, max-age=300",
+  });
+  assert.deepEqual(mediaThumbnailRedirectCacheHeaders(false), {
+    "Cache-Control": "private, max-age=300",
     Vary: "Cookie",
   });
 });

@@ -5,7 +5,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { getDb } from "./db";
-import { createContentReport, listContentReports, setContentReportStatus } from "./reports";
+import { createContentReport, deleteContentReport, listContentReports, setContentReportStatus } from "./reports";
 import { createUserRecord } from "./users";
 
 function resetDb() {
@@ -49,4 +49,6 @@ test("enforces report roles, validation, daily limits, and status changes", (t) 
   assert.equal(listContentReports({ status: "resolved" }).totalReports, 1);
   assert.equal(setContentReportStatus(open.reports[0].id, "open", "admin"), true);
   assert.equal(listContentReports({ status: "open" }).totalReports, 2);
+  assert.equal(deleteContentReport(open.reports[0].id), true);
+  assert.equal(listContentReports({ status: "all" }).totalReports, 1);
 });

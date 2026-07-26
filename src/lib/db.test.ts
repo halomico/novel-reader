@@ -217,15 +217,26 @@ test("removes legacy search tables and the retired content index database", asyn
     assert.equal(userColumns.some((column) => column.name === "role"), true);
     assert.equal(userColumns.some((column) => column.name === "trust_level"), true);
     assert.equal(userColumns.some((column) => column.name === "soda_balance"), true);
+    assert.equal(userColumns.some((column) => column.name === "soda_experience"), true);
     assert.equal((db.prepare("SELECT role FROM users").get() as { role: string }).role, "user");
     assert.deepEqual(
-      { ...(db.prepare("SELECT trust_level, soda_balance FROM users").get() as object) },
-      { trust_level: 2, soda_balance: 0 },
+      { ...(db.prepare("SELECT trust_level, soda_balance, soda_experience FROM users").get() as object) },
+      { trust_level: 3, soda_balance: 0, soda_experience: 200 },
     );
     assert.equal(
       (db.prepare("SELECT COUNT(*) AS count FROM user_levels").get() as { count: number }).count,
       7,
     );
+    assert.equal(
+      (db.prepare("SELECT soda_required FROM user_levels WHERE level = 6").get() as { soda_required: number }).soda_required,
+      2500,
+    );
+    for (const tableName of ["user_novel_favorites", "user_hidden_tags"]) {
+      assert.equal(
+        (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as { name: string }).name,
+        tableName,
+      );
+    }
     const recommendationColumns = db.prepare("PRAGMA table_info(novel_recommendations)").all() as Array<{ name: string }>;
     assert.equal(recommendationColumns.some((column) => column.name === "recommendation_date"), true);
     assert.equal((db.prepare("SELECT recommend_count FROM novels").get() as { recommend_count: number }).recommend_count, 1);
