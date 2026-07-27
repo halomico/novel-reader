@@ -32,7 +32,7 @@ export function MediaPlayer({
       controls
       playsInline
       poster={`${mediaBasePath}/thumbnail?v=${encodeURIComponent(posterVersion)}`}
-      preload="none"
+      preload="metadata"
       onPlay={recordPlay}
     >
       <source src={`${mediaBasePath}/stream?v=${Math.floor(sourceVersion)}`} />

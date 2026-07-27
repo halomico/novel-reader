@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatMediaDuration } from "./media-metadata";
+import { formatMediaDuration } from "./media-format";
 
 test("formats media duration for cards and lists", () => {
   assert.equal(formatMediaDuration(5.9), "0:05");

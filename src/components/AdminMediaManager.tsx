@@ -15,6 +15,7 @@ import { LocalDateTime } from "@/components/LocalDateTime";
 import { MediaVideoPreview } from "@/components/MediaVideoPreview";
 import { beginNavigationProgress } from "@/components/NavigationProgress";
 import { usePersistentSelection } from "@/components/usePersistentSelection";
+import { InlineMutationNotice, useInlineMutation } from "@/components/useInlineMutation";
 import type { MediaAsset, MediaFolder, MediaKind, MediaSortBy, MediaSortOrder, VideoCategory } from "@/lib/media";
 
 const KIND_LABELS: Record<MediaKind, string> = { video: "视频", audio: "音频", file: "文件" };
@@ -176,8 +177,12 @@ export function AdminMediaManager({
   };
 }) {
   const router = useRouter();
+  const mutation = useInlineMutation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const kind = initialKind;
+  const [visibleAssets, setVisibleAssets] = useState(assets);
+  const [visibleTotalAssets, setVisibleTotalAssets] = useState(totalAssets);
+  const [videoCategories, setVideoCategories] = useState(categories);
   const [folder, setFolder] = useState(initialFolder);
   const [files, setFiles] = useState<File[]>([]);
   const [title, setTitle] = useState("");
@@ -195,20 +200,45 @@ export function AdminMediaManager({
   const [batchAssets, setBatchAssets] = useState<MediaAsset[]>([]);
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchError, setBatchError] = useState("");
-  const visibleIds = assets.map((asset) => asset.id);
+  const visibleIds = visibleAssets.map((asset) => asset.id);
   const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
-  const categoryNames = useMemo(() => new Map(categories.map((category) => [category.id, category.name])), [categories]);
+  const categoryNames = useMemo(
+    () => new Map(videoCategories.map((category) => [category.id, category.name])),
+    [videoCategories],
+  );
   const selectedAssets = batchAssets;
   const selectedKind = selectedAssets.length && selectedAssets.every((asset) => asset.kind === selectedAssets[0].kind)
     ? selectedAssets[0].kind
     : undefined;
 
   useEffect(() => {
+    setVisibleAssets(assets);
+    setVisibleTotalAssets(totalAssets);
     setEditingAsset(null);
     setBatchEditing(false);
     setBatchAssets([]);
     setBatchError("");
-  }, [assets]);
+  }, [assets, totalAssets]);
+
+  useEffect(() => {
+    setVideoCategories(categories);
+  }, [categories]);
+
+  useEffect(() => {
+    function updateCategories(event: Event) {
+      const next = (event as CustomEvent<{ categories: VideoCategory[] }>).detail?.categories;
+      if (!next) return;
+      const validIds = new Set(next.map((category) => category.id));
+      setVideoCategories(next);
+      setVisibleAssets((current) => current.map((asset) => (
+        asset.kind === "video" && asset.categoryId && !validIds.has(asset.categoryId)
+          ? { ...asset, categoryId: null }
+          : asset
+      )));
+    }
+    window.addEventListener("admin-video-categories-changed", updateCategories);
+    return () => window.removeEventListener("admin-video-categories-changed", updateCategories);
+  }, []);
 
   useEffect(() => {
     setFolder(initialFolder);
@@ -390,8 +420,72 @@ export function AdminMediaManager({
     }
   }
 
+  function mergeAssets(nextAssets: MediaAsset[]) {
+    const byId = new Map(nextAssets.map((asset) => [asset.id, asset]));
+    setVisibleAssets((current) => current.map((asset) => byId.get(asset.id) || asset));
+  }
+
+  function submitCategory(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    mutation.run(
+      () => assignAdminVideoCategoryAction(formData),
+      (result) => {
+        if (result.data?.assets) mergeAssets(result.data.assets);
+        if (result.ok) clearSelection();
+      },
+    );
+  }
+
+  function submitDelete(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedIds.length || !window.confirm(`确认删除所选 ${selectedIds.length} 个资源及其文件？`)) return;
+    const formData = new FormData(event.currentTarget);
+    mutation.run(
+      () => deleteAdminMediaAction(formData),
+      (result) => {
+        const deletedIds = result.data?.deletedIds || [];
+        if (deletedIds.length) {
+          const deleted = new Set(deletedIds);
+          setVisibleAssets((current) => current.filter((asset) => !deleted.has(asset.id)));
+          setVisibleTotalAssets((current) => Math.max(0, current - deletedIds.length));
+          clearSelection();
+        }
+      },
+    );
+  }
+
+  function submitBatchEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    mutation.run(
+      () => batchUpdateAdminMediaAction(formData),
+      (result) => {
+        if (result.data?.assets) mergeAssets(result.data.assets);
+        if (result.ok) {
+          setBatchEditing(false);
+          clearSelection();
+        }
+      },
+    );
+  }
+
+  function submitEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    mutation.run(
+      () => updateAdminMediaAction(formData),
+      (result) => {
+        if (!result.data?.asset) return;
+        mergeAssets([result.data.asset]);
+        if (result.ok) setEditingAsset(null);
+      },
+    );
+  }
+
   return (
     <>
+      <InlineMutationNotice notice={mutation.notice} />
       {kind ? <form className="adminMediaUpload" onSubmit={upload}>
         <div className={`adminMediaUploadFields${kind !== "file" ? " hasArtist" : ""}${kind === "video" ? " hasCategory" : ""}`}>
           <label>
@@ -415,7 +509,7 @@ export function AdminMediaManager({
               <span>分类</span>
               <select value={uploadCategoryId} onChange={(event) => setUploadCategoryId(event.target.value)} disabled={isUploading}>
                 <option value="">未分类</option>
-                {categories.map((category) => <option value={category.id} key={category.id}>{category.name}{category.visible ? "" : "（隐藏）"}</option>)}
+                {videoCategories.map((category) => <option value={category.id} key={category.id}>{category.name}{category.visible ? "" : "（隐藏）"}</option>)}
               </select>
             </label>
           ) : null}
@@ -447,7 +541,7 @@ export function AdminMediaManager({
         ) : null}
       </form> : null}
 
-      {assets.length || directFolders.length ? (
+      {visibleAssets.length || directFolders.length ? (
         <>
           {view === "grid" && kind === "video" ? (
             <div className="adminMediaGridContent">
@@ -474,7 +568,7 @@ export function AdminMediaManager({
                 </div>
               ) : null}
               <div className="adminMediaVideoGrid">
-                {assets.map((asset) => (
+                {visibleAssets.map((asset) => (
                   <article className={selectedIds.includes(asset.id) ? "adminMediaVideoItem isSelected" : "adminMediaVideoItem"} key={asset.id}>
                     <label className="adminMediaVideoSelect" title={`选择 ${asset.title}`}>
                       <input className="adminCheckbox" type="checkbox" checked={selectedIds.includes(asset.id)} onChange={() => toggleOne(asset.id)} aria-label={`选择 ${asset.title}`} />
@@ -542,7 +636,7 @@ export function AdminMediaManager({
                       key={item.path}
                     />
                   ))}
-                  {assets.map((asset) => {
+                  {visibleAssets.map((asset) => {
                     const Icon = KIND_ICONS[asset.kind];
                     return (
                       <tr key={asset.id}>
@@ -583,29 +677,29 @@ export function AdminMediaManager({
                 </button>
               ) : null}
               {kind === "video" ? (
-                <form className="adminMediaCategoryBulkForm" action={assignAdminVideoCategoryAction}>
+                <form className="adminMediaCategoryBulkForm" onSubmit={submitCategory}>
                   <input name="returnPath" type="hidden" value={returnPath} />
                   {selectedIds.map((id) => <input name="mediaIds" type="hidden" value={id} key={id} />)}
                   <select name="categoryId" aria-label="批量设置视频分类" disabled={!selectedIds.length}>
                     <option value="">未分类</option>
-                    {categories.map((category) => <option value={category.id} key={category.id}>{category.name}{category.visible ? "" : "（隐藏）"}</option>)}
+                    {videoCategories.map((category) => <option value={category.id} key={category.id}>{category.name}{category.visible ? "" : "（隐藏）"}</option>)}
                   </select>
-                  <button className="adminIconTextButton" type="submit" disabled={!selectedIds.length}>
+                  <button className="adminIconTextButton" type="submit" disabled={!selectedIds.length || mutation.pending}>
                     <Tags size={15} aria-hidden="true" />归类
                   </button>
                 </form>
               ) : null}
-              <form action={deleteAdminMediaAction} onSubmit={clearSelection}>
+              <form onSubmit={submitDelete}>
                 <input name="returnPath" type="hidden" value={returnPath} />
                 {selectedIds.map((id) => <input name="mediaIds" type="hidden" value={id} key={id} />)}
-                <button className="adminDangerButton" type="submit" disabled={!selectedIds.length}>
+                <button className="adminDangerButton" type="submit" disabled={!selectedIds.length || mutation.pending}>
                   <Trash2 size={16} aria-hidden="true" />
                   删除所选
                 </button>
               </form>
             </div>
             <span>
-              当前显示 {directFolders.length} 个文件夹、{assets.length} 个资源，共 {totalAssets} 个资源
+              当前显示 {directFolders.length} 个文件夹、{visibleAssets.length} 个资源，共 {visibleTotalAssets} 个资源
               {selectedIds.length ? `；已选 ${selectedIds.length} 个` : ""}
             </span>
           </div>
@@ -614,7 +708,7 @@ export function AdminMediaManager({
 
       {batchEditing ? (
         <div className="adminMediaEditBackdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setBatchEditing(false)}>
-          <form className="adminMediaEditDialog adminMediaBatchDialog" action={batchUpdateAdminMediaAction} role="dialog" aria-modal="true" aria-labelledby="admin-media-batch-title">
+          <form className="adminMediaEditDialog adminMediaBatchDialog" onSubmit={submitBatchEdit} role="dialog" aria-modal="true" aria-labelledby="admin-media-batch-title">
             <header>
               <div>
                 <h3 id="admin-media-batch-title">批量编辑资源</h3>
@@ -662,13 +756,13 @@ export function AdminMediaManager({
                     <select name="categoryId" defaultValue="__keep__">
                       <option value="__keep__">保持原分类</option>
                       <option value="">未分类</option>
-                      {categories.map((category) => <option value={category.id} key={category.id}>{category.name}{category.visible ? "" : "（隐藏）"}</option>)}
+                      {videoCategories.map((category) => <option value={category.id} key={category.id}>{category.name}{category.visible ? "" : "（隐藏）"}</option>)}
                     </select>
                   </label>
                 ) : null}
                 <footer>
                   <button className="adminSecondaryButton" type="button" onClick={() => setBatchEditing(false)}>取消</button>
-                  <button type="submit"><Save size={16} aria-hidden="true" />保存</button>
+                  <button type="submit" disabled={mutation.pending}><Save size={16} aria-hidden="true" />保存</button>
                 </footer>
               </>
             ) : null}
@@ -678,7 +772,7 @@ export function AdminMediaManager({
 
       {editingAsset ? (
         <div className="adminMediaEditBackdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setEditingAsset(null)}>
-          <form className="adminMediaEditDialog" action={updateAdminMediaAction} role="dialog" aria-modal="true" aria-labelledby="admin-media-edit-title" key={editingAsset.id}>
+          <form className="adminMediaEditDialog" onSubmit={submitEdit} role="dialog" aria-modal="true" aria-labelledby="admin-media-edit-title" key={editingAsset.id}>
             <header>
               <div>
                 <h3 id="admin-media-edit-title">编辑资源</h3>
@@ -703,7 +797,7 @@ export function AdminMediaManager({
                 <span>分类</span>
                 <select name="categoryId" defaultValue={editingAsset.categoryId || ""}>
                   <option value="">未分类</option>
-                  {categories.map((category) => <option value={category.id} key={category.id}>{category.name}{category.visible ? "" : "（隐藏）"}</option>)}
+                  {videoCategories.map((category) => <option value={category.id} key={category.id}>{category.name}{category.visible ? "" : "（隐藏）"}</option>)}
                 </select>
               </label>
             ) : null}
@@ -720,7 +814,7 @@ export function AdminMediaManager({
             </label>
             <footer>
               <button className="adminSecondaryButton" type="button" onClick={() => setEditingAsset(null)}>取消</button>
-              <button type="submit"><Save size={16} aria-hidden="true" />保存</button>
+              <button type="submit" disabled={mutation.pending}><Save size={16} aria-hidden="true" />保存</button>
             </footer>
           </form>
         </div>

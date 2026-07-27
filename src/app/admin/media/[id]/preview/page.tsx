@@ -7,7 +7,6 @@ import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
 import { getAudioDefaultPlaybackMode, getVideoThumbnailSettings } from "@/lib/config";
 import { getMediaAsset, listMediaFolderAssets, type MediaKind } from "@/lib/media";
-import { scheduleMediaPreparation } from "@/lib/media-maintenance";
 import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
@@ -43,11 +42,11 @@ export default async function AdminMediaPreviewPage({ params }: { params: Promis
       id: item.id,
       title: displayTitle(item.title, item.fileName),
       artist: item.artist,
+      durationSeconds: item.durationSeconds,
       version: item.mtimeMs,
     }));
   const thumbnailSettings = getVideoThumbnailSettings();
   const posterVersion = `${asset.mtimeMs}-single-${thumbnailSettings.singlePercent}`;
-  scheduleMediaPreparation([asset]);
 
   return (
     <main className="adminShell adminPreviewShell">

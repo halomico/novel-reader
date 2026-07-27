@@ -1,4 +1,4 @@
-import { Clapperboard, Download, File, Headphones } from "lucide-react";
+import { Clapperboard, Clock3, Download, Eye, File, Headphones, UserRound } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
@@ -6,14 +6,27 @@ import { after } from "next/server";
 import { cache } from "react";
 import { MediaAudioPlayer, type AudioQueueTrack } from "@/components/MediaAudioPlayer";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { MediaFavoriteButton } from "@/components/MediaFavoriteButton";
 import { MediaPlayer } from "@/components/MediaPlayer";
+import { MediaRecommendationButton } from "@/components/MediaRecommendationButton";
 import { MediaVideoCard } from "@/components/MediaVideoCard";
+import { ReportMediaButton } from "@/components/ReportMediaButton";
 import { SiteHeader } from "@/components/SiteHeader";
 import { recordAnalyticsEvent } from "@/lib/analytics";
 import { getAudioDefaultPlaybackMode, getRelatedVideoSettings, getVideoThumbnailSettings } from "@/lib/config";
-import { getMediaAsset, isMediaKindAccessible, listMediaFolderAssets, listRelatedVideoAssets, type MediaKind } from "@/lib/media";
-import { scheduleMediaPreparation } from "@/lib/media-maintenance";
+import { isMediaFavorite } from "@/lib/favorites";
+import {
+  getMediaAsset,
+  isFeedbackMediaKind,
+  isMediaKindAccessible,
+  listMediaFolderAssets,
+  listRelatedVideoAssets,
+  type MediaKind,
+} from "@/lib/media";
+import { formatMediaDuration } from "@/lib/media-format";
+import { getMediaRecommendationState } from "@/lib/recommendations";
 import { getCurrentUser } from "@/lib/user-auth";
+import { hasUserPermission } from "@/lib/user-levels";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { recordMediaHistory } from "@/lib/users";
 
@@ -45,6 +58,10 @@ function listHref(kind: MediaKind, folder: string): string {
   const params = new URLSearchParams({ kind });
   if (folder) params.set("folder", folder);
   return `/media?${params.toString()}`;
+}
+
+function formatCompactCount(value: number): string {
+  return new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 }).format(Math.max(value, 0));
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
@@ -94,13 +111,18 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
         id: item.id,
         title: displayTitle(item.title, item.fileName),
         artist: item.artist,
+        durationSeconds: item.durationSeconds,
         version: item.mtimeMs,
       }));
   const relatedSettings = getRelatedVideoSettings();
   const thumbnailSettings = getVideoThumbnailSettings();
   const posterVersion = `${asset.mtimeMs}-single-${thumbnailSettings.singlePercent}`;
   const relatedVideos = asset.kind === "video" ? listRelatedVideoAssets(asset.id, relatedSettings.count, relatedSettings.mode) : [];
-  scheduleMediaPreparation([asset, ...relatedVideos]);
+  const feedbackMedia = isFeedbackMediaKind(asset.kind);
+  const favorite = user && feedbackMedia ? isMediaFavorite(user.id, asset.id) : false;
+  const recommendation = user && feedbackMedia ? getMediaRecommendationState(user.id, asset.id) : null;
+  const canRecommend = feedbackMedia && hasUserPermission(user, "novel_feedback");
+  const canReport = Boolean(feedbackMedia && user?.role === "user" && hasUserPermission(user, "content_report"));
 
   return (
     <main className="appShell">
@@ -117,23 +139,66 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
           ]}
         />
 
-        {asset.kind !== "audio" ? (
+        {asset.kind === "file" ? (
           <header className="mediaDetailHeader">
             <span className={`mediaAssetIcon is-${asset.kind}`} aria-hidden="true"><Icon size={23} /></span>
             <div>
-              <span>{KIND_LABELS[asset.kind]}{asset.kind === "file" && asset.folder ? ` · ${asset.folder}` : ""}</span>
+              <span>{KIND_LABELS[asset.kind]}{asset.folder ? ` · ${asset.folder}` : ""}</span>
               <h1>{title}</h1>
-              {asset.kind === "file" ? <p>{formatBytes(asset.sizeBytes)}</p> : null}
+              <p>{formatBytes(asset.sizeBytes)}</p>
             </div>
           </header>
         ) : null}
 
         {asset.kind === "video" ? (
-          <div className="mediaVideoStage">
-            <MediaPlayer id={asset.id} posterVersion={posterVersion} sourceVersion={asset.mtimeMs} />
-          </div>
+          <>
+            <header className="mediaVideoHeading">
+              <h1>{title}</h1>
+              <div className="mediaVideoStats" aria-label="视频信息">
+                <span><Eye size={15} aria-hidden="true" />{formatCompactCount(asset.playCount)}</span>
+                <span><Clock3 size={15} aria-hidden="true" />{formatMediaDuration(asset.durationSeconds)}</span>
+              </div>
+            </header>
+            <div className="mediaVideoStage">
+              <MediaPlayer id={asset.id} posterVersion={posterVersion} sourceVersion={asset.mtimeMs} />
+            </div>
+            <section className="mediaVideoInfo" aria-label="作者与简介">
+              <div className="mediaVideoInfoBar">
+                <div className="mediaVideoAuthor">
+                  <span aria-hidden="true"><UserRound size={20} /></span>
+                  <div>
+                    <strong>{asset.artist || "未标注作者"}</strong>
+                    <small>作者</small>
+                  </div>
+                </div>
+                {user ? (
+                  <div className="readerFeedbackActions feedbackActionTrio mediaVideoActions" aria-label="视频操作">
+                    {canRecommend && recommendation ? (
+                      <MediaRecommendationButton
+                        mediaId={asset.id}
+                        initialRecommended={recommendation.recommended}
+                      />
+                    ) : null}
+                    <MediaFavoriteButton mediaId={asset.id} initialFavorite={favorite} />
+                    {canReport ? <ReportMediaButton mediaId={asset.id} title={title} kind="video" /> : null}
+                  </div>
+                ) : null}
+              </div>
+              {asset.description ? <p className="mediaDescription">{asset.description}</p> : null}
+            </section>
+          </>
         ) : asset.kind === "audio" ? (
-          <MediaAudioPlayer initialId={asset.id} tracks={audioQueue} defaultPlaybackMode={getAudioDefaultPlaybackMode()} />
+          <MediaAudioPlayer
+            initialId={asset.id}
+            tracks={audioQueue}
+            defaultPlaybackMode={getAudioDefaultPlaybackMode()}
+            feedback={user ? {
+              initialFavorite: favorite,
+              initialRecommended: recommendation?.recommended ?? false,
+              canRecommend,
+              canReport,
+            } : undefined}
+          />
         ) : (
           <a className="mediaDownloadButton" href={`/media/${asset.id}/download`}>
             <Download size={18} aria-hidden="true" />
@@ -141,7 +206,7 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
           </a>
         )}
 
-        {asset.description ? <p className="mediaDescription">{asset.description}</p> : null}
+        {asset.kind !== "video" && asset.description ? <p className="mediaDescription">{asset.description}</p> : null}
         {relatedVideos.length ? (
           <section className="mediaRelatedVideos">
             <h2>更多视频</h2>

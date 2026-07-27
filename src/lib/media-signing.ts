@@ -1,5 +1,8 @@
 import crypto from "node:crypto";
-import { getRemoteMediaStorageConfig } from "./media-storage-config";
+import {
+  getRemoteMediaNodeConfig,
+  getRemoteMediaStorageConfig,
+} from "./media-storage-config";
 
 export type SignedMediaPayload = {
   storedName: string;
@@ -67,6 +70,7 @@ function encodedStoredName(storedName: string): string {
 }
 
 export function createSignedMediaUrl(input: {
+  storageNodeId?: string | null;
   storedName: string;
   mimeType: string;
   fileName: string;
@@ -76,7 +80,9 @@ export function createSignedMediaUrl(input: {
   publiclyAccessible?: boolean;
   now?: number;
 }): string {
-  const config = getRemoteMediaStorageConfig();
+  const config = input.storageNodeId
+    ? getRemoteMediaNodeConfig(input.storageNodeId)
+    : getRemoteMediaStorageConfig();
   const nowSeconds = Math.floor((input.now ?? Date.now()) / 1_000);
   const publiclyAccessible = Boolean(input.publiclyAccessible && !input.download);
   const bucketSeconds = Math.min(config.ttlSeconds, MEDIA_SIGNATURE_BUCKET_MAX_SECONDS);
@@ -100,7 +106,7 @@ export function createSignedMediaUrl(input: {
     mt: encodeValue(payload.mimeType),
     fn: encodeValue(payload.fileName),
     public: payload.publiclyAccessible ? "1" : "0",
-    sig: signature(payload, signingSecret()),
+    sig: signature(payload, config.signingSecret),
   });
   return `${config.publicUrl}${MEDIA_PATH_PREFIX}${encodedStoredName(payload.storedName)}?${params.toString()}`;
 }
@@ -176,6 +182,7 @@ function thumbnailSignature(payload: SignedMediaThumbnailPayload, secret: string
 }
 
 export function createSignedMediaThumbnailUrl(input: {
+  storageNodeId?: string | null;
   storedName: string;
   mtimeMs: number;
   sizeBytes: number;
@@ -183,7 +190,9 @@ export function createSignedMediaThumbnailUrl(input: {
   publiclyAccessible: boolean;
   now?: number;
 }): string {
-  const config = getRemoteMediaStorageConfig();
+  const config = input.storageNodeId
+    ? getRemoteMediaNodeConfig(input.storageNodeId)
+    : getRemoteMediaStorageConfig();
   const nowSeconds = Math.floor((input.now ?? Date.now()) / 1_000);
   const bucketSeconds = Math.min(config.ttlSeconds, THUMBNAIL_SIGNATURE_BUCKET_MAX_SECONDS);
   const payload: SignedMediaThumbnailPayload = {

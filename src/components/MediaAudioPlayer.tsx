@@ -2,13 +2,23 @@
 
 import { Disc3, ListMusic, Play, Repeat1, SkipBack, SkipForward, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { MediaAudioFeedbackActions } from "@/components/MediaAudioFeedbackActions";
+import { formatMediaDuration } from "@/lib/media-format";
 import type { AudioPlaybackMode } from "@/lib/site-settings";
 
 export type AudioQueueTrack = {
   id: number;
   title: string;
   artist: string;
+  durationSeconds: number | null;
   version: number;
+};
+
+export type AudioFeedbackOptions = {
+  initialFavorite: boolean;
+  initialRecommended: boolean;
+  canRecommend: boolean;
+  canReport: boolean;
 };
 
 const MODE_LABELS: Record<AudioPlaybackMode, string> = {
@@ -26,11 +36,13 @@ export function MediaAudioPlayer({
   tracks,
   basePathPrefix = "/media",
   defaultPlaybackMode = "next",
+  feedback,
 }: {
   initialId: number;
   tracks: AudioQueueTrack[];
   basePathPrefix?: string;
   defaultPlaybackMode?: AudioPlaybackMode;
+  feedback?: AudioFeedbackOptions;
 }) {
   const initialTrack = tracks.find((track) => track.id === initialId) || tracks[0];
   const [activeTrack, setActiveTrack] = useState(initialTrack);
@@ -38,6 +50,7 @@ export function MediaAudioPlayer({
   const audioRef = useRef<HTMLAudioElement>(null);
   const queueRef = useRef<HTMLDivElement>(null);
   const autoPlayRef = useRef(false);
+  const loadedTrackIdRef = useRef(initialTrack.id);
   const countedIdsRef = useRef(new Set<number>());
   const [queueScrollTop, setQueueScrollTop] = useState(0);
   const activeIndex = tracks.findIndex((track) => track.id === activeTrack.id);
@@ -52,7 +65,8 @@ export function MediaAudioPlayer({
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || loadedTrackIdRef.current === activeTrack.id) return;
+    loadedTrackIdRef.current = activeTrack.id;
     audio.load();
     if (autoPlayRef.current) {
       autoPlayRef.current = false;
@@ -113,9 +127,20 @@ export function MediaAudioPlayer({
           <strong title={activeTrack.title}>{activeTrack.title}</strong>
           <small>{activeTrack.artist || "未知作者"}</small>
         </div>
+        {feedback ? (
+          <MediaAudioFeedbackActions
+            mediaId={activeTrack.id}
+            initialMediaId={initialId}
+            initialFavorite={feedback.initialFavorite}
+            initialRecommended={feedback.initialRecommended}
+            canRecommend={feedback.canRecommend}
+            canReport={feedback.canReport}
+            title={activeTrack.title}
+          />
+        ) : null}
       </div>
       <div className="mediaAudioPlayerPanel">
-        <audio ref={audioRef} className="mediaAudioPlayer" controls autoPlay preload="metadata" onPlay={recordPlay} onEnded={handleEnded} aria-label={`播放 ${activeTrack.title}`}>
+        <audio ref={audioRef} className="mediaAudioPlayer" controls autoPlay preload="auto" onPlay={recordPlay} onEnded={handleEnded} aria-label={`播放 ${activeTrack.title}`}>
           <source src={`${basePathPrefix}/${activeTrack.id}/stream?v=${Math.floor(activeTrack.version)}`} />
           当前浏览器无法播放这个音频。
         </audio>
@@ -151,7 +176,9 @@ export function MediaAudioPlayer({
               <button className={track.id === activeTrack.id ? "isActive" : ""} type="button" onClick={() => chooseTrack(track)} key={track.id}>
                 <span aria-hidden="true">{track.id === activeTrack.id ? <Play size={13} fill="currentColor" /> : null}</span>
                 <strong title={track.title}>{track.title}</strong>
-                <small title={track.artist}>{track.artist || "未知作者"}</small>
+                <time aria-label={`时长 ${formatMediaDuration(track.durationSeconds)}`}>
+                  {formatMediaDuration(track.durationSeconds)}
+                </time>
               </button>
             ))}
             {visibleEnd < tracks.length ? (

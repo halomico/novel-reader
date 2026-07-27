@@ -65,8 +65,9 @@ test("removes legacy search tables and the retired content index database", asyn
     CREATE TABLE novel_recommendations (
       novel_id INTEGER NOT NULL,
       user_id INTEGER NOT NULL,
+      recommendation_date TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY(novel_id, user_id)
+      PRIMARY KEY(novel_id, user_id, recommendation_date)
     );
     CREATE TABLE content_reports (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,6 +94,14 @@ test("removes legacy search tables and the retired content index database", asyn
       download_count INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE media_recommendations (
+      media_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      recommendation_date TEXT NOT NULL,
+      soda_spent INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(media_id, user_id, recommendation_date)
     );
     CREATE TABLE tags (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -133,12 +142,18 @@ test("removes legacy search tables and the retired content index database", asyn
     VALUES ('legacy novel', 'legacy.txt', 'legacy.txt', 10, 1);
     INSERT INTO users (username, display_name, password_hash, history_visible)
     VALUES ('legacy-user', 'Legacy User', 'test-hash', 0);
-    INSERT INTO novel_recommendations (novel_id, user_id, created_at)
-    VALUES (1, 1, '2026-07-25 10:00:00');
+    INSERT INTO novel_recommendations (novel_id, user_id, recommendation_date, created_at)
+    VALUES (1, 1, '2026-07-25', '2026-07-25 10:00:00');
+    INSERT INTO novel_recommendations (novel_id, user_id, recommendation_date, created_at)
+    VALUES (1, 1, '2026-07-26', '2026-07-26 10:00:00');
     INSERT INTO content_reports (user_id, novel_id, category)
     VALUES (1, 1, 'tag_error');
     INSERT INTO media_assets (kind, title, file_name, stored_name, mime_type, size_bytes)
     VALUES ('audio', 'legacy audio', 'legacy.mp3', 'legacy.mp3', 'audio/mpeg', 10);
+    INSERT INTO media_recommendations (media_id, user_id, recommendation_date, created_at)
+    VALUES (1, 1, '2026-07-25', '2026-07-25 10:00:00');
+    INSERT INTO media_recommendations (media_id, user_id, recommendation_date, created_at)
+    VALUES (1, 1, '2026-07-26', '2026-07-26 10:00:00');
     INSERT INTO tags (name, slug, is_visible) VALUES ('公开标签', 'public-tag', 1);
     INSERT INTO tags (name, slug, is_visible) VALUES ('隐藏标签', 'hidden-tag', 0);
     INSERT INTO user_reading_history (user_id, novel_id, title, visit_count, hidden_by_user)
@@ -241,8 +256,11 @@ test("removes legacy search tables and the retired content index database", asyn
       );
     }
     const recommendationColumns = db.prepare("PRAGMA table_info(novel_recommendations)").all() as Array<{ name: string }>;
-    assert.equal(recommendationColumns.some((column) => column.name === "recommendation_date"), true);
+    assert.equal(recommendationColumns.some((column) => column.name === "recommendation_date"), false);
+    const mediaRecommendationColumns = db.prepare("PRAGMA table_info(media_recommendations)").all() as Array<{ name: string }>;
+    assert.equal(mediaRecommendationColumns.some((column) => column.name === "recommendation_date"), false);
     assert.equal((db.prepare("SELECT recommend_count FROM novels").get() as { recommend_count: number }).recommend_count, 1);
+    assert.equal((db.prepare("SELECT recommend_count FROM media_assets").get() as { recommend_count: number }).recommend_count, 1);
     assert.doesNotThrow(() => {
       db!.prepare(
         "INSERT INTO content_reports (user_id, novel_id, category) VALUES (1, 1, 'title_error')",
@@ -256,6 +274,7 @@ test("removes legacy search tables and the retired content index database", asyn
     assert.equal((db.prepare("SELECT visit_count FROM user_media_history").get() as { visit_count: number }).visit_count, 3);
     const mediaColumns = db.prepare("PRAGMA table_info(media_assets)").all() as Array<{ name: string }>;
     assert.equal(mediaColumns.some((column) => column.name === "category_id"), true);
+    assert.equal(mediaColumns.some((column) => column.name === "storage_node_id"), true);
     const tagColumns = db.prepare("PRAGMA table_info(tags)").all() as Array<{ name: string }>;
     assert.equal(tagColumns.some((column) => column.name === "is_visible"), false);
     assert.equal(tagColumns.some((column) => column.name === "visibility"), true);
@@ -268,6 +287,7 @@ test("removes legacy search tables and the retired content index database", asyn
     );
     const mediaIndexes = db.prepare("PRAGMA index_list(media_assets)").all() as Array<{ name: string }>;
     assert.equal(mediaIndexes.some((index) => index.name === "idx_media_assets_video_category"), true);
+    assert.equal(mediaIndexes.some((index) => index.name === "idx_media_assets_storage_node"), true);
     const pinnedTable = db
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'pinned_novels'")
       .get() as { name: string } | undefined;

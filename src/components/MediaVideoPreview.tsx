@@ -8,11 +8,13 @@ export function MediaVideoPreview({
   singlePercent = 33,
   sourceVersion,
   admin = false,
+  priority = false,
 }: {
   id: number;
   singlePercent?: number;
   sourceVersion: number;
   admin?: boolean;
+  priority?: boolean;
 }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const version = `single-${singlePercent}-${Math.floor(sourceVersion)}`;
@@ -30,8 +32,9 @@ export function MediaVideoPreview({
           src={src}
           alt=""
           decoding="async"
+          fetchPriority={priority ? "high" : "auto"}
           height="360"
-          loading="lazy"
+          loading={priority ? "eager" : "lazy"}
           width="640"
           onError={() => setFailedSrc(src)}
         />

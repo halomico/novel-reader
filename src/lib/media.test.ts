@@ -7,11 +7,15 @@ import test, { type TestContext } from "node:test";
 import {
   isMediaKindAccessible,
   listMediaAssets,
+  listMediaAssetsNeedingPreparation,
   listMediaFolders,
+  mediaThumbnailVersion,
   normalizeMediaFile,
   normalizeMediaSortBy,
   normalizeMediaSortOrder,
   parseMediaByteRange,
+  saveMediaDuration,
+  saveMediaThumbnailVersion,
   sortMediaFolders,
   type MediaFolder,
 } from "./media";
@@ -133,4 +137,29 @@ test("searches media recursively with multiple terms and exposes matching folder
     listMediaFolders("audio").filter((folder) => folder.path.includes("归档")).map((folder) => folder.path),
     ["归档", "归档/古典", "归档/民谣"],
   );
+});
+
+test("tracks media preparation independently from public list requests", (t) => {
+  withTempDatabase(t);
+  const db = getDb();
+  const insert = db.prepare(
+    `INSERT INTO media_assets
+      (kind, title, file_name, stored_name, mime_type, size_bytes, mtime_ms, duration_seconds)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const videoId = Number(insert
+    .run("video", "视频", "video.mp4", "video/video.mp4", "video/mp4", 100, 10, 60)
+    .lastInsertRowid);
+  const audioId = Number(insert
+    .run("audio", "音频", "audio.mp3", "audio/audio.mp3", "audio/mpeg", 50, 10, null)
+    .lastInsertRowid);
+
+  assert.deepEqual(
+    new Set(listMediaAssetsNeedingPreparation().map((asset) => asset.id)),
+    new Set([videoId, audioId]),
+  );
+  assert.equal(saveMediaThumbnailVersion(videoId, mediaThumbnailVersion(10, 33)), true);
+  assert.equal(saveMediaDuration(audioId, 30), true);
+  assert.deepEqual(listMediaAssetsNeedingPreparation(), []);
+  assert.deepEqual(listMediaAssetsNeedingPreparation(1_000, 40).map((asset) => asset.id), [videoId]);
 });

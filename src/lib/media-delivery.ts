@@ -10,7 +10,10 @@ import {
   type MediaAsset,
 } from "./media";
 import { createSignedMediaUrl } from "./media-signing";
-import { isRemoteMediaStorage } from "./media-storage-config";
+import {
+  isRemoteMediaStorage,
+  resolveRemoteMediaNodeForAsset,
+} from "./media-storage-config";
 
 export type ResolvedMediaDelivery = {
   asset: MediaAsset;
@@ -33,7 +36,9 @@ export function mediaDeliveryUrl(
   options: { publiclyAccessible?: boolean } = {},
 ): string {
   if (isRemoteMediaStorage()) {
+    const node = resolveRemoteMediaNodeForAsset(asset.storageNodeId, asset.kind);
     return createSignedMediaUrl({
+      storageNodeId: node.id,
       storedName: asset.storedName,
       mimeType: asset.mimeType,
       fileName: asset.fileName,
@@ -92,20 +97,34 @@ export function resolveMediaDeliveryUri(uri: string): ResolvedMediaDelivery | nu
   return { asset, download };
 }
 
-export function mediaDeliveryHeaders(delivery: ResolvedMediaDelivery): Headers {
-  return new Headers({
-    "Cache-Control": "private, max-age=300",
+export function mediaDeliveryHeaders(
+  delivery: ResolvedMediaDelivery,
+  publiclyAccessible = false,
+): Headers {
+  const headers = new Headers({
+    "Cache-Control": publiclyAccessible
+      ? "public, max-age=21600, immutable, no-transform"
+      : "private, max-age=300, no-transform",
     "Content-Disposition": contentDisposition(delivery.asset, delivery.download),
     "X-Content-Type-Options": "nosniff",
-    Vary: "Cookie",
   });
+  if (publiclyAccessible) {
+    headers.set("Cloudflare-CDN-Cache-Control", "public, max-age=21600, no-transform");
+  } else {
+    headers.set("Vary", "Cookie");
+  }
+  return headers;
 }
 
 export function authorizeMediaDelivery(delivery: ResolvedMediaDelivery, authenticated: boolean): boolean {
   return isMediaKindAccessible(delivery.asset.kind, authenticated);
 }
 
-export async function serveMediaDelivery(request: NextRequest, delivery: ResolvedMediaDelivery): Promise<Response> {
+export async function serveMediaDelivery(
+  request: NextRequest,
+  delivery: ResolvedMediaDelivery,
+  options: { publiclyAccessible?: boolean } = {},
+): Promise<Response> {
   if (isRemoteMediaStorage()) {
     return new Response(null, { status: 404 });
   }
@@ -134,7 +153,7 @@ export async function serveMediaDelivery(request: NextRequest, delivery: Resolve
 
   const start = range?.start ?? 0;
   const end = range?.end ?? stat.size - 1;
-  const headers = mediaDeliveryHeaders(delivery);
+  const headers = mediaDeliveryHeaders(delivery, Boolean(options.publiclyAccessible));
   headers.set("Accept-Ranges", "bytes");
   headers.set("Content-Length", String(end - start + 1));
   headers.set("Content-Type", delivery.asset.mimeType);

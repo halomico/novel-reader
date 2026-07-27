@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserDailyReportLimit } from "@/lib/config";
-import { createContentReport, isContentReportCategory } from "@/lib/reports";
+import { createContentReport, isContentReportCategory, isMediaReportCategory } from "@/lib/reports";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 import { hasUserPermission } from "@/lib/user-levels";
 
@@ -27,14 +27,23 @@ export async function POST(request: NextRequest) {
   }
   const category = body.category;
   const details = String(body.details || "").trim();
-  if (!isContentReportCategory(category) || details.length > 200 || (category === "other" && !details)) {
+  const novelId = Number(body.novelId || 0);
+  const mediaId = Number(body.mediaId || 0);
+  const mediaTarget = Number.isInteger(mediaId) && mediaId > 0;
+  if (
+    !isContentReportCategory(category) ||
+    (mediaTarget && !isMediaReportCategory(category)) ||
+    details.length > 200 ||
+    (category === "other" && !details)
+  ) {
     return NextResponse.json({ ok: false, message: category === "other" && !details ? "请填写补充说明" : "举报内容有误" }, { status: 400 });
   }
 
   try {
     const result = createContentReport({
       userId: user.id,
-      novelId: Number(body.novelId),
+      novelId,
+      mediaId,
       category,
       details,
       dailyLimit: getUserDailyReportLimit(),

@@ -23,7 +23,7 @@ test("builds stable thumbnail cache validators", () => {
 test("only allows edge caching for publicly accessible thumbnails", () => {
   assert.deepEqual(mediaThumbnailCacheHeaders(true), {
     "Cache-Control": "public, max-age=86400, immutable",
-    "Cloudflare-CDN-Cache-Control": "public, max-age=300",
+    "Cloudflare-CDN-Cache-Control": "public, max-age=86400",
   });
   assert.deepEqual(mediaThumbnailCacheHeaders(false), {
     "Cache-Control": "private, max-age=86400, stale-while-revalidate=604800, immutable",

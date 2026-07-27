@@ -161,11 +161,15 @@ async function serveSignedMedia(
   }
   const start = range?.start ?? 0;
   const end = range?.end ?? stat.size - 1;
+  const publicMaxAge = Math.max(
+    60,
+    Math.min(86_400, payload.expiresAt - Math.floor(Date.now() / 1_000) - 30),
+  );
   const headers: Record<string, string> = {
     "Accept-Ranges": "bytes",
     "Cache-Control": payload.publiclyAccessible
-      ? "public, max-age=3600, immutable"
-      : "private, max-age=300",
+      ? `public, max-age=${publicMaxAge}, immutable, no-transform`
+      : "private, max-age=300, no-transform",
     "Content-Disposition": contentDisposition(payload.fileName, payload.download),
     "Content-Length": String(end - start + 1),
     "Content-Type": payload.mimeType,
@@ -175,7 +179,7 @@ async function serveSignedMedia(
     "X-Content-Type-Options": "nosniff",
   };
   if (payload.publiclyAccessible) {
-    headers["Cloudflare-CDN-Cache-Control"] = "public, max-age=3600";
+    headers["Cloudflare-CDN-Cache-Control"] = `public, max-age=${publicMaxAge}, no-transform`;
   }
   if (range) headers["Content-Range"] = `bytes ${start}-${end}/${stat.size}`;
   if (!range && request.headers["if-none-match"] === etag) {
@@ -204,12 +208,20 @@ async function serveSignedThumbnail(
     return;
   }
   try {
-    const thumbnailPath = await store.thumbnail(payload);
+    const thumbnailPath = await store.findThumbnail(payload);
+    if (!thumbnailPath) {
+      empty(response, 404, { "Cache-Control": "no-store" });
+      return;
+    }
     const stat = fs.statSync(thumbnailPath);
     const etag = `"media-thumbnail-${path.basename(thumbnailPath, ".jpg")}-${stat.size}"`;
+    const publicMaxAge = Math.max(
+      60,
+      Math.min(86_400, payload.expiresAt - Math.floor(Date.now() / 1_000) - 30),
+    );
     const headers: Record<string, string> = {
       "Cache-Control": payload.publiclyAccessible
-        ? "public, max-age=86400, immutable"
+        ? `public, max-age=${publicMaxAge}, immutable`
         : "private, max-age=86400, stale-while-revalidate=604800, immutable",
       "Content-Length": String(stat.size),
       "Content-Type": "image/jpeg",
@@ -219,7 +231,7 @@ async function serveSignedThumbnail(
       "X-Content-Type-Options": "nosniff",
     };
     if (payload.publiclyAccessible) {
-      headers["Cloudflare-CDN-Cache-Control"] = "public, max-age=300";
+      headers["Cloudflare-CDN-Cache-Control"] = `public, max-age=${publicMaxAge}, no-transform`;
     }
     if (request.headers["if-none-match"] === etag) {
       delete headers["Content-Length"];
@@ -233,7 +245,7 @@ async function serveSignedThumbnail(
     }
     pipeline(fs.createReadStream(thumbnailPath), response, () => undefined);
   } catch {
-    empty(response, 404);
+    empty(response, 404, { "Cache-Control": "no-store" });
   }
 }
 
@@ -363,7 +375,7 @@ export function createMediaNodeServer(options: MediaNodeServerOptions): http.Ser
           });
           return;
         }
-        if (url.pathname === "/control/thumbnails/prewarm" && request.method === "POST") {
+        if (url.pathname === "/control/thumbnails/prepare" && request.method === "POST") {
           const body = await readJson<{
             storedName: string;
             mtimeMs: number;
@@ -371,7 +383,8 @@ export function createMediaNodeServer(options: MediaNodeServerOptions): http.Ser
             percent: number;
             durationSeconds?: number | null;
           }>(request);
-          json(response, 202, { ok: true, queued: store.prewarmThumbnail(body) });
+          await store.thumbnail(body);
+          json(response, 200, { ok: true, ready: true });
           return;
         }
         if (url.pathname === "/control/thumbnails" && request.method === "DELETE") {

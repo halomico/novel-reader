@@ -18,7 +18,6 @@ import {
   type MediaSortBy,
   type MediaSortOrder,
 } from "@/lib/media";
-import { scheduleMediaPreparation } from "@/lib/media-maintenance";
 import { readSiteSettings } from "@/lib/site-settings";
 import {
   createAdminMediaFolderAction,
@@ -118,9 +117,6 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
     sortBy,
     sortOrder,
   });
-  if (view === "grid") {
-    scheduleMediaPreparation(result.assets);
-  }
   const folders: Record<MediaKind, ReturnType<typeof listMediaFolders>> = {
     video: kind === "video" ? listMediaFolders("video") : [],
     audio: kind === "audio" ? listMediaFolders("audio") : [],

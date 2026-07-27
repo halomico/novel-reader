@@ -31,6 +31,14 @@ type ManifestSnapshot = {
   >;
 };
 
+type MediaThumbnailRequest = {
+  storedName: string;
+  mtimeMs: number;
+  sizeBytes: number;
+  percent: number;
+  durationSeconds?: number | null;
+};
+
 const MEDIA_KINDS: MediaNodeKind[] = ["video", "audio", "file"];
 const MANIFEST_CACHE_MS = 5 * 60 * 1000;
 const THUMBNAIL_CONCURRENCY = 2;
@@ -669,24 +677,22 @@ export class MediaNodeStore {
     }
   }
 
-  async thumbnail(params: {
-    storedName: string;
-    mtimeMs: number;
-    sizeBytes: number;
-    percent: number;
-    durationSeconds?: number | null;
-  }): Promise<string> {
+  private thumbnailPaths(params: MediaThumbnailRequest): {
+    sourcePath: string;
+    sourceStat: fs.Stats;
+    targetPath: string;
+  } {
     const sourcePath = this.mediaPath(params.storedName);
-    let stat: fs.Stats;
+    let sourceStat: fs.Stats;
     try {
-      stat = fs.statSync(sourcePath);
+      sourceStat = fs.statSync(sourcePath);
     } catch {
       throw new MediaNodeStoreError("资源不存在", 404);
     }
     if (
-      !stat.isFile() ||
-      stat.size !== params.sizeBytes ||
-      Math.floor(stat.mtimeMs) !== Math.floor(params.mtimeMs)
+      !sourceStat.isFile() ||
+      sourceStat.size !== params.sizeBytes ||
+      Math.floor(sourceStat.mtimeMs) !== Math.floor(params.mtimeMs)
     ) {
       throw new MediaNodeStoreError("资源版本已变化", 404);
     }
@@ -695,18 +701,30 @@ export class MediaNodeStore {
       .update(`${params.storedName}\n${Math.floor(params.mtimeMs)}\n${params.sizeBytes}\n${params.percent}`)
       .digest("hex");
     const targetPath = path.join(this.root, ".thumbnails", `${cacheIdentity}.jpg`);
+    return { sourcePath, sourceStat, targetPath };
+  }
+
+  async findThumbnail(params: MediaThumbnailRequest): Promise<string | null> {
+    const { sourceStat, targetPath } = this.thumbnailPaths(params);
     try {
       const thumbnailStat = await fs.promises.stat(targetPath);
-      if (thumbnailStat.size > 0 && thumbnailStat.mtimeMs >= stat.mtimeMs) return targetPath;
+      return thumbnailStat.size > 0 && thumbnailStat.mtimeMs >= sourceStat.mtimeMs ? targetPath : null;
     } catch {
-      // Queue generation for a missing or stale thumbnail.
+      return null;
     }
+  }
+
+  async thumbnail(params: MediaThumbnailRequest): Promise<string> {
+    const readyThumbnail = await this.findThumbnail(params);
+    if (readyThumbnail) return readyThumbnail;
+    const { sourcePath, sourceStat, targetPath } = this.thumbnailPaths(params);
+    const cacheIdentity = path.basename(targetPath, ".jpg");
     const existingJob = this.thumbnailJobs.get(cacheIdentity);
     if (existingJob) return existingJob;
     const job = this.enqueueThumbnail(async () => {
       try {
         const thumbnailStat = await fs.promises.stat(targetPath);
-        if (thumbnailStat.size > 0 && thumbnailStat.mtimeMs >= stat.mtimeMs) return targetPath;
+        if (thumbnailStat.size > 0 && thumbnailStat.mtimeMs >= sourceStat.mtimeMs) return targetPath;
       } catch {
         // Another queued request has not generated the thumbnail yet.
       }
@@ -727,29 +745,6 @@ export class MediaNodeStore {
     this.thumbnailJobs.set(cacheIdentity, job);
     void job.finally(() => this.thumbnailJobs.delete(cacheIdentity)).catch(() => undefined);
     return job;
-  }
-
-  prewarmThumbnail(params: {
-    storedName: string;
-    mtimeMs: number;
-    sizeBytes: number;
-    percent: number;
-    durationSeconds?: number | null;
-  }): boolean {
-    const storedName = normalizeMediaStoragePath(params.storedName);
-    if (!storedName || !storedName.startsWith("video/")) {
-      throw new MediaNodeStoreError("封面预热目标无效");
-    }
-    void this.thumbnail({
-      storedName,
-      mtimeMs: Math.floor(params.mtimeMs),
-      sizeBytes: Math.floor(params.sizeBytes),
-      percent: Math.min(Math.max(Math.floor(params.percent), 1), 99),
-      durationSeconds: params.durationSeconds,
-    }).catch((error) => {
-      console.warn("[media-node] thumbnail warmup failed", storedName, error);
-    });
-    return true;
   }
 
   clearThumbnails(): number {

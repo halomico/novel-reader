@@ -40,6 +40,19 @@ export function mediaThumbnailEtag(id: number, mtimeMs: number, size: number): s
   return `"media-thumbnail-${id}-${Math.floor(mtimeMs)}-${size}"`;
 }
 
+export async function findMediaThumbnail(
+  asset: MediaAsset,
+  options: MediaThumbnailOptions = { fraction: 1 / 3, cacheKey: "single-33" },
+): Promise<string | null> {
+  const targetPath = mediaThumbnailPath(asset.id, options.cacheKey);
+  try {
+    const stat = await fs.promises.stat(targetPath);
+    return stat.isFile() && stat.size > 0 && stat.mtimeMs >= asset.mtimeMs ? targetPath : null;
+  } catch {
+    return null;
+  }
+}
+
 async function generateMediaThumbnail(asset: MediaAsset, options: MediaThumbnailOptions): Promise<string> {
   const sourcePath = mediaFilePath(asset.storedName);
   const sourceStat = await fs.promises.stat(sourcePath);

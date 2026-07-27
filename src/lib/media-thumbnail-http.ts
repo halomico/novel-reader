@@ -2,16 +2,20 @@ import fs from "node:fs";
 import { Readable } from "node:stream";
 import type { NextRequest } from "next/server";
 import { getVideoThumbnailSettings } from "./config";
-import type { MediaAsset } from "./media";
-import { ensureMediaThumbnail, mediaThumbnailEtag } from "./media-thumbnail";
+import { mediaThumbnailVersion, type MediaAsset } from "./media";
+import { findMediaThumbnail, mediaThumbnailEtag } from "./media-thumbnail";
 import { createSignedMediaThumbnailUrl } from "./media-signing";
-import { isRemoteMediaStorage, MediaStorageConfigurationError } from "./media-storage-config";
+import {
+  isRemoteMediaStorage,
+  MediaStorageConfigurationError,
+  resolveRemoteMediaNodeForAsset,
+} from "./media-storage-config";
 
 export function mediaThumbnailCacheHeaders(publiclyAccessible: boolean): Record<string, string> {
   if (publiclyAccessible) {
     return {
       "Cache-Control": "public, max-age=86400, immutable",
-      "Cloudflare-CDN-Cache-Control": "public, max-age=300",
+      "Cloudflare-CDN-Cache-Control": "public, max-age=86400",
     };
   }
   return {
@@ -27,8 +31,13 @@ export async function serveMediaThumbnail(
 ): Promise<Response> {
   try {
     const settings = getVideoThumbnailSettings();
+    if (asset.thumbnailVersion !== mediaThumbnailVersion(asset.mtimeMs, settings.singlePercent)) {
+      return new Response(null, { status: 404, headers: { "Cache-Control": "no-store" } });
+    }
     if (isRemoteMediaStorage()) {
+      const node = resolveRemoteMediaNodeForAsset(asset.storageNodeId, asset.kind);
       const remoteUrl = createSignedMediaThumbnailUrl({
+        storageNodeId: node.id,
         storedName: asset.storedName,
         mtimeMs: asset.mtimeMs,
         sizeBytes: asset.sizeBytes,
@@ -47,7 +56,10 @@ export async function serveMediaThumbnail(
       fraction: settings.singlePercent / 100,
       cacheKey: `single-${settings.singlePercent}`,
     };
-    const thumbnailPath = await ensureMediaThumbnail(asset, options);
+    const thumbnailPath = await findMediaThumbnail(asset, options);
+    if (!thumbnailPath) {
+      return new Response(null, { status: 404, headers: { "Cache-Control": "no-store" } });
+    }
     const stat = fs.statSync(thumbnailPath);
     const etag = mediaThumbnailEtag(asset.id, stat.mtimeMs, stat.size);
     const cacheHeaders = {
@@ -69,7 +81,7 @@ export async function serveMediaThumbnail(
     if (error instanceof MediaStorageConfigurationError) {
       return new Response(null, { status: 503 });
     }
-    return new Response(null, { status: 404 });
+    return new Response(null, { status: 404, headers: { "Cache-Control": "no-store" } });
   }
 }
 

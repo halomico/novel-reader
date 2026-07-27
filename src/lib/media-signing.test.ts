@@ -15,10 +15,16 @@ const MEDIA_ENV_NAMES = [
   "MEDIA_SIGNING_SECRET",
   "MEDIA_CONTROL_SECRET",
   "MEDIA_URL_TTL_SECONDS",
+  "MEDIA_NODES_JSON",
+  "MEDIA_NODE_ROUTES_JSON",
+  "MEDIA_LEGACY_NODE_ID",
 ] as const;
 
 function withMediaEnvironment(overrides: Partial<NodeJS.ProcessEnv>, run: () => void) {
   const previous = new Map(MEDIA_ENV_NAMES.map((name) => [name, process.env[name]]));
+  for (const name of MEDIA_ENV_NAMES) {
+    delete process.env[name];
+  }
   Object.assign(process.env, {
     MEDIA_STORAGE_MODE: "remote",
     MEDIA_PUBLIC_URL: "https://media.example.com",
@@ -120,6 +126,48 @@ test("signs versioned media thumbnails with explicit cache visibility", () => {
     const tampered = new URL(signed);
     tampered.searchParams.set("public", "1");
     assert.equal(verifySignedMediaThumbnailUrl(tampered, 1_000_000), null);
+  });
+});
+
+test("signs each asset with its own configured media node", () => {
+  const videoSecret = "video-signing-secret-0123456789abcdef";
+  const audioSecret = "audio-signing-secret-0123456789abcdef";
+  withMediaEnvironment({
+    MEDIA_NODES_JSON: JSON.stringify([
+      {
+        id: "video-node",
+        publicUrl: "https://video.example.com",
+        controlUrl: "https://video-control.example.com",
+        signingSecret: videoSecret,
+        controlSecret: "video-control-secret-0123456789abcdef",
+      },
+      {
+        id: "audio-node",
+        publicUrl: "https://audio.example.com",
+        controlUrl: "https://audio-control.example.com",
+        signingSecret: audioSecret,
+        controlSecret: "audio-control-secret-0123456789abcdef",
+      },
+    ]),
+    MEDIA_NODE_ROUTES_JSON: JSON.stringify({
+      video: "video-node",
+      audio: "audio-node",
+      file: "video-node",
+    }),
+  }, () => {
+    const signed = createSignedMediaUrl({
+      storageNodeId: "audio-node",
+      storedName: "audio/test.mp3",
+      mimeType: "audio/mpeg",
+      fileName: "test.mp3",
+      mtimeMs: 123_456,
+      sizeBytes: 987_654,
+      download: false,
+      now: 1_000_000,
+    });
+    assert.equal(new URL(signed).origin, "https://audio.example.com");
+    assert.equal(verifySignedMediaUrl(new URL(signed), 1_000_000, audioSecret)?.storedName, "audio/test.mp3");
+    assert.equal(verifySignedMediaUrl(new URL(signed), 1_000_000, videoSecret), null);
   });
 });
 

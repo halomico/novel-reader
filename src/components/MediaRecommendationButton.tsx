@@ -3,11 +3,11 @@
 import { CupSoda } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 
-export function NovelRecommendationButton({
-  novelId,
+export function MediaRecommendationButton({
+  mediaId,
   initialRecommended,
 }: {
-  novelId: number;
+  mediaId: number;
   initialRecommended: boolean;
 }) {
   const [recommended, setRecommended] = useState(initialRecommended);
@@ -24,9 +24,7 @@ export function NovelRecommendationButton({
     if (recommended || pending) return;
     startTransition(async () => {
       try {
-        const response = await fetch(`/api/novels/${novelId}/recommendation`, {
-          method: "POST",
-        });
+        const response = await fetch(`/api/media/${mediaId}/recommendation`, { method: "POST" });
         const result = await response.json() as {
           ok?: boolean;
           recommended?: boolean;

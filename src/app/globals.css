@@ -3254,8 +3254,8 @@ mark {
 
 .mediaAssetGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px 14px;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 20px 14px;
 }
 
 .mediaVideoCard {
@@ -3264,7 +3264,8 @@ mark {
 
 .mediaVideoCard {
   display: grid;
-  gap: 8px;
+  align-content: start;
+  gap: 7px;
 }
 
 .mediaVideoPreview {
@@ -3272,8 +3273,8 @@ mark {
   display: block;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: 0;
+  border-radius: 6px;
   background: #101214;
 }
 
@@ -3333,9 +3334,23 @@ mark {
   font-size: 11px;
 }
 
+.mediaVideoViews {
+  position: absolute;
+  bottom: 7px;
+  left: 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 5px;
+  padding: 3px 6px;
+  background: rgb(15 18 20 / 78%);
+  color: #fff;
+  font-size: 11px;
+}
+
 .mediaVideoCard:hover .mediaVideoPreview,
 .mediaVideoCard:focus-visible .mediaVideoPreview {
-  border-color: color-mix(in srgb, var(--accent) 52%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
 .mediaVideoCard:hover .mediaVideoPlay,
@@ -3400,7 +3415,23 @@ mark {
 }
 
 .mediaVideoCard .mediaCardCopy strong {
-  font-size: 15px;
+  display: -webkit-box;
+  min-height: 2.8em;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.mediaVideoCard .mediaCardCopy small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mediaVideoCard:hover .mediaCardCopy strong,
@@ -3463,6 +3494,11 @@ mark {
   margin-inline: auto;
 }
 
+.mediaDetail.is-video {
+  width: min(1120px, 100%);
+  gap: 14px;
+}
+
 .mediaDetailHeader > div {
   min-width: 0;
 }
@@ -3488,12 +3524,125 @@ mark {
   background: #101214;
 }
 
+.mediaVideoHeading {
+  display: grid;
+  gap: 7px;
+}
+
+.mediaVideoHeading h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: 25px;
+  font-weight: 720;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.mediaVideoStats {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.mediaVideoStats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .mediaVideoStage {
   overflow: hidden;
   border: 1px solid #252a2e;
-  border-radius: 8px;
+  border-radius: 6px;
   background: #101214;
-  box-shadow: 0 16px 40px rgb(0 0 0 / 18%);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 14%);
+}
+
+.mediaVideoInfo {
+  display: grid;
+  gap: 12px;
+  padding: 2px 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mediaVideoInfoBar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.mediaVideoAuthor {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.mediaVideoAuthor > span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-soft));
+  color: var(--accent);
+}
+
+.mediaVideoAuthor > div {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.mediaVideoAuthor strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mediaVideoAuthor small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.feedbackActionTrio {
+  display: grid;
+  grid-template-columns: repeat(3, 34px);
+  gap: 3px;
+  margin: 0;
+}
+
+.feedbackActionTrio .novelRecommendationControl {
+  grid-column: 1;
+}
+
+.feedbackActionTrio .novelFavoriteControl {
+  grid-column: 2;
+}
+
+.feedbackActionTrio .readerReportAction {
+  grid-column: 3;
+  margin-left: 0;
+}
+
+.mediaVideoActions {
+  justify-content: end;
+}
+
+.mediaVideoInfo .mediaDescription {
+  max-width: 76ch;
+  padding-top: 0;
+  border-top: 0;
+  color: color-mix(in srgb, var(--text) 76%, var(--muted));
+  font-size: 13px;
+  line-height: 1.7;
 }
 
 .mediaAudioPlayer {
@@ -3545,6 +3694,11 @@ mark {
 .mediaAudioNowPlaying small {
   color: var(--muted);
   font-size: 13px;
+}
+
+.mediaAudioActions {
+  min-height: 34px;
+  justify-content: start;
 }
 
 .mediaAudioPlayerPanel {
@@ -3634,7 +3788,7 @@ mark {
 
 .mediaAudioQueue button {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) minmax(80px, 130px);
+  grid-template-columns: 16px minmax(0, 1fr) 52px;
   width: 100%;
   height: 36px;
   align-items: center;
@@ -3656,7 +3810,7 @@ mark {
 }
 
 .mediaAudioQueue button strong,
-.mediaAudioQueue button small {
+.mediaAudioQueue button time {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3667,8 +3821,10 @@ mark {
   font-size: 12px;
 }
 
-.mediaAudioQueue button small {
+.mediaAudioQueue button time {
+  color: var(--muted);
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
@@ -3696,6 +3852,32 @@ mark {
   margin: 0;
   color: var(--text);
   font-size: 18px;
+}
+
+@media (max-width: 640px) {
+  .mediaAssetGrid {
+    gap: 16px 10px;
+  }
+
+  .mediaVideoCard {
+    gap: 6px;
+  }
+
+  .mediaVideoCard .mediaCardCopy strong {
+    font-size: 13px;
+  }
+
+  .mediaVideoHeading h1 {
+    font-size: 20px;
+  }
+
+  .mediaVideoInfoBar {
+    gap: 10px;
+  }
+
+  .mediaVideoInfo .mediaDescription {
+    font-size: 12px;
+  }
 }
 
 .accountSideNav {
@@ -4130,6 +4312,36 @@ mark {
 .adminNotice.isError {
   border-color: color-mix(in srgb, #b42318 48%, var(--border));
   background: color-mix(in srgb, #b42318 12%, var(--surface));
+}
+
+.inlineMutationNotice {
+  position: fixed;
+  z-index: 120;
+  top: 72px;
+  right: 22px;
+  max-width: min(360px, calc(100vw - 32px));
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 9px 12px;
+  box-shadow: 0 10px 26px color-mix(in srgb, #000 14%, transparent);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+  backdrop-filter: blur(10px);
+}
+
+.inlineMutationNotice.is-success {
+  border-color: color-mix(in srgb, #2e7d52 42%, var(--border));
+}
+
+.inlineMutationNotice.is-warning {
+  border-color: color-mix(in srgb, #b7791f 42%, var(--border));
+}
+
+.inlineMutationNotice.is-error {
+  border-color: color-mix(in srgb, #b42318 42%, var(--border));
 }
 
 .adminTopbar {
@@ -8486,16 +8698,16 @@ a.analyticsSearchTag:focus-visible {
     align-items: center;
   }
 
+  .mediaAudioActions {
+    grid-column: 2;
+  }
+
   .mediaAudioDetailCover {
     width: 72px;
   }
 
   .mediaAudioQueue button {
-    grid-template-columns: 16px minmax(0, 1fr);
-  }
-
-  .mediaAudioQueue button small {
-    display: none;
+    grid-template-columns: 16px minmax(0, 1fr) 48px;
   }
 
   .adminVideoCategoryRow {

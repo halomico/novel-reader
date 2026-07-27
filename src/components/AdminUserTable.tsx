@@ -2,20 +2,24 @@
 
 import { Pencil, Save, Trash2, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { deleteAdminUsersAction, updateAdminUserAction, updateAdminUserStatusAction } from "@/app/admin/actions";
 import { LocalDateTime } from "@/components/LocalDateTime";
 import { AdminSelect } from "@/components/AdminSelect";
 import { usePersistentSelection } from "@/components/usePersistentSelection";
+import { InlineMutationNotice, useInlineMutation } from "@/components/useInlineMutation";
 import type { UserProfile } from "@/lib/users";
 
 export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; returnPath: string }) {
+  const mutation = useInlineMutation();
   const { selectedIds, toggleOne, togglePage, clearSelection } = usePersistentSelection("novel-reader-admin-user-selection");
+  const [visibleUsers, setVisibleUsers] = useState(users);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
-  const visibleIds = users.map((user) => user.id);
+  const visibleIds = visibleUsers.map((user) => user.id);
   const isAllSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
 
   useEffect(() => {
+    setVisibleUsers(users);
     setEditingUser(null);
   }, [users]);
 
@@ -23,8 +27,54 @@ export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; re
     togglePage(visibleIds);
   }
 
+  function mergeUser(user: UserProfile) {
+    setVisibleUsers((current) => current.map((item) => item.id === user.id ? user : item));
+  }
+
+  function updateStatus(form: HTMLFormElement, user: UserProfile, status: UserProfile["status"]) {
+    const formData = new FormData(form);
+    formData.set("status", status);
+    mergeUser({ ...user, status });
+    mutation.run(
+      () => updateAdminUserStatusAction(formData),
+      (result) => {
+        if (result.data?.user) mergeUser(result.data.user);
+        else if (!result.ok) mergeUser(user);
+      },
+    );
+  }
+
+  function updateUser(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    mutation.run(
+      () => updateAdminUserAction(formData),
+      (result) => {
+        if (result.data?.user) mergeUser(result.data.user);
+        if (result.ok) setEditingUser(null);
+      },
+    );
+  }
+
+  function deleteUsers(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedIds.length || !window.confirm(`确认删除所选 ${selectedIds.length} 个用户？`)) return;
+    const formData = new FormData(event.currentTarget);
+    mutation.run(
+      () => deleteAdminUsersAction(formData),
+      (result) => {
+        const deletedIds = result.data?.deletedIds || [];
+        if (!deletedIds.length) return;
+        const deleted = new Set(deletedIds);
+        setVisibleUsers((current) => current.filter((user) => !deleted.has(user.id)));
+        clearSelection();
+      },
+    );
+  }
+
   return (
     <>
+      <InlineMutationNotice notice={mutation.notice} />
       <div className="adminTableWrap">
         <table className="adminTable adminUserTable">
           <thead>
@@ -40,8 +90,8 @@ export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; re
             </tr>
           </thead>
           <tbody>
-            {users.length ? (
-              users.map((user) => (
+            {visibleUsers.length ? (
+              visibleUsers.map((user) => (
                 <tr key={user.id}>
                   <td>
                     <input
@@ -88,15 +138,20 @@ export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; re
                     </button>
                   </td>
                   <td>
-                    <form className="adminUserStatusForm" action={updateAdminUserStatusAction}>
+                    <form className="adminUserStatusForm" onSubmit={(event) => event.preventDefault()}>
                       <input name="userId" type="hidden" value={user.id} />
                       <input name="returnPath" type="hidden" value={returnPath} />
                       <AdminSelect
                         className={`adminUserStatusSelect is-${user.status}`}
                         name="status"
-                        defaultValue={user.status}
+                        value={user.status}
                         key={user.status}
-                        onChange={(event) => event.currentTarget.form?.requestSubmit()}
+                        disabled={mutation.pending}
+                        onChange={(event) => {
+                          const form = event.currentTarget.form;
+                          if (!form) return;
+                          updateStatus(form, user, event.currentTarget.value as UserProfile["status"]);
+                        }}
                         aria-label={`${user.username} 状态`}
                       >
                         <option value="active">启用</option>
@@ -122,12 +177,12 @@ export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; re
               <X size={16} aria-hidden="true" />
             </button>
           ) : null}
-          <form action={deleteAdminUsersAction} onSubmit={clearSelection}>
+          <form onSubmit={deleteUsers}>
             <input name="returnPath" type="hidden" value={returnPath} />
             {selectedIds.map((id) => (
               <input name="userIds" type="hidden" value={id} key={id} />
             ))}
-            <button className="adminDangerButton" type="submit" disabled={selectedIds.length === 0}>
+            <button className="adminDangerButton" type="submit" disabled={selectedIds.length === 0 || mutation.pending}>
               <Trash2 size={16} aria-hidden="true" />
               删除所选{selectedIds.length ? ` (${selectedIds.length})` : ""}
             </button>
@@ -141,7 +196,7 @@ export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; re
           role="presentation"
           onMouseDown={(event) => event.target === event.currentTarget && setEditingUser(null)}
         >
-          <form className="adminMediaEditDialog adminUserEditDialog" action={updateAdminUserAction} role="dialog" aria-modal="true" aria-labelledby="admin-user-edit-title" key={editingUser.id}>
+          <form className="adminMediaEditDialog adminUserEditDialog" onSubmit={updateUser} role="dialog" aria-modal="true" aria-labelledby="admin-user-edit-title" key={editingUser.id}>
             <header>
               <div>
                 <h3 id="admin-user-edit-title">编辑用户</h3>
@@ -181,7 +236,7 @@ export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; re
             </label>
             <footer>
               <button className="adminSecondaryButton" type="button" onClick={() => setEditingUser(null)}>取消</button>
-              <button type="submit"><Save size={16} aria-hidden="true" />保存</button>
+              <button type="submit" disabled={mutation.pending}><Save size={16} aria-hidden="true" />保存</button>
             </footer>
           </form>
         </div>

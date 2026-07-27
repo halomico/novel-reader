@@ -198,11 +198,14 @@ function migrateLegacyContentAccessBans(db: DatabaseSync) {
   }
 }
 
-function migrateContentReportCategories(db: DatabaseSync) {
+function migrateContentReports(db: DatabaseSync) {
   const table = db
     .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'content_reports'")
     .get() as { sql?: string } | undefined;
-  if (!table?.sql || table.sql.includes("'title_error'")) {
+  if (
+    !table?.sql ||
+    (table.sql.includes("media_id") && table.sql.includes("'playback_error'"))
+  ) {
     return;
   }
 
@@ -212,24 +215,30 @@ function migrateContentReportCategories(db: DatabaseSync) {
       CREATE TABLE content_reports_new (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
-        novel_id INTEGER NOT NULL,
-        category TEXT NOT NULL CHECK(category IN ('title_error', 'tag_error', 'hotword_error', 'spam', 'other')),
+        novel_id INTEGER,
+        media_id INTEGER,
+        category TEXT NOT NULL CHECK(category IN ('title_error', 'tag_error', 'hotword_error', 'playback_error', 'spam', 'other')),
         details TEXT NOT NULL DEFAULT '',
         status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'resolved')),
         resolved_by TEXT,
         resolved_at TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CHECK(
+          (novel_id IS NOT NULL AND media_id IS NULL) OR
+          (novel_id IS NULL AND media_id IS NOT NULL)
+        ),
         FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE
+        FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE,
+        FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE CASCADE
       );
 
       INSERT INTO content_reports_new (
-        id, user_id, novel_id, category, details, status,
+        id, user_id, novel_id, media_id, category, details, status,
         resolved_by, resolved_at, created_at, updated_at
       )
       SELECT
-        id, user_id, novel_id, category, details, status,
+        id, user_id, novel_id, NULL, category, details, status,
         resolved_by, resolved_at, created_at, updated_at
       FROM content_reports;
 
@@ -370,8 +379,8 @@ function migrateNovelRecommendations(db: DatabaseSync) {
   }
 
   let recommendationColumns = db.prepare("PRAGMA table_info(novel_recommendations)").all() as Array<{ name: string }>;
-  const needsDailyKey = !recommendationColumns.some((column) => column.name === "recommendation_date");
-  if (needsDailyKey) {
+  const hasDailyKey = recommendationColumns.some((column) => column.name === "recommendation_date");
+  if (hasDailyKey) {
     const spentColumn = recommendationColumns.some((column) => column.name === "soda_spent")
       ? "soda_spent"
       : recommendationColumns.some((column) => column.name === "cola_spent")
@@ -380,22 +389,24 @@ function migrateNovelRecommendations(db: DatabaseSync) {
     db.exec("BEGIN");
     try {
       db.exec(`
+        DROP TRIGGER IF EXISTS novel_recommendations_insert_count;
+
         CREATE TABLE novel_recommendations_new (
           novel_id INTEGER NOT NULL,
           user_id INTEGER NOT NULL,
-          recommendation_date TEXT NOT NULL,
           soda_spent INTEGER NOT NULL DEFAULT 0 CHECK(soda_spent >= 0),
           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          PRIMARY KEY(novel_id, user_id, recommendation_date),
+          PRIMARY KEY(novel_id, user_id),
           FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE,
           FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         );
 
         INSERT OR IGNORE INTO novel_recommendations_new (
-          novel_id, user_id, recommendation_date, soda_spent, created_at
+          novel_id, user_id, soda_spent, created_at
         )
-        SELECT novel_id, user_id, date(created_at), ${spentColumn}, created_at
-        FROM novel_recommendations;
+        SELECT novel_id, user_id, MAX(${spentColumn}), MIN(created_at)
+        FROM novel_recommendations
+        GROUP BY novel_id, user_id;
 
         DROP TABLE novel_recommendations;
         ALTER TABLE novel_recommendations_new RENAME TO novel_recommendations;
@@ -415,7 +426,7 @@ function migrateNovelRecommendations(db: DatabaseSync) {
     }
   }
 
-  if (addedRecommendCount || needsDailyKey) {
+  if (addedRecommendCount || hasDailyKey) {
     db.exec(`
       UPDATE novels
       SET recommend_count = (
@@ -438,6 +449,50 @@ function migrateNovelRecommendations(db: DatabaseSync) {
       SET recommend_count = recommend_count + 1
       WHERE id = NEW.novel_id;
     END;
+  `);
+}
+
+function migrateMediaRecommendations(db: DatabaseSync) {
+  const columns = db.prepare("PRAGMA table_info(media_recommendations)").all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === "recommendation_date")) {
+    return;
+  }
+  db.exec("BEGIN");
+  try {
+    db.exec(`
+      DROP TRIGGER IF EXISTS media_recommendations_insert_count;
+
+      CREATE TABLE media_recommendations_new (
+        media_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        soda_spent INTEGER NOT NULL DEFAULT 1 CHECK(soda_spent > 0),
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY(media_id, user_id),
+        FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE CASCADE,
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+
+      INSERT OR IGNORE INTO media_recommendations_new (
+        media_id, user_id, soda_spent, created_at
+      )
+      SELECT media_id, user_id, MAX(soda_spent), MIN(created_at)
+      FROM media_recommendations
+      GROUP BY media_id, user_id;
+
+      DROP TABLE media_recommendations;
+      ALTER TABLE media_recommendations_new RENAME TO media_recommendations;
+    `);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+  db.exec(`
+    UPDATE media_assets
+    SET recommend_count = (
+      SELECT COUNT(*) FROM media_recommendations r
+      WHERE r.media_id = media_assets.id
+    );
   `);
 }
 
@@ -698,16 +753,22 @@ function initialize(db: DatabaseSync) {
     CREATE TABLE IF NOT EXISTS content_reports (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
-      novel_id INTEGER NOT NULL,
-      category TEXT NOT NULL CHECK(category IN ('title_error', 'tag_error', 'hotword_error', 'spam', 'other')),
+      novel_id INTEGER,
+      media_id INTEGER,
+      category TEXT NOT NULL CHECK(category IN ('title_error', 'tag_error', 'hotword_error', 'playback_error', 'spam', 'other')),
       details TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'resolved')),
       resolved_by TEXT,
       resolved_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK(
+        (novel_id IS NOT NULL AND media_id IS NULL) OR
+        (novel_id IS NULL AND media_id IS NOT NULL)
+      ),
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE
+      FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE,
+      FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE CASCADE
     );
 
     CREATE INDEX IF NOT EXISTS idx_content_reports_status_time ON content_reports(status, created_at DESC);
@@ -717,10 +778,9 @@ function initialize(db: DatabaseSync) {
     CREATE TABLE IF NOT EXISTS novel_recommendations (
       novel_id INTEGER NOT NULL,
       user_id INTEGER NOT NULL,
-      recommendation_date TEXT NOT NULL,
       soda_spent INTEGER NOT NULL DEFAULT 0 CHECK(soda_spent >= 0),
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY(novel_id, user_id, recommendation_date),
+      PRIMARY KEY(novel_id, user_id),
       FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE,
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
     );
@@ -884,6 +944,7 @@ function initialize(db: DatabaseSync) {
     CREATE TABLE IF NOT EXISTS media_assets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       kind TEXT NOT NULL CHECK(kind IN ('video', 'audio', 'file')),
+      storage_node_id TEXT,
       category_id INTEGER REFERENCES video_categories(id) ON DELETE SET NULL,
       title TEXT NOT NULL,
       artist TEXT NOT NULL DEFAULT '',
@@ -894,7 +955,9 @@ function initialize(db: DatabaseSync) {
       size_bytes INTEGER NOT NULL,
       mtime_ms INTEGER NOT NULL DEFAULT 0,
       duration_seconds REAL,
+      thumbnail_version INTEGER NOT NULL DEFAULT 0,
       play_count INTEGER NOT NULL DEFAULT 0,
+      recommend_count INTEGER NOT NULL DEFAULT 0 CHECK(recommend_count >= 0),
       download_count INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -919,11 +982,36 @@ function initialize(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_user_media_history_user_time ON user_media_history(user_id, last_accessed_at);
     CREATE INDEX IF NOT EXISTS idx_user_media_history_media ON user_media_history(media_id);
 
+    CREATE TABLE IF NOT EXISTS user_media_favorites (
+      user_id INTEGER NOT NULL,
+      media_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(user_id, media_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_user_media_favorites_user_time
+      ON user_media_favorites(user_id, created_at DESC, media_id DESC);
+
+    CREATE TABLE IF NOT EXISTS media_recommendations (
+      media_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      soda_spent INTEGER NOT NULL DEFAULT 1 CHECK(soda_spent > 0),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(media_id, user_id),
+      FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE CASCADE,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_media_recommendations_user_time
+      ON media_recommendations(user_id, created_at DESC);
+
   `);
   migrateLegacySearchRateLimitBans(db);
   migrateTagVisibility(db);
   migrateLegacyContentAccessBans(db);
-  migrateContentReportCategories(db);
+  migrateContentReports(db);
   migrateContentAccessCrawlerTarget(db);
   migrateContentAccessMatchMode(db);
   db.exec(`
@@ -943,10 +1031,23 @@ function initialize(db: DatabaseSync) {
   addColumnIfMissing(db, "novels", "last_accessed_user_agent", "last_accessed_user_agent TEXT");
   addColumnIfMissing(db, "users", "registration_ip", "registration_ip TEXT");
   addColumnIfMissing(db, "users", "role", "role TEXT NOT NULL DEFAULT 'user'");
+  addColumnIfMissing(db, "media_assets", "storage_node_id", "storage_node_id TEXT");
   addColumnIfMissing(db, "media_assets", "artist", "artist TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(db, "media_assets", "mtime_ms", "mtime_ms INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(db, "media_assets", "duration_seconds", "duration_seconds REAL");
+  addColumnIfMissing(db, "media_assets", "thumbnail_version", "thumbnail_version INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(db, "media_assets", "recommend_count", "recommend_count INTEGER NOT NULL DEFAULT 0 CHECK(recommend_count >= 0)");
   addColumnIfMissing(db, "media_assets", "category_id", "category_id INTEGER REFERENCES video_categories(id) ON DELETE SET NULL");
+  migrateMediaRecommendations(db);
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS media_recommendations_insert_count
+    AFTER INSERT ON media_recommendations
+    BEGIN
+      UPDATE media_assets
+      SET recommend_count = recommend_count + 1
+      WHERE id = NEW.media_id;
+    END;
+  `);
   addColumnIfMissing(db, "tags", "parent_id", "parent_id INTEGER REFERENCES tags(id) ON DELETE SET NULL");
   addColumnIfMissing(db, "tags", "aliases", "aliases TEXT NOT NULL DEFAULT '[]'");
   addColumnIfMissing(db, "analytics_events", "media_id", "media_id INTEGER REFERENCES media_assets(id) ON DELETE SET NULL");
@@ -970,9 +1071,11 @@ function initialize(db: DatabaseSync) {
   db.exec("CREATE INDEX IF NOT EXISTS idx_content_reports_status_time ON content_reports(status, created_at DESC);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_content_reports_user_time ON content_reports(user_id, created_at DESC);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_content_reports_novel_time ON content_reports(novel_id, created_at DESC);");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_content_reports_media_time ON content_reports(media_id, created_at DESC);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_analytics_events_media_time ON analytics_events(media_id, created_at);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_analytics_events_tag_time ON analytics_events(tag_id, created_at);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_media_assets_video_category ON media_assets(kind, category_id, updated_at DESC);");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_media_assets_storage_node ON media_assets(storage_node_id, stored_name);");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_search_query_events_event_key ON search_query_events(event_key) WHERE event_key IS NOT NULL;");
   db.exec("CREATE INDEX IF NOT EXISTS idx_search_query_events_source_time ON search_query_events(source, created_at);");
 }

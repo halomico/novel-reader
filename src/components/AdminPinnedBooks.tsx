@@ -2,18 +2,22 @@
 
 import { ArrowDown, ArrowUp, Pin, PinOff, RotateCcw, Save } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { savePinnedNovelsAction } from "@/app/admin/actions";
+import { InlineMutationNotice, useInlineMutation } from "@/components/useInlineMutation";
 import type { PinnedNovel } from "@/lib/pinned-novels";
 
 export function AdminPinnedBooks({ books, returnPath }: { books: PinnedNovel[]; returnPath: string }) {
+  const mutation = useInlineMutation();
   const sourceKey = useMemo(() => JSON.stringify(books.map((book) => [book.id, book.title])), [books]);
+  const [savedBooks, setSavedBooks] = useState(books);
   const [orderedBooks, setOrderedBooks] = useState(books);
-  const sourceIds = books.map((book) => book.id).join(",");
+  const sourceIds = savedBooks.map((book) => book.id).join(",");
   const orderedIds = orderedBooks.map((book) => book.id).join(",");
   const dirty = sourceIds !== orderedIds;
 
   useEffect(() => {
+    setSavedBooks(books);
     setOrderedBooks(books);
   }, [sourceKey]);
 
@@ -33,6 +37,17 @@ export function AdminPinnedBooks({ books, returnPath }: { books: PinnedNovel[]; 
     setOrderedBooks((current) => current.filter((book) => book.id !== id));
   }
 
+  function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    mutation.run(
+      () => savePinnedNovelsAction(formData),
+      (result) => {
+        if (result.ok) setSavedBooks(orderedBooks);
+      },
+    );
+  }
+
   return (
     <details className="adminPinnedBooks">
       <summary>
@@ -40,7 +55,8 @@ export function AdminPinnedBooks({ books, returnPath }: { books: PinnedNovel[]; 
         <span>置顶小说</span>
         <small>{orderedBooks.length}</small>
       </summary>
-      <form action={savePinnedNovelsAction}>
+      <InlineMutationNotice notice={mutation.notice} />
+      <form onSubmit={save}>
         <input name="returnPath" type="hidden" value={returnPath} />
         {orderedBooks.map((book) => <input name="bookIds" type="hidden" value={book.id} key={book.id} />)}
         {orderedBooks.length ? (
@@ -64,14 +80,14 @@ export function AdminPinnedBooks({ books, returnPath }: { books: PinnedNovel[]; 
             ))}
           </ol>
         ) : (
-          <p>{books.length ? "全部取消置顶将在保存后生效" : "暂无置顶小说"}</p>
+          <p>{savedBooks.length ? "全部取消置顶将在保存后生效" : "暂无置顶小说"}</p>
         )}
         <footer className="adminPinnedFooter">
           <small>{dirty ? "调整尚未保存" : "顺序已保存"}</small>
-          <button className="adminPinnedResetButton" type="button" disabled={!dirty} onClick={() => setOrderedBooks(books)} aria-label="撤销置顶调整" title="撤销调整">
+          <button className="adminPinnedResetButton" type="button" disabled={!dirty || mutation.pending} onClick={() => setOrderedBooks(savedBooks)} aria-label="撤销置顶调整" title="撤销调整">
             <RotateCcw size={15} aria-hidden="true" />
           </button>
-          <button className="adminIconTextButton" type="submit" disabled={!dirty}>
+          <button className="adminIconTextButton" type="submit" disabled={!dirty || mutation.pending}>
             <Save size={15} aria-hidden="true" />
             保存
           </button>

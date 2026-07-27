@@ -5,7 +5,7 @@ import { AdminSelect } from "@/components/AdminSelect";
 import { LocalDateTime } from "@/components/LocalDateTime";
 import { Pagination } from "@/components/Pagination";
 import { getStationDisplayName } from "@/lib/config";
-import { listContentReports, type ContentReportCategory } from "@/lib/reports";
+import { listContentReports, type ContentReport, type ContentReportCategory } from "@/lib/reports";
 import {
   getStationThread,
   getVisibleAnnouncement,
@@ -44,9 +44,18 @@ const REPORT_CATEGORY_LABELS: Record<ContentReportCategory, string> = {
   title_error: "标题有误",
   tag_error: "标签有误",
   hotword_error: "热词有误",
+  playback_error: "播放异常",
   spam: "垃圾页面",
   other: "其他",
 };
+
+function getReportCategoryLabel(report: ContentReport): string {
+  if (report.targetType !== "media") return REPORT_CATEGORY_LABELS[report.category];
+  if (report.category === "title_error") return report.mediaKind === "audio" ? "音频信息有误" : "视频信息有误";
+  if (report.category === "playback_error") return "播放异常";
+  if (report.category === "spam") return report.mediaKind === "audio" ? "音质或内容问题" : "画面或内容问题";
+  return "其他问题";
+}
 
 function localDateTime(value: string | null): string {
   if (!value) return "";
@@ -177,7 +186,7 @@ export default async function AdminStationPage({ searchParams }: StationAdminPag
               <table className="adminTable adminReportsTable">
                 <thead>
                   <tr>
-                    <th>小说</th>
+                    <th>内容</th>
                     <th>问题</th>
                     <th>提交用户</th>
                     <th>时间</th>
@@ -187,10 +196,14 @@ export default async function AdminStationPage({ searchParams }: StationAdminPag
                 <tbody>
                   {reports.reports.length ? reports.reports.map((report) => (
                     <tr key={report.id}>
-                      <td><Link href={`/books/${report.novelId}`}>{report.novelTitle}</Link></td>
+                      <td>
+                        <Link href={report.targetType === "media" ? `/media/${report.targetId}` : `/books/${report.targetId}`}>
+                          {report.targetTitle}
+                        </Link>
+                      </td>
                       <td>
                         <span className="adminReportIssue">
-                          <strong>{REPORT_CATEGORY_LABELS[report.category]}</strong>
+                          <strong>{getReportCategoryLabel(report)}</strong>
                           <small>{report.details || "未补充说明"}</small>
                         </span>
                       </td>

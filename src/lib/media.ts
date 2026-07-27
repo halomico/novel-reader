@@ -20,16 +20,24 @@ import {
   readRemoteMediaManifest,
   renameRemoteMediaFolder,
 } from "./media-node-client";
-import { getRemoteMediaStorageConfig, isRemoteMediaStorage } from "./media-storage-config";
+import {
+  getRemoteMediaNodeForKind,
+  isRemoteMediaStorage,
+  listRemoteMediaNodes,
+  remoteMediaRegistryFingerprint,
+  resolveRemoteMediaNodeForAsset,
+} from "./media-storage-config";
 import { normalizeMediaStoragePath, resolveMediaStoragePath } from "./media-storage-path";
 
 export type MediaKind = "video" | "audio" | "file";
+export type FeedbackMediaKind = Extract<MediaKind, "video" | "audio">;
 export type MediaSortBy = "name" | "duration" | "size" | "updated" | "plays";
 export type MediaSortOrder = "asc" | "desc";
 
 export type MediaAsset = {
   id: number;
   kind: MediaKind;
+  storageNodeId: string | null;
   categoryId: number | null;
   title: string;
   artist: string;
@@ -41,7 +49,9 @@ export type MediaAsset = {
   sizeBytes: number;
   mtimeMs: number;
   durationSeconds: number | null;
+  thumbnailVersion: number;
   playCount: number;
+  recommendCount: number;
   downloadCount: number;
   createdAt: string;
   updatedAt: string;
@@ -76,6 +86,7 @@ export type MediaSyncResult = {
 type MediaRow = {
   id: number;
   kind: MediaKind;
+  storage_node_id: string | null;
   category_id: number | null;
   title: string;
   artist: string;
@@ -86,7 +97,9 @@ type MediaRow = {
   size_bytes: number;
   mtime_ms: number;
   duration_seconds: number | null;
+  thumbnail_version: number;
   play_count: number;
+  recommend_count: number;
   download_count: number;
   created_at: string;
   updated_at: string;
@@ -104,6 +117,7 @@ type VideoCategoryRow = {
 
 type ScannedMediaFile = {
   kind: MediaKind;
+  storageNodeId: string | null;
   fileName: string;
   storedName: string;
   mimeType: string;
@@ -173,6 +187,10 @@ function toPosixPath(value: string): string {
   return value.replace(/\\/g, "/");
 }
 
+function mediaStorageKey(storageNodeId: string | null, storedName: string): string {
+  return `${storageNodeId || "local"}\u0000${storedName}`;
+}
+
 export function normalizeMediaFolder(value: unknown): string | null {
   return normalizeMediaStoragePath(value);
 }
@@ -217,6 +235,7 @@ function toAsset(row: MediaRow): MediaAsset {
   return {
     id: row.id,
     kind: row.kind,
+    storageNodeId: row.storage_node_id,
     categoryId: row.category_id,
     title: row.title,
     artist: row.artist,
@@ -228,7 +247,9 @@ function toAsset(row: MediaRow): MediaAsset {
     sizeBytes: row.size_bytes,
     mtimeMs: row.mtime_ms,
     durationSeconds: row.duration_seconds,
+    thumbnailVersion: row.thumbnail_version,
     playCount: row.play_count,
+    recommendCount: row.recommend_count,
     downloadCount: row.download_count,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -348,6 +369,10 @@ export function isMediaKind(value: unknown): value is MediaKind {
   return value === "video" || value === "audio" || value === "file";
 }
 
+export function isFeedbackMediaKind(kind: MediaKind): kind is FeedbackMediaKind {
+  return kind === "video" || kind === "audio";
+}
+
 export function isMediaKindEnabled(kind: MediaKind): boolean {
   if (kind === "video") {
     return isVideoLibraryEnabled();
@@ -418,7 +443,7 @@ function emptyFolderSnapshot(): MediaLibrarySyncState["folders"] {
 
 function getMediaLibrarySyncState(): MediaLibrarySyncState {
   const directory = isRemoteMediaStorage()
-    ? `remote:${getRemoteMediaStorageConfig().controlUrl}`
+    ? `remote:${remoteMediaRegistryFingerprint()}`
     : path.resolve(getMediaDir());
   const globalState = globalThis as MediaGlobal;
   if (!globalState.mediaLibrarySyncState || globalState.mediaLibrarySyncState.directory !== directory) {
@@ -493,6 +518,24 @@ export function availableMediaStoredName(kind: MediaKind, folder: string, fileNa
   throw new MediaFolderError("同名资源过多，请修改名称");
 }
 
+export function availableIndexedMediaStoredName(
+  kind: MediaKind,
+  folder: string,
+  fileName: string,
+): string {
+  const extension = path.extname(fileName);
+  const baseName = path.basename(fileName, extension);
+  const exists = getDb().prepare("SELECT 1 FROM media_assets WHERE stored_name = ?");
+  for (let suffix = 1; suffix < 10_000; suffix += 1) {
+    const candidateFileName = suffix === 1 ? fileName : `${baseName} (${suffix})${extension}`;
+    const candidate = mediaStoredName(kind, folder, candidateFileName);
+    if (!exists.get(candidate)) {
+      return candidate;
+    }
+  }
+  throw new MediaFolderError("同名资源过多，请修改名称");
+}
+
 function migrateFlatMediaAssets() {
   const rows = getDb().prepare("SELECT id, kind, stored_name FROM media_assets").all() as Array<{
     id: number;
@@ -560,14 +603,40 @@ function migrateGeneratedMediaFileNames() {
 
 async function scanMediaFiles(refreshRemote = false): Promise<ScannedMediaLibrary> {
   if (isRemoteMediaStorage()) {
-    const manifest = await readRemoteMediaManifest(refreshRemote);
+    const files = new Map<string, ScannedMediaFile>();
+    const folders = emptyFolderSnapshot();
+    const failures: unknown[] = [];
+    let completedNodes = 0;
+    for (const node of listRemoteMediaNodes()) {
+      let manifest;
+      try {
+        manifest = await readRemoteMediaManifest(node.id, refreshRemote);
+        completedNodes += 1;
+      } catch (error) {
+        failures.push(error);
+        console.warn(`[media] failed to read manifest from node ${node.id}`, error);
+        continue;
+      }
+      for (const file of manifest.files) {
+        files.set(mediaStorageKey(node.id, file.storedName), {
+          ...file,
+          storageNodeId: node.id,
+        });
+      }
+      for (const kind of MEDIA_KINDS) {
+        folders[kind].push(
+          ...manifest.folders
+            .filter((folder) => folder.kind === kind)
+            .map(({ path: folderPath, mtimeMs }) => ({ path: folderPath, mtimeMs })),
+        );
+      }
+    }
+    if (!completedNodes && failures.length) {
+      throw failures[0];
+    }
     return {
-      files: new Map(manifest.files.map((file) => [file.storedName, file])),
-      folders: {
-        video: manifest.folders.filter((folder) => folder.kind === "video").map(({ path: folderPath, mtimeMs }) => ({ path: folderPath, mtimeMs })),
-        audio: manifest.folders.filter((folder) => folder.kind === "audio").map(({ path: folderPath, mtimeMs }) => ({ path: folderPath, mtimeMs })),
-        file: manifest.folders.filter((folder) => folder.kind === "file").map(({ path: folderPath, mtimeMs }) => ({ path: folderPath, mtimeMs })),
-      },
+      files,
+      folders,
     };
   }
   const files = new Map<string, ScannedMediaFile>();
@@ -594,8 +663,9 @@ async function scanMediaFiles(refreshRemote = false): Promise<ScannedMediaLibrar
       }
       const stat = await fs.promises.stat(absolutePath);
       const storedName = toPosixPath(path.relative(getMediaDir(), absolutePath));
-      files.set(storedName, {
+      files.set(mediaStorageKey(null, storedName), {
         kind,
+        storageNodeId: null,
         fileName: normalizedFile.fileName,
         storedName,
         mimeType: normalizedFile.mimeType,
@@ -640,10 +710,29 @@ async function performMediaLibrarySync(state: MediaLibrarySyncState, force = fal
   const scanned = scannedLibrary.files;
   const db = getDb();
   const rows = db.prepare("SELECT * FROM media_assets").all() as MediaRow[];
-  const existing = new Map(rows.map((row) => [row.stored_name, row]));
   const remoteStorage = isRemoteMediaStorage();
+  const scannedByStoredName = new Map<string, ScannedMediaFile[]>();
+  for (const file of scanned.values()) {
+    scannedByStoredName.set(file.storedName, [
+      ...(scannedByStoredName.get(file.storedName) || []),
+      file,
+    ]);
+  }
+  const existing = new Map<string, MediaRow>();
+  for (const row of rows) {
+    let storageNodeId: string | null = null;
+    if (remoteStorage) {
+      const candidates = (scannedByStoredName.get(row.stored_name) || [])
+        .filter((file) => file.kind === row.kind);
+      storageNodeId = row.storage_node_id ||
+        (candidates.length === 1
+          ? candidates[0].storageNodeId
+          : resolveRemoteMediaNodeForAsset(null, row.kind).id);
+    }
+    existing.set(mediaStorageKey(storageNodeId, row.stored_name), row);
+  }
   const missingRows = remoteStorage ? [] : rows.filter((row) => {
-    if (scanned.has(row.stored_name)) {
+    if (scanned.has(mediaStorageKey(null, row.stored_name))) {
       return false;
     }
     try {
@@ -652,7 +741,9 @@ async function performMediaLibrarySync(state: MediaLibrarySyncState, force = fal
       return true;
     }
   });
-  const newFiles = Array.from(scanned.values()).filter((file) => !existing.has(file.storedName));
+  const newFiles = Array.from(scanned.values()).filter(
+    (file) => !existing.has(mediaStorageKey(file.storageNodeId, file.storedName)),
+  );
   const identity = (item: { kind: MediaKind; sizeBytes?: number; size_bytes?: number; mtimeMs?: number; mtime_ms?: number; fileName?: string; file_name?: string }) => {
     const size = item.sizeBytes ?? item.size_bytes ?? -1;
     const mtime = item.mtimeMs ?? item.mtime_ms ?? -1;
@@ -677,20 +768,26 @@ async function performMediaLibrarySync(state: MediaLibrarySyncState, force = fal
     }
   }
   const renamedIds = new Set(renamedPairs.map((pair) => pair.row.id));
-  const renamedStoredNames = new Set(renamedPairs.map((pair) => pair.file.storedName));
+  const renamedStorageKeys = new Set(
+    renamedPairs.map((pair) => mediaStorageKey(pair.file.storageNodeId, pair.file.storedName)),
+  );
   const removedRows = missingRows.filter((row) => !renamedIds.has(row.id));
   let added = 0;
   let updated = 0;
   db.exec("BEGIN");
   try {
     const insert = db.prepare(
-      `INSERT INTO media_assets (kind, title, artist, description, file_name, stored_name, mime_type, size_bytes, mtime_ms)
-       VALUES (?, ?, '', '', ?, ?, ?, ?, ?)`,
+      `INSERT INTO media_assets (
+         kind, storage_node_id, title, artist, description, file_name, stored_name,
+         mime_type, size_bytes, mtime_ms
+       )
+       VALUES (?, ?, ?, '', '', ?, ?, ?, ?, ?)`,
     );
     const update = db.prepare(
       `UPDATE media_assets
-       SET title = ?, file_name = ?, mime_type = ?, size_bytes = ?, mtime_ms = ?,
+       SET storage_node_id = ?, title = ?, file_name = ?, mime_type = ?, size_bytes = ?, mtime_ms = ?,
            duration_seconds = CASE WHEN size_bytes <> ? OR mtime_ms <> ? THEN NULL ELSE duration_seconds END,
+           thumbnail_version = CASE WHEN size_bytes <> ? OR mtime_ms <> ? THEN 0 ELSE thumbnail_version END,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
     );
@@ -700,6 +797,7 @@ async function performMediaLibrarySync(state: MediaLibrarySyncState, force = fal
        WHERE id = ?`,
     );
     const updateHistoryTitle = db.prepare("UPDATE user_media_history SET title = ? WHERE media_id = ?");
+    const claimedStoredNames = new Set(rows.map((row) => row.stored_name));
     for (const { row, file } of renamedPairs) {
       const title = path.basename(file.fileName, path.extname(file.fileName));
       updateRename.run(title, file.fileName, file.storedName, file.mimeType, file.sizeBytes, file.mtimeMs, row.id);
@@ -707,10 +805,18 @@ async function performMediaLibrarySync(state: MediaLibrarySyncState, force = fal
       updated += 1;
     }
     for (const file of scanned.values()) {
-      const row = existing.get(file.storedName);
-      if (!row && !renamedStoredNames.has(file.storedName)) {
+      const storageKey = mediaStorageKey(file.storageNodeId, file.storedName);
+      const row = existing.get(storageKey);
+      if (!row && !renamedStorageKeys.has(storageKey)) {
+        if (claimedStoredNames.has(file.storedName)) {
+          console.warn(
+            `[media] skipped duplicate logical path on node ${file.storageNodeId || "local"}: ${file.storedName}`,
+          );
+          continue;
+        }
         insert.run(
           file.kind,
+          file.storageNodeId,
           path.basename(file.fileName, path.extname(file.fileName)),
           file.fileName,
           file.storedName,
@@ -718,15 +824,29 @@ async function performMediaLibrarySync(state: MediaLibrarySyncState, force = fal
           file.sizeBytes,
           file.mtimeMs,
         );
+        claimedStoredNames.add(file.storedName);
         added += 1;
       } else if (row && (
+        row.storage_node_id !== file.storageNodeId ||
         row.file_name !== file.fileName ||
         row.mime_type !== file.mimeType ||
         row.size_bytes !== file.sizeBytes ||
         row.mtime_ms !== file.mtimeMs
       )) {
         const title = row.file_name === file.fileName ? row.title : path.basename(file.fileName, path.extname(file.fileName));
-        update.run(title, file.fileName, file.mimeType, file.sizeBytes, file.mtimeMs, file.sizeBytes, file.mtimeMs, row.id);
+        update.run(
+          file.storageNodeId,
+          title,
+          file.fileName,
+          file.mimeType,
+          file.sizeBytes,
+          file.mtimeMs,
+          file.sizeBytes,
+          file.mtimeMs,
+          file.sizeBytes,
+          file.mtimeMs,
+          row.id,
+        );
         if (title !== row.title) {
           updateHistoryTitle.run(title, row.id);
         }
@@ -778,6 +898,7 @@ export function syncMediaLibrary(options: { force?: boolean } = {}): Promise<Med
 
 export function createMediaAsset(params: {
   kind: MediaKind;
+  storageNodeId?: string | null;
   categoryId?: unknown;
   title: string;
   artist?: string;
@@ -793,13 +914,14 @@ export function createMediaAsset(params: {
   const result = getDb()
     .prepare(
       `INSERT INTO media_assets (
-         kind, category_id, title, artist, description, file_name, stored_name,
+         kind, storage_node_id, category_id, title, artist, description, file_name, stored_name,
          mime_type, size_bytes, mtime_ms, duration_seconds
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       params.kind,
+      params.storageNodeId || null,
       categoryId,
       params.title,
       params.kind === "file" ? "" : params.artist || "",
@@ -822,10 +944,21 @@ export function getMediaAsset(id: number): MediaAsset | null {
   return row ? toAsset(row) : null;
 }
 
-export function getMediaAssetByStoredName(storedNameValue: string): MediaAsset | null {
+export function getMediaAssetByStoredName(
+  storedNameValue: string,
+  storageNodeId?: string | null,
+): MediaAsset | null {
   const storedName = normalizeMediaFolder(storedNameValue);
   if (!storedName) return null;
-  const row = getDb().prepare("SELECT * FROM media_assets WHERE stored_name = ?").get(storedName) as MediaRow | undefined;
+  const row = storageNodeId === undefined
+    ? getDb().prepare("SELECT * FROM media_assets WHERE stored_name = ?").get(storedName) as MediaRow | undefined
+    : getDb()
+      .prepare(
+        storageNodeId
+          ? "SELECT * FROM media_assets WHERE stored_name = ? AND storage_node_id = ?"
+          : "SELECT * FROM media_assets WHERE stored_name = ? AND storage_node_id IS NULL",
+      )
+      .get(...(storageNodeId ? [storedName, storageNodeId] : [storedName])) as MediaRow | undefined;
   return row ? toAsset(row) : null;
 }
 
@@ -1022,22 +1155,37 @@ export function saveMediaDuration(id: number, durationSeconds: number): boolean 
   return Number(info.changes) > 0;
 }
 
-export function listMediaAssetsNeedingDuration(limit = 100): MediaAsset[] {
+export function saveMediaThumbnailVersion(id: number, sourceVersion: number): boolean {
+  if (!Number.isFinite(sourceVersion) || sourceVersion <= 0) {
+    return false;
+  }
+  const info = getDb()
+    .prepare("UPDATE media_assets SET thumbnail_version = ? WHERE id = ?")
+    .run(Math.floor(sourceVersion), id);
+  return Number(info.changes) > 0;
+}
+
+export function mediaThumbnailVersion(sourceVersion: number, percent: number): number {
+  const normalizedPercent = Math.min(Math.max(Math.floor(percent), 1), 99);
+  return Math.floor(sourceVersion) * 100 + normalizedPercent;
+}
+
+export function listMediaAssetsNeedingPreparation(limit = 1_000, thumbnailPercent = 33): MediaAsset[] {
+  const normalizedPercent = Math.min(Math.max(Math.floor(thumbnailPercent), 1), 99);
   const rows = getDb()
     .prepare(
       `SELECT * FROM media_assets
-       WHERE kind IN ('video', 'audio') AND (duration_seconds IS NULL OR duration_seconds <= 0)
+       WHERE (
+         kind IN ('video', 'audio')
+         AND (duration_seconds IS NULL OR duration_seconds <= 0)
+       ) OR (
+         kind = 'video'
+         AND thumbnail_version <> CAST(mtime_ms AS INTEGER) * 100 + ?
+       )
        ORDER BY updated_at DESC, id ASC
        LIMIT ?`,
     )
-    .all(Math.min(Math.max(Math.floor(limit), 1), 1_000)) as MediaRow[];
-  return rows.map(toAsset);
-}
-
-export function listVideoAssetsForPreparation(limit = 200): MediaAsset[] {
-  const rows = getDb()
-    .prepare("SELECT * FROM media_assets WHERE kind = 'video' ORDER BY updated_at DESC, id ASC LIMIT ?")
-    .all(Math.min(Math.max(Math.floor(limit), 1), 1_000)) as MediaRow[];
+    .all(normalizedPercent, Math.min(Math.max(Math.floor(limit), 1), 5_000)) as MediaRow[];
   return rows.map(toAsset);
 }
 
@@ -1067,7 +1215,8 @@ export async function createMediaFolder(kind: MediaKind, parent: string, nameVal
   const folder = [normalizedParent, name].filter(Boolean).join("/");
   if (isRemoteMediaStorage()) {
     try {
-      const createdFolder = await createRemoteMediaFolder(kind, folder);
+      const node = getRemoteMediaNodeForKind(kind);
+      const createdFolder = await createRemoteMediaFolder(node.id, kind, folder);
       markMediaLibraryDirty();
       rememberMediaFolder(kind, createdFolder);
       return createdFolder;
@@ -1104,16 +1253,28 @@ export async function renameMediaFolder(kind: MediaKind, folderValue: string, na
   }
   const oldPrefix = `${kind}/${folder}/`;
   const nextPrefix = `${kind}/${nextFolder}/`;
-  const rows = getDb().prepare("SELECT id, stored_name FROM media_assets WHERE stored_name LIKE ? ESCAPE '\\'").all(`${escapeLike(oldPrefix)}%`) as Array<{
+  const remoteStorage = isRemoteMediaStorage();
+  const remoteNode = remoteStorage ? getRemoteMediaNodeForKind(kind) : null;
+  const includeUnassignedRows = remoteNode
+    ? resolveRemoteMediaNodeForAsset(null, kind).id === remoteNode.id
+    : false;
+  const rows = getDb()
+    .prepare(
+      `SELECT id, stored_name FROM media_assets
+       WHERE stored_name LIKE ? ESCAPE '\\'
+       ${remoteNode
+          ? `AND (storage_node_id = ?${includeUnassignedRows ? " OR storage_node_id IS NULL" : ""})`
+          : ""}`,
+    )
+    .all(...(remoteNode ? [`${escapeLike(oldPrefix)}%`, remoteNode.id] : [`${escapeLike(oldPrefix)}%`])) as Array<{
     id: number;
     stored_name: string;
   }>;
-  const remoteStorage = isRemoteMediaStorage();
   const sourcePath = remoteStorage ? "" : mediaFolderAbsolutePath(kind, folder);
   const targetPath = remoteStorage ? "" : mediaFolderAbsolutePath(kind, nextFolder);
   if (remoteStorage) {
     try {
-      await renameRemoteMediaFolder(kind, folder, nextFolder);
+      await renameRemoteMediaFolder(remoteNode!.id, kind, folder, nextFolder);
     } catch (error) {
       remoteMediaError(error);
     }
@@ -1137,7 +1298,7 @@ export async function renameMediaFolder(kind: MediaKind, folderValue: string, na
   } catch (error) {
     db.exec("ROLLBACK");
     if (remoteStorage) {
-      await renameRemoteMediaFolder(kind, nextFolder, folder).catch(() => undefined);
+      await renameRemoteMediaFolder(remoteNode!.id, kind, nextFolder, folder).catch(() => undefined);
     } else {
       fs.renameSync(targetPath, sourcePath);
     }
@@ -1155,7 +1316,8 @@ export async function deleteMediaFolder(kind: MediaKind, folderValue: string): P
   }
   if (isRemoteMediaStorage()) {
     try {
-      const deleted = await deleteRemoteMediaFolder(kind, folder);
+      const node = getRemoteMediaNodeForKind(kind);
+      const deleted = await deleteRemoteMediaFolder(node.id, kind, folder);
       if (deleted) {
         markMediaLibraryDirty();
         forgetMediaFolder(kind, folder);
@@ -1197,6 +1359,9 @@ export async function updateMediaAsset(
     throw new MediaFolderError("名称无效，不能包含文件路径字符");
   }
   const remoteStorage = isRemoteMediaStorage();
+  const remoteNode = remoteStorage
+    ? resolveRemoteMediaNodeForAsset(asset.storageNodeId, asset.kind)
+    : null;
   if (folder === null || (!remoteStorage && !mediaFolderExists(asset.kind, folder))) {
     throw new MediaFolderError("目标文件夹不存在");
   }
@@ -1215,7 +1380,7 @@ export async function updateMediaAsset(
   if (nextStoredName !== asset.storedName) {
     if (remoteStorage) {
       try {
-        await moveRemoteMediaAsset(asset.storedName, nextStoredName);
+        await moveRemoteMediaAsset(remoteNode!.id, asset.storedName, nextStoredName);
       } catch (error) {
         remoteMediaError(error);
       }
@@ -1256,7 +1421,7 @@ export async function updateMediaAsset(
     db.exec("ROLLBACK");
     if (moved) {
       if (remoteStorage) {
-        await moveRemoteMediaAsset(nextStoredName, asset.storedName).catch(() => undefined);
+        await moveRemoteMediaAsset(remoteNode!.id, nextStoredName, asset.storedName).catch(() => undefined);
       } else {
         fs.renameSync(targetPath, sourcePath);
       }
@@ -1279,25 +1444,35 @@ export async function deleteMediaAssets(ids: number[]): Promise<{ deleted: numbe
     return { deleted: 0, fileDeleteFailures: 0 };
   }
   const placeholders = uniqueIds.map(() => "?").join(", ");
-  const rows = getDb().prepare(`SELECT id, stored_name FROM media_assets WHERE id IN (${placeholders})`).all(...uniqueIds) as Array<{
+  const rows = getDb().prepare(`SELECT id, kind, storage_node_id, stored_name FROM media_assets WHERE id IN (${placeholders})`).all(...uniqueIds) as Array<{
     id: number;
+    kind: MediaKind;
+    storage_node_id: string | null;
     stored_name: string;
   }>;
   const deletedIds: number[] = [];
   let fileDeleteFailures = 0;
   if (isRemoteMediaStorage()) {
-    try {
-      const result = await deleteRemoteMediaAssets(rows.map((row) => row.stored_name));
-      const deletedNames = new Set(result.deletedStoredNames);
-      for (const row of rows) {
-        if (deletedNames.has(row.stored_name)) {
-          deletedIds.push(row.id);
-        } else {
-          fileDeleteFailures += 1;
+    const rowsByNode = new Map<string, typeof rows>();
+    for (const row of rows) {
+      const nodeId = resolveRemoteMediaNodeForAsset(row.storage_node_id, row.kind).id;
+      rowsByNode.set(nodeId, [...(rowsByNode.get(nodeId) || []), row]);
+    }
+    for (const [nodeId, nodeRows] of rowsByNode) {
+      try {
+        const result = await deleteRemoteMediaAssets(nodeId, nodeRows.map((row) => row.stored_name));
+        const deletedNames = new Set(result.deletedStoredNames);
+        for (const row of nodeRows) {
+          if (deletedNames.has(row.stored_name)) {
+            deletedIds.push(row.id);
+          } else {
+            fileDeleteFailures += 1;
+          }
         }
+      } catch (error) {
+        fileDeleteFailures += nodeRows.length;
+        console.warn(`[media] failed to delete assets from node ${nodeId}`, error);
       }
-    } catch (error) {
-      remoteMediaError(error);
     }
   } else {
     for (const row of rows) {

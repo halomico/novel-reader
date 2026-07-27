@@ -16,14 +16,14 @@ import {
   listMediaAssets,
   listMediaFolders,
   listVideoCategories,
+  normalizeMediaFolder,
   sortMediaFolders,
   type MediaAsset,
   type MediaKind,
   type MediaSortBy,
   type MediaSortOrder,
 } from "@/lib/media";
-import { scheduleMediaPreparation } from "@/lib/media-maintenance";
-import { formatMediaDuration } from "@/lib/media-metadata";
+import { formatMediaDuration } from "@/lib/media-format";
 import { getCurrentUser } from "@/lib/user-auth";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { Breadcrumbs, type BreadcrumbItem } from "@/components/Breadcrumbs";
@@ -87,15 +87,18 @@ function mediaHref(
   folder = "",
   query = "",
   category = "",
-  sort: MediaSortBy = "name",
-  order: MediaSortOrder = "asc",
+  sort?: MediaSortBy,
+  order?: MediaSortOrder,
 ): string {
+  const defaultSort: MediaSortBy = kind === "audio" && !folder ? "duration" : "name";
+  const selectedSort = sort || defaultSort;
+  const selectedOrder = order || (selectedSort === "name" ? "asc" : "desc");
   const params = new URLSearchParams({ kind });
   if (folder) params.set("folder", folder);
   if (query) params.set("q", query);
   if (kind === "video" && category) params.set("category", category);
-  if (sort !== "name") params.set("sort", sort);
-  if (order === "desc") params.set("order", order);
+  if (selectedSort !== defaultSort) params.set("sort", selectedSort);
+  if (selectedOrder !== (selectedSort === "name" ? "asc" : "desc")) params.set("order", selectedOrder);
   return `/media?${params.toString()}`;
 }
 
@@ -128,9 +131,11 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
   const requestedKind = isMediaKind(params.kind) ? params.kind : null;
   if (requestedKind && !accessibleKinds.includes(requestedKind)) notFound();
   const kind = requestedKind || accessibleKinds[0];
+  const requestedFolder = kind === "video" ? "" : normalizeMediaFolder(params.folder || "") || "";
   const timedKind = kind === "video" || kind === "audio";
+  const defaultSortBy: MediaSortBy = kind === "audio" && !requestedFolder ? "duration" : "name";
   const sortBy: MediaSortBy = timedKind
-    ? params.sort === "duration" || params.sort === "size" ? "duration" : "name"
+    ? params.sort === "duration" ? "duration" : params.sort === "name" ? "name" : defaultSortBy
     : params.sort === "size" ? "size" : "name";
   const sortOrder: MediaSortOrder = params.order === "asc" || params.order === "desc"
     ? params.order
@@ -145,15 +150,14 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
   const result = listMediaAssets({
     kind,
     videoCategoryId,
-    folder: kind === "video" ? "" : params.folder,
+    folder: requestedFolder,
     recursive: kind === "video",
     query: params.q,
     page: Number(params.page || 1),
-    pageSize: 18,
+    pageSize: kind === "video" ? 30 : kind === "audio" ? 50 : 18,
     sortBy,
     sortOrder,
   });
-  scheduleMediaPreparation(result.assets);
   const thumbnailSettings = getVideoThumbnailSettings();
   const folders = kind === "video" ? [] : listMediaFolders(kind);
   const EmptyIcon = KIND_ICONS[kind];
@@ -177,7 +181,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
   const visibleChildFolders = childFolders.slice((folderPage - 1) * folderPageSize, folderPage * folderPageSize);
   const breadcrumbItems: BreadcrumbItem[] = [
     { label: "首页", href: "/" },
-    { label: KIND_LABELS[kind], href: segments.length || activeVideoCategory ? mediaHref(kind, "", "", "", sortBy, sortOrder) : undefined },
+    { label: KIND_LABELS[kind], href: segments.length || activeVideoCategory ? mediaHref(kind) : undefined },
   ];
   if (activeVideoCategory) {
     breadcrumbItems.push({ label: activeVideoCategory.name });
@@ -215,7 +219,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
                 aria-label={kind === "video" ? "搜索视频" : kind === "audio" ? "搜索标题、作者或目录" : "搜索文件或目录"}
               />
               <input name="kind" type="hidden" value={kind} />
-              {sortBy !== "name" ? <input name="sort" type="hidden" value={sortBy} /> : null}
+              {sortBy !== defaultSortBy ? <input name="sort" type="hidden" value={sortBy} /> : null}
               {sortOrder !== (sortBy === "name" ? "asc" : "desc") ? <input name="order" type="hidden" value={sortOrder} /> : null}
               {categoryParam ? <input name="category" type="hidden" value={categoryParam} /> : null}
               {kind !== "video" && result.folder ? <input name="folder" type="hidden" value={result.folder} /> : null}
@@ -258,7 +262,14 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
             {result.assets.length || childFolders.length ? (
               kind === "video" ? (
                 <div className="mediaAssetGrid is-video">
-                  {result.assets.map((asset) => <MediaVideoCard asset={asset} thumbnail={thumbnailSettings} key={asset.id} />)}
+                  {result.assets.map((asset, index) => (
+                    <MediaVideoCard
+                      asset={asset}
+                      thumbnail={thumbnailSettings}
+                      priority={index < 8}
+                      key={asset.id}
+                    />
+                  ))}
                 </div>
               ) : (
                 <div className="mediaResourceList">
@@ -292,7 +303,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
                 folder: kind === "video" ? undefined : result.folder || undefined,
                 category: categoryParam || undefined,
                 folderPage: folderPage > 1 ? String(folderPage) : undefined,
-                sort: sortBy === "name" ? undefined : sortBy,
+                sort: sortBy === defaultSortBy ? undefined : sortBy,
                 order: sortOrder === (sortBy === "name" ? "asc" : "desc") ? undefined : sortOrder,
               }}
             />
@@ -307,7 +318,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
                 folder: kind === "video" ? undefined : result.folder || undefined,
                 category: categoryParam || undefined,
                 page: result.page > 1 ? String(result.page) : undefined,
-                sort: sortBy === "name" ? undefined : sortBy,
+                sort: sortBy === defaultSortBy ? undefined : sortBy,
                 order: sortOrder === (sortBy === "name" ? "asc" : "desc") ? undefined : sortOrder,
               }}
             />

@@ -217,14 +217,14 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
           <ReaderContent book={book} hitSegment={hitSegment} requestHeaders={headerStore} user={user} />
         </Suspense>
         {user ? (
-          <div className="readerFeedbackActions" aria-label="文章操作">
-            <NovelFavoriteButton novelId={book.id} initialFavorite={favorite} />
+          <div className="readerFeedbackActions feedbackActionTrio" aria-label="文章操作">
             {canRecommend && recommendation ? (
               <NovelRecommendationButton
                 novelId={book.id}
                 initialRecommended={recommendation.recommended}
               />
             ) : null}
+            <NovelFavoriteButton novelId={book.id} initialFavorite={favorite} />
             {canReport ? <ReportNovelButton novelId={book.id} title={book.title} /> : null}
           </div>
         ) : null}

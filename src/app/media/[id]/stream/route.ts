@@ -29,19 +29,26 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return new Response(null, { status: 404 });
   }
   let location: string;
+  const publiclyAccessible = isMediaKindPublic(asset.kind) && !hasScopedContentAccessRules("media");
   try {
     location = mediaDeliveryUrl(asset, false, {
-      publiclyAccessible: isMediaKindPublic(asset.kind) && !hasScopedContentAccessRules("media"),
+      publiclyAccessible,
     });
   } catch {
     return new Response(null, { status: 503 });
   }
   return new Response(null, {
     status: 307,
-    headers: {
-      "Cache-Control": "private, no-store",
-      Location: location,
-      Vary: "Cookie",
-    },
+    headers: publiclyAccessible
+      ? {
+          "Cache-Control": "public, max-age=300",
+          "Cloudflare-CDN-Cache-Control": "public, max-age=300",
+          Location: location,
+        }
+      : {
+          "Cache-Control": "private, no-store",
+          Location: location,
+          Vary: "Cookie",
+        },
   });
 }

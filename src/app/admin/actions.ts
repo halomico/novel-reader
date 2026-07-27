@@ -33,19 +33,23 @@ import {
   getMediaAsset,
   isMediaKind,
   listMediaAssetsByIds,
+  listVideoCategories,
   MediaCategoryError,
   MediaFolderError,
   renameMediaFolder,
   setVideoCategoryForAssets,
   syncMediaLibrary,
+  type MediaAsset,
   type MediaKind,
+  type VideoCategory,
   updateVideoCategory,
   updateMediaAsset,
 } from "@/lib/media";
+import { mutationResult, type MutationResult } from "@/lib/mutation-result";
 import { scheduleMissingMediaPreparation } from "@/lib/media-maintenance";
 import { clearMediaThumbnails } from "@/lib/media-thumbnail";
 import { clearRemoteMediaThumbnails } from "@/lib/media-node-client";
-import { isRemoteMediaStorage } from "@/lib/media-storage-config";
+import { isRemoteMediaStorage, listRemoteMediaNodes } from "@/lib/media-storage-config";
 import { deleteNovelIds, renameNovelFile, updateNovelFile } from "@/lib/novel-files";
 import { hashPassword } from "@/lib/password";
 import { replacePinnedNovels, togglePinnedNovel } from "@/lib/pinned-novels";
@@ -77,6 +81,7 @@ import {
   getUserById,
   updateUserRecord,
   updateUserStatus,
+  type UserProfile,
   validateDisplayName,
   validatePassword,
   validateUsername,
@@ -379,8 +384,7 @@ export async function togglePinnedNovelAction(formData: FormData) {
   revalidatePath("/admin/books");
 }
 
-export async function savePinnedNovelsAction(formData: FormData) {
-  const returnPath = listReturnPath(formData, "/admin/books");
+export async function savePinnedNovelsAction(formData: FormData): Promise<MutationResult> {
   await requireAdminRequest();
   const novelIds = formData
     .getAll("bookIds")
@@ -389,11 +393,11 @@ export async function savePinnedNovelsAction(formData: FormData) {
   try {
     replacePinnedNovels(novelIds);
   } catch (error) {
-    adminNotice(error instanceof Error ? error.message : "置顶列表保存失败", "warning", returnPath);
+    return mutationResult(false, error instanceof Error ? error.message : "置顶列表保存失败", "warning");
   }
   revalidatePath("/");
-  revalidatePath("/admin/books");
-  adminNotice("置顶列表已保存", "success", returnPath);
+  for (const novelId of novelIds) revalidatePath(`/books/${novelId}`);
+  return mutationResult(true, "置顶列表已保存", "success");
 }
 
 function tagOperationMessage(error: unknown): string {
@@ -789,28 +793,29 @@ export async function loadAdminMediaSelectionAction(requestedIds: number[]) {
   return listMediaAssetsByIds(ids);
 }
 
-export async function updateAdminMediaAction(formData: FormData) {
+export async function updateAdminMediaAction(
+  formData: FormData,
+): Promise<MutationResult<{ asset: MediaAsset }>> {
   await requireAdminRequest();
-  const returnPath = mediaReturnPath(formData);
   const id = Number(formData.get("mediaId"));
   const title = String(formData.get("title") || "").trim();
   const artist = String(formData.get("artist") || "").trim();
   const description = String(formData.get("description") || "").trim();
   const asset = Number.isInteger(id) && id > 0 ? getMediaAsset(id) : null;
   if (!asset) {
-    adminNotice("资源不存在", "warning", returnPath);
+    return mutationResult(false, "资源不存在", "warning");
   }
   if (!title || title.length > 120) {
-    adminNotice("标题应为 1 到 120 个字符", "warning", returnPath);
+    return mutationResult(false, "标题应为 1 到 120 个字符", "warning");
   }
   if (description.length > 1000) {
-    adminNotice("简介不能超过 1000 个字符", "warning", returnPath);
+    return mutationResult(false, "简介不能超过 1000 个字符", "warning");
   }
   if (artist.length > 80) {
-    adminNotice("作者不能超过 80 个字符", "warning", returnPath);
+    return mutationResult(false, "作者不能超过 80 个字符", "warning");
   }
   try {
-    await updateMediaAsset(
+    const updated = await updateMediaAsset(
       id,
       title,
       asset.kind === "file" ? "" : artist,
@@ -818,18 +823,22 @@ export async function updateAdminMediaAction(formData: FormData) {
       String(formData.get("targetFolder") || ""),
       asset.kind === "video" && formData.has("categoryId") ? formData.get("categoryId") : undefined,
     );
+    const nextAsset = updated ? getMediaAsset(id) : null;
+    if (!nextAsset) {
+      return mutationResult(false, "资源不存在", "warning");
+    }
+    revalidatePath("/media");
+    revalidatePath(`/media/${id}`);
+    return mutationResult(true, "资源信息已更新", "success", { asset: nextAsset });
   } catch (error) {
-    adminNotice(mediaOperationMessage(error), "warning", returnPath);
+    return mutationResult(false, mediaOperationMessage(error), "warning");
   }
-  revalidatePath("/media");
-  revalidatePath(`/media/${id}`);
-  revalidatePath("/admin/media");
-  adminNotice("资源信息已更新", "success", returnPath);
 }
 
-export async function batchUpdateAdminMediaAction(formData: FormData) {
+export async function batchUpdateAdminMediaAction(
+  formData: FormData,
+): Promise<MutationResult<{ assets: MediaAsset[] }>> {
   await requireAdminRequest();
-  const returnPath = mediaReturnPath(formData);
   const ids = Array.from(new Set(
     formData
       .getAll("mediaIds")
@@ -837,7 +846,7 @@ export async function batchUpdateAdminMediaAction(formData: FormData) {
       .filter((id) => Number.isInteger(id) && id > 0),
   )).slice(0, 100);
   if (!ids.length) {
-    adminNotice("请选择要编辑的资源", "warning", returnPath);
+    return mutationResult(false, "请选择要编辑的资源", "warning");
   }
 
   const applyArtist = formData.get("applyArtist") === "on";
@@ -847,7 +856,11 @@ export async function batchUpdateAdminMediaAction(formData: FormData) {
   const targetFolder = String(formData.get("targetFolder") || "__keep__");
   const categoryId = String(formData.get("categoryId") || "__keep__");
   if (artist.length > 80 || description.length > 1000) {
-    adminNotice(artist.length > 80 ? "作者不能超过 80 个字符" : "简介不能超过 1000 个字符", "warning", returnPath);
+    return mutationResult(
+      false,
+      artist.length > 80 ? "作者不能超过 80 个字符" : "简介不能超过 1000 个字符",
+      "warning",
+    );
   }
 
   let updated = 0;
@@ -868,29 +881,41 @@ export async function batchUpdateAdminMediaAction(formData: FormData) {
       revalidatePath(`/media/${id}`);
     }
   } catch (error) {
-    adminNotice(mediaOperationMessage(error), "warning", returnPath);
+    return mutationResult(
+      false,
+      mediaOperationMessage(error),
+      "warning",
+      { assets: listMediaAssetsByIds(ids) },
+    );
   }
   revalidatePath("/media");
-  revalidatePath("/admin/media");
-  adminNotice(`已更新 ${updated} 个资源`, updated ? "success" : "warning", returnPath);
+  return mutationResult(
+    updated > 0,
+    `已更新 ${updated} 个资源`,
+    updated ? "success" : "warning",
+    { assets: listMediaAssetsByIds(ids) },
+  );
 }
 
-export async function createAdminVideoCategoryAction(formData: FormData) {
+export async function createAdminVideoCategoryAction(
+  formData: FormData,
+): Promise<MutationResult<{ categories: VideoCategory[] }>> {
   await requireAdminRequest();
-  const returnPath = mediaReturnPath(formData);
   try {
     createVideoCategory(String(formData.get("name") || ""));
   } catch (error) {
-    adminNotice(mediaOperationMessage(error), "warning", returnPath);
+    return mutationResult(false, mediaOperationMessage(error), "warning");
   }
   revalidatePath("/media");
-  revalidatePath("/admin/media");
-  adminNotice("视频分类已创建", "success", returnPath);
+  return mutationResult(true, "视频分类已创建", "success", {
+    categories: listVideoCategories({ includeHidden: true }),
+  });
 }
 
-export async function updateAdminVideoCategoryAction(formData: FormData) {
+export async function updateAdminVideoCategoryAction(
+  formData: FormData,
+): Promise<MutationResult<{ categories: VideoCategory[] }>> {
   await requireAdminRequest();
-  const returnPath = mediaReturnPath(formData);
   const id = Number(formData.get("categoryId"));
   let updated = false;
   try {
@@ -901,44 +926,55 @@ export async function updateAdminVideoCategoryAction(formData: FormData) {
       formData.get("visible") === "on",
     );
   } catch (error) {
-    adminNotice(mediaOperationMessage(error), "warning", returnPath);
+    return mutationResult(false, mediaOperationMessage(error), "warning");
   }
   if (!updated) {
-    adminNotice("视频分类不存在", "warning", returnPath);
+    return mutationResult(false, "视频分类不存在", "warning");
   }
   revalidatePath("/media");
-  revalidatePath("/admin/media");
-  adminNotice("视频分类已更新", "success", returnPath);
+  return mutationResult(true, "视频分类已更新", "success", {
+    categories: listVideoCategories({ includeHidden: true }),
+  });
 }
 
-export async function deleteAdminVideoCategoryAction(formData: FormData) {
+export async function deleteAdminVideoCategoryAction(
+  formData: FormData,
+): Promise<MutationResult<{ categories: VideoCategory[] }>> {
   await requireAdminRequest();
-  const returnPath = mediaReturnPath(formData);
   const deleted = deleteVideoCategory(Number(formData.get("categoryId")));
   revalidatePath("/media");
-  revalidatePath("/admin/media");
-  adminNotice(deleted ? "视频分类已删除，原视频已归入未分类" : "视频分类不存在", deleted ? "success" : "warning", returnPath);
+  return mutationResult(
+    deleted,
+    deleted ? "视频分类已删除，原视频已归入未分类" : "视频分类不存在",
+    deleted ? "success" : "warning",
+    { categories: listVideoCategories({ includeHidden: true }) },
+  );
 }
 
-export async function assignAdminVideoCategoryAction(formData: FormData) {
+export async function assignAdminVideoCategoryAction(
+  formData: FormData,
+): Promise<MutationResult<{ assets: MediaAsset[] }>> {
   await requireAdminRequest();
-  const returnPath = mediaReturnPath(formData);
   const ids = formData
     .getAll("mediaIds")
     .map(Number)
     .filter((id) => Number.isInteger(id) && id > 0);
   if (!ids.length) {
-    adminNotice("请选择要归类的视频", "warning", returnPath);
+    return mutationResult(false, "请选择要归类的视频", "warning");
   }
   let updated = 0;
   try {
     updated = setVideoCategoryForAssets(ids, formData.get("categoryId"));
   } catch (error) {
-    adminNotice(mediaOperationMessage(error), "warning", returnPath);
+    return mutationResult(false, mediaOperationMessage(error), "warning");
   }
   revalidatePath("/media");
-  revalidatePath("/admin/media");
-  adminNotice(updated ? `已归类 ${updated} 个视频` : "所选视频不存在", updated ? "success" : "warning", returnPath);
+  return mutationResult(
+    updated > 0,
+    updated ? `已归类 ${updated} 个视频` : "所选视频不存在",
+    updated ? "success" : "warning",
+    { assets: listMediaAssetsByIds(ids) },
+  );
 }
 
 export async function saveAdminMediaDisplaySettingsAction(formData: FormData) {
@@ -955,7 +991,9 @@ export async function saveAdminMediaDisplaySettingsAction(formData: FormData) {
     writeSiteSettings(next);
     if (previous.videoThumbnailSinglePercent !== next.videoThumbnailSinglePercent) {
       if (isRemoteMediaStorage()) {
-        await clearRemoteMediaThumbnails().catch((error) => {
+        await Promise.all(
+          listRemoteMediaNodes().map((node) => clearRemoteMediaThumbnails(node.id)),
+        ).catch((error) => {
           console.warn("Failed to clear remote media thumbnails", error);
         });
       } else {
@@ -972,9 +1010,10 @@ export async function saveAdminMediaDisplaySettingsAction(formData: FormData) {
   adminNotice("视频展示设置已保存", "success", returnPath);
 }
 
-export async function deleteAdminMediaAction(formData: FormData) {
+export async function deleteAdminMediaAction(
+  formData: FormData,
+): Promise<MutationResult<{ deletedIds: number[] }>> {
   await requireAdminRequest();
-  const returnPath = mediaReturnPath(formData);
   const ids = Array.from(
     new Set(
       formData
@@ -984,16 +1023,27 @@ export async function deleteAdminMediaAction(formData: FormData) {
     ),
   );
   if (!ids.length) {
-    adminNotice("请选择要删除的资源", "warning", returnPath);
+    return mutationResult(false, "请选择要删除的资源", "warning");
   }
   const result = await deleteMediaAssets(ids);
+  const remainingIds = new Set(listMediaAssetsByIds(ids).map((asset) => asset.id));
+  const deletedIds = ids.filter((id) => !remainingIds.has(id));
   revalidatePath("/media");
   revalidatePath("/admin");
-  revalidatePath("/admin/media");
   if (result.fileDeleteFailures) {
-    adminNotice(`已删除 ${result.deleted} 条记录，但有 ${result.fileDeleteFailures} 个文件未能删除`, "warning", returnPath);
+    return mutationResult(
+      result.deleted > 0,
+      `已删除 ${result.deleted} 条记录，但有 ${result.fileDeleteFailures} 个文件未能删除`,
+      "warning",
+      { deletedIds },
+    );
   }
-  adminNotice(`已删除 ${result.deleted} 个资源`, result.deleted ? "success" : "warning", returnPath);
+  return mutationResult(
+    result.deleted > 0,
+    `已删除 ${result.deleted} 个资源`,
+    result.deleted ? "success" : "warning",
+    { deletedIds },
+  );
 }
 
 export async function syncAdminMediaAction(formData: FormData) {
@@ -1112,8 +1162,9 @@ export async function createAdminUserAction(formData: FormData) {
   adminNotice("用户已创建", "success", returnPath);
 }
 
-export async function updateAdminUserAction(formData: FormData) {
-  const returnPath = listReturnPath(formData, "/admin/users");
+export async function updateAdminUserAction(
+  formData: FormData,
+): Promise<MutationResult<{ user: UserProfile }>> {
   const session = await requireAdminRequest();
   const userId = Number(formData.get("userId"));
   const displayName = String(formData.get("displayName") || "").trim();
@@ -1124,15 +1175,15 @@ export async function updateAdminUserAction(formData: FormData) {
   const sodaExperience = Math.max(Math.floor(Number(formData.get("sodaExperience")) || 0), sodaBalance, 0);
 
   if (!Number.isInteger(userId) || userId < 1) {
-    adminNotice("用户不存在", "warning", returnPath);
+    return mutationResult(false, "用户不存在", "warning");
   }
   const displayNameError = validateDisplayName(displayName);
   if (displayNameError) {
-    adminNotice(displayNameError, "warning", returnPath);
+    return mutationResult(false, displayNameError, "warning");
   }
   const passwordError = newPassword ? validatePassword(newPassword) : null;
   if (passwordError) {
-    adminNotice(passwordError, "warning", returnPath);
+    return mutationResult(false, passwordError, "warning");
   }
 
   const previousUser = getUserById(userId);
@@ -1144,7 +1195,7 @@ export async function updateAdminUserAction(formData: FormData) {
     passwordHash: newPassword ? hashUserPassword(newPassword) : undefined,
   });
   if (!updated) {
-    adminNotice("用户不存在", "warning", returnPath);
+    return mutationResult(false, "用户不存在", "warning");
   }
   updateUserGrowth({
     userId,
@@ -1155,9 +1206,10 @@ export async function updateAdminUserAction(formData: FormData) {
   if (newPassword || status === "disabled" || previousUser?.role !== role) {
     deleteUserSessions(userId);
   }
-  revalidatePath("/admin/users");
-  revalidatePath(`/admin/users/${userId}`);
-  adminNotice("用户已更新", "success", returnPath);
+  const user = getUserById(userId);
+  return user
+    ? mutationResult(true, "用户已更新", "success", { user })
+    : mutationResult(false, "用户不存在", "warning");
 }
 
 export async function saveUserLevelsAction(formData: FormData) {
@@ -1195,25 +1247,28 @@ export async function saveUserLevelsAction(formData: FormData) {
   adminNotice("等级权限已保存", "success", "/admin/users/levels");
 }
 
-export async function updateAdminUserStatusAction(formData: FormData) {
-  const returnPath = listReturnPath(formData, "/admin/users");
+export async function updateAdminUserStatusAction(
+  formData: FormData,
+): Promise<MutationResult<{ user: UserProfile }>> {
   await requireAdminRequest();
   const userId = Number(formData.get("userId"));
   const status = formData.get("status") === "disabled" ? "disabled" : "active";
 
   if (!Number.isInteger(userId) || userId < 1 || !updateUserStatus(userId, status)) {
-    adminNotice("用户不存在", "warning", returnPath);
+    return mutationResult(false, "用户不存在", "warning");
   }
   if (status === "disabled") {
     deleteUserSessions(userId);
   }
-  revalidatePath("/admin/users");
-  revalidatePath(`/admin/users/${userId}`);
-  adminNotice(status === "active" ? "用户已启用" : "用户已停用", "success", returnPath);
+  const user = getUserById(userId);
+  return user
+    ? mutationResult(true, status === "active" ? "用户已启用" : "用户已停用", "success", { user })
+    : mutationResult(false, "用户不存在", "warning");
 }
 
-export async function deleteAdminUsersAction(formData: FormData) {
-  const returnPath = listReturnPath(formData, "/admin/users");
+export async function deleteAdminUsersAction(
+  formData: FormData,
+): Promise<MutationResult<{ deletedIds: number[] }>> {
   await requireAdminRequest();
   const ids = formData
     .getAll("userIds")
@@ -1221,12 +1276,17 @@ export async function deleteAdminUsersAction(formData: FormData) {
     .filter((value) => Number.isInteger(value) && value > 0);
 
   if (!ids.length) {
-    adminNotice("请选择要删除的用户", "warning", returnPath);
+    return mutationResult(false, "请选择要删除的用户", "warning");
   }
 
   const deleted = deleteUserIds(ids);
-  revalidatePath("/admin/users");
-  adminNotice(`已删除 ${deleted} 个用户`, deleted ? "success" : "warning", returnPath);
+  const deletedIds = ids.filter((id) => !getUserById(id));
+  return mutationResult(
+    deleted > 0,
+    `已删除 ${deleted} 个用户`,
+    deleted ? "success" : "warning",
+    { deletedIds },
+  );
 }
 
 export async function deleteAdminUserHistoryAction(formData: FormData) {

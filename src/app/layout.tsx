@@ -5,6 +5,7 @@ import { DefaultPaletteRotation } from "@/components/DefaultPaletteRotation";
 import { NavigationProgress } from "@/components/NavigationProgress";
 import { ThemeScript } from "@/components/ThemeScript";
 import { getReaderDefaultFontSize, getSiteTitle } from "@/lib/config";
+import { getMediaPublicUrl } from "@/lib/media-storage-config";
 import { getSiteUrl, getUmamiConfig } from "@/lib/seo";
 import { getSiteIconHref } from "@/lib/site-icon";
 import { readSiteSettings } from "@/lib/site-settings";
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   const settings = readSiteSettings();
   const defaultFontSize = getReaderDefaultFontSize();
   const umami = getUmamiConfig();
+  const mediaPublicUrl = getMediaPublicUrl();
   const defaultPalette = resolveDefaultPalette(
     settings.defaultPalette,
     settings.defaultPaletteRandomEnabled,
@@ -52,6 +54,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
+        {mediaPublicUrl ? <link rel="preconnect" href={mediaPublicUrl} crossOrigin="" /> : null}
+        {mediaPublicUrl ? <link rel="dns-prefetch" href={mediaPublicUrl} /> : null}
         <ThemeScript
           defaultTheme={settings.adminTheme}
           defaultFontSize={defaultFontSize}

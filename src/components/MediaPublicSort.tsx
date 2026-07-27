@@ -26,12 +26,13 @@ export function MediaPublicSort({
     : [{ value: "name", label: "名称" }, { value: "duration", label: "时长" }];
 
   function navigate(nextSort: MediaSortBy, nextOrder: MediaSortOrder) {
+    const defaultSort: MediaSortBy = kind === "audio" && !folder ? "duration" : "name";
     const params = new URLSearchParams({ kind });
     if (folder) params.set("folder", folder);
     if (query) params.set("q", query);
     if (category) params.set("category", category);
-    if (nextSort !== "name") params.set("sort", nextSort);
-    if (nextOrder === "desc") params.set("order", nextOrder);
+    if (nextSort !== defaultSort) params.set("sort", nextSort);
+    if (nextOrder !== (nextSort === "name" ? "asc" : "desc")) params.set("order", nextOrder);
     beginNavigationProgress();
     router.push(`/media?${params.toString()}`);
   }
