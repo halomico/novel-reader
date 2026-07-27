@@ -8,8 +8,11 @@ import { Pagination } from "@/components/Pagination";
 import { ResultCount } from "@/components/ResultCount";
 import { UserWorkspace } from "@/components/UserWorkspace";
 import { getCatalogPageSize, getVideoThumbnailSettings, isTagLibraryEnabled } from "@/lib/config";
+import { hasScopedContentAccessRules } from "@/lib/content-access";
 import { listFavoriteMedia, listFavoriteNovels } from "@/lib/favorites";
+import { isMediaKindPublic } from "@/lib/media";
 import { formatMediaDuration } from "@/lib/media-format";
+import { directMediaThumbnailUrl } from "@/lib/media-thumbnail-url";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { filterTagsByNovelForUser } from "@/lib/tag-preferences";
 import { listTagsForNovels } from "@/lib/tags";
@@ -37,6 +40,8 @@ export default async function FavoritesPage({ searchParams }: { searchParams: Pr
     : new Map();
   const tagsByNovel = filterTagsByNovelForUser(sourceTags, user.id);
   const thumbnailSettings = getVideoThumbnailSettings();
+  const directThumbnails = mediaKind === "video" && !hasScopedContentAccessRules("media");
+  const publiclyAccessibleThumbnails = directThumbnails && isMediaKindPublic("video");
 
   return (
     <UserWorkspace user={user} active="favorites" breadcrumb="收藏">
@@ -60,7 +65,15 @@ export default async function FavoritesPage({ searchParams }: { searchParams: Pr
         ) : mediaKind === "video" && mediaResult?.assets.length ? (
           <div className="mediaAssetGrid is-video">
             {mediaResult.assets.map((asset, index) => (
-              <MediaVideoCard asset={asset} thumbnail={thumbnailSettings} priority={index < 6} key={asset.id} />
+              <MediaVideoCard
+                asset={asset}
+                thumbnail={thumbnailSettings}
+                thumbnailUrl={directThumbnails
+                  ? directMediaThumbnailUrl(asset, thumbnailSettings.singlePercent, publiclyAccessibleThumbnails)
+                  : null}
+                priority={index < 6}
+                key={asset.id}
+              />
             ))}
           </div>
         ) : mediaKind === "audio" && mediaResult?.assets.length ? (

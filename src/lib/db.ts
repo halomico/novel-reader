@@ -956,6 +956,7 @@ function initialize(db: DatabaseSync) {
       mtime_ms INTEGER NOT NULL DEFAULT 0,
       duration_seconds REAL,
       thumbnail_version INTEGER NOT NULL DEFAULT 0,
+      custom_cover_key TEXT,
       play_count INTEGER NOT NULL DEFAULT 0,
       recommend_count INTEGER NOT NULL DEFAULT 0 CHECK(recommend_count >= 0),
       download_count INTEGER NOT NULL DEFAULT 0,
@@ -965,6 +966,23 @@ function initialize(db: DatabaseSync) {
 
     CREATE INDEX IF NOT EXISTS idx_media_assets_kind_created ON media_assets(kind, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_media_assets_title ON media_assets(title);
+    CREATE TABLE IF NOT EXISTS media_prepare_jobs (
+      media_id INTEGER PRIMARY KEY,
+      source_version INTEGER NOT NULL,
+      thumbnail_percent INTEGER NOT NULL DEFAULT 33,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'failed')),
+      attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+      next_run_at INTEGER NOT NULL DEFAULT 0,
+      locked_until INTEGER,
+      last_error TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_media_prepare_jobs_ready
+      ON media_prepare_jobs(status, next_run_at, media_id);
+
     CREATE TABLE IF NOT EXISTS user_media_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -1036,6 +1054,7 @@ function initialize(db: DatabaseSync) {
   addColumnIfMissing(db, "media_assets", "mtime_ms", "mtime_ms INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(db, "media_assets", "duration_seconds", "duration_seconds REAL");
   addColumnIfMissing(db, "media_assets", "thumbnail_version", "thumbnail_version INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(db, "media_assets", "custom_cover_key", "custom_cover_key TEXT");
   addColumnIfMissing(db, "media_assets", "recommend_count", "recommend_count INTEGER NOT NULL DEFAULT 0 CHECK(recommend_count >= 0)");
   addColumnIfMissing(db, "media_assets", "category_id", "category_id INTEGER REFERENCES video_categories(id) ON DELETE SET NULL");
   migrateMediaRecommendations(db);

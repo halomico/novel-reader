@@ -137,6 +137,7 @@ export function listFavoriteMedia(
     mtime_ms: number;
     duration_seconds: number | null;
     thumbnail_version: number;
+    custom_cover_key: string | null;
     play_count: number;
     recommend_count: number;
     download_count: number;
@@ -159,6 +160,7 @@ export function listFavoriteMedia(
     mtimeMs: row.mtime_ms,
     durationSeconds: row.duration_seconds,
     thumbnailVersion: row.thumbnail_version,
+    customCoverKey: row.custom_cover_key,
     playCount: row.play_count,
     recommendCount: row.recommend_count,
     downloadCount: row.download_count,

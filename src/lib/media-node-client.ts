@@ -222,3 +222,28 @@ export async function clearRemoteMediaThumbnails(nodeId: string): Promise<number
   const result = await controlRequest<{ removed: number }>(nodeId, "/control/thumbnails", { method: "DELETE" });
   return Number(result.removed) || 0;
 }
+
+export async function writeRemoteMediaCover(nodeId: string, key: string, buffer: Buffer): Promise<void> {
+  await controlRequest<Record<string, never>>(
+    nodeId,
+    `/control/covers/${encodeURIComponent(key)}`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Length": String(buffer.length),
+        "Content-Type": "image/jpeg",
+      },
+      body: new Uint8Array(buffer),
+    },
+    30_000,
+  );
+}
+
+export async function deleteRemoteMediaCover(nodeId: string, key: string): Promise<boolean> {
+  const result = await controlRequest<{ deleted: boolean }>(
+    nodeId,
+    `/control/covers/${encodeURIComponent(key)}`,
+    { method: "DELETE" },
+  );
+  return Boolean(result.deleted);
+}

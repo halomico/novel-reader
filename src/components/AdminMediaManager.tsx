@@ -13,6 +13,7 @@ import {
 } from "@/app/admin/actions";
 import { LocalDateTime } from "@/components/LocalDateTime";
 import { MediaVideoPreview } from "@/components/MediaVideoPreview";
+import { mediaCoverVersion } from "@/lib/media-cover-version";
 import { beginNavigationProgress } from "@/components/NavigationProgress";
 import { usePersistentSelection } from "@/components/usePersistentSelection";
 import { InlineMutationNotice, useInlineMutation } from "@/components/useInlineMutation";
@@ -578,6 +579,7 @@ export function AdminMediaManager({
                         id={asset.id}
                         singlePercent={thumbnail.singlePercent}
                         sourceVersion={asset.mtimeMs}
+                        coverVersion={mediaCoverVersion(asset, thumbnail.singlePercent)}
                         admin
                       />
                       <span className="mediaVideoMeta">{formatDuration(asset.durationSeconds)}</span>

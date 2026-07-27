@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import sharp from "sharp";
+import { MediaCoverError, normalizeMediaCover } from "./media-cover";
 import { mediaThumbnailEtag, thumbnailSeekSeconds } from "./media-thumbnail";
 import { mediaThumbnailCacheHeaders, mediaThumbnailRedirectCacheHeaders } from "./media-thumbnail-http";
 
@@ -37,4 +39,21 @@ test("only allows edge caching for publicly accessible thumbnails", () => {
     "Cache-Control": "private, max-age=300",
     Vary: "Cookie",
   });
+});
+
+test("normalizes custom covers to a bounded versioned JPEG", async () => {
+  const source = await sharp({
+    create: {
+      width: 80,
+      height: 120,
+      channels: 4,
+      background: { r: 34, g: 90, b: 140, alpha: 0.8 },
+    },
+  }).png().toBuffer();
+  const normalized = await normalizeMediaCover(source);
+  const metadata = await sharp(normalized).metadata();
+  assert.equal(metadata.format, "jpeg");
+  assert.equal(metadata.width, 640);
+  assert.equal(metadata.height, 360);
+  await assert.rejects(() => normalizeMediaCover(Buffer.from("not-an-image")), MediaCoverError);
 });

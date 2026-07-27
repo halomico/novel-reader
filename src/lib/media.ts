@@ -20,6 +20,7 @@ import {
   readRemoteMediaManifest,
   renameRemoteMediaFolder,
 } from "./media-node-client";
+import { deleteMediaCustomCover } from "./media-cover";
 import {
   getRemoteMediaNodeForKind,
   isRemoteMediaStorage,
@@ -27,6 +28,7 @@ import {
   remoteMediaRegistryFingerprint,
   resolveRemoteMediaNodeForAsset,
 } from "./media-storage-config";
+import { isIgnoredMediaStorageEntry } from "./media-scan-filter";
 import { normalizeMediaStoragePath, resolveMediaStoragePath } from "./media-storage-path";
 
 export type MediaKind = "video" | "audio" | "file";
@@ -50,6 +52,7 @@ export type MediaAsset = {
   mtimeMs: number;
   durationSeconds: number | null;
   thumbnailVersion: number;
+  customCoverKey: string | null;
   playCount: number;
   recommendCount: number;
   downloadCount: number;
@@ -98,6 +101,7 @@ type MediaRow = {
   mtime_ms: number;
   duration_seconds: number | null;
   thumbnail_version: number;
+  custom_cover_key: string | null;
   play_count: number;
   recommend_count: number;
   download_count: number;
@@ -248,6 +252,7 @@ function toAsset(row: MediaRow): MediaAsset {
     mtimeMs: row.mtime_ms,
     durationSeconds: row.duration_seconds,
     thumbnailVersion: row.thumbnail_version,
+    customCoverKey: row.custom_cover_key,
     playCount: row.play_count,
     recommendCount: row.recommend_count,
     downloadCount: row.download_count,
@@ -643,7 +648,7 @@ async function scanMediaFiles(refreshRemote = false): Promise<ScannedMediaLibrar
   const folders = emptyFolderSnapshot();
   const visit = async (kind: MediaKind, directory: string, relativeFolder = "") => {
     for (const entry of await fs.promises.readdir(directory, { withFileTypes: true })) {
-      if (entry.isSymbolicLink()) {
+      if (entry.isSymbolicLink() || isIgnoredMediaStorageEntry(entry.name)) {
         continue;
       }
       const absolutePath = path.join(directory, entry.name);
@@ -865,6 +870,12 @@ async function performMediaLibrarySync(state: MediaLibrarySyncState, force = fal
 
   for (const row of removedRows) {
     removeThumbnailFile(row.id);
+    await deleteMediaCustomCover(
+      { kind: row.kind, storageNodeId: row.storage_node_id },
+      row.custom_cover_key,
+    ).catch((error) => {
+      console.warn(`[media] failed to delete orphaned custom cover for asset ${row.id}`, error);
+    });
   }
   state.folders = scannedLibrary.folders;
   state.syncedAt = Date.now();
@@ -1165,6 +1176,20 @@ export function saveMediaThumbnailVersion(id: number, sourceVersion: number): bo
   return Number(info.changes) > 0;
 }
 
+export function replaceMediaCustomCoverKey(id: number, nextKey: string | null): string | null | undefined {
+  const db = getDb();
+  const row = db
+    .prepare("SELECT custom_cover_key FROM media_assets WHERE id = ? AND kind = 'video'")
+    .get(id) as { custom_cover_key: string | null } | undefined;
+  if (!row) {
+    return undefined;
+  }
+  db.prepare(
+    "UPDATE media_assets SET custom_cover_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+  ).run(nextKey, id);
+  return row.custom_cover_key;
+}
+
 export function mediaThumbnailVersion(sourceVersion: number, percent: number): number {
   const normalizedPercent = Math.min(Math.max(Math.floor(percent), 1), 99);
   return Math.floor(sourceVersion) * 100 + normalizedPercent;
@@ -1444,11 +1469,12 @@ export async function deleteMediaAssets(ids: number[]): Promise<{ deleted: numbe
     return { deleted: 0, fileDeleteFailures: 0 };
   }
   const placeholders = uniqueIds.map(() => "?").join(", ");
-  const rows = getDb().prepare(`SELECT id, kind, storage_node_id, stored_name FROM media_assets WHERE id IN (${placeholders})`).all(...uniqueIds) as Array<{
+  const rows = getDb().prepare(`SELECT id, kind, storage_node_id, stored_name, custom_cover_key FROM media_assets WHERE id IN (${placeholders})`).all(...uniqueIds) as Array<{
     id: number;
     kind: MediaKind;
     storage_node_id: string | null;
     stored_name: string;
+    custom_cover_key: string | null;
   }>;
   const deletedIds: number[] = [];
   let fileDeleteFailures = 0;
@@ -1487,6 +1513,16 @@ export async function deleteMediaAssets(ids: number[]): Promise<{ deleted: numbe
   }
   if (!deletedIds.length) {
     return { deleted: 0, fileDeleteFailures };
+  }
+  const deletedIdSet = new Set(deletedIds);
+  for (const row of rows) {
+    if (!deletedIdSet.has(row.id) || !row.custom_cover_key) continue;
+    await deleteMediaCustomCover(
+      { kind: row.kind, storageNodeId: row.storage_node_id },
+      row.custom_cover_key,
+    ).catch((error) => {
+      console.warn(`[media] failed to delete custom cover for asset ${row.id}`, error);
+    });
   }
   const rowPlaceholders = deletedIds.map(() => "?").join(", ");
   const deleted = Number(getDb().prepare(`DELETE FROM media_assets WHERE id IN (${rowPlaceholders})`).run(...deletedIds).changes);

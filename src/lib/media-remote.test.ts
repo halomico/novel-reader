@@ -94,6 +94,7 @@ test("uploads directly to the media node while the main app keeps only the index
     const media = await import("./media");
     const delivery = await import("./media-delivery");
     const client = await import("./media-node-client");
+    const signing = await import("./media-signing");
     const uploads = await import("./media-upload-service");
     const { getDb } = await import("./db");
     database = getDb();
@@ -193,6 +194,26 @@ test("uploads directly to the media node while the main app keeps only the index
     const manifest = await client.readRemoteMediaManifest("file-node", true);
     assert.equal(manifest.files.some((item) => item.storedName === "file/公开资料/整理资料.txt"), true);
     assert.equal(manifest.folders.some((item) => item.path === "公开资料"), true);
+    fs.writeFileSync(path.join(mediaRoot, "file", "ignored.part"), "partial");
+    fs.writeFileSync(path.join(mediaRoot, "file", ".hidden"), "hidden");
+    const filteredManifest = await client.readRemoteMediaManifest("file-node", true);
+    assert.equal(filteredManifest.files.some((item) => item.storedName.includes("ignored.part")), false);
+    assert.equal(filteredManifest.files.some((item) => item.storedName.includes(".hidden")), false);
+
+    const coverKey = "0123456789abcdef0123456789abcdef";
+    const coverBytes = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+    await client.writeRemoteMediaCover("video-node", coverKey, coverBytes);
+    assert.equal(fs.existsSync(path.join(videoMediaRoot, ".covers", `${coverKey}.jpg`)), true);
+    const coverResponse = await fetch(signing.createSignedMediaCoverUrl({
+      storageNodeId: "video-node",
+      key: coverKey,
+      publiclyAccessible: true,
+    }));
+    assert.equal(coverResponse.status, 200);
+    assert.deepEqual(Buffer.from(await coverResponse.arrayBuffer()), coverBytes);
+    assert.match(coverResponse.headers.get("cache-control") || "", /^public, max-age=\d+, immutable$/);
+    assert.equal(await client.deleteRemoteMediaCover("video-node", coverKey), true);
+    assert.equal(fs.existsSync(path.join(videoMediaRoot, ".covers", `${coverKey}.jpg`)), false);
 
     fs.rmSync(path.join(mediaRoot, "file", "公开资料", "整理资料.txt"));
     assert.deepEqual(await media.syncMediaLibrary({ force: true }), { added: 0, updated: 0, removed: 0 });

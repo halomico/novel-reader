@@ -1,12 +1,15 @@
 import { Clapperboard, File, Headphones } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { AdminMediaCoverManager } from "@/components/AdminMediaCoverManager";
 import { MediaAudioPlayer, type AudioQueueTrack } from "@/components/MediaAudioPlayer";
 import { MediaPlayer } from "@/components/MediaPlayer";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
 import { getAudioDefaultPlaybackMode, getVideoThumbnailSettings } from "@/lib/config";
+import { mediaCoverVersion } from "@/lib/media-cover-version";
 import { getMediaAsset, listMediaFolderAssets, type MediaKind } from "@/lib/media";
+import { getMediaPreparationJob, mediaAssetNeedsPreparation } from "@/lib/media-preparation-jobs";
 import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +49,10 @@ export default async function AdminMediaPreviewPage({ params }: { params: Promis
       version: item.mtimeMs,
     }));
   const thumbnailSettings = getVideoThumbnailSettings();
-  const posterVersion = `${asset.mtimeMs}-single-${thumbnailSettings.singlePercent}`;
+  const posterVersion = mediaCoverVersion(asset, thumbnailSettings.singlePercent);
+  const preparationJob = asset.kind === "video" ? getMediaPreparationJob(asset.id) : null;
+  const preparationStatus = preparationJob?.status ||
+    (mediaAssetNeedsPreparation(asset, thumbnailSettings.singlePercent) ? "pending" : "ready");
 
   return (
     <main className="adminShell adminPreviewShell">
@@ -71,14 +77,24 @@ export default async function AdminMediaPreviewPage({ params }: { params: Promis
         </header>
 
         {asset.kind === "video" ? (
-          <div className="mediaVideoStage">
-            <MediaPlayer
-              id={asset.id}
-              posterVersion={posterVersion}
-              sourceVersion={asset.mtimeMs}
-              basePath={`/admin/media/${asset.id}`}
+          <>
+            <div className="mediaVideoStage">
+              <MediaPlayer
+                id={asset.id}
+                posterVersion={posterVersion}
+                sourceVersion={asset.mtimeMs}
+                basePath={`/admin/media/${asset.id}`}
+              />
+            </div>
+            <AdminMediaCoverManager
+              mediaId={asset.id}
+              coverVersion={posterVersion}
+              singlePercent={thumbnailSettings.singlePercent}
+              custom={Boolean(asset.customCoverKey)}
+              preparationStatus={preparationStatus}
+              preparationError={preparationJob?.lastError}
             />
-          </div>
+          </>
         ) : (
           <MediaAudioPlayer
             initialId={asset.id}

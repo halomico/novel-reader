@@ -2,9 +2,10 @@ import fs from "node:fs";
 import { Readable } from "node:stream";
 import type { NextRequest } from "next/server";
 import { getVideoThumbnailSettings } from "./config";
+import { findLocalMediaCustomCover } from "./media-cover";
 import { mediaThumbnailVersion, type MediaAsset } from "./media";
 import { findMediaThumbnail, mediaThumbnailEtag } from "./media-thumbnail";
-import { createSignedMediaThumbnailUrl } from "./media-signing";
+import { createSignedMediaCoverUrl, createSignedMediaThumbnailUrl } from "./media-signing";
 import {
   isRemoteMediaStorage,
   MediaStorageConfigurationError,
@@ -24,6 +25,30 @@ export function mediaThumbnailCacheHeaders(publiclyAccessible: boolean): Record<
   };
 }
 
+function serveLocalThumbnailFile(
+  request: NextRequest,
+  thumbnailPath: string,
+  publiclyAccessible: boolean,
+  etag: string,
+): Response {
+  const stat = fs.statSync(thumbnailPath);
+  const cacheHeaders = {
+    ...mediaThumbnailCacheHeaders(publiclyAccessible),
+    ETag: etag,
+    "Last-Modified": stat.mtime.toUTCString(),
+  };
+  if (request.headers.get("if-none-match") === etag) {
+    return new Response(null, { status: 304, headers: cacheHeaders });
+  }
+  return new Response(Readable.toWeb(fs.createReadStream(thumbnailPath)) as ReadableStream<Uint8Array>, {
+    headers: {
+      ...cacheHeaders,
+      "Content-Length": String(stat.size),
+      "Content-Type": "image/jpeg",
+    },
+  });
+}
+
 export async function serveMediaThumbnail(
   request: NextRequest,
   asset: MediaAsset,
@@ -31,8 +56,38 @@ export async function serveMediaThumbnail(
 ): Promise<Response> {
   try {
     const settings = getVideoThumbnailSettings();
+    if (asset.customCoverKey) {
+      if (isRemoteMediaStorage()) {
+        const node = resolveRemoteMediaNodeForAsset(asset.storageNodeId, asset.kind);
+        return new Response(null, {
+          status: 307,
+          headers: {
+            ...mediaThumbnailRedirectCacheHeaders(publiclyAccessible),
+            Location: createSignedMediaCoverUrl({
+              storageNodeId: node.id,
+              key: asset.customCoverKey,
+              publiclyAccessible,
+            }),
+          },
+        });
+      }
+      const customCoverPath = await findLocalMediaCustomCover(asset.customCoverKey);
+      if (!customCoverPath) {
+        return new Response(null, { status: 404, headers: { "Cache-Control": "no-store" } });
+      }
+      const stat = fs.statSync(customCoverPath);
+      return serveLocalThumbnailFile(
+        request,
+        customCoverPath,
+        publiclyAccessible,
+        `"media-cover-${asset.customCoverKey}-${stat.size}"`,
+      );
+    }
     if (asset.thumbnailVersion !== mediaThumbnailVersion(asset.mtimeMs, settings.singlePercent)) {
-      return new Response(null, { status: 404, headers: { "Cache-Control": "no-store" } });
+      return new Response(null, {
+        status: 404,
+        headers: { "Cache-Control": "no-store", "Retry-After": "2" },
+      });
     }
     if (isRemoteMediaStorage()) {
       const node = resolveRemoteMediaNodeForAsset(asset.storageNodeId, asset.kind);
@@ -58,25 +113,14 @@ export async function serveMediaThumbnail(
     };
     const thumbnailPath = await findMediaThumbnail(asset, options);
     if (!thumbnailPath) {
-      return new Response(null, { status: 404, headers: { "Cache-Control": "no-store" } });
+      return new Response(null, {
+        status: 404,
+        headers: { "Cache-Control": "no-store", "Retry-After": "2" },
+      });
     }
     const stat = fs.statSync(thumbnailPath);
     const etag = mediaThumbnailEtag(asset.id, stat.mtimeMs, stat.size);
-    const cacheHeaders = {
-      ...mediaThumbnailCacheHeaders(publiclyAccessible),
-      ETag: etag,
-      "Last-Modified": stat.mtime.toUTCString(),
-    };
-    if (request.headers.get("if-none-match") === etag) {
-      return new Response(null, { status: 304, headers: cacheHeaders });
-    }
-    return new Response(Readable.toWeb(fs.createReadStream(thumbnailPath)) as ReadableStream<Uint8Array>, {
-      headers: {
-        ...cacheHeaders,
-        "Content-Length": String(stat.size),
-        "Content-Type": "image/jpeg",
-      },
-    });
+    return serveLocalThumbnailFile(request, thumbnailPath, publiclyAccessible, etag);
   } catch (error) {
     if (error instanceof MediaStorageConfigurationError) {
       return new Response(null, { status: 503 });

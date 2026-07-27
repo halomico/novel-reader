@@ -27,6 +27,8 @@ import { formatMediaDuration } from "@/lib/media-format";
 import { getCurrentUser } from "@/lib/user-auth";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { Breadcrumbs, type BreadcrumbItem } from "@/components/Breadcrumbs";
+import { hasScopedContentAccessRules } from "@/lib/content-access";
+import { directMediaThumbnailUrl } from "@/lib/media-thumbnail-url";
 
 export const dynamic = "force-dynamic";
 
@@ -159,6 +161,8 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
     sortOrder,
   });
   const thumbnailSettings = getVideoThumbnailSettings();
+  const directThumbnails = kind === "video" && !hasScopedContentAccessRules("media");
+  const publiclyAccessibleThumbnails = directThumbnails && isMediaKindPublic("video");
   const folders = kind === "video" ? [] : listMediaFolders(kind);
   const EmptyIcon = KIND_ICONS[kind];
   const segments = result.folder ? result.folder.split("/") : [];
@@ -266,6 +270,9 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
                     <MediaVideoCard
                       asset={asset}
                       thumbnail={thumbnailSettings}
+                      thumbnailUrl={directThumbnails
+                        ? directMediaThumbnailUrl(asset, thumbnailSettings.singlePercent, publiclyAccessibleThumbnails)
+                        : null}
                       priority={index < 8}
                       key={asset.id}
                     />

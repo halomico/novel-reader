@@ -14,6 +14,7 @@ import {
   type MediaNodeUploadStart,
 } from "./media-node-protocol";
 import { generateVideoThumbnailFile, optimizeMediaFileFastStart, probeMediaDurationFile } from "./media-processing";
+import { isIgnoredMediaStorageEntry } from "./media-scan-filter";
 import { normalizeMediaStoragePath, resolveMediaStoragePath } from "./media-storage-path";
 
 type UploadSession = MediaNodeUploadRequest & {
@@ -42,6 +43,7 @@ type MediaThumbnailRequest = {
 const MEDIA_KINDS: MediaNodeKind[] = ["video", "audio", "file"];
 const MANIFEST_CACHE_MS = 5 * 60 * 1000;
 const THUMBNAIL_CONCURRENCY = 2;
+const MAX_NORMALIZED_COVER_BYTES = 2 * 1024 * 1024;
 const MIME_TYPES: Record<string, string> = {
   ".mp4": "video/mp4",
   ".m4v": "video/x-m4v",
@@ -72,6 +74,10 @@ export class MediaNodeStoreError extends Error {
 }
 
 function validUploadId(value: string): boolean {
+  return /^[a-f0-9]{32}$/.test(value);
+}
+
+function validCoverKey(value: string): boolean {
   return /^[a-f0-9]{32}$/.test(value);
 }
 
@@ -161,6 +167,7 @@ export class MediaNodeStore {
 
   private ensureDirectories() {
     fs.mkdirSync(this.root, { recursive: true });
+    fs.mkdirSync(path.join(this.root, ".covers"), { recursive: true });
     for (const kind of MEDIA_KINDS) {
       fs.mkdirSync(path.join(this.root, kind), { recursive: true });
     }
@@ -188,6 +195,13 @@ export class MediaNodeStore {
     } catch {
       throw new MediaNodeStoreError("资源路径无效");
     }
+  }
+
+  private coverPath(key: string): string {
+    if (!validCoverKey(key)) {
+      throw new MediaNodeStoreError("封面标识无效");
+    }
+    return path.join(this.root, ".covers", `${key}.jpg`);
   }
 
   private readSession(uploadId: string): UploadSession {
@@ -422,14 +436,6 @@ export class MediaNodeStore {
       throw new MediaNodeStoreError("上传文件不存在", 404);
     }
     const stat = fs.statSync(finalPath);
-    let durationSeconds: number | null = null;
-    if (session.kind !== "file") {
-      try {
-        durationSeconds = await probeMediaDurationFile(finalPath);
-      } catch {
-        durationSeconds = null;
-      }
-    }
     const fileName = path.posix.basename(finalStoredName);
     const receipt: MediaNodeUploadReceipt = {
       uploadId,
@@ -443,7 +449,7 @@ export class MediaNodeStore {
       mimeType: session.mimeType,
       sizeBytes: stat.size,
       mtimeMs: Math.floor(stat.mtimeMs),
-      durationSeconds,
+      durationSeconds: null,
     };
     writeJsonAtomic(this.completedPath(uploadId), receipt);
     fs.rmSync(this.sessionPath(uploadId), { force: true });
@@ -478,7 +484,7 @@ export class MediaNodeStore {
     const folders: MediaNodeManifestFolder[] = [];
     const visit = async (kind: MediaNodeKind, directory: string, relativeFolder = "") => {
       for (const entry of await fs.promises.readdir(directory, { withFileTypes: true })) {
-        if (entry.isSymbolicLink()) continue;
+        if (entry.isSymbolicLink() || isIgnoredMediaStorageEntry(entry.name)) continue;
         const absolutePath = path.join(directory, entry.name);
         if (entry.isDirectory()) {
           const folderPath = [relativeFolder, entry.name].filter(Boolean).join("/");
@@ -757,5 +763,42 @@ export class MediaNodeStore {
       removed += 1;
     }
     return removed;
+  }
+
+  async writeCover(key: string, buffer: Buffer): Promise<void> {
+    if (
+      buffer.length <= 0 ||
+      buffer.length > MAX_NORMALIZED_COVER_BYTES ||
+      buffer[0] !== 0xff ||
+      buffer[1] !== 0xd8
+    ) {
+      throw new MediaNodeStoreError("封面文件无效", 422);
+    }
+    const targetPath = this.coverPath(key);
+    const temporaryPath = `${targetPath}.${crypto.randomBytes(6).toString("hex")}.tmp`;
+    await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
+    try {
+      await fs.promises.writeFile(temporaryPath, buffer, { flag: "wx", mode: 0o600 });
+      await fs.promises.rename(temporaryPath, targetPath);
+    } finally {
+      await fs.promises.rm(temporaryPath, { force: true }).catch(() => undefined);
+    }
+  }
+
+  async findCover(key: string): Promise<string | null> {
+    const targetPath = this.coverPath(key);
+    try {
+      const stat = await fs.promises.stat(targetPath);
+      return stat.isFile() && stat.size > 0 ? targetPath : null;
+    } catch {
+      return null;
+    }
+  }
+
+  deleteCover(key: string): boolean {
+    const targetPath = this.coverPath(key);
+    const found = fs.existsSync(targetPath);
+    fs.rmSync(targetPath, { force: true });
+    return found;
   }
 }

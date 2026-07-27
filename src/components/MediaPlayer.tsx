@@ -5,11 +5,13 @@ import { useMemo, useRef } from "react";
 export function MediaPlayer({
   id,
   posterVersion,
+  posterUrl,
   sourceVersion,
   basePath,
 }: {
   id: number;
   posterVersion: string;
+  posterUrl?: string | null;
   sourceVersion: number;
   basePath?: string;
 }) {
@@ -31,7 +33,7 @@ export function MediaPlayer({
       className="mediaVideoPlayer"
       controls
       playsInline
-      poster={`${mediaBasePath}/thumbnail?v=${encodeURIComponent(posterVersion)}`}
+      poster={posterUrl || `${mediaBasePath}/thumbnail?v=${encodeURIComponent(posterVersion)}`}
       preload="metadata"
       onPlay={recordPlay}
     >

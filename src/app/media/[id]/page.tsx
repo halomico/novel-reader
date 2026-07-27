@@ -14,16 +14,20 @@ import { ReportMediaButton } from "@/components/ReportMediaButton";
 import { SiteHeader } from "@/components/SiteHeader";
 import { recordAnalyticsEvent } from "@/lib/analytics";
 import { getAudioDefaultPlaybackMode, getRelatedVideoSettings, getVideoThumbnailSettings } from "@/lib/config";
+import { hasScopedContentAccessRules } from "@/lib/content-access";
 import { isMediaFavorite } from "@/lib/favorites";
+import { mediaCoverVersion } from "@/lib/media-cover-version";
 import {
   getMediaAsset,
   isFeedbackMediaKind,
   isMediaKindAccessible,
+  isMediaKindPublic,
   listMediaFolderAssets,
   listRelatedVideoAssets,
   type MediaKind,
 } from "@/lib/media";
 import { formatMediaDuration } from "@/lib/media-format";
+import { directMediaThumbnailUrl } from "@/lib/media-thumbnail-url";
 import { getMediaRecommendationState } from "@/lib/recommendations";
 import { getCurrentUser } from "@/lib/user-auth";
 import { hasUserPermission } from "@/lib/user-levels";
@@ -116,7 +120,12 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
       }));
   const relatedSettings = getRelatedVideoSettings();
   const thumbnailSettings = getVideoThumbnailSettings();
-  const posterVersion = `${asset.mtimeMs}-single-${thumbnailSettings.singlePercent}`;
+  const posterVersion = mediaCoverVersion(asset, thumbnailSettings.singlePercent);
+  const directThumbnails = asset.kind === "video" && !hasScopedContentAccessRules("media");
+  const publiclyAccessibleThumbnails = directThumbnails && isMediaKindPublic("video");
+  const posterUrl = directThumbnails
+    ? directMediaThumbnailUrl(asset, thumbnailSettings.singlePercent, publiclyAccessibleThumbnails)
+    : null;
   const relatedVideos = asset.kind === "video" ? listRelatedVideoAssets(asset.id, relatedSettings.count, relatedSettings.mode) : [];
   const feedbackMedia = isFeedbackMediaKind(asset.kind);
   const favorite = user && feedbackMedia ? isMediaFavorite(user.id, asset.id) : false;
@@ -160,7 +169,12 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
               </div>
             </header>
             <div className="mediaVideoStage">
-              <MediaPlayer id={asset.id} posterVersion={posterVersion} sourceVersion={asset.mtimeMs} />
+              <MediaPlayer
+                id={asset.id}
+                posterVersion={posterVersion}
+                posterUrl={posterUrl}
+                sourceVersion={asset.mtimeMs}
+              />
             </div>
             <section className="mediaVideoInfo" aria-label="作者与简介">
               <div className="mediaVideoInfoBar">
@@ -211,7 +225,16 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
           <section className="mediaRelatedVideos">
             <h2>更多视频</h2>
             <div className="mediaAssetGrid is-video">
-              {relatedVideos.map((item) => <MediaVideoCard asset={item} thumbnail={thumbnailSettings} key={item.id} />)}
+              {relatedVideos.map((item) => (
+                <MediaVideoCard
+                  asset={item}
+                  thumbnail={thumbnailSettings}
+                  thumbnailUrl={directThumbnails
+                    ? directMediaThumbnailUrl(item, thumbnailSettings.singlePercent, publiclyAccessibleThumbnails)
+                    : null}
+                  key={item.id}
+                />
+              ))}
             </div>
           </section>
         ) : null}

@@ -5,7 +5,11 @@ import path from "node:path";
 import { pipeline } from "node:stream";
 import { MEDIA_UPLOAD_CHUNK_BYTES, type MediaNodeKind, type MediaNodeUploadRequest } from "./media-node-protocol";
 import { MediaNodeStore, MediaNodeStoreError } from "./media-node-store";
-import { verifySignedMediaThumbnailUrl, verifySignedMediaUrl } from "./media-signing";
+import {
+  verifySignedMediaCoverUrl,
+  verifySignedMediaThumbnailUrl,
+  verifySignedMediaUrl,
+} from "./media-signing";
 import { resolveMediaStoragePath } from "./media-storage-path";
 
 export type MediaNodeServerOptions = {
@@ -249,6 +253,60 @@ async function serveSignedThumbnail(
   }
 }
 
+async function serveSignedCover(
+  request: IncomingMessage,
+  response: ServerResponse,
+  url: URL,
+  store: MediaNodeStore,
+  signingSecret: string,
+) {
+  const payload = verifySignedMediaCoverUrl(url, Date.now(), signingSecret);
+  if (!payload) {
+    empty(response, 404);
+    return;
+  }
+  try {
+    const coverPath = await store.findCover(payload.key);
+    if (!coverPath) {
+      empty(response, 404, { "Cache-Control": "no-store" });
+      return;
+    }
+    const stat = fs.statSync(coverPath);
+    const etag = `"media-cover-${payload.key}-${stat.size}"`;
+    const publicMaxAge = Math.max(
+      60,
+      Math.min(86_400, payload.expiresAt - Math.floor(Date.now() / 1_000) - 30),
+    );
+    const headers: Record<string, string> = {
+      "Cache-Control": payload.publiclyAccessible
+        ? `public, max-age=${publicMaxAge}, immutable`
+        : "private, max-age=86400, stale-while-revalidate=604800, immutable",
+      "Content-Length": String(stat.size),
+      "Content-Type": "image/jpeg",
+      "Cross-Origin-Resource-Policy": "cross-origin",
+      ETag: etag,
+      "Last-Modified": stat.mtime.toUTCString(),
+      "X-Content-Type-Options": "nosniff",
+    };
+    if (payload.publiclyAccessible) {
+      headers["Cloudflare-CDN-Cache-Control"] = `public, max-age=${publicMaxAge}, no-transform`;
+    }
+    if (request.headers["if-none-match"] === etag) {
+      delete headers["Content-Length"];
+      empty(response, 304, headers);
+      return;
+    }
+    response.writeHead(200, headers);
+    if (request.method === "HEAD") {
+      response.end();
+      return;
+    }
+    pipeline(fs.createReadStream(coverPath), response, () => undefined);
+  } catch {
+    empty(response, 404, { "Cache-Control": "no-store" });
+  }
+}
+
 export function createMediaNodeServer(options: MediaNodeServerOptions): http.Server {
   if (options.signingSecret.length < 32) {
     throw new Error("MEDIA_SIGNING_SECRET 至少需要 32 个字符");
@@ -391,10 +449,27 @@ export function createMediaNodeServer(options: MediaNodeServerOptions): http.Ser
           json(response, 200, { ok: true, removed: store.clearThumbnails() });
           return;
         }
+        const coverMatch = url.pathname.match(/^\/control\/covers\/([a-f0-9]{32})$/);
+        if (coverMatch && request.method === "PUT") {
+          await store.writeCover(coverMatch[1], await readBody(request, 2 * 1024 * 1024));
+          json(response, 200, { ok: true });
+          return;
+        }
+        if (coverMatch && request.method === "DELETE") {
+          json(response, 200, { ok: true, deleted: store.deleteCover(coverMatch[1]) });
+          return;
+        }
         empty(response, 404);
         return;
       }
 
+      if (
+        (request.method === "GET" || request.method === "HEAD") &&
+        url.pathname.startsWith("/media-cover/")
+      ) {
+        await serveSignedCover(request, response, url, store, options.signingSecret);
+        return;
+      }
       if (
         (request.method === "GET" || request.method === "HEAD") &&
         url.pathname.startsWith("/media-thumbnail/")

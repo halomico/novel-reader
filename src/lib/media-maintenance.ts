@@ -1,6 +1,6 @@
 import { getVideoThumbnailSettings } from "./config";
 import {
-  listMediaAssetsNeedingPreparation,
+  getMediaAsset,
   mediaThumbnailVersion,
   MEDIA_SYNC_INTERVAL_MS,
   saveMediaThumbnailVersion,
@@ -10,6 +10,15 @@ import {
 } from "./media";
 import { ensureMediaDuration } from "./media-metadata";
 import { prepareRemoteMediaThumbnail } from "./media-node-client";
+import {
+  claimMediaPreparationJob,
+  completeMediaPreparationJob,
+  enqueueMediaPreparationJob,
+  failMediaPreparationJob,
+  mediaAssetNeedsPreparation,
+  reconcileMediaPreparationJobs,
+  type MediaPreparationJob,
+} from "./media-preparation-jobs";
 import { ensureMediaThumbnail } from "./media-thumbnail";
 import {
   isRemoteMediaStorage,
@@ -19,26 +28,24 @@ import {
 type MediaMaintenanceGlobal = typeof globalThis & {
   mediaMaintenanceStarted?: boolean;
   mediaMaintenanceTimer?: ReturnType<typeof setInterval>;
-  mediaPreparationQueue?: MediaAsset[];
-  mediaPreparationKeys?: Set<string>;
+  mediaPreparationTimer?: ReturnType<typeof setInterval>;
   mediaPreparationActive?: number;
 };
 
 const MEDIA_PREPARATION_CONCURRENCY = 2;
+const MEDIA_PREPARATION_POLL_MS = 10_000;
 
-function firstThumbnailOptions() {
-  const settings = getVideoThumbnailSettings();
+function thumbnailOptions(percent = getVideoThumbnailSettings().singlePercent) {
   return {
-    fraction: settings.singlePercent / 100,
-    cacheKey: `single-${settings.singlePercent}`,
+    fraction: percent / 100,
+    cacheKey: `single-${percent}`,
   };
 }
 
-async function prepareMediaAsset(asset: MediaAsset) {
+async function prepareMediaAsset(asset: MediaAsset, thumbnailPercent: number) {
   if (asset.kind === "file") return;
   const durationSeconds = await ensureMediaDuration(asset);
-  const thumbnailOptions = firstThumbnailOptions();
-  const thumbnailPercent = Math.round(thumbnailOptions.fraction * 100);
+  const options = thumbnailOptions(thumbnailPercent);
   const expectedThumbnailVersion = mediaThumbnailVersion(asset.mtimeMs, thumbnailPercent);
   if (asset.kind !== "video" || asset.thumbnailVersion === expectedThumbnailVersion) {
     return;
@@ -51,57 +58,69 @@ async function prepareMediaAsset(asset: MediaAsset) {
     }, thumbnailPercent);
     if (!ready) throw new Error("媒体节点未完成视频封面准备");
   } else {
-    await ensureMediaThumbnail({ ...asset, durationSeconds }, thumbnailOptions);
+    await ensureMediaThumbnail({ ...asset, durationSeconds }, options);
   }
   saveMediaThumbnailVersion(asset.id, expectedThumbnailVersion);
 }
 
+async function processMediaPreparationJob(job: MediaPreparationJob) {
+  const asset = getMediaAsset(job.mediaId);
+  if (!asset) {
+    completeMediaPreparationJob(job);
+    return;
+  }
+  if (
+    Math.floor(asset.mtimeMs) !== job.sourceVersion ||
+    !mediaAssetNeedsPreparation(asset, job.thumbnailPercent)
+  ) {
+    completeMediaPreparationJob(job);
+    if (mediaAssetNeedsPreparation(asset, getVideoThumbnailSettings().singlePercent)) {
+      enqueueMediaPreparationJob(asset, getVideoThumbnailSettings().singlePercent);
+    }
+    return;
+  }
+  try {
+    await prepareMediaAsset(asset, job.thumbnailPercent);
+    completeMediaPreparationJob(job);
+  } catch (error) {
+    const status = failMediaPreparationJob(job, error);
+    console.warn(
+      `[media] asset preparation ${status === "failed" ? "failed permanently" : "will retry"}`,
+      asset.id,
+      error,
+    );
+  }
+}
+
 function runNextMediaPreparationJobs() {
   const state = globalThis as MediaMaintenanceGlobal;
-  state.mediaPreparationQueue ||= [];
-  state.mediaPreparationKeys ||= new Set<string>();
   state.mediaPreparationActive ||= 0;
-  while (
-    state.mediaPreparationActive < MEDIA_PREPARATION_CONCURRENCY &&
-    state.mediaPreparationQueue.length
-  ) {
-    const asset = state.mediaPreparationQueue.shift()!;
-    const key = `${asset.id}:${Math.floor(asset.mtimeMs)}`;
+  while (state.mediaPreparationActive < MEDIA_PREPARATION_CONCURRENCY) {
+    const job = claimMediaPreparationJob();
+    if (!job) break;
     state.mediaPreparationActive += 1;
-    void prepareMediaAsset(asset)
+    void processMediaPreparationJob(job)
       .catch((error) => {
-        console.warn("[media] asset preparation failed", asset.id, error);
+        console.error("[media] preparation worker failed", error);
       })
       .finally(() => {
-        state.mediaPreparationKeys!.delete(key);
         state.mediaPreparationActive = Math.max(0, (state.mediaPreparationActive || 1) - 1);
         runNextMediaPreparationJobs();
       });
   }
 }
 
-export function scheduleMediaPreparation(assets: MediaAsset[]) {
-  const state = globalThis as MediaMaintenanceGlobal;
-  const thumbnailPercent = Math.round(firstThumbnailOptions().fraction * 100);
-  state.mediaPreparationQueue ||= [];
-  state.mediaPreparationKeys ||= new Set<string>();
+export function scheduleMediaPreparation(assets: MediaAsset[], options: { force?: boolean } = {}) {
+  const thumbnailPercent = getVideoThumbnailSettings().singlePercent;
   for (const asset of assets) {
-    const readyDuration = asset.kind === "file" || Boolean(asset.durationSeconds && asset.durationSeconds > 0);
-    const readyThumbnail =
-      asset.kind !== "video" ||
-      asset.thumbnailVersion === mediaThumbnailVersion(asset.mtimeMs, thumbnailPercent);
-    if (readyDuration && readyThumbnail) continue;
-    const key = `${asset.id}:${Math.floor(asset.mtimeMs)}`;
-    if (state.mediaPreparationKeys.has(key)) continue;
-    state.mediaPreparationKeys.add(key);
-    state.mediaPreparationQueue.push(asset);
+    enqueueMediaPreparationJob(asset, thumbnailPercent, options);
   }
   runNextMediaPreparationJobs();
 }
 
 export function scheduleMissingMediaPreparation() {
-  const thumbnailPercent = Math.round(firstThumbnailOptions().fraction * 100);
-  scheduleMediaPreparation(listMediaAssetsNeedingPreparation(1_000, thumbnailPercent));
+  reconcileMediaPreparationJobs(getVideoThumbnailSettings().singlePercent);
+  runNextMediaPreparationJobs();
 }
 
 export async function runMediaLibraryMaintenance(force = false): Promise<MediaSyncResult> {
@@ -116,6 +135,7 @@ export function initializeMediaLibraryMaintenance() {
     return;
   }
   state.mediaMaintenanceStarted = true;
+  runNextMediaPreparationJobs();
 
   const initialRun = setTimeout(() => {
     void runMediaLibraryMaintenance(true).catch((error) => {
@@ -130,4 +150,7 @@ export function initializeMediaLibraryMaintenance() {
     });
   }, MEDIA_SYNC_INTERVAL_MS);
   state.mediaMaintenanceTimer.unref?.();
+
+  state.mediaPreparationTimer = setInterval(runNextMediaPreparationJobs, MEDIA_PREPARATION_POLL_MS);
+  state.mediaPreparationTimer.unref?.();
 }

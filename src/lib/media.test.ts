@@ -21,6 +21,13 @@ import {
 } from "./media";
 import { getDb } from "./db";
 import { naturalSortKey } from "./natural-sort";
+import {
+  claimMediaPreparationJob,
+  completeMediaPreparationJob,
+  failMediaPreparationJob,
+  getMediaPreparationJob,
+  reconcileMediaPreparationJobs,
+} from "./media-preparation-jobs";
 import { readSiteSettings, writeSiteSettings } from "./site-settings";
 
 function withTempDatabase(t: TestContext) {
@@ -158,8 +165,24 @@ test("tracks media preparation independently from public list requests", (t) => 
     new Set(listMediaAssetsNeedingPreparation().map((asset) => asset.id)),
     new Set([videoId, audioId]),
   );
+  assert.equal(reconcileMediaPreparationJobs(33, 1_000), 2);
+  const firstJob = claimMediaPreparationJob(1_000);
+  assert.equal(firstJob?.mediaId, videoId);
+  assert.equal(failMediaPreparationJob(firstJob!, new Error("temporary failure"), 1_000), "pending");
+  assert.equal(getMediaPreparationJob(videoId)?.nextRunAt, 16_000);
+  const secondJob = claimMediaPreparationJob(1_000);
+  assert.equal(secondJob?.mediaId, audioId);
+  assert.equal(completeMediaPreparationJob(secondJob!), true);
+  assert.equal(claimMediaPreparationJob(15_999), null);
+  const retriedJob = claimMediaPreparationJob(16_000);
+  assert.equal(retriedJob?.mediaId, videoId);
+  assert.equal(retriedJob?.attempts, 1);
+  assert.equal(completeMediaPreparationJob(retriedJob!), true);
   assert.equal(saveMediaThumbnailVersion(videoId, mediaThumbnailVersion(10, 33)), true);
   assert.equal(saveMediaDuration(audioId, 30), true);
+  assert.equal(reconcileMediaPreparationJobs(33), 0);
+  assert.equal(getMediaPreparationJob(videoId), null);
+  assert.equal(getMediaPreparationJob(audioId), null);
   assert.deepEqual(listMediaAssetsNeedingPreparation(), []);
   assert.deepEqual(listMediaAssetsNeedingPreparation(1_000, 40).map((asset) => asset.id), [videoId]);
 });

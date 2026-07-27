@@ -21,7 +21,7 @@ import {
   type MediaAsset,
   type MediaKind,
 } from "./media";
-import { optimizeMediaFileFastStart, probeMediaDurationFile } from "./media-processing";
+import { optimizeMediaFileFastStart } from "./media-processing";
 
 export { MEDIA_UPLOAD_CHUNK_BYTES, MEDIA_UPLOAD_MAX_BYTES };
 
@@ -335,14 +335,6 @@ async function finishMediaUploadUnlocked(uploadId: string): Promise<MediaAsset> 
   }
   fs.renameSync(sourcePath, finalPath);
   const finalStat = fs.statSync(finalPath);
-  let durationSeconds: number | null = null;
-  if (session.kind !== "file") {
-    try {
-      durationSeconds = await probeMediaDurationFile(finalPath);
-    } catch {
-      // The background preparation worker retries metadata probing after ingest.
-    }
-  }
   let asset: MediaAsset;
   try {
     asset = createMediaAsset({
@@ -356,7 +348,7 @@ async function finishMediaUploadUnlocked(uploadId: string): Promise<MediaAsset> 
       mimeType: session.mimeType,
       sizeBytes: finalStat.size,
       mtimeMs: Math.floor(finalStat.mtimeMs),
-      durationSeconds,
+      durationSeconds: null,
     });
   } catch (error) {
     fs.rmSync(finalPath, { force: true });

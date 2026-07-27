@@ -275,6 +275,13 @@ test("removes legacy search tables and the retired content index database", asyn
     const mediaColumns = db.prepare("PRAGMA table_info(media_assets)").all() as Array<{ name: string }>;
     assert.equal(mediaColumns.some((column) => column.name === "category_id"), true);
     assert.equal(mediaColumns.some((column) => column.name === "storage_node_id"), true);
+    assert.equal(mediaColumns.some((column) => column.name === "custom_cover_key"), true);
+    assert.equal(
+      (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'media_prepare_jobs'").get() as { name: string }).name,
+      "media_prepare_jobs",
+    );
+    const mediaPreparationIndexes = db.prepare("PRAGMA index_list(media_prepare_jobs)").all() as Array<{ name: string }>;
+    assert.equal(mediaPreparationIndexes.some((index) => index.name === "idx_media_prepare_jobs_ready"), true);
     const tagColumns = db.prepare("PRAGMA table_info(tags)").all() as Array<{ name: string }>;
     assert.equal(tagColumns.some((column) => column.name === "is_visible"), false);
     assert.equal(tagColumns.some((column) => column.name === "visibility"), true);

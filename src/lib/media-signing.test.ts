@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  createSignedMediaCoverUrl,
   createSignedMediaThumbnailUrl,
   createSignedMediaUrl,
+  verifySignedMediaCoverUrl,
   verifySignedMediaThumbnailUrl,
   verifySignedMediaUrl,
 } from "./media-signing";
@@ -126,6 +128,32 @@ test("signs versioned media thumbnails with explicit cache visibility", () => {
     const tampered = new URL(signed);
     tampered.searchParams.set("public", "1");
     assert.equal(verifySignedMediaThumbnailUrl(tampered, 1_000_000), null);
+  });
+});
+
+test("signs immutable custom media covers", () => {
+  withMediaEnvironment({}, () => {
+    const key = "0123456789abcdef0123456789abcdef";
+    const signed = createSignedMediaCoverUrl({
+      key,
+      publiclyAccessible: true,
+      now: 1_000_000,
+    });
+    assert.deepEqual(verifySignedMediaCoverUrl(new URL(signed), 1_000_000), {
+      key,
+      expiresAt: 1_800,
+      publiclyAccessible: true,
+    });
+    const tampered = new URL(signed);
+    tampered.searchParams.set("public", "0");
+    assert.equal(verifySignedMediaCoverUrl(tampered, 1_000_000), null);
+    assert.throws(
+      () => createSignedMediaCoverUrl({
+        key: "../cover",
+        publiclyAccessible: false,
+      }),
+      /封面标识无效/,
+    );
   });
 });
 

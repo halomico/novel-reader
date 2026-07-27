@@ -17,6 +17,7 @@ export type SignedMediaPayload = {
 
 const MEDIA_PATH_PREFIX = "/media-file/";
 const THUMBNAIL_PATH_PREFIX = "/media-thumbnail/";
+const COVER_PATH_PREFIX = "/media-cover/";
 const MEDIA_SIGNATURE_BUCKET_MAX_SECONDS = 60 * 60;
 const THUMBNAIL_SIGNATURE_BUCKET_MAX_SECONDS = 60 * 60;
 
@@ -26,6 +27,12 @@ export type SignedMediaThumbnailPayload = {
   mtimeMs: number;
   sizeBytes: number;
   percent: number;
+  publiclyAccessible: boolean;
+};
+
+export type SignedMediaCoverPayload = {
+  key: string;
+  expiresAt: number;
   publiclyAccessible: boolean;
 };
 
@@ -262,6 +269,77 @@ export function verifySignedMediaThumbnailUrl(
     publiclyAccessible: url.searchParams.get("public") === "1",
   };
   const expected = thumbnailSignature(payload, secret);
+  try {
+    return crypto.timingSafeEqual(Buffer.from(suppliedSignature), Buffer.from(expected)) ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
+function coverPayloadText(payload: SignedMediaCoverPayload): string {
+  return [
+    "cover-v1",
+    payload.key,
+    String(payload.expiresAt),
+    payload.publiclyAccessible ? "1" : "0",
+  ].join("\n");
+}
+
+function coverSignature(payload: SignedMediaCoverPayload, secret: string): string {
+  return crypto.createHmac("sha256", secret).update(coverPayloadText(payload)).digest("base64url");
+}
+
+export function createSignedMediaCoverUrl(input: {
+  storageNodeId?: string | null;
+  key: string;
+  publiclyAccessible: boolean;
+  now?: number;
+}): string {
+  if (!/^[a-f0-9]{32}$/.test(input.key)) {
+    throw new Error("封面标识无效");
+  }
+  const config = input.storageNodeId
+    ? getRemoteMediaNodeConfig(input.storageNodeId)
+    : getRemoteMediaStorageConfig();
+  const nowSeconds = Math.floor((input.now ?? Date.now()) / 1_000);
+  const bucketSeconds = Math.min(config.ttlSeconds, THUMBNAIL_SIGNATURE_BUCKET_MAX_SECONDS);
+  const payload: SignedMediaCoverPayload = {
+    key: input.key,
+    expiresAt: Math.floor(nowSeconds / bucketSeconds) * bucketSeconds + config.ttlSeconds + bucketSeconds,
+    publiclyAccessible: input.publiclyAccessible,
+  };
+  const params = new URLSearchParams({
+    exp: String(payload.expiresAt),
+    public: payload.publiclyAccessible ? "1" : "0",
+    sig: coverSignature(payload, config.signingSecret),
+  });
+  return `${config.publicUrl}${COVER_PATH_PREFIX}${payload.key}.jpg?${params.toString()}`;
+}
+
+export function verifySignedMediaCoverUrl(
+  url: URL,
+  now = Date.now(),
+  secret = signingSecret(),
+): SignedMediaCoverPayload | null {
+  if (secret.length < 32 || !url.pathname.startsWith(COVER_PATH_PREFIX)) return null;
+  const match = /^\/media-cover\/([a-f0-9]{32})\.jpg$/.exec(url.pathname);
+  if (!match) return null;
+  const expiresAt = Number(url.searchParams.get("exp"));
+  const suppliedSignature = url.searchParams.get("sig") || "";
+  if (
+    !Number.isInteger(expiresAt) ||
+    expiresAt <= Math.floor(now / 1_000) ||
+    expiresAt > Math.floor(now / 1_000) + 86_400 + THUMBNAIL_SIGNATURE_BUCKET_MAX_SECONDS + 60 ||
+    suppliedSignature.length !== 43
+  ) {
+    return null;
+  }
+  const payload: SignedMediaCoverPayload = {
+    key: match[1],
+    expiresAt,
+    publiclyAccessible: url.searchParams.get("public") === "1",
+  };
+  const expected = coverSignature(payload, secret);
   try {
     return crypto.timingSafeEqual(Buffer.from(suppliedSignature), Buffer.from(expected)) ? payload : null;
   } catch {

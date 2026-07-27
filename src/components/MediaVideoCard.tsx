@@ -1,5 +1,6 @@
 import { Eye, Play } from "lucide-react";
 import Link from "next/link";
+import { mediaCoverVersion } from "@/lib/media-cover-version";
 import { formatMediaDuration } from "@/lib/media-format";
 import type { MediaAsset } from "@/lib/media";
 import { MediaVideoPreview } from "./MediaVideoPreview";
@@ -16,12 +17,14 @@ function formatCompactCount(value: number): string {
 export function MediaVideoCard({
   asset,
   thumbnail,
+  thumbnailUrl,
   priority = false,
 }: {
   asset: MediaAsset;
   thumbnail: {
     singlePercent: number;
   };
+  thumbnailUrl?: string | null;
   priority?: boolean;
 }) {
   const title = displayTitle(asset.title, asset.fileName);
@@ -32,6 +35,8 @@ export function MediaVideoCard({
           id={asset.id}
           singlePercent={thumbnail.singlePercent}
           sourceVersion={asset.mtimeMs}
+          coverVersion={mediaCoverVersion(asset, thumbnail.singlePercent)}
+          src={thumbnailUrl || undefined}
           priority={priority}
         />
         <span className="mediaVideoPlay" aria-hidden="true"><Play size={20} fill="currentColor" /></span>
