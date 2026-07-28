@@ -1,0 +1,215 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+import type { ReadingProgress } from "@/lib/reading-progress";
+
+type StoredProgress = {
+  novelId: number;
+  segmentIndex: number;
+  segmentRatio: number;
+  progressPercent: number;
+  contentVersion: string;
+  completed: boolean;
+  savedAt: number;
+};
+
+const STORAGE_PREFIX = "novel-reader:reading-progress:";
+const MAX_LOCAL_ITEMS = 30;
+const SYNC_INTERVAL_MS = 20_000;
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), maximum);
+}
+
+function storageKey(userId: number): string {
+  return `${STORAGE_PREFIX}${userId}`;
+}
+
+function readStoredProgress(userId: number, novelId: number): StoredProgress | null {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(storageKey(userId)) || "[]") as StoredProgress[];
+    return parsed.find((item) => item.novelId === novelId) || null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredProgress(userId: number, progress: StoredProgress) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(storageKey(userId)) || "[]") as StoredProgress[];
+    const next = [progress, ...parsed.filter((item) => item.novelId !== progress.novelId)]
+      .sort((left, right) => right.savedAt - left.savedAt)
+      .slice(0, MAX_LOCAL_ITEMS);
+    localStorage.setItem(storageKey(userId), JSON.stringify(next));
+  } catch {
+    // Server synchronization remains available when local storage is unavailable.
+  }
+}
+
+function progressChanged(left: StoredProgress | null, right: StoredProgress): boolean {
+  return !left ||
+    left.contentVersion !== right.contentVersion ||
+    left.segmentIndex !== right.segmentIndex ||
+    Math.abs(left.segmentRatio - right.segmentRatio) >= 0.02 ||
+    Math.abs(left.progressPercent - right.progressPercent) >= 0.5 ||
+    left.completed !== right.completed;
+}
+
+function scrollToProgress(progress: Pick<StoredProgress, "segmentIndex" | "segmentRatio">) {
+  const segment = document.querySelector<HTMLElement>(
+    `.readerSegment[data-segment-index="${progress.segmentIndex}"]`,
+  );
+  if (!segment) return;
+  const header = document.querySelector<HTMLElement>(".readerSiteHeader");
+  const headerOffset = header?.getBoundingClientRect().height || 0;
+  const target = window.scrollY + segment.getBoundingClientRect().top +
+    segment.offsetHeight * clamp(progress.segmentRatio, 0, 1) -
+    headerOffset - 20;
+  window.scrollTo({ top: Math.max(0, target), behavior: "auto" });
+}
+
+export function ReadingProgressTracker({
+  novelId,
+  userId,
+  contentVersion,
+  totalSegments,
+  initialProgress,
+  resume,
+}: {
+  novelId: number;
+  userId: number;
+  contentVersion: string;
+  totalSegments: number;
+  initialProgress: ReadingProgress | null;
+  resume: boolean;
+}) {
+  const currentRef = useRef<StoredProgress | null>(null);
+  const sentRef = useRef<StoredProgress | null>(
+    initialProgress
+      ? {
+          novelId,
+          segmentIndex: initialProgress.segmentIndex,
+          segmentRatio: initialProgress.segmentRatio,
+          progressPercent: initialProgress.progressPercent,
+          contentVersion: initialProgress.contentVersion,
+          completed: initialProgress.completed,
+          savedAt: Date.parse(initialProgress.lastReadAt) || 0,
+        }
+      : null,
+  );
+  const interactedRef = useRef(false);
+  const flushTimerRef = useRef<number | null>(null);
+  const frameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const local = readStoredProgress(userId, novelId);
+    const server = sentRef.current;
+    const validLocal = local?.contentVersion === contentVersion ? local : null;
+    const validServer = server?.contentVersion === contentVersion ? server : null;
+    const resumeProgress = validLocal && (!validServer || validLocal.savedAt > validServer.savedAt)
+      ? validLocal
+      : validServer;
+
+    if (resume && resumeProgress) {
+      window.requestAnimationFrame(() => {
+        scrollToProgress(resumeProgress);
+        const url = new URL(window.location.href);
+        url.searchParams.delete("resume");
+        window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+      });
+    }
+
+    function measureProgress() {
+      frameRef.current = null;
+      if (!totalSegments) return;
+      const probeY = clamp(window.innerHeight * 0.42, 80, Math.max(window.innerHeight - 80, 80));
+      const target = document.elementFromPoint(window.innerWidth / 2, probeY);
+      const documentBottomReached =
+        window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 80;
+      const segment = target?.closest<HTMLElement>(".readerSegment") ||
+        (documentBottomReached
+          ? document.querySelector<HTMLElement>(".readerSegment:last-of-type")
+          : null);
+      if (!segment) return;
+      const segmentIndex = Math.max(Number(segment.dataset.segmentIndex || 0), 0);
+      const rect = segment.getBoundingClientRect();
+      const segmentRatio = rect.height > 0 ? clamp((probeY - rect.top) / rect.height, 0, 1) : 0;
+      const progressPercent = clamp(
+        ((segmentIndex + segmentRatio) / totalSegments) * 100,
+        0,
+        100,
+      );
+      const next: StoredProgress = {
+        novelId,
+        segmentIndex,
+        segmentRatio,
+        progressPercent,
+        contentVersion,
+        completed: documentBottomReached || progressPercent >= 98,
+        savedAt: Date.now(),
+      };
+      currentRef.current = next;
+      writeStoredProgress(userId, next);
+    }
+
+    function scheduleMeasure(interacted = true) {
+      if (interacted) {
+        interactedRef.current = true;
+      }
+      if (frameRef.current === null) {
+        frameRef.current = window.requestAnimationFrame(measureProgress);
+      }
+    }
+
+    function flush() {
+      const current = currentRef.current;
+      if (
+        !interactedRef.current ||
+        !current ||
+        !progressChanged(sentRef.current, current)
+      ) {
+        return;
+      }
+      sentRef.current = current;
+      void fetch("/api/account/reading-progress", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(current),
+        credentials: "same-origin",
+        keepalive: true,
+      }).catch(() => undefined);
+    }
+
+    function onVisibilityChange() {
+      if (document.visibilityState === "hidden") {
+        measureProgress();
+        flush();
+      }
+    }
+
+    const onScroll = () => scheduleMeasure(true);
+    const onResize = () => scheduleMeasure(false);
+    const onPageHide = () => {
+      measureProgress();
+      flush();
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onResize);
+    window.addEventListener("pagehide", onPageHide);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    flushTimerRef.current = window.setInterval(flush, SYNC_INTERVAL_MS);
+
+    return () => {
+      if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
+      if (flushTimerRef.current !== null) window.clearInterval(flushTimerRef.current);
+      measureProgress();
+      flush();
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("pagehide", onPageHide);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [contentVersion, novelId, resume, totalSegments, userId]);
+
+  return null;
+}

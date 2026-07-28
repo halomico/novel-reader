@@ -12,7 +12,6 @@ export function AdminMediaSort({
   sortBy,
   sortOrder,
   category,
-  view,
 }: {
   kind: MediaKind;
   folder: string;
@@ -20,7 +19,6 @@ export function AdminMediaSort({
   sortBy: MediaSortBy;
   sortOrder: MediaSortOrder;
   category?: string;
-  view?: "table" | "grid";
 }) {
   const router = useRouter();
   const options: MediaSortOption[] = kind === "video" || kind === "audio"
@@ -41,7 +39,6 @@ export function AdminMediaSort({
     if (folder) params.set("folder", folder);
     if (query) params.set("q", query);
     if (kind === "video" && category) params.set("category", category);
-    if (kind === "video" && view === "grid") params.set("view", view);
     beginNavigationProgress();
     router.push(`/admin/media?${params.toString()}`);
   }

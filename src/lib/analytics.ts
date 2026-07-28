@@ -62,6 +62,8 @@ export type AnalyticsRealtimeEvent = {
   createdAt: string;
 };
 
+export type AnalyticsRealtimeContentFilter = "all" | "novel" | "video" | "audio" | "file";
+
 export type AnalyticsOverview = {
   range: AnalyticsRange;
   customFrom?: string;
@@ -96,6 +98,9 @@ export type AnalyticsOverview = {
   realtimePageSize: number;
   realtimeTotal: number;
   realtimeTotalPages: number;
+  realtimeContentType: AnalyticsRealtimeContentFilter;
+  realtimeCountry: string;
+  realtimeCountries: string[];
 };
 
 const RANGE_MODIFIERS: Record<AnalyticsPresetRange, string> = {
@@ -195,6 +200,43 @@ function contentTimeWhere(filter: AnalyticsTimeFilter, createdAtColumn = "create
     sql: `(${novelIdColumn} IS NOT NULL OR ${mediaIdColumn} IS NOT NULL) AND ${time.sql}`,
     params: time.params,
   };
+}
+
+export function normalizeAnalyticsRealtimeContentFilter(value: string | undefined): AnalyticsRealtimeContentFilter {
+  return value === "novel" || value === "video" || value === "audio" || value === "file" ? value : "all";
+}
+
+export function normalizeAnalyticsRealtimeCountry(value: string | undefined): string {
+  const country = value?.trim().toUpperCase() || "";
+  if (!country || country === "ALL") return "all";
+  if (country === "UNKNOWN") return "unknown";
+  return /^[A-Z0-9]{2,8}$/.test(country) ? country : "all";
+}
+
+function realtimeContentCondition(contentType: AnalyticsRealtimeContentFilter) {
+  if (contentType === "novel") {
+    return { sql: "e.novel_id IS NOT NULL", params: [] as string[] };
+  }
+  if (contentType !== "all") {
+    return {
+      sql: "EXISTS (SELECT 1 FROM media_assets filtered_media WHERE filtered_media.id = e.media_id AND filtered_media.kind = ?)",
+      params: [contentType],
+    };
+  }
+  return { sql: "1 = 1", params: [] as string[] };
+}
+
+function realtimeCountryCondition(country: string) {
+  if (country === "unknown") {
+    return {
+      sql: "(e.country IS NULL OR TRIM(e.country) = '' OR LOWER(TRIM(e.country)) = 'unknown')",
+      params: [] as string[],
+    };
+  }
+  if (country !== "all") {
+    return { sql: "UPPER(e.country) = ?", params: [country] };
+  }
+  return { sql: "1 = 1", params: [] as string[] };
 }
 
 export function parseUserAgent(userAgent: string): UserAgentInfo {
@@ -587,6 +629,8 @@ export function getAnalyticsOverview(
     realtimeLimit?: number;
     realtimePage?: number | string;
     realtimePageSize?: number;
+    realtimeContentType?: string;
+    realtimeCountry?: string;
     searchQueryPage?: number | string;
     searchQueryPageSize?: number;
     contentPage?: number | string;
@@ -602,6 +646,15 @@ export function getAnalyticsOverview(
   const contentWhere = contentTimeWhere(filter, "e.created_at", "e.novel_id", "e.media_id");
   const searchTime = timeCondition(filter, "created_at");
   const tagTime = timeCondition(filter, "e.created_at");
+  const realtimeTime = contentTimeWhere(filter, "e.created_at", "e.novel_id", "e.media_id");
+  const realtimeContentType = normalizeAnalyticsRealtimeContentFilter(options.realtimeContentType);
+  const realtimeCountry = normalizeAnalyticsRealtimeCountry(options.realtimeCountry);
+  const realtimeContent = realtimeContentCondition(realtimeContentType);
+  const realtimeRegion = realtimeCountryCondition(realtimeCountry);
+  const realtimeBaseSql = `${realtimeTime.sql} AND ${realtimeContent.sql}`;
+  const realtimeBaseParams = [...realtimeTime.params, ...realtimeContent.params];
+  const realtimeWhereSql = `${realtimeBaseSql} AND ${realtimeRegion.sql}`;
+  const realtimeWhereParams = [...realtimeBaseParams, ...realtimeRegion.params];
   const realtimeLimit = Math.min(Math.max(Math.floor(options.realtimeLimit || 300), 30), 2000);
   const realtimePageSize = Math.min(Math.max(Math.floor(options.realtimePageSize || 30), 1), 100);
   const searchQueryPageSize = Math.min(Math.max(Math.floor(options.searchQueryPageSize || 100), 1), 100);
@@ -623,17 +676,33 @@ export function getAnalyticsOverview(
       `SELECT COUNT(*) AS count
        FROM (
          SELECT id
-         FROM analytics_events
-         WHERE ${eventWhere.sql}
-         ORDER BY created_at DESC, id DESC
+         FROM analytics_events e
+         WHERE ${realtimeWhereSql}
+         ORDER BY e.created_at DESC, e.id DESC
          LIMIT ?
        )`,
     )
-    .get(...eventWhere.params, realtimeLimit) as { count: number } | undefined;
+    .get(...realtimeWhereParams, realtimeLimit) as { count: number } | undefined;
   const realtimeTotal = realtimeTotalRow?.count || 0;
   const realtimeTotalPages = Math.max(1, Math.ceil(realtimeTotal / realtimePageSize));
   const realtimePage = normalizePositivePage(options.realtimePage, realtimeTotalPages);
   const realtimeOffset = (realtimePage - 1) * realtimePageSize;
+  const realtimeCountryRows = getDb()
+    .prepare(
+      `SELECT CASE
+          WHEN e.country IS NULL OR TRIM(e.country) = '' OR LOWER(TRIM(e.country)) = 'unknown' THEN 'unknown'
+          ELSE UPPER(TRIM(e.country))
+        END AS country
+       FROM analytics_events e
+       WHERE ${realtimeBaseSql}
+       GROUP BY CASE
+          WHEN e.country IS NULL OR TRIM(e.country) = '' OR LOWER(TRIM(e.country)) = 'unknown' THEN 'unknown'
+          ELSE UPPER(TRIM(e.country))
+        END
+       ORDER BY COUNT(*) DESC, country ASC
+       LIMIT 250`,
+    )
+    .all(...realtimeBaseParams) as Array<{ country: string }>;
   const searchQueryTotal = oneCount(
     `SELECT COUNT(DISTINCT query) AS count FROM search_query_events WHERE ${searchTime.sql}`,
     searchTime.params,
@@ -672,19 +741,14 @@ export function getAnalyticsOverview(
               COALESCE(n.title, m.title, e.path) AS content_title,
               CASE WHEN e.novel_id IS NOT NULL THEN 'novel' ELSE COALESCE(m.kind, 'unknown') END AS content_type,
               e.referrer, e.ip, e.country, e.browser, e.os, e.device, e.created_at
-       FROM (
-         SELECT *
-         FROM analytics_events
-         WHERE ${eventWhere.sql}
-         ORDER BY created_at DESC, id DESC
-         LIMIT ?
-       ) e
+       FROM analytics_events e
        LEFT JOIN novels n ON n.id = e.novel_id
        LEFT JOIN media_assets m ON m.id = e.media_id
+       WHERE ${realtimeWhereSql}
        ORDER BY e.created_at DESC, e.id DESC
        LIMIT ? OFFSET ?`,
     )
-    .all(...eventWhere.params, realtimeLimit, realtimePageSize, realtimeOffset) as Array<{
+    .all(...realtimeWhereParams, realtimePageSize, realtimeOffset) as Array<{
     id: number;
     content_title: string;
     content_type: "novel" | "video" | "audio" | "file" | "unknown";
@@ -820,5 +884,8 @@ export function getAnalyticsOverview(
     realtimePageSize,
     realtimeTotal,
     realtimeTotalPages,
+    realtimeContentType,
+    realtimeCountry,
+    realtimeCountries: realtimeCountryRows.map((row) => row.country),
   };
 }

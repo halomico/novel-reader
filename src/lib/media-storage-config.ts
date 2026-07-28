@@ -250,12 +250,26 @@ export function getRemoteMediaStorageConfig(
 }
 
 export function getMediaPublicUrl(env: NodeJS.ProcessEnv = process.env): string | null {
-  if (getMediaStorageMode(env) !== "remote") return null;
-  const registry = getRemoteMediaStorageRegistry(env);
-  return getRemoteMediaNodeConfig(
-    registry.legacyNodeId || registry.routes.video,
-    env,
-  ).publicUrl;
+  return getMediaPublicUrlForKind("video", env);
+}
+
+export function getMediaPublicUrlForKind(
+  kind: MediaStorageKind,
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  return getMediaStorageMode(env) === "remote"
+    ? getRemoteMediaNodeForKind(kind, env).publicUrl
+    : null;
+}
+
+export function getMediaPublicUrlForAsset(
+  storageNodeId: string | null | undefined,
+  kind: MediaStorageKind,
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  return getMediaStorageMode(env) === "remote"
+    ? resolveRemoteMediaNodeForAsset(storageNodeId, kind, env).publicUrl
+    : null;
 }
 
 export function remoteMediaRegistryFingerprint(

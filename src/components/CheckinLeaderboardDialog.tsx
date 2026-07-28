@@ -3,12 +3,14 @@
 import { LoaderCircle, Trophy, UserRound, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { DailyCheckinLeaderboardEntry } from "@/lib/user-economy";
+import { DEFAULT_LOCALE, uiText, type AppLocale } from "@/lib/locale";
 
 type CheckinLeaderboardDialogProps = {
   reward: number;
   currentUserId: number;
   entries: DailyCheckinLeaderboardEntry[] | null;
   autoOpen: boolean;
+  locale?: AppLocale;
 };
 
 export function CheckinLeaderboardDialog({
@@ -16,6 +18,7 @@ export function CheckinLeaderboardDialog({
   currentUserId,
   entries,
   autoOpen,
+  locale = DEFAULT_LOCALE,
 }: CheckinLeaderboardDialogProps) {
   const [open, setOpen] = useState(autoOpen);
   const [leaderboard, setLeaderboard] = useState(entries);
@@ -54,12 +57,12 @@ export function CheckinLeaderboardDialog({
         message?: string;
       };
       if (!response.ok || !data.entries) {
-        setError(data.message || "排行榜读取失败");
+        setError(data.message || uiText(locale, "排行榜读取失败"));
         return;
       }
       setLeaderboard(data.entries);
     } catch {
-      setError("排行榜读取失败");
+      setError(uiText(locale, "排行榜读取失败"));
     } finally {
       setLoading(false);
     }
@@ -71,8 +74,8 @@ export function CheckinLeaderboardDialog({
         className="accountLeaderboardButton"
         type="button"
         onClick={showLeaderboard}
-        aria-label="查看今日排行榜"
-        title="今日排行榜"
+        aria-label={uiText(locale, "查看今日排行榜")}
+        title={uiText(locale, "今日排行榜")}
       >
         <Trophy size={16} strokeWidth={1.9} aria-hidden="true" />
       </button>
@@ -94,29 +97,29 @@ export function CheckinLeaderboardDialog({
                   <Trophy size={18} />
                 </span>
                 <span>
-                  <h2 id="checkin-leaderboard-title">今日苏打榜</h2>
+                  <h2 id="checkin-leaderboard-title">{uiText(locale, "今日苏打榜")}</h2>
                 </span>
               </div>
               <button
                 ref={closeButtonRef}
                 type="button"
                 onClick={() => setOpen(false)}
-                aria-label="关闭"
-                title="关闭"
+                aria-label={uiText(locale, "关闭")}
+                title={uiText(locale, "关闭")}
               >
                 <X size={18} aria-hidden="true" />
               </button>
             </header>
 
             <div className={`checkinReward${reward > 0 ? "" : " isPending"}`}>
-              <span>{reward > 0 ? "今日获得" : "今日尚未签到"}</span>
-              {reward > 0 ? <><strong>+{reward}</strong><small>苏打</small></> : null}
+              <span>{uiText(locale, reward > 0 ? "今日获得" : "今日尚未签到")}</span>
+              {reward > 0 ? <><strong>+{reward}</strong><small>{uiText(locale, "苏打")}</small></> : null}
             </div>
 
             {loading ? (
               <p className="checkinLeaderboardStatus">
                 <LoaderCircle className="isSpinning" size={17} aria-hidden="true" />
-                正在读取
+                {uiText(locale, "正在读取")}
               </p>
             ) : error ? (
               <p className="checkinLeaderboardStatus isError">{error}</p>
@@ -132,7 +135,7 @@ export function CheckinLeaderboardDialog({
                       </span>
                       <span className="checkinLeaderboardName">
                         <strong>{entry.displayName}</strong>
-                        {isCurrent ? <small>我</small> : null}
+                        {isCurrent ? <small>{uiText(locale, "我")}</small> : null}
                       </span>
                       <b>+{entry.reward}</b>
                     </li>
@@ -140,7 +143,7 @@ export function CheckinLeaderboardDialog({
                 })}
               </ol>
             ) : (
-              <p className="checkinLeaderboardStatus">今天还没有签到记录</p>
+              <p className="checkinLeaderboardStatus">{uiText(locale, "今天还没有签到记录")}</p>
             )}
           </section>
         </div>

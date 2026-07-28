@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  getMediaPublicUrlForAsset,
+  getMediaPublicUrlForKind,
   getMediaStorageMode,
   getRemoteMediaNodeForKind,
   getRemoteMediaStorageConfig,
@@ -85,6 +87,8 @@ test("routes each media kind through an explicit multi-node registry", () => {
     file: "video-node",
   });
   assert.equal(getRemoteMediaNodeForKind("audio", env).publicUrl, "https://audio.example.com");
+  assert.equal(getMediaPublicUrlForKind("audio", env), "https://audio.example.com");
+  assert.equal(getMediaPublicUrlForAsset("video-node", "audio", env), "https://video.example.com");
   assert.equal(resolveRemoteMediaNodeForAsset("video-node", "audio", env).publicUrl, "https://video.example.com");
   assert.equal(resolveRemoteMediaNodeForAsset(null, "audio", env).id, "video-node");
 });

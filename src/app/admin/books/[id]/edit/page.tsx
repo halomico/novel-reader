@@ -1,9 +1,10 @@
-import { BookOpenText, PencilLine, Save } from "lucide-react";
+import { BookOpenText, PencilLine, Save, Sparkles } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminNovelContentEditor } from "@/components/AdminNovelContentEditor";
 import { getNovelById } from "@/lib/books";
+import { isNovelInRecommendationPool } from "@/lib/recommendation-pool";
 import { getNovelRecommendationCount } from "@/lib/recommendations";
 import { listHotwordsForNovel, listTagGroups, listTagsForNovel, type TagGroup, type TagWithCount } from "@/lib/tags";
 import { saveNovelEditorAction } from "../../../actions";
@@ -62,6 +63,7 @@ export default async function AdminBookEditPage({ params, searchParams }: AdminB
   const selectedTagIds = new Set(listTagsForNovel(book.id, { includeHidden: true }).map((tag) => tag.id));
   const hotwords = listHotwordsForNovel(book.id);
   const recommendationCount = getNovelRecommendationCount(book.id);
+  const inRecommendationPool = isNovelInRecommendationPool(book.id);
   const returnPath = safeReturnPath(query.returnPath, book.id);
 
   return (
@@ -105,6 +107,18 @@ export default async function AdminBookEditPage({ params, searchParams }: AdminB
                 />
               </label>
             </div>
+            <label className="adminBookPoolToggle settingToggle">
+              <input
+                name="recommendationPool"
+                type="checkbox"
+                defaultChecked={inRecommendationPool}
+              />
+              <span className="adminBookPoolCopy">
+                <strong><Sparkles size={15} aria-hidden="true" />精选推荐池</strong>
+                <small>开启后，这本小说才会参与小说页的定时随机推荐。</small>
+              </span>
+              <span className="settingToggleTrack" aria-hidden="true"><span /></span>
+            </label>
           </section>
 
           <section className="adminBookEditorSection adminBookTagChooser">

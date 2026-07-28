@@ -14,7 +14,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return new Response(null, { status: 404 });
   }
   const access = checkContentAccess(request.headers, {
-    scope: "media",
+    scope: "file",
     authenticated: Boolean(user),
     admin: user?.role === "admin",
   });

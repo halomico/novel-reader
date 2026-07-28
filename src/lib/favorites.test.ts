@@ -10,6 +10,8 @@ import {
   isNovelFavorite,
   listFavoriteMedia,
   listFavoriteNovels,
+  removeMediaFavorites,
+  removeNovelFavorites,
   toggleMediaFavorite,
   toggleNovelFavorite,
 } from "./favorites";
@@ -50,8 +52,10 @@ test("toggles and paginates favorites per user", (t) => {
   assert.equal(isNovelFavorite(firstUser, firstNovel), true);
   assert.equal(isNovelFavorite(secondUser, firstNovel), false);
   assert.deepEqual(listFavoriteNovels(firstUser, 1, 1).books.map((book) => book.id), [secondNovel]);
-  assert.deepEqual(toggleNovelFavorite(firstUser, firstNovel), { ok: true, favorite: false });
+  assert.equal(removeNovelFavorites(firstUser, [secondNovel, 999, secondNovel]), 1);
   assert.equal(listFavoriteNovels(firstUser).totalBooks, 1);
+  assert.deepEqual(toggleNovelFavorite(firstUser, firstNovel), { ok: true, favorite: false });
+  assert.equal(listFavoriteNovels(firstUser).totalBooks, 0);
   assert.deepEqual(toggleNovelFavorite(firstUser, 999), { ok: false, favorite: false });
 });
 
@@ -82,7 +86,11 @@ test("toggles and lists video and audio favorites separately", (t) => {
   assert.equal(isMediaFavorite(userId, audioId), true);
   assert.deepEqual(listFavoriteMedia(userId, "video").assets.map((asset) => asset.id), [videoId]);
   assert.deepEqual(listFavoriteMedia(userId, "audio").assets.map((asset) => asset.id), [audioId]);
+  assert.equal(removeMediaFavorites(userId, "video", [videoId, audioId]), 1);
+  assert.equal(isMediaFavorite(userId, videoId), false);
+  assert.equal(isMediaFavorite(userId, audioId), true);
   assert.deepEqual(toggleMediaFavorite(userId, fileId), { ok: false, favorite: false });
-  assert.deepEqual(toggleMediaFavorite(userId, videoId), { ok: true, favorite: false });
+  assert.deepEqual(toggleMediaFavorite(userId, videoId), { ok: true, favorite: true });
+  assert.equal(removeMediaFavorites(userId, "video", [videoId]), 1);
   assert.deepEqual(toggleMediaFavorite(userId, audioId), { ok: true, favorite: false });
 });

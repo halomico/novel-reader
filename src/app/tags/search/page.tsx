@@ -1,5 +1,6 @@
 import { ListFilter } from "lucide-react";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { AdvancedSearchResultAnchor } from "@/components/AdvancedSearchResultAnchor";
@@ -20,10 +21,23 @@ import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { filterTagsByNovelForUser, listEffectivelyHiddenTagIds } from "@/lib/tag-preferences";
 import { listNovelsByTagIntersection, listTagGroups, listTagsForNovels } from "@/lib/tags";
 import { getCurrentUser } from "@/lib/user-auth";
+import { checkContentAccess } from "@/lib/content-access";
 import { hasUserPermission } from "@/lib/user-levels";
+import { getRequestLocale, localizeText, localizeTexts, normalizeSearchText } from "@/lib/locale-server";
+import { languageAlternates, uiText, withLocalePath } from "@/lib/locale";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "高级搜索", robots: NO_INDEX_ROBOTS };
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  return {
+    title: uiText(locale, "高级搜索"),
+    robots: NO_INDEX_ROBOTS,
+    alternates: {
+      canonical: withLocalePath("/tags/search", locale),
+      languages: languageAlternates("/tags/search"),
+    },
+  };
+}
 
 type AdvancedTagSearchPageProps = {
   searchParams: Promise<{
@@ -38,15 +52,23 @@ type AdvancedTagSearchPageProps = {
 
 export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTagSearchPageProps) {
   const params = await searchParams;
+  const locale = await getRequestLocale();
   const user = await getCurrentUser();
   const canUseAdvancedSearch = canAccessAdvancedTagSearch(false) ||
     (canAccessAdvancedTagSearch(Boolean(user)) && hasUserPermission(user, "advanced_search"));
   if (!canUseAdvancedSearch) notFound();
+  const access = checkContentAccess(await headers(), {
+    scope: "novel",
+    authenticated: Boolean(user),
+    admin: user?.role === "admin",
+    rateLimit: false,
+  });
+  if (!access.allowed) notFound();
 
   const audience = user?.role === "admin" ? "admin" : user ? "member" : "public";
   const hiddenTagIds = user ? listEffectivelyHiddenTagIds(user.id) : new Set<number>();
   const sourceGroups = listTagGroups({ audience });
-  const groups: AdvancedTagGroup[] = sourceGroups.flatMap((group) => {
+  const sourceAdvancedGroups: AdvancedTagGroup[] = sourceGroups.flatMap((group) => {
     const tags = (group.tags.length ? group.tags : group.group ? [group.group] : [])
       .filter((tag) => !hiddenTagIds.has(tag.id));
     return tags.length
@@ -56,12 +78,24 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
         }]
       : [];
   });
+  const groups: AdvancedTagGroup[] = await Promise.all(
+    sourceAdvancedGroups.map(async (group) => ({
+      ...group,
+      label: await localizeText(group.label, locale),
+      tags: await Promise.all(group.tags.map(async (tag) => ({
+        ...tag,
+        name: await localizeText(tag.name, locale),
+        aliases: await Promise.all(tag.aliases.map((alias) => localizeText(alias, locale))),
+      }))),
+    })),
+  );
   const tagBySlug = new Map(groups.flatMap((group) => group.tags).map((tag) => [tag.slug, tag]));
   const selectedSlugs = Array.from(new Set((params.tags || "").split(",").map((slug) => slug.trim()).filter((slug) => tagBySlug.has(slug)))).slice(0, 20);
   const excludedSlugs = Array.from(new Set((params.exclude || "").split(",").map((slug) => slug.trim()).filter((slug) => tagBySlug.has(slug) && !selectedSlugs.includes(slug)))).slice(0, 20);
   const selectedTags = selectedSlugs.map((slug) => tagBySlug.get(slug)!);
   const excludedTags = excludedSlugs.map((slug) => tagBySlug.get(slug)!);
-  const titleQuery = (params.q || "").normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, 80);
+  const titleInput = (params.q || "").normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, 80);
+  const titleQuery = await normalizeSearchText(titleInput);
   const contentInput = (params.content || "").trim();
   const contentValidation = contentInput ? validateSearchKeyword(contentInput) : null;
   const pageValue = Number(params.page || 1);
@@ -81,29 +115,33 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
   const returnParams = new URLSearchParams();
   if (selectedSlugs.length) returnParams.set("tags", selectedSlugs.join(","));
   if (excludedSlugs.length) returnParams.set("exclude", excludedSlugs.join(","));
-  if (titleQuery) returnParams.set("q", titleQuery);
-  if (contentValidation?.ok) returnParams.set("content", contentValidation.keyword);
+  if (titleInput) returnParams.set("q", titleInput);
+  if (contentInput) returnParams.set("content", contentInput);
   if (page > 1) returnParams.set("page", String(page));
   const returnHref = `/tags/search${returnParams.size ? `?${returnParams.toString()}` : ""}`;
 
   let searchEventKey = contentValidation?.ok
-    ? resolveSearchQueryEventKey(params.searchEvent, contentValidation.keyword)
+    ? resolveSearchQueryEventKey(params.searchEvent, contentInput)
     : null;
   if (contentValidation?.ok && !searchEventKey) {
-    searchEventKey = recordSearchQuery(contentValidation.keyword, "content", {
+    searchEventKey = recordSearchQuery(contentInput, "content", {
       source: "advanced_tags",
       userId: user?.id ?? null,
     });
   }
+  const [homeLabel, tagsLabel, advancedLabel, noResultsLabel, invalidContentLabel] = await localizeTexts(
+    ["首页", "标签", "高级搜索", "没有符合条件的小说", "正文关键词格式有误"] as const,
+    locale,
+  );
 
   return (
     <main className="appShell catalogShell advancedTagSearchPage">
       <SiteHeader currentUser={user} />
-      <Breadcrumbs items={[{ label: "首页", href: "/" }, { label: "标签", href: "/tags" }, { label: "高级搜索" }]} />
+      <Breadcrumbs items={[{ label: homeLabel, href: "/" }, { label: tagsLabel, href: "/tags" }, { label: advancedLabel }]} />
       <header className="tagLibraryHeader advancedTagSearchHeader">
         <span className="tagLibraryIcon" aria-hidden="true"><ListFilter size={23} /></span>
         <div>
-          <h1>高级搜索</h1>
+          <h1>{advancedLabel}</h1>
         </div>
       </header>
 
@@ -111,17 +149,18 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
         groups={groups}
         initialSelected={selectedSlugs}
         initialExcluded={excludedSlugs}
-        initialTitleQuery={titleQuery}
-        initialContentQuery={contentValidation?.ok ? contentValidation.keyword : contentInput}
+        initialTitleQuery={titleInput}
+        initialContentQuery={contentInput}
+        locale={locale}
       />
 
       <AdvancedSearchResultAnchor count={result?.totalBooks} scrollKey={returnHref} />
 
       {contentInput && !contentValidation?.ok ? (
-        <section className="emptyState"><h2>{contentValidation?.message || "正文关键词格式有误"}</h2></section>
+        <section className="emptyState"><h2>{contentValidation?.message || invalidContentLabel}</h2></section>
       ) : contentValidation?.ok ? (
         <ContentSearchClient
-          keyword={contentValidation.keyword}
+          keyword={contentInput}
           initialPage={page}
           hasExplicitPage={Boolean(params.page)}
           pageSize={getSearchResultsPageSize()}
@@ -130,7 +169,7 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
           searchEventKey={searchEventKey}
           searchSource="advanced_tags"
           originNovelId={null}
-          requestFilters={{ includeTags: selectedSlugs, excludeTags: excludedSlugs, titleQuery }}
+          requestFilters={{ includeTags: selectedSlugs, excludeTags: excludedSlugs, titleQuery: titleInput }}
           resultReturnPath="/tags/search"
           resultReturnParams={Object.fromEntries(returnParams)}
           scrollTargetId="advanced-search-results"
@@ -139,7 +178,7 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
         result.books.length ? (
           <CatalogBookGrid books={result.books} returnHref={returnHref} ariaLabel="高级搜索结果" tagsByNovel={tagsByNovel} />
         ) : (
-          <section className="emptyState"><h2>没有符合条件的小说</h2></section>
+          <section className="emptyState"><h2>{noResultsLabel}</h2></section>
         )
       ) : null}
 
@@ -147,7 +186,7 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
         <Pagination
           page={result.page}
           totalPages={result.totalPages}
-          query={result.query}
+          query={titleInput}
           basePath="/tags/search"
           extraParams={{ tags: selectedSlugs.join(",") || undefined, exclude: excludedSlugs.join(",") || undefined }}
           hash="advanced-search-results"

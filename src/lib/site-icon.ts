@@ -77,8 +77,11 @@ export function removeSiteIconFile(fileName: string): boolean {
   }
 }
 
-export function readSiteIconAsset(): SiteIconAsset | null {
+export function readSiteIconAsset(requestedFileName?: string): SiteIconAsset | null {
   const settings = readSiteSettings();
+  if (requestedFileName !== undefined && requestedFileName !== settings.siteIconFileName) {
+    return null;
+  }
   const filePath = siteIconFilePath(settings.siteIconFileName);
   if (!filePath || !settings.siteIconMimeType || !fs.existsSync(filePath)) {
     return null;
@@ -99,6 +102,5 @@ export function getSiteIconHref(): string | undefined {
   if (!filePath || !settings.siteIconMimeType || !fs.existsSync(filePath)) {
     return undefined;
   }
-  const version = settings.siteIconUpdatedAt || settings.siteIconFileName;
-  return `/api/site-icon?v=${encodeURIComponent(version)}`;
+  return `/site-icon/${encodeURIComponent(settings.siteIconFileName)}`;
 }

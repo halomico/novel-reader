@@ -1,5 +1,5 @@
 import { ChevronRight, Folder, FolderOpen, HardDrive } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/LocalizedLink";
 import type { MediaFolder, MediaKind, MediaSortBy, MediaSortOrder } from "@/lib/media";
 
 type FolderNode = MediaFolder & { children: FolderNode[] };
@@ -12,7 +12,6 @@ function folderHref(
   sortBy?: MediaSortBy,
   sortOrder?: MediaSortOrder,
   category?: string,
-  view?: "table" | "grid",
 ): string {
   const params = new URLSearchParams({ kind });
   if (folder) {
@@ -24,7 +23,6 @@ function folderHref(
   if (sortBy) params.set("sort", sortBy);
   if (sortOrder) params.set("order", sortOrder);
   if (kind === "video" && category) params.set("category", category);
-  if (kind === "video" && view === "grid") params.set("view", view);
   return `${basePath}?${params.toString()}`;
 }
 
@@ -53,7 +51,6 @@ function FolderBranch({
   sortBy,
   sortOrder,
   category,
-  view,
 }: {
   node: FolderNode;
   kind: MediaKind;
@@ -63,13 +60,12 @@ function FolderBranch({
   sortBy?: MediaSortBy;
   sortOrder?: MediaSortOrder;
   category?: string;
-  view?: "table" | "grid";
 }) {
   const active = activeFolder === node.path;
   const containsActive = activeFolder.startsWith(`${node.path}/`);
   const Icon = active ? FolderOpen : Folder;
   const link = (
-    <Link className={active ? "isActive" : ""} href={folderHref(basePath, kind, node.path, query, sortBy, sortOrder, category, view)} title={node.path}>
+    <Link className={active ? "isActive" : ""} href={folderHref(basePath, kind, node.path, query, sortBy, sortOrder, category)} title={node.path}>
       <Icon size={16} aria-hidden="true" />
       <span>{node.name}</span>
       <small>{node.directAssets}</small>
@@ -96,7 +92,6 @@ function FolderBranch({
             sortBy={sortBy}
             sortOrder={sortOrder}
             category={category}
-            view={view}
             key={child.path}
           />
         ))}
@@ -114,7 +109,6 @@ export function MediaFolderTree({
   sortBy,
   sortOrder,
   category,
-  view,
 }: {
   kind: MediaKind;
   folders: MediaFolder[];
@@ -124,13 +118,12 @@ export function MediaFolderTree({
   sortBy?: MediaSortBy;
   sortOrder?: MediaSortOrder;
   category?: string;
-  view?: "table" | "grid";
 }) {
   return (
     <nav className="mediaFolderTree" aria-label="资源文件夹">
       <Link
         className={!activeFolder ? "isActive mediaFolderRoot" : "mediaFolderRoot"}
-        href={folderHref(basePath, kind, "", query, sortBy, sortOrder, category, view)}
+        href={folderHref(basePath, kind, "", query, sortBy, sortOrder, category)}
       >
         <HardDrive size={16} aria-hidden="true" />
         <span>根目录</span>
@@ -145,7 +138,6 @@ export function MediaFolderTree({
           sortBy={sortBy}
           sortOrder={sortOrder}
           category={category}
-          view={view}
           key={node.path}
         />
       ))}

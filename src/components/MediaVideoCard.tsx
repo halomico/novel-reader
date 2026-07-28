@@ -1,5 +1,5 @@
 import { Eye, Play } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/LocalizedLink";
 import { mediaCoverVersion } from "@/lib/media-cover-version";
 import { formatMediaDuration } from "@/lib/media-format";
 import type { MediaAsset } from "@/lib/media";

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/LocalizedLink";
 import { redirect } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
@@ -15,9 +15,13 @@ import { getTurnstileSiteKey } from "@/lib/human-verification";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { normalizeUserReturnPath } from "@/lib/return-path";
 import { loginUserAction } from "../account/actions";
+import { getRequestLocale, localizeText } from "@/lib/locale-server";
+import { uiText, withLocalePath } from "@/lib/locale";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "登录", robots: NO_INDEX_ROBOTS };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: uiText(await getRequestLocale(), "登录"), robots: NO_INDEX_ROBOTS };
+}
 
 type LoginPageProps = {
   searchParams: Promise<{
@@ -30,11 +34,12 @@ type LoginPageProps = {
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const locale = await getRequestLocale();
   const user = await getCurrentUser();
   const params = await searchParams;
   const returnTo = normalizeUserReturnPath(params.returnTo);
   if (user) {
-    redirect(returnTo);
+    redirect(withLocalePath(returnTo, locale));
   }
   const loginEnabled = isUserLoginEnabled();
   const registrationEnabled = isUserRegistrationEnabled();
@@ -44,10 +49,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   return (
     <main className="appShell">
       <SiteHeader currentUser={null} showPrimaryNavigation={false} authMode />
-      <Breadcrumbs items={[{ label: "首页", href: "/" }, { label: "登录" }]} />
+      <Breadcrumbs items={[{ label: uiText(locale, "首页"), href: "/" }, { label: uiText(locale, "登录") }]} />
       {params.notice ? (
         <DismissibleNotice
-          message={params.notice}
+          message={await localizeText(params.notice, locale)}
           tone={params.tone}
           variant="search"
           displaySeconds={noticeDisplaySeconds}
@@ -56,27 +61,27 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       <section className="authPage">
         <form className="userPanel authPanel" action={loginUserAction}>
           <input name="returnTo" type="hidden" value={returnTo} />
-          <div className="userPanelHeader"><div><h1>登录</h1></div></div>
+          <div className="userPanelHeader"><div><h1>{uiText(locale, "登录")}</h1></div></div>
           <label>
-            <span>用户名</span>
+            <span>{uiText(locale, "用户名")}</span>
             <input name="username" autoComplete="username" defaultValue={String(params.username || "").slice(0, 32)} disabled={!loginEnabled} required />
           </label>
           <label>
-            <span>密码</span>
+            <span>{uiText(locale, "密码")}</span>
             <input name="password" type="password" autoComplete="current-password" disabled={!loginEnabled} required />
           </label>
           <label className="authRemember">
             <input name="rememberLogin" type="checkbox" defaultChecked={params.remember !== "0"} />
-            <span>保持登录状态</span>
+            <span>{uiText(locale, "保持登录状态")}</span>
           </label>
           <HumanVerificationField siteKey={turnstileSiteKey} purpose="login" />
           <button className="authPrimaryButton" type="submit" disabled={!loginEnabled}>
-            登录
+            {uiText(locale, "登录")}
           </button>
-          {!loginEnabled ? <p className="authHint">登录暂未开放。</p> : null}
+          {!loginEnabled ? <p className="authHint">{uiText(locale, "登录暂未开放。")}</p> : null}
           {registrationEnabled ? (
             <p className="authSwitchText">
-              还没有账号？<Link href={`/register?${new URLSearchParams({ returnTo }).toString()}`}>去注册</Link>
+              {uiText(locale, "还没有账号？")}<Link href={`/register?${new URLSearchParams({ returnTo }).toString()}`}>{uiText(locale, "去注册")}</Link>
             </p>
           ) : null}
         </form>

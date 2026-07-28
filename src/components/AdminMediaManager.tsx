@@ -12,8 +12,6 @@ import {
   updateAdminMediaAction,
 } from "@/app/admin/actions";
 import { LocalDateTime } from "@/components/LocalDateTime";
-import { MediaVideoPreview } from "@/components/MediaVideoPreview";
-import { mediaCoverVersion } from "@/lib/media-cover-version";
 import { beginNavigationProgress } from "@/components/NavigationProgress";
 import { usePersistentSelection } from "@/components/usePersistentSelection";
 import { InlineMutationNotice, useInlineMutation } from "@/components/useInlineMutation";
@@ -39,16 +37,6 @@ function formatBytes(bytes: number): string {
     unit += 1;
   }
   return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[unit]}`;
-}
-
-function formatDuration(durationSeconds: number | null): string {
-  if (!durationSeconds || !Number.isFinite(durationSeconds) || durationSeconds <= 0) return "--:--";
-  const totalSeconds = Math.floor(durationSeconds);
-  const seconds = String(totalSeconds % 60).padStart(2, "0");
-  const totalMinutes = Math.floor(totalSeconds / 60);
-  return totalMinutes < 60
-    ? `${totalMinutes}:${seconds}`
-    : `${Math.floor(totalMinutes / 60)}:${String(totalMinutes % 60).padStart(2, "0")}:${seconds}`;
 }
 
 type UploadResponse = {
@@ -157,8 +145,6 @@ export function AdminMediaManager({
   returnPath,
   categories,
   categoryParam = "",
-  view = "table",
-  thumbnail,
 }: {
   assets: MediaAsset[];
   totalAssets: number;
@@ -172,10 +158,6 @@ export function AdminMediaManager({
   returnPath: string;
   categories: VideoCategory[];
   categoryParam?: string;
-  view?: "table" | "grid";
-  thumbnail: {
-    singlePercent: number;
-  };
 }) {
   const router = useRouter();
   const mutation = useInlineMutation();
@@ -544,140 +526,73 @@ export function AdminMediaManager({
 
       {visibleAssets.length || directFolders.length ? (
         <>
-          {view === "grid" && kind === "video" ? (
-            <div className="adminMediaGridContent">
-              {directFolders.length ? (
-                <div className="adminMediaGridFolders">
-                  {directFolders.map((item) => (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const params = new URLSearchParams({ kind, folder: item.path, sort: sortBy, order: sortOrder, view });
-                        if (query) params.set("q", query);
-                        if (categoryParam) params.set("category", categoryParam);
-                        beginNavigationProgress();
-                        router.push(`/admin/media?${params.toString()}`);
-                      }}
-                      title={`打开 ${item.path}`}
-                      key={item.path}
-                    >
-                      <Folder size={18} aria-hidden="true" />
-                      <span>{item.name}</span>
-                      <ChevronRight size={15} aria-hidden="true" />
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-              <div className="adminMediaVideoGrid">
-                {visibleAssets.map((asset) => (
-                  <article className={selectedIds.includes(asset.id) ? "adminMediaVideoItem isSelected" : "adminMediaVideoItem"} key={asset.id}>
-                    <label className="adminMediaVideoSelect" title={`选择 ${asset.title}`}>
-                      <input className="adminCheckbox" type="checkbox" checked={selectedIds.includes(asset.id)} onChange={() => toggleOne(asset.id)} aria-label={`选择 ${asset.title}`} />
-                    </label>
-                    <div className="adminMediaVideoThumbnail">
-                      <MediaVideoPreview
-                        id={asset.id}
-                        singlePercent={thumbnail.singlePercent}
-                        sourceVersion={asset.mtimeMs}
-                        coverVersion={mediaCoverVersion(asset, thumbnail.singlePercent)}
-                        admin
-                      />
-                      <span className="mediaVideoMeta">{formatDuration(asset.durationSeconds)}</span>
-                    </div>
-                    <div className="adminMediaVideoCopy">
-                      <AdminMediaTitleLink asset={asset}>
-                        <strong title={asset.title}>{asset.title}</strong>
-                      </AdminMediaTitleLink>
-                      <span>
-                        {asset.categoryId ? categoryNames.get(asset.categoryId) || "未分类" : "未分类"}
-                        {asset.artist ? ` · ${asset.artist}` : ""}
-                      </span>
-                      <small title={asset.fileName}>{asset.fileName}</small>
-                    </div>
-                    <div className="adminMediaGridActions">
-                      <button className="adminTableIconButton" type="button" onClick={() => setEditingAsset(asset)} aria-label={`编辑 ${asset.title}`} title="编辑">
-                        <Pencil size={15} aria-hidden="true" />
-                      </button>
-                    </div>
-                  </article>
+          <div className="adminTableWrap adminMediaTableWrap">
+            <table className="adminTable adminMediaTable">
+              <thead>
+                <tr>
+                  <th aria-label="选择资源"><input className="adminCheckbox" type="checkbox" checked={allSelected} onChange={toggleAll} /></th>
+                  <th>类型</th>
+                  <th>名称</th>
+                  <th>分类</th>
+                  <th>作者</th>
+                  <th>文件名</th>
+                  <th>目录</th>
+                  <th>大小</th>
+                  <th>播放/下载</th>
+                  <th>更新时间</th>
+                  <th aria-label="编辑">编辑</th>
+                </tr>
+              </thead>
+              <tbody>
+                {directFolders.map((item) => (
+                  <AdminMediaFolderRow
+                    folder={item}
+                    onOpen={() => {
+                      const params = new URLSearchParams({ kind, folder: item.path });
+                      if (query) params.set("q", query);
+                      if (categoryParam) params.set("category", categoryParam);
+                      params.set("sort", sortBy);
+                      params.set("order", sortOrder);
+                      beginNavigationProgress();
+                      router.push(`/admin/media?${params.toString()}`);
+                    }}
+                    key={item.path}
+                  />
                 ))}
-              </div>
-            </div>
-          ) : (
-            <div className="adminTableWrap adminMediaTableWrap">
-              <table className="adminTable adminMediaTable">
-                <thead>
-                  <tr>
-                    <th aria-label="选择资源"><input className="adminCheckbox" type="checkbox" checked={allSelected} onChange={toggleAll} /></th>
-                    <th>类型</th>
-                    <th>名称</th>
-                    <th>分类</th>
-                    <th>作者</th>
-                    <th>文件名</th>
-                    <th>目录</th>
-                    <th>大小</th>
-                    <th>播放/下载</th>
-                    <th>更新时间</th>
-                    <th aria-label="编辑">编辑</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {directFolders.map((item) => (
-                    <AdminMediaFolderRow
-                      folder={item}
-                      onOpen={() => {
-                        const params = new URLSearchParams({ kind, folder: item.path });
-                        if (query) params.set("q", query);
-                        if (categoryParam) params.set("category", categoryParam);
-                        if (view === "grid") params.set("view", view);
-                        params.set("sort", sortBy);
-                        params.set("order", sortOrder);
-                        beginNavigationProgress();
-                        router.push(`/admin/media?${params.toString()}`);
-                      }}
-                      key={item.path}
-                    />
-                  ))}
-                  {visibleAssets.map((asset) => {
-                    const Icon = KIND_ICONS[asset.kind];
-                    return (
-                      <tr key={asset.id}>
-                        <td><input className="adminCheckbox" type="checkbox" checked={selectedIds.includes(asset.id)} onChange={() => toggleOne(asset.id)} aria-label={`选择 ${asset.title}`} /></td>
-                        <td><span className={`adminMediaKind is-${asset.kind}`}><Icon size={14} aria-hidden="true" />{KIND_LABELS[asset.kind]}</span></td>
-                        <td title={asset.title}>
-                          <AdminMediaTitleLink asset={asset}>
-                            <strong>{asset.title}</strong>
-                          </AdminMediaTitleLink>
-                        </td>
-                        <td>{asset.kind === "video" ? (asset.categoryId ? categoryNames.get(asset.categoryId) || "未分类" : "未分类") : "-"}</td>
-                        <td title={asset.artist}>{asset.kind === "file" ? "-" : asset.artist || "-"}</td>
-                        <td title={asset.fileName}>{asset.fileName}</td>
-                        <td title={asset.folder || "根目录"}>{asset.folder || "根目录"}</td>
-                        <td>{formatBytes(asset.sizeBytes)}</td>
-                        <td>{asset.kind === "file" ? `${asset.downloadCount} 次下载` : `${asset.playCount} 次播放`}</td>
-                        <td><LocalDateTime value={asset.updatedAt} /></td>
-                        <td>
-                          <button className="adminTableIconButton" type="button" onClick={() => setEditingAsset(asset)} aria-label={`编辑 ${asset.title}`} title="编辑">
-                            <Pencil size={15} aria-hidden="true" />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+                {visibleAssets.map((asset) => {
+                  const Icon = KIND_ICONS[asset.kind];
+                  return (
+                    <tr key={asset.id}>
+                      <td><input className="adminCheckbox" type="checkbox" checked={selectedIds.includes(asset.id)} onChange={() => toggleOne(asset.id)} aria-label={`选择 ${asset.title}`} /></td>
+                      <td><span className={`adminMediaKind is-${asset.kind}`}><Icon size={14} aria-hidden="true" />{KIND_LABELS[asset.kind]}</span></td>
+                      <td title={asset.title}>
+                        <AdminMediaTitleLink asset={asset}>
+                          <strong>{asset.title}</strong>
+                        </AdminMediaTitleLink>
+                      </td>
+                      <td>{asset.kind === "video" ? (asset.categoryId ? categoryNames.get(asset.categoryId) || "未分类" : "未分类") : "-"}</td>
+                      <td title={asset.artist}>{asset.kind === "file" ? "-" : asset.artist || "-"}</td>
+                      <td title={asset.fileName}>{asset.fileName}</td>
+                      <td title={asset.folder || "根目录"}>{asset.folder || "根目录"}</td>
+                      <td>{formatBytes(asset.sizeBytes)}</td>
+                      <td>{asset.kind === "file" ? `${asset.downloadCount} 次下载` : `${asset.playCount} 次播放`}</td>
+                      <td><LocalDateTime value={asset.updatedAt} /></td>
+                      <td>
+                        <button className="adminTableIconButton" type="button" onClick={() => setEditingAsset(asset)} aria-label={`编辑 ${asset.title}`} title="编辑">
+                          <Pencil size={15} aria-hidden="true" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
           <div className="adminTableFooter adminMediaFooter">
             <div className="adminMediaBulkActions">
               <button className="adminIconTextButton" type="button" disabled={!selectedIds.length} onClick={() => void openBatchEditor()}>
-                <ListChecks size={15} aria-hidden="true" />批量编辑
+                <ListChecks size={15} aria-hidden="true" />批量编辑{selectedIds.length ? `（${selectedIds.length}）` : ""}
               </button>
-              {selectedIds.length ? (
-                <button className="adminTableIconButton" type="button" onClick={clearSelection} aria-label="清除全部选择" title="清除选择">
-                  <X size={16} aria-hidden="true" />
-                </button>
-              ) : null}
               {kind === "video" ? (
                 <form className="adminMediaCategoryBulkForm" onSubmit={submitCategory}>
                   <input name="returnPath" type="hidden" value={returnPath} />

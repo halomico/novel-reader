@@ -14,6 +14,7 @@ import {
   isUserRegistrationEnabled,
 } from "@/lib/config";
 import { verifyHumanRequest } from "@/lib/human-verification";
+import { LOCALE_REQUEST_HEADER, normalizeLocale } from "@/lib/locale";
 import { normalizeUserReturnPath } from "@/lib/return-path";
 import { claimDailySoda } from "@/lib/user-economy";
 import {
@@ -144,6 +145,7 @@ export async function registerUserAction(formData: FormData) {
       displayName,
       passwordHash: hashUserPassword(password),
       status: "active",
+      localePreference: normalizeLocale(headerStore.get(LOCALE_REQUEST_HEADER)),
       registrationIp: clientIp,
     });
   } catch (error) {

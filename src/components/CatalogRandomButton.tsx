@@ -1,7 +1,8 @@
 "use client";
 
 import { ChevronRight, Dices, LockKeyhole } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { localeFromPathname, uiText, withLocalePath } from "@/lib/locale";
 import { beginNavigationProgress } from "./NavigationProgress";
 
 function randomCatalogHref() {
@@ -11,18 +12,20 @@ function randomCatalogHref() {
 
 export function CatalogRandomButton() {
   const router = useRouter();
+  const locale = localeFromPathname(usePathname());
+  const label = uiText(locale, "随便看看");
 
   function openRandomSelection() {
     beginNavigationProgress();
-    router.push(randomCatalogHref());
+    router.push(withLocalePath(randomCatalogHref(), locale));
   }
 
   return (
     <button
       className="catalogRandomButton"
       type="button"
-      aria-label="随便看看"
-      title="随便看看"
+      aria-label={label}
+      title={label}
       onClick={openRandomSelection}
     >
       <Dices size={18} aria-hidden="true" />
@@ -32,11 +35,15 @@ export function CatalogRandomButton() {
 
 export function CatalogRandomCard({ loginRequired = false }: { loginRequired?: boolean }) {
   const router = useRouter();
+  const locale = localeFromPathname(usePathname());
+  const randomLabel = uiText(locale, "随便看看");
+  const loginLabel = uiText(locale, "登录后可用");
 
   function openRandomSelection() {
     beginNavigationProgress();
     const href = randomCatalogHref();
-    router.push(loginRequired ? `/login?${new URLSearchParams({ returnTo: href }).toString()}` : href);
+    const target = loginRequired ? `/login?${new URLSearchParams({ returnTo: href }).toString()}` : href;
+    router.push(withLocalePath(target, locale));
   }
 
   return (
@@ -44,13 +51,13 @@ export function CatalogRandomCard({ loginRequired = false }: { loginRequired?: b
       className="homePortalCard is-random"
       type="button"
       onClick={openRandomSelection}
-      title={loginRequired ? "登录后可用" : undefined}
-      aria-label={loginRequired ? "随便看看，登录后可用" : undefined}
+      title={loginRequired ? loginLabel : undefined}
+      aria-label={loginRequired ? `${randomLabel}，${loginLabel}` : undefined}
     >
       <span className="homePortalCardIcon" aria-hidden="true">
         <Dices size={30} />
       </span>
-      <strong>随便看看</strong>
+      <strong>{randomLabel}</strong>
       {loginRequired
         ? <LockKeyhole className="homePortalCardArrow" size={17} aria-hidden="true" />
         : <ChevronRight className="homePortalCardArrow" size={19} aria-hidden="true" />}

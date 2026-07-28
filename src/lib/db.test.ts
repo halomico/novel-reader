@@ -38,6 +38,32 @@ test("removes legacy search tables and the retired content index database", asyn
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY(ip, category)
     );
+    CREATE TABLE content_access_rules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      target_type TEXT NOT NULL,
+      target_value TEXT NOT NULL,
+      scope TEXT NOT NULL DEFAULT 'all',
+      audience TEXT NOT NULL DEFAULT 'all',
+      source TEXT NOT NULL DEFAULT 'manual',
+      reason TEXT NOT NULL DEFAULT '',
+      expires_at INTEGER,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_by TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE content_access_policies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      scope TEXT NOT NULL DEFAULT 'all',
+      audience TEXT NOT NULL DEFAULT 'guest',
+      window_seconds INTEGER NOT NULL,
+      max_requests INTEGER NOT NULL,
+      block_seconds INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
     CREATE TABLE novels (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
@@ -164,6 +190,10 @@ test("removes legacy search tables and the retired content index database", asyn
     VALUES ('203.0.113.9', 'legacy-search-rule', 1, NULL);
     INSERT INTO rate_limit_bans (ip, category, rule_id, is_permanent, banned_until)
     VALUES ('198.51.100.8', 'content', 'legacy-content-rule', 1, NULL);
+    INSERT INTO content_access_rules (target_type, target_value, scope)
+    VALUES ('ip', '192.0.2.10', 'media');
+    INSERT INTO content_access_policies (name, scope, window_seconds, max_requests, block_seconds)
+    VALUES ('旧策略', 'media', 60, 10, 300);
   `);
   seed.close();
   fs.writeFileSync(legacyPath, "retired derived database", "utf8");
@@ -187,39 +217,27 @@ test("removes legacy search tables and the retired content index database", asyn
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'rate_limit_bans'")
       .get();
     assert.equal(legacyBanTable, undefined);
-    const migratedBan = db
+    const discardedLegacyBan = db
       .prepare(
         `SELECT target_type, target_value, match_mode, scope, audience, source, expires_at
          FROM content_access_rules WHERE target_value = '198.51.100.8'`,
       )
-      .get() as {
-        target_type: string;
-        target_value: string;
-        match_mode: string;
-        scope: string;
-        audience: string;
-        source: string;
-        expires_at: number;
-      };
-    assert.deepEqual(
-      {
-        targetType: migratedBan.target_type,
-        targetValue: migratedBan.target_value,
-        matchMode: migratedBan.match_mode,
-        scope: migratedBan.scope,
-        audience: migratedBan.audience,
-        source: migratedBan.source,
-      },
-      {
-        targetType: "ip",
-        targetValue: "198.51.100.8",
-        matchMode: "include",
-        scope: "all",
-        audience: "all",
-        source: "rate_limit",
-      },
+      .get();
+    assert.equal(discardedLegacyBan, undefined);
+    const accessRuleSchema = db
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'content_access_rules'")
+      .get() as { sql: string };
+    assert.match(accessRuleSchema.sql, /country_mode/);
+    assert.match(accessRuleSchema.sql, /'video'/);
+    assert.doesNotMatch(accessRuleSchema.sql, /'media'/);
+    assert.equal(
+      (db.prepare("SELECT COUNT(*) AS count FROM content_access_rules").get() as { count: number }).count,
+      0,
     );
-    assert.ok(migratedBan.expires_at > Date.now());
+    assert.equal(
+      (db.prepare("SELECT COUNT(*) AS count FROM content_access_policies").get() as { count: number }).count,
+      0,
+    );
     assert.equal(fs.existsSync(legacyPath), false);
     const obsoleteColumns = [
       ["users", "history_visible"],
@@ -236,6 +254,26 @@ test("removes legacy search tables and the retired content index database", asyn
     assert.equal(userColumns.some((column) => column.name === "trust_level"), true);
     assert.equal(userColumns.some((column) => column.name === "soda_balance"), true);
     assert.equal(userColumns.some((column) => column.name === "soda_experience"), true);
+    assert.equal(userColumns.some((column) => column.name === "locale_preference"), true);
+    assert.equal(userColumns.some((column) => column.name === "reading_history_enabled"), true);
+    assert.equal(userColumns.some((column) => column.name === "reading_progress_enabled"), true);
+    assert.deepEqual(
+      { ...(db.prepare(
+        "SELECT locale_preference, reading_history_enabled, reading_progress_enabled FROM users",
+      ).get() as object) },
+      {
+        locale_preference: "zh-Hans",
+        reading_history_enabled: 1,
+        reading_progress_enabled: 1,
+      },
+    );
+    const readingHistoryColumns = db
+      .prepare("PRAGMA table_info(user_reading_history)")
+      .all() as Array<{ name: string }>;
+    assert.equal(
+      readingHistoryColumns.some((column) => column.name === "recorded_in_history"),
+      true,
+    );
     assert.equal((db.prepare("SELECT role FROM users").get() as { role: string }).role, "user");
     assert.deepEqual(
       { ...(db.prepare("SELECT trust_level, soda_balance, soda_experience FROM users").get() as object) },
@@ -271,6 +309,16 @@ test("removes legacy search tables and the retired content index database", asyn
       "content_reports",
     );
     assert.equal((db.prepare("SELECT visit_count FROM user_reading_history").get() as { visit_count: number }).visit_count, 2);
+    const readingColumns = db.prepare("PRAGMA table_info(user_reading_history)").all() as Array<{ name: string }>;
+    for (const columnName of ["segment_ratio", "progress_percent", "content_version", "completed", "updated_at"]) {
+      assert.equal(readingColumns.some((column) => column.name === columnName), true);
+    }
+    for (const tableName of ["novel_read_daily_stats", "user_read_daily_stats"]) {
+      assert.equal(
+        (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as { name: string }).name,
+        tableName,
+      );
+    }
     assert.equal((db.prepare("SELECT visit_count FROM user_media_history").get() as { visit_count: number }).visit_count, 3);
     const mediaColumns = db.prepare("PRAGMA table_info(media_assets)").all() as Array<{ name: string }>;
     assert.equal(mediaColumns.some((column) => column.name === "category_id"), true);
@@ -301,6 +349,13 @@ test("removes legacy search tables and the retired content index database", asyn
     assert.equal(pinnedTable?.name, "pinned_novels");
     const pinnedIndexes = db.prepare("PRAGMA index_list(pinned_novels)").all() as Array<{ name: string }>;
     assert.equal(pinnedIndexes.some((index) => index.name === "idx_pinned_novels_sort"), true);
+    assert.equal(
+      (
+        db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'novel_recommendation_pool'")
+          .get() as { name: string }
+      ).name,
+      "novel_recommendation_pool",
+    );
 
     db.exec(`
       DELETE FROM user_reading_history;
@@ -320,6 +375,11 @@ test("removes legacy search tables and the retired content index database", asyn
     }
     const { listNovels } = await import("./books");
     const { listPinnedNovels, pinNovel, replacePinnedNovels } = await import("./pinned-novels");
+    const {
+      countRecommendationPoolNovels,
+      listRecommendationPoolNovelIds,
+      setNovelRecommendationPool,
+    } = await import("./recommendation-pool");
     assert.equal(pinNovel(2), true);
     assert.equal(pinNovel(1), true);
     assert.deepEqual(listPinnedNovels().map((book) => book.id), [2, 1]);
@@ -328,6 +388,13 @@ test("removes legacy search tables and the retired content index database", asyn
     assert.throws(() => replacePinnedNovels([2, 999]), /不存在/);
     assert.deepEqual(listPinnedNovels().map((book) => book.id), [1, 2]);
     assert.deepEqual(listNovels({ pageSize: 5 }).books.slice(0, 2).map((book) => book.id), [1, 2]);
+    for (let id = 1; id <= 8; id += 1) {
+      setNovelRecommendationPool(id, true);
+    }
+    setNovelRecommendationPool(8, false);
+    assert.deepEqual(listRecommendationPoolNovelIds(), [1, 2, 3, 4, 5, 6, 7]);
+    setNovelRecommendationPool(8, true);
+    assert.equal(countRecommendationPoolNovels(), 8);
 
     const { readSiteSettings, writeSiteSettings } = await import("./site-settings");
     writeSiteSettings({
@@ -339,7 +406,7 @@ test("removes legacy search tables and the retired content index database", asyn
     const promoted = listNovels({ pageSize: 8 }).books.map((book) => book.id);
     assert.deepEqual(promoted.slice(0, 2), [1, 2]);
     assert.equal(new Set(promoted.slice(2, 6)).size, 4);
-    assert.equal(promoted.slice(2, 6).some((id) => id === 1 || id === 2), false);
+    assert.equal(promoted.slice(2, 6).every((id) => id >= 3 && id <= 8), true);
 
     const randomA = listNovels({ pageSize: 12, randomSeed: "stable-seed" });
     const randomARepeat = listNovels({ pageSize: 12, randomSeed: "stable-seed" });
@@ -352,6 +419,7 @@ test("removes legacy search tables and the retired content index database", asyn
 
     db.prepare("DELETE FROM novels WHERE id = 1").run();
     assert.deepEqual(listPinnedNovels().map((book) => book.id), [2]);
+    assert.equal(listRecommendationPoolNovelIds().includes(1), false);
 
     db.close();
     delete (globalThis as typeof globalThis & { novelReaderDb?: DatabaseSync }).novelReaderDb;
@@ -377,6 +445,12 @@ test("removes legacy search tables and the retired content index database", asyn
     } else {
       process.env.ADMIN_SETTINGS_PATH = previousSettingsPath;
     }
-    fs.rmSync(root, { recursive: true, force: true });
+    try {
+      fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    } catch (error) {
+      if (process.platform !== "win32" || (error as NodeJS.ErrnoException).code !== "EPERM") {
+        throw error;
+      }
+    }
   }
 });

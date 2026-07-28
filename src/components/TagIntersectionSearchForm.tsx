@@ -4,6 +4,7 @@ import { Check, ChevronDown, Minus, Plus, RotateCcw, Search, Tags } from "lucide
 import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState, useTransition } from "react";
 import { beginNavigationProgress } from "./NavigationProgress";
+import { uiText, withLocalePath, type AppLocale } from "@/lib/locale";
 
 export type AdvancedTagGroup = {
   label: string;
@@ -24,13 +25,16 @@ export function TagIntersectionSearchForm({
   initialExcluded,
   initialTitleQuery,
   initialContentQuery,
+  locale,
 }: {
   groups: AdvancedTagGroup[];
   initialSelected: string[];
   initialExcluded: string[];
   initialTitleQuery: string;
   initialContentQuery: string;
+  locale: AppLocale;
 }) {
+  const tr = (text: string) => uiText(locale, text);
   const router = useRouter();
   const [included, setIncluded] = useState(() => new Set(initialSelected));
   const [excluded, setExcluded] = useState(() => new Set(initialExcluded));
@@ -65,7 +69,7 @@ export function TagIntersectionSearchForm({
         const next = new Set(current);
         if (next.has(slug)) next.delete(slug);
         else if (next.size < MAX_SELECTED_TAGS) next.add(slug);
-        else setMessage(`最多选择 ${MAX_SELECTED_TAGS} 个包含标签`);
+        else setMessage(locale === "zh-Hant" ? `最多選擇 ${MAX_SELECTED_TAGS} 個包含標籤` : `最多选择 ${MAX_SELECTED_TAGS} 个包含标签`);
         return next;
       });
       return;
@@ -80,7 +84,7 @@ export function TagIntersectionSearchForm({
       const next = new Set(current);
       if (next.has(slug)) next.delete(slug);
       else if (next.size < MAX_SELECTED_TAGS) next.add(slug);
-      else setMessage(`最多选择 ${MAX_SELECTED_TAGS} 个排除标签`);
+      else setMessage(locale === "zh-Hant" ? `最多選擇 ${MAX_SELECTED_TAGS} 個排除標籤` : `最多选择 ${MAX_SELECTED_TAGS} 个排除标签`);
       return next;
     });
   }
@@ -105,7 +109,7 @@ export function TagIntersectionSearchForm({
     const normalizedTitle = titleQuery.normalize("NFKC").replace(/\s+/gu, " ").trim();
     const normalizedContent = contentQuery.normalize("NFKC").replace(/\s+/gu, " ").trim();
     if (!includedTags.length && !normalizedTitle && !normalizedContent) {
-      setMessage("请选择标签或输入标题、正文关键词");
+      setMessage(tr("请选择标签或输入标题、正文关键词"));
       return;
     }
     const params = new URLSearchParams();
@@ -115,19 +119,19 @@ export function TagIntersectionSearchForm({
     if (normalizedContent) params.set("content", normalizedContent);
     setPickerOpen(false);
     beginNavigationProgress();
-    startTransition(() => router.push(`/tags/search?${params.toString()}#advanced-search-results`));
+    startTransition(() => router.push(withLocalePath(`/tags/search?${params.toString()}#advanced-search-results`, locale)));
   }
 
   return (
     <form className="advancedTagSearchForm" onSubmit={submit}>
       <div className="advancedTagSearchToolbar">
         <label>
-          <span>标题关键词</span>
-          <input value={titleQuery} onChange={(event) => { setTitleQuery(event.target.value); setMessage(""); }} maxLength={80} placeholder="可选" />
+          <span>{tr("标题关键词")}</span>
+          <input value={titleQuery} onChange={(event) => { setTitleQuery(event.target.value); setMessage(""); }} maxLength={80} placeholder={tr("可选")} />
         </label>
         <label>
-          <span>正文关键词</span>
-          <input value={contentQuery} onChange={(event) => { setContentQuery(event.target.value); setMessage(""); }} maxLength={200} placeholder="可选，多关键词用空格分隔" />
+          <span>{tr("正文关键词")}</span>
+          <input value={contentQuery} onChange={(event) => { setContentQuery(event.target.value); setMessage(""); }} maxLength={200} placeholder={tr("可选，多关键词用空格分隔")} />
         </label>
         <div className="advancedTagSearchActions">
           <button
@@ -139,14 +143,14 @@ export function TagIntersectionSearchForm({
               setExcluded(new Set());
               setMessage("");
             }}
-            aria-label="清除已选标签"
-            title="清除已选"
+            aria-label={tr("清除已选标签")}
+            title={tr("清除已选")}
           >
             <RotateCcw size={16} aria-hidden="true" />
           </button>
           <button className="iconTextButton" type="submit" disabled={isPending}>
             <Search size={16} aria-hidden="true" />
-            搜索
+            {tr("搜索")}
           </button>
         </div>
       </div>
@@ -154,11 +158,11 @@ export function TagIntersectionSearchForm({
       {message ? <strong className="advancedTagMessage" role="status">{message}</strong> : null}
 
       {included.size || excluded.size ? (
-        <div className="advancedTagConditionSummary" aria-label="已选标签条件">
+        <div className="advancedTagConditionSummary" aria-label={tr("已选标签条件")}>
           {Array.from(included).map((slug) => {
             const tag = tagsBySlug.get(slug);
             return tag ? (
-              <button className="isIncluded" type="button" onClick={() => removeTag(slug)} title={`移除包含标签 ${tag.name}`} key={`include-${slug}`}>
+              <button className="isIncluded" type="button" onClick={() => removeTag(slug)} title={`${locale === "zh-Hant" ? "移除包含標籤" : "移除包含标签"} ${tag.name}`} key={`include-${slug}`}>
                 <Plus size={12} aria-hidden="true" />{tag.name}
               </button>
             ) : null;
@@ -166,7 +170,7 @@ export function TagIntersectionSearchForm({
           {Array.from(excluded).map((slug) => {
             const tag = tagsBySlug.get(slug);
             return tag ? (
-              <button className="isExcluded" type="button" onClick={() => removeTag(slug)} title={`移除排除标签 ${tag.name}`} key={`exclude-${slug}`}>
+              <button className="isExcluded" type="button" onClick={() => removeTag(slug)} title={`${locale === "zh-Hant" ? "移除排除標籤" : "移除排除标签"} ${tag.name}`} key={`exclude-${slug}`}>
                 <Minus size={12} aria-hidden="true" />{tag.name}
               </button>
             ) : null;
@@ -176,23 +180,23 @@ export function TagIntersectionSearchForm({
 
       <details className="advancedTagPicker" open={pickerOpen} onToggle={(event) => setPickerOpen(event.currentTarget.open)}>
         <summary>
-          <span><Tags size={16} aria-hidden="true" />标签</span>
+          <span><Tags size={16} aria-hidden="true" />{tr("标签")}</span>
           <small>{included.size + excluded.size || groups.reduce((count, group) => count + group.tags.length, 0)}</small>
           <ChevronDown size={16} aria-hidden="true" />
         </summary>
         <div className="advancedTagPickerBody">
           <div className="advancedTagSelectionStatus" aria-live="polite">
-            <div className="advancedTagSelectionMode" role="group" aria-label="标签条件">
+            <div className="advancedTagSelectionMode" role="group" aria-label={tr("标签条件")}>
               <button className={selectionMode === "include" ? "isActive" : ""} type="button" onClick={() => setSelectionMode("include")} aria-pressed={selectionMode === "include"}>
-                <Plus size={14} aria-hidden="true" />包含 {included.size}
+                <Plus size={14} aria-hidden="true" />{tr("包含")} {included.size}
               </button>
               <button className={selectionMode === "exclude" ? "isActive" : ""} type="button" onClick={() => setSelectionMode("exclude")} aria-pressed={selectionMode === "exclude"}>
-                <Minus size={14} aria-hidden="true" />排除 {excluded.size}
+                <Minus size={14} aria-hidden="true" />{tr("排除")} {excluded.size}
               </button>
             </div>
             <label className="advancedTagFilter">
               <Search size={14} aria-hidden="true" />
-              <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="筛选标签或别名" aria-label="筛选标签或别名" />
+              <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder={tr("筛选标签或别名")} aria-label={tr("筛选标签或别名")} />
             </label>
           </div>
           <div className="advancedTagGroups">
@@ -219,7 +223,7 @@ export function TagIntersectionSearchForm({
                   })}
                 </div>
               </section>
-            )) : <p className="advancedTagEmpty">没有匹配的标签</p>}
+            )) : <p className="advancedTagEmpty">{tr("没有匹配的标签")}</p>}
           </div>
         </div>
       </details>

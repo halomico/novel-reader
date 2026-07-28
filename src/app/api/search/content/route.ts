@@ -18,6 +18,9 @@ import { getCurrentUserFromRequest } from "@/lib/user-auth";
 import { listNovelIdsByTagFilters, listVisibleTagsBySlugs } from "@/lib/tags";
 import { checkContentAccess } from "@/lib/content-access";
 import { hasUserPermission } from "@/lib/user-levels";
+import { LOCALE_COOKIE, normalizeLocale, TRADITIONAL_LOCALE, type AppLocale } from "@/lib/locale";
+import { localizeTexts, normalizeSearchText as normalizeLocaleSearchText } from "@/lib/locale-server";
+import type { ContentJobSnapshot } from "@/lib/content-jobs";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -46,6 +49,39 @@ function cleanSlugList(value: unknown): string[] {
   return Array.from(new Set(value.map((item) => String(item).trim()).filter((item) => item.length > 0 && item.length <= 64))).slice(0, 20);
 }
 
+function getResponseLocale(request: NextRequest): AppLocale {
+  return normalizeLocale(request.cookies.get(LOCALE_COOKIE)?.value);
+}
+
+async function localizeJob(
+  job: ContentJobSnapshot,
+  locale: AppLocale,
+): Promise<ContentJobSnapshot> {
+  if (locale !== TRADITIONAL_LOCALE) {
+    return job;
+  }
+
+  const messageValues = await localizeTexts(
+    [job.message || "", job.error || ""] as const,
+    locale,
+  );
+  const results = job.results
+    ? await Promise.all(job.results.map(async (result) => {
+        const [title, snippet] = await localizeTexts(
+          [result.title, result.snippet] as const,
+          locale,
+        );
+        return { ...result, title, snippet };
+      }))
+    : undefined;
+  return {
+    ...job,
+    message: messageValues[0],
+    error: messageValues[1] || undefined,
+    results,
+  };
+}
+
 export async function POST(request: NextRequest) {
   let body: { q?: unknown; filters?: unknown } = {};
   try {
@@ -54,7 +90,9 @@ export async function POST(request: NextRequest) {
     return jsonError("搜索请求格式有误", 400);
   }
 
-  const validation = validateSearchKeyword(String(body.q || ""));
+  const validation = validateSearchKeyword(
+    await normalizeLocaleSearchText(String(body.q || "")),
+  );
   if (!validation.ok) {
     return jsonError(validation.message, 400);
   }
@@ -84,7 +122,11 @@ export async function POST(request: NextRequest) {
     const excludedIds = listVisibleTagsBySlugs(cleanSlugList(filters.excludeTags), { audience })
       .map((tag) => tag.id)
       .filter((id) => !includedIds.includes(id));
-    const titleQuery = String(filters.titleQuery || "").normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, 80);
+    const titleQuery = (await normalizeLocaleSearchText(String(filters.titleQuery || "")))
+      .normalize("NFKC")
+      .replace(/\s+/gu, " ")
+      .trim()
+      .slice(0, 80);
     if (includedIds.length || excludedIds.length || titleQuery) {
       candidateNovelIds = listNovelIdsByTagFilters(includedIds, { excludeTagIds: excludedIds, q: titleQuery, audience });
       cacheScope = `advanced:${crypto.createHash("sha256").update(candidateNovelIds.join(",")).digest("base64url").slice(0, 20)}`;
@@ -97,7 +139,12 @@ export async function POST(request: NextRequest) {
   }
 
   const job = startContentSearchJob(validation.query, { candidateNovelIds, cacheScope });
-  return NextResponse.json({ ok: true, jobId: job.id, job, showProgressBars: shouldShowProgressBars() });
+  return NextResponse.json({
+    ok: true,
+    jobId: job.id,
+    job: await localizeJob(job, getResponseLocale(request)),
+    showProgressBars: shouldShowProgressBars(),
+  });
 }
 
 export async function GET(request: NextRequest) {
@@ -110,7 +157,11 @@ export async function GET(request: NextRequest) {
     return jsonError("搜索任务不存在或已过期", 404);
   }
 
-  return NextResponse.json({ ok: true, job, showProgressBars: shouldShowProgressBars() });
+  return NextResponse.json({
+    ok: true,
+    job: await localizeJob(job, getResponseLocale(request)),
+    showProgressBars: shouldShowProgressBars(),
+  });
 }
 
 export async function DELETE(request: NextRequest) {

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import type { MediaKind, MediaSortBy, MediaSortOrder } from "@/lib/media";
 import { MediaSortMenu, type MediaSortOption } from "./MediaSortMenu";
 import { beginNavigationProgress } from "./NavigationProgress";
+import { uiText, withLocalePath, type AppLocale } from "@/lib/locale";
 
 export function MediaPublicSort({
   kind,
@@ -12,6 +13,7 @@ export function MediaPublicSort({
   category,
   sortBy,
   sortOrder,
+  locale,
 }: {
   kind: MediaKind;
   folder: string;
@@ -19,11 +21,12 @@ export function MediaPublicSort({
   category: string;
   sortBy: MediaSortBy;
   sortOrder: MediaSortOrder;
+  locale: AppLocale;
 }) {
   const router = useRouter();
   const options: MediaSortOption[] = kind === "file"
-    ? [{ value: "name", label: "名称" }, { value: "size", label: "大小" }]
-    : [{ value: "name", label: "名称" }, { value: "duration", label: "时长" }];
+    ? [{ value: "name", label: uiText(locale, "名称") }, { value: "size", label: uiText(locale, "大小") }]
+    : [{ value: "name", label: uiText(locale, "名称") }, { value: "duration", label: uiText(locale, "时长") }];
 
   function navigate(nextSort: MediaSortBy, nextOrder: MediaSortOrder) {
     const defaultSort: MediaSortBy = kind === "audio" && !folder ? "duration" : "name";
@@ -34,7 +37,7 @@ export function MediaPublicSort({
     if (nextSort !== defaultSort) params.set("sort", nextSort);
     if (nextOrder !== (nextSort === "name" ? "asc" : "desc")) params.set("order", nextOrder);
     beginNavigationProgress();
-    router.push(`/media?${params.toString()}`);
+    router.push(withLocalePath(`/media?${params.toString()}`, locale));
   }
 
   return <MediaSortMenu options={options} sortBy={sortBy} sortOrder={sortOrder} onChange={navigate} />;

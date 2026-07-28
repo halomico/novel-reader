@@ -160,42 +160,11 @@ function migrateLegacySearchRateLimitBans(db: DatabaseSync) {
   }
 }
 
-function migrateLegacyContentAccessBans(db: DatabaseSync) {
+function dropLegacyContentAccessBans(db: DatabaseSync) {
   const legacy = db
     .prepare("SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'rate_limit_bans'")
     .get() as { found: number } | undefined;
-  if (!legacy) {
-    return;
-  }
-
-  db.exec("BEGIN");
-  try {
-    db.exec(`
-      INSERT INTO content_access_rules (
-        target_type, target_value, scope, audience, source, reason, expires_at
-      )
-      SELECT
-        'ip',
-        ip,
-        'all',
-        'all',
-        'rate_limit',
-        '由旧版正文访问规则迁移',
-        CASE
-          WHEN is_permanent = 1 THEN (CAST(strftime('%s', 'now') AS INTEGER) * 1000) + 86400000
-          ELSE banned_until
-        END
-      FROM rate_limit_bans
-      WHERE category = 'content'
-        AND (is_permanent = 1 OR banned_until > CAST(strftime('%s', 'now') AS INTEGER) * 1000);
-
-      DROP TABLE rate_limit_bans;
-    `);
-    db.exec("COMMIT");
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
-  }
+  if (legacy) db.exec("DROP TABLE rate_limit_bans;");
 }
 
 function migrateContentReports(db: DatabaseSync) {
@@ -252,22 +221,43 @@ function migrateContentReports(db: DatabaseSync) {
   }
 }
 
-function migrateContentAccessCrawlerTarget(db: DatabaseSync) {
-  const table = db
+function migrateContentAccessSchema(db: DatabaseSync) {
+  const ruleTable = db
     .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'content_access_rules'")
     .get() as { sql?: string } | undefined;
-  if (!table?.sql || /target_type\s+IN\s*\([^)]*'crawler'/i.test(table.sql)) {
+  const policyTable = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'content_access_policies'")
+    .get() as { sql?: string } | undefined;
+  const ruleSql = ruleTable?.sql || "";
+  const policySql = policyTable?.sql || "";
+  const currentRules = ruleSql.includes("country_mode") &&
+    ruleSql.includes("'crawler'") &&
+    ruleSql.includes("'video'") &&
+    ruleSql.includes("'audio'") &&
+    ruleSql.includes("'file'") &&
+    !ruleSql.includes("'media'");
+  const currentPolicies = policySql.includes("country_mode") &&
+    policySql.includes("'video'") &&
+    policySql.includes("'audio'") &&
+    policySql.includes("'file'") &&
+    !policySql.includes("'media'");
+  if (currentRules && currentPolicies) {
     return;
   }
+
   db.exec("BEGIN");
   try {
     db.exec(`
-      CREATE TABLE content_access_rules_new (
+      DROP TABLE content_access_rules;
+      DROP TABLE content_access_policies;
+
+      CREATE TABLE content_access_rules (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         target_type TEXT NOT NULL CHECK(target_type IN ('ip', 'cidr', 'country', 'crawler')),
         target_value TEXT NOT NULL,
         match_mode TEXT NOT NULL DEFAULT 'include' CHECK(match_mode IN ('include', 'exclude')),
-        scope TEXT NOT NULL DEFAULT 'all' CHECK(scope IN ('all', 'novel', 'media')),
+        scope TEXT NOT NULL DEFAULT 'all' CHECK(scope IN ('all', 'novel', 'video', 'audio', 'file')),
+        country_mode TEXT NOT NULL DEFAULT 'all' CHECK(country_mode IN ('all', 'cn', 'non_cn')),
         audience TEXT NOT NULL DEFAULT 'all' CHECK(audience IN ('all', 'guest')),
         source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual', 'rate_limit')),
         reason TEXT NOT NULL DEFAULT '',
@@ -278,31 +268,25 @@ function migrateContentAccessCrawlerTarget(db: DatabaseSync) {
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
 
-      INSERT INTO content_access_rules_new (
-        id, target_type, target_value, scope, audience, source, reason,
-        expires_at, enabled, created_by, created_at, updated_at
-      )
-      SELECT id, target_type, target_value, scope, audience, source, reason,
-             expires_at, enabled, created_by, created_at, updated_at
-      FROM content_access_rules;
-
-      DROP TABLE content_access_rules;
-      ALTER TABLE content_access_rules_new RENAME TO content_access_rules;
+      CREATE TABLE content_access_policies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        scope TEXT NOT NULL DEFAULT 'all' CHECK(scope IN ('all', 'novel', 'video', 'audio', 'file')),
+        country_mode TEXT NOT NULL DEFAULT 'all' CHECK(country_mode IN ('all', 'cn', 'non_cn')),
+        audience TEXT NOT NULL DEFAULT 'guest' CHECK(audience IN ('all', 'guest')),
+        window_seconds INTEGER NOT NULL,
+        max_requests INTEGER NOT NULL,
+        block_seconds INTEGER NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
     `);
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");
     throw error;
   }
-}
-
-function migrateContentAccessMatchMode(db: DatabaseSync) {
-  addColumnIfMissing(
-    db,
-    "content_access_rules",
-    "match_mode",
-    "match_mode TEXT NOT NULL DEFAULT 'include' CHECK(match_mode IN ('include', 'exclude'))",
-  );
 }
 
 function migrateUserEconomy(db: DatabaseSync) {
@@ -606,6 +590,12 @@ function initialize(db: DatabaseSync) {
 
     CREATE INDEX IF NOT EXISTS idx_pinned_novels_sort ON pinned_novels(sort_order, novel_id);
 
+    CREATE TABLE IF NOT EXISTS novel_recommendation_pool (
+      novel_id INTEGER PRIMARY KEY,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT NOT NULL UNIQUE,
@@ -618,6 +608,9 @@ function initialize(db: DatabaseSync) {
       soda_balance INTEGER NOT NULL DEFAULT 0 CHECK(soda_balance >= 0),
       soda_experience INTEGER NOT NULL DEFAULT 0 CHECK(soda_experience >= 0),
       search_rate_limit_per_minute INTEGER,
+      locale_preference TEXT NOT NULL DEFAULT 'zh-Hans' CHECK(locale_preference IN ('zh-Hans', 'zh-Hant')),
+      reading_history_enabled INTEGER NOT NULL DEFAULT 1 CHECK(reading_history_enabled IN (0, 1)),
+      reading_progress_enabled INTEGER NOT NULL DEFAULT 1 CHECK(reading_progress_enabled IN (0, 1)),
       registration_ip TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -648,16 +641,54 @@ function initialize(db: DatabaseSync) {
       novel_id INTEGER NOT NULL,
       title TEXT NOT NULL,
       segment_index INTEGER NOT NULL DEFAULT 0,
+      segment_ratio REAL NOT NULL DEFAULT 0 CHECK(segment_ratio >= 0 AND segment_ratio <= 1),
+      progress_percent REAL NOT NULL DEFAULT 0 CHECK(progress_percent >= 0 AND progress_percent <= 100),
+      content_version TEXT NOT NULL DEFAULT '',
+      completed INTEGER NOT NULL DEFAULT 0 CHECK(completed IN (0, 1)),
+      recorded_in_history INTEGER NOT NULL DEFAULT 1 CHECK(recorded_in_history IN (0, 1)),
       visit_count INTEGER NOT NULL DEFAULT 0,
       last_read_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(user_id, novel_id),
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE
     );
 
-    CREATE INDEX IF NOT EXISTS idx_user_history_user_time ON user_reading_history(user_id, last_read_at);
+    CREATE INDEX IF NOT EXISTS idx_user_history_user_time
+      ON user_reading_history(user_id, last_read_at DESC);
     CREATE INDEX IF NOT EXISTS idx_user_history_novel ON user_reading_history(novel_id);
+
+    CREATE TABLE IF NOT EXISTS novel_read_daily_stats (
+      day TEXT NOT NULL,
+      novel_id INTEGER NOT NULL,
+      open_count INTEGER NOT NULL DEFAULT 0 CHECK(open_count >= 0),
+      resume_count INTEGER NOT NULL DEFAULT 0 CHECK(resume_count >= 0),
+      completion_count INTEGER NOT NULL DEFAULT 0 CHECK(completion_count >= 0),
+      progress_sample_count INTEGER NOT NULL DEFAULT 0 CHECK(progress_sample_count >= 0),
+      progress_percent_sum REAL NOT NULL DEFAULT 0 CHECK(progress_percent_sum >= 0),
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(day, novel_id),
+      FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_novel_read_daily_day
+      ON novel_read_daily_stats(day DESC, open_count DESC);
+
+    CREATE TABLE IF NOT EXISTS user_read_daily_stats (
+      day TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
+      open_count INTEGER NOT NULL DEFAULT 0 CHECK(open_count >= 0),
+      resume_count INTEGER NOT NULL DEFAULT 0 CHECK(resume_count >= 0),
+      completion_count INTEGER NOT NULL DEFAULT 0 CHECK(completion_count >= 0),
+      progress_update_count INTEGER NOT NULL DEFAULT 0 CHECK(progress_update_count >= 0),
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(day, user_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_user_read_daily_day
+      ON user_read_daily_stats(day DESC, open_count DESC);
 
     CREATE TABLE IF NOT EXISTS user_login_records (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -905,7 +936,8 @@ function initialize(db: DatabaseSync) {
       target_type TEXT NOT NULL CHECK(target_type IN ('ip', 'cidr', 'country', 'crawler')),
       target_value TEXT NOT NULL,
       match_mode TEXT NOT NULL DEFAULT 'include' CHECK(match_mode IN ('include', 'exclude')),
-      scope TEXT NOT NULL DEFAULT 'all' CHECK(scope IN ('all', 'novel', 'media')),
+      scope TEXT NOT NULL DEFAULT 'all' CHECK(scope IN ('all', 'novel', 'video', 'audio', 'file')),
+      country_mode TEXT NOT NULL DEFAULT 'all' CHECK(country_mode IN ('all', 'cn', 'non_cn')),
       audience TEXT NOT NULL DEFAULT 'all' CHECK(audience IN ('all', 'guest')),
       source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual', 'rate_limit')),
       reason TEXT NOT NULL DEFAULT '',
@@ -920,7 +952,8 @@ function initialize(db: DatabaseSync) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 1,
-      scope TEXT NOT NULL DEFAULT 'all' CHECK(scope IN ('all', 'novel', 'media')),
+      scope TEXT NOT NULL DEFAULT 'all' CHECK(scope IN ('all', 'novel', 'video', 'audio', 'file')),
+      country_mode TEXT NOT NULL DEFAULT 'all' CHECK(country_mode IN ('all', 'cn', 'non_cn')),
       audience TEXT NOT NULL DEFAULT 'guest' CHECK(audience IN ('all', 'guest')),
       window_seconds INTEGER NOT NULL,
       max_requests INTEGER NOT NULL,
@@ -928,9 +961,6 @@ function initialize(db: DatabaseSync) {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
-
-    CREATE INDEX IF NOT EXISTS idx_content_access_policies_enabled
-      ON content_access_policies(enabled, scope, audience);
 
     CREATE TABLE IF NOT EXISTS video_categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1028,15 +1058,16 @@ function initialize(db: DatabaseSync) {
   `);
   migrateLegacySearchRateLimitBans(db);
   migrateTagVisibility(db);
-  migrateLegacyContentAccessBans(db);
+  dropLegacyContentAccessBans(db);
   migrateContentReports(db);
-  migrateContentAccessCrawlerTarget(db);
-  migrateContentAccessMatchMode(db);
+  migrateContentAccessSchema(db);
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_content_access_rules_match
-      ON content_access_rules(enabled, scope, audience, target_type, target_value);
+      ON content_access_rules(enabled, scope, country_mode, audience, target_type, target_value);
     CREATE INDEX IF NOT EXISTS idx_content_access_rules_expiry
       ON content_access_rules(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_content_access_policies_enabled
+      ON content_access_policies(enabled, scope, country_mode, audience);
   `);
   migrateUserEconomy(db);
   migrateNovelRecommendations(db);
@@ -1077,7 +1108,67 @@ function initialize(db: DatabaseSync) {
   addColumnIfMissing(db, "search_query_events", "origin_novel_id", "origin_novel_id INTEGER REFERENCES novels(id) ON DELETE SET NULL");
   addColumnIfMissing(db, "search_query_events", "result_count", "result_count INTEGER");
   addColumnIfMissing(db, "search_query_events", "result_novel_count", "result_novel_count INTEGER");
+  addColumnIfMissing(
+    db,
+    "users",
+    "locale_preference",
+    "locale_preference TEXT NOT NULL DEFAULT 'zh-Hans' CHECK(locale_preference IN ('zh-Hans', 'zh-Hant'))",
+  );
+  addColumnIfMissing(
+    db,
+    "users",
+    "reading_history_enabled",
+    "reading_history_enabled INTEGER NOT NULL DEFAULT 1 CHECK(reading_history_enabled IN (0, 1))",
+  );
+  addColumnIfMissing(
+    db,
+    "users",
+    "reading_progress_enabled",
+    "reading_progress_enabled INTEGER NOT NULL DEFAULT 1 CHECK(reading_progress_enabled IN (0, 1))",
+  );
+  addColumnIfMissing(
+    db,
+    "user_reading_history",
+    "segment_ratio",
+    "segment_ratio REAL NOT NULL DEFAULT 0 CHECK(segment_ratio >= 0 AND segment_ratio <= 1)",
+  );
+  addColumnIfMissing(
+    db,
+    "user_reading_history",
+    "progress_percent",
+    "progress_percent REAL NOT NULL DEFAULT 0 CHECK(progress_percent >= 0 AND progress_percent <= 100)",
+  );
+  addColumnIfMissing(
+    db,
+    "user_reading_history",
+    "content_version",
+    "content_version TEXT NOT NULL DEFAULT ''",
+  );
+  addColumnIfMissing(
+    db,
+    "user_reading_history",
+    "completed",
+    "completed INTEGER NOT NULL DEFAULT 0 CHECK(completed IN (0, 1))",
+  );
+  addColumnIfMissing(
+    db,
+    "user_reading_history",
+    "recorded_in_history",
+    "recorded_in_history INTEGER NOT NULL DEFAULT 1 CHECK(recorded_in_history IN (0, 1))",
+  );
+  addColumnIfMissing(
+    db,
+    "user_reading_history",
+    "updated_at",
+    "updated_at TEXT NOT NULL DEFAULT ''",
+  );
+  db.exec("UPDATE user_reading_history SET updated_at = last_read_at WHERE updated_at = '';");
   cleanupObsoleteHistoryColumns(db);
+  db.exec("DROP INDEX IF EXISTS idx_user_history_user_time;");
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_user_history_user_time
+     ON user_reading_history(user_id, recorded_in_history, last_read_at DESC)`,
+  );
   db.exec("DROP INDEX IF EXISTS idx_novel_tags_tag_novel;");
   db.exec("CREATE INDEX IF NOT EXISTS idx_novels_title_nocase_id ON novels(title COLLATE NOCASE, id);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_tags_visibility_sort ON tags(visibility, sort_order, name);");

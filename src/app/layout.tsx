@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import { Suspense } from "react";
 import { DefaultPaletteRotation } from "@/components/DefaultPaletteRotation";
+import { LocalePreferenceSync } from "@/components/LocalePreferenceSync";
 import { NavigationProgress } from "@/components/NavigationProgress";
 import { ThemeScript } from "@/components/ThemeScript";
 import { getReaderDefaultFontSize, getSiteTitle } from "@/lib/config";
-import { getMediaPublicUrl } from "@/lib/media-storage-config";
+import { getRequestLocale, localizeTexts } from "@/lib/locale-server";
 import { getSiteUrl, getUmamiConfig } from "@/lib/seo";
 import { getSiteIconHref } from "@/lib/site-icon";
 import { readSiteSettings } from "@/lib/site-settings";
@@ -14,10 +15,13 @@ import "./globals.css";
 
 export const dynamic = "force-dynamic";
 
-export function generateMetadata(): Metadata {
+export async function generateMetadata(): Promise<Metadata> {
   const siteIconHref = getSiteIconHref();
-  const siteTitle = getSiteTitle();
-  const description = "简洁、快速的中文小说在线阅读站。";
+  const locale = await getRequestLocale();
+  const [siteTitle, description] = await localizeTexts(
+    [getSiteTitle(), "简洁、快速的中文小说在线阅读站。"] as const,
+    locale,
+  );
   return {
     metadataBase: new URL(getSiteUrl()),
     title: {
@@ -28,7 +32,7 @@ export function generateMetadata(): Metadata {
     icons: siteIconHref ? { icon: siteIconHref, shortcut: siteIconHref } : undefined,
     openGraph: {
       type: "website",
-      locale: "zh_CN",
+      locale: locale === "zh-Hant" ? "zh_TW" : "zh_CN",
       siteName: siteTitle,
       title: siteTitle,
       description,
@@ -40,11 +44,11 @@ export function generateMetadata(): Metadata {
   };
 }
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const settings = readSiteSettings();
+  const locale = await getRequestLocale();
   const defaultFontSize = getReaderDefaultFontSize();
   const umami = getUmamiConfig();
-  const mediaPublicUrl = getMediaPublicUrl();
   const defaultPalette = resolveDefaultPalette(
     settings.defaultPalette,
     settings.defaultPaletteRandomEnabled,
@@ -52,10 +56,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   );
 
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
+    <html lang={locale} data-locale={locale} suppressHydrationWarning>
       <head>
-        {mediaPublicUrl ? <link rel="preconnect" href={mediaPublicUrl} crossOrigin="" /> : null}
-        {mediaPublicUrl ? <link rel="dns-prefetch" href={mediaPublicUrl} /> : null}
         <ThemeScript
           defaultTheme={settings.adminTheme}
           defaultFontSize={defaultFontSize}
@@ -65,14 +67,17 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         />
       </head>
       <body>
+        <LocalePreferenceSync />
         <Suspense fallback={null}><NavigationProgress /></Suspense>
-        <DefaultPaletteRotation
-          fallback={settings.defaultPalette}
-          enabled={settings.defaultPaletteRandomEnabled}
-          intervalMinutes={settings.defaultPaletteRotationMinutes}
-        />
+        {settings.defaultPaletteRandomEnabled ? (
+          <DefaultPaletteRotation
+            fallback={settings.defaultPalette}
+            enabled
+            intervalMinutes={settings.defaultPaletteRotationMinutes}
+          />
+        ) : null}
         {umami ? (
-          <Script src={umami.scriptUrl} data-website-id={umami.websiteId} strategy="afterInteractive" />
+          <Script src={umami.scriptUrl} data-website-id={umami.websiteId} strategy="lazyOnload" />
         ) : null}
         {umami?.recorderUrl ? (
           <Script src={umami.recorderUrl} data-website-id={umami.websiteId} strategy="lazyOnload" />

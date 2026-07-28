@@ -17,7 +17,6 @@ import {
   Pin,
   SlidersHorizontal,
   Trash2,
-  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
@@ -507,13 +506,8 @@ export function AdminBookTable({
             }}
           >
             <ListChecks size={16} aria-hidden="true" />
-            批量编辑
+            批量编辑{selectedIds.length ? ` (${selectedIds.length})` : ""}
           </Link>
-          {selectedIds.length ? (
-            <button className="adminTableIconButton" type="button" onClick={clearSelection} aria-label="清除全部选择" title="清除选择">
-              <X size={16} aria-hidden="true" />
-            </button>
-          ) : null}
           <button className="adminDangerButton" type="submit" disabled={selectedIds.length === 0}>
             <Trash2 size={17} aria-hidden="true" />
             删除所选{selectedIds.length ? ` (${selectedIds.length})` : ""}

@@ -1,5 +1,5 @@
 import { BookOpen, MessageCircle } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/LocalizedLink";
 import {
   canAccessAdvancedTagSearch,
   getNoticeDisplaySeconds,
@@ -21,6 +21,7 @@ import {
 import { getCurrentUser } from "@/lib/user-auth";
 import { hasUserPermission } from "@/lib/user-levels";
 import type { UserProfile } from "@/lib/users";
+import { getRequestLocale, localizeText, localizeTexts } from "@/lib/locale-server";
 import { countUserUnreadMessages } from "@/lib/station";
 import { HeaderSearch } from "./HeaderSearch";
 import { HeaderPrimaryNav } from "./HeaderPrimaryNav";
@@ -53,7 +54,12 @@ export async function SiteHeader({
   currentUser?: UserProfile | null;
   unreadMessages?: number;
 }) {
-  const siteName = getSiteName();
+  const locale = await getRequestLocale();
+  const siteName = await localizeText(getSiteName(), locale);
+  const [homeLabel, novelsLabel, messageLabel] = await localizeTexts(
+    ["返回首页", "前往小说", "消息"] as const,
+    locale,
+  );
   const brandHref = getSiteBrandHref();
   const user = currentUser === undefined ? await getCurrentUser() : currentUser;
   const loginEnabled = isUserLoginEnabled();
@@ -88,7 +94,7 @@ export async function SiteHeader({
 
   return (
     <header className={headerClassName}>
-        <Link className="brand" href={brandHref} aria-label={brandHref === "/novels" ? "前往小说" : "返回首页"}>
+        <Link className="brand" href={brandHref} aria-label={brandHref === "/novels" ? novelsLabel : homeLabel}>
           <BookOpen size={24} aria-hidden="true" />
           <span>{siteName}</span>
         </Link>
@@ -108,7 +114,7 @@ export async function SiteHeader({
             ) : null}
             <div className="headerActions">
               {user ? (
-                <Link className="iconLink headerMessageLink" href="/messages" aria-label="消息" title="消息">
+                <Link className="iconLink headerMessageLink" href="/messages" aria-label={messageLabel} title={messageLabel}>
                   <MessageCircle size={20} aria-hidden="true" />
                   {unreadCount > 0 ? <span className="headerUnreadDot" aria-label={`${unreadCount} 条未读消息`} /> : null}
                 </Link>

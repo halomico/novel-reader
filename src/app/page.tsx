@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Bell, BookOpenText, ChevronRight, Clapperboard, File, Headphones, LockKeyhole, Tags, type LucideIcon } from "lucide-react";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CatalogRandomCard } from "@/components/CatalogRandomButton";
+import Link from "@/components/LocalizedLink";
 import { SiteHeader } from "@/components/SiteHeader";
 import {
   getAnnouncementCardTarget,
@@ -18,6 +18,8 @@ import {
   type HomePortalContentCardKey,
 } from "@/lib/home-portal";
 import type { MediaKind } from "@/lib/media";
+import { languageAlternates, uiText, withLocalePath } from "@/lib/locale";
+import { getRequestLocale, localizeText } from "@/lib/locale-server";
 import { readSiteSettings } from "@/lib/site-settings";
 import { getCurrentUser } from "@/lib/user-auth";
 import { getHomeAnnouncement } from "@/lib/station";
@@ -51,29 +53,33 @@ function gatedCardHref(href: string, mode: HomePortalAccessMode, authenticated: 
   return `/login?${new URLSearchParams({ returnTo: href }).toString()}`;
 }
 
-export function generateMetadata(): Metadata {
-  const title = getSiteTitle();
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const title = await localizeText(getSiteTitle(), locale);
+  const description = await localizeText("浏览站内小说、标签与已开放的资源。", locale);
+  const canonical = withLocalePath("/", locale);
   return {
     title: { absolute: title },
-    description: "浏览站内小说、标签与已开放的资源。",
-    alternates: { canonical: "/" },
+    description,
+    alternates: { canonical, languages: languageAlternates("/") },
     robots: { index: true, follow: true },
     openGraph: {
       title,
-      description: "浏览站内小说、标签与已开放的资源。",
-      url: "/",
+      description,
+      url: canonical,
     },
   };
 }
 
 export default async function Home({ searchParams }: HomeProps) {
   const params = await searchParams;
+  const locale = await getRequestLocale();
   const legacyParams = new URLSearchParams();
   if (params.page) legacyParams.set("page", params.page);
   if (params.q) legacyParams.set("q", params.q);
   if (params.random) legacyParams.set("random", params.random);
   if (legacyParams.size > 0) {
-    redirect(`/novels?${legacyParams.toString()}`);
+    redirect(withLocalePath(`/novels?${legacyParams.toString()}`, locale));
   }
 
   const user = await getCurrentUser();
@@ -166,18 +172,20 @@ export default async function Home({ searchParams }: HomeProps) {
           const card = cards.get(key);
           if (!card) return null;
           const Icon = card.icon;
+          const label = uiText(locale, card.label);
+          const loginLabel = uiText(locale, "登录后可用");
           return (
             <Link
               className={`homePortalCard is-${card.kind}`}
               href={gatedCardHref(card.href, card.accessMode, authenticated)}
-              title={!authenticated && card.accessMode === "preview" ? "登录后可用" : undefined}
-              aria-label={!authenticated && card.accessMode === "preview" ? `${card.label}，登录后可用` : undefined}
+              title={!authenticated && card.accessMode === "preview" ? loginLabel : undefined}
+              aria-label={!authenticated && card.accessMode === "preview" ? `${label}，${loginLabel}` : undefined}
               key={card.kind}
             >
               <span className="homePortalCardIcon" aria-hidden="true">
                 <Icon size={30} />
               </span>
-              <strong>{card.label}</strong>
+              <strong>{label}</strong>
               {!authenticated && card.accessMode === "preview"
                 ? <LockKeyhole className="homePortalCardArrow" size={17} aria-hidden="true" />
                 : <ChevronRight className="homePortalCardArrow" size={19} aria-hidden="true" />}

@@ -24,10 +24,12 @@ import {
   getSiteTitle,
 } from "@/lib/config";
 import { readSiteSettings } from "@/lib/site-settings";
+import { getSiteIconHref } from "@/lib/site-icon";
 import {
   resolveHomePortalAccessMode,
   type HomePortalContentCardKey,
 } from "@/lib/home-portal";
+import { countRecommendationPoolNovels } from "@/lib/recommendation-pool";
 import { normalizeReaderLineHeight, READER_LINE_HEIGHTS } from "@/lib/ui-preferences";
 import {
   cancelFrontendSearchJobsAction,
@@ -86,6 +88,8 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
   const userAvatarMaxMb = ((settings.userAvatarMaxBytes || getUserAvatarMaxBytes()) / 1024 ** 2).toFixed(1);
   const analyticsRealtimeLimit = settings.analyticsRealtimeLimit || getAnalyticsRealtimeLimit();
   const frontendSearchConcurrencyLimit = settings.frontendSearchConcurrencyLimit || getFrontendSearchConcurrencyLimit();
+  const siteIconHref = getSiteIconHref();
+  const recommendationPoolCount = countRecommendationPoolNovels();
 
   return (
     <AdminFrame active="settings" notice={params.notice} tone={params.tone}>
@@ -100,9 +104,9 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
 
         <form className="adminSettingsSection siteIconManager" action={uploadSiteIconAction}>
           <div className="siteIconPreview" aria-label="当前浏览器标签图标">
-            {settings.siteIconFileName ? (
+            {siteIconHref ? (
               <img
-                src={`/api/site-icon?v=${encodeURIComponent(settings.siteIconUpdatedAt || settings.siteIconFileName)}`}
+                src={siteIconHref}
                 alt="当前站点图标"
                 width="48"
                 height="48"
@@ -296,7 +300,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
             <label className="adminSwitchLabel">
               <span>
                 <strong>启用随机推荐</strong>
-                <small>每个周期等权抽取一批小说，顺序可在下方调整。</small>
+                <small>每个周期从精选推荐池等权抽取，当前 {recommendationPoolCount} 本。</small>
               </span>
               <input name="randomRecommendationsEnabled" type="checkbox" defaultChecked={settings.randomRecommendationsEnabled} />
             </label>

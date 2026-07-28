@@ -9,20 +9,23 @@ export const runtime = "nodejs";
 
 async function deliver(request: NextRequest) {
   const delivery = resolveMediaDeliveryUri(`${request.nextUrl.pathname}${request.nextUrl.search}`);
+  if (!delivery) {
+    return new Response(null, { status: 404 });
+  }
   const user = getCurrentUserFromRequest(request);
   const access = checkContentAccess(request.headers, {
-    scope: "media",
+    scope: delivery.asset.kind,
     authenticated: Boolean(user),
     admin: user?.role === "admin",
     rateLimit: false,
   });
-  if (!delivery || !access.allowed || !authorizeMediaDelivery(delivery, Boolean(user))) {
+  if (!access.allowed || !authorizeMediaDelivery(delivery, Boolean(user))) {
     return new Response(null, { status: 404 });
   }
   return serveMediaDelivery(request, delivery, {
     publiclyAccessible: !delivery.download &&
       isMediaKindPublic(delivery.asset.kind) &&
-      !hasScopedContentAccessRules("media"),
+      !hasScopedContentAccessRules(delivery.asset.kind),
   });
 }
 

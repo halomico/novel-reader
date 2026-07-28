@@ -19,9 +19,13 @@ import {
   updateAccountDisplayNameAction,
   updateAccountPasswordAction,
 } from "./actions";
+import { getRequestLocale, localizeText } from "@/lib/locale-server";
+import { uiText, withLocalePath } from "@/lib/locale";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "用户中心", robots: NO_INDEX_ROBOTS };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: uiText(await getRequestLocale(), "用户中心"), robots: NO_INDEX_ROBOTS };
+}
 
 type AccountPageProps = {
   searchParams: Promise<{
@@ -37,9 +41,11 @@ function resolveView(value: string | undefined): Extract<UserWorkspaceKey, "prof
 }
 
 export default async function AccountPage({ searchParams }: AccountPageProps) {
+  const locale = await getRequestLocale();
+  const tr = (text: string) => uiText(locale, text);
   const user = await getCurrentUser();
   if (!user) {
-    redirect("/login");
+    redirect(withLocalePath("/login", locale));
   }
 
   const params = await searchParams;
@@ -52,15 +58,23 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
   const showCheckinDialog = view === "growth" && params.checkin === "1" && Boolean(checkin?.checkedIn);
   const checkinLeaderboard = showCheckinDialog ? listDailyCheckinLeaderboard() : null;
   const labels: Record<typeof view, string> = {
-    profile: "账户",
-    growth: "成长",
+    profile: tr("账户"),
+    growth: tr("成长"),
   };
+  const displayLevelName = await localizeText(level.name, locale);
+  const displayNextLevelName = growth.next ? await localizeText(growth.next.name, locale) : "";
+  const permissionLabels = new Map(
+    await Promise.all(USER_PERMISSION_DEFINITIONS.map(async (permission) => [
+      permission.key,
+      await localizeText(permission.label, locale),
+    ] as const)),
+  );
 
   return (
     <UserWorkspace user={user} active={view} breadcrumb={labels[view]}>
       {params.notice && !showCheckinDialog ? (
         <DismissibleNotice
-          message={params.notice}
+          message={await localizeText(params.notice, locale)}
           tone={params.tone}
           variant="search"
           displaySeconds={getNoticeDisplaySeconds()}
@@ -77,20 +91,20 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
               <h1>{user.displayName}</h1>
               <p>@{user.username}</p>
             </div>
-            <AvatarUploadForm maxAvatarMb={maxAvatarMb} />
+            <AvatarUploadForm maxAvatarMb={maxAvatarMb} locale={locale} />
           </div>
 
           <div className="accountFormSections">
             <section className="accountFormSection">
               <header>
-                <h2>资料</h2>
+                <h2>{tr("资料")}</h2>
               </header>
               <form className="accountProfileForm" action={updateAccountDisplayNameAction}>
                 <label>
-                  <span>显示名称</span>
+                  <span>{tr("显示名称")}</span>
                   <input name="displayName" defaultValue={user.displayName} maxLength={40} required />
                 </label>
-                <button className="accountActionButton" type="submit"><Save size={14} aria-hidden="true" />保存</button>
+                <button className="accountActionButton" type="submit"><Save size={14} aria-hidden="true" />{tr("保存")}</button>
               </form>
             </section>
 
@@ -98,24 +112,24 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
               <header>
                 <KeyRound size={17} aria-hidden="true" />
                 <div>
-                  <h2>安全</h2>
-                  <p>更新后，其他登录状态会自动失效。</p>
+                  <h2>{tr("安全")}</h2>
+                  <p>{tr("更新后，其他登录状态会自动失效。")}</p>
                 </div>
               </header>
               <form className="accountPasswordForm" action={updateAccountPasswordAction}>
                 <label>
-                  <span>当前密码</span>
+                  <span>{tr("当前密码")}</span>
                   <input name="currentPassword" type="password" autoComplete="current-password" required />
                 </label>
                 <label>
-                  <span>新密码</span>
+                  <span>{tr("新密码")}</span>
                   <input name="newPassword" type="password" autoComplete="new-password" minLength={6} maxLength={72} required />
                 </label>
                 <label>
-                  <span>确认密码</span>
+                  <span>{tr("确认密码")}</span>
                   <input name="confirmPassword" type="password" autoComplete="new-password" minLength={6} maxLength={72} required />
                 </label>
-                <button className="accountActionButton" type="submit"><Save size={14} aria-hidden="true" />更新</button>
+                <button className="accountActionButton" type="submit"><Save size={14} aria-hidden="true" />{tr("更新")}</button>
               </form>
             </section>
           </div>
@@ -127,18 +141,18 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
           <header className="accountGrowthHeader">
             <div>
               <span className="accountGrowthLevel"><Sparkles size={18} aria-hidden="true" />Lv.{user.trustLevel}</span>
-              <h1>{level.name}</h1>
+              <h1>{displayLevelName}</h1>
             </div>
             <div className="accountGrowthBalance">
               <CupSoda size={18} aria-hidden="true" />
-              <span>苏打</span>
+              <span>{tr("苏打")}</span>
               <strong>{user.sodaBalance}</strong>
             </div>
           </header>
 
-          <section className="accountLevelProgress" aria-label="等级进度">
+          <section className="accountLevelProgress" aria-label={tr("等级进度")}>
             <header>
-              <span>累计成长</span>
+              <span>{tr("累计成长")}</span>
               <strong>
                 {growth.next ? `${growth.currentValue} / ${growth.targetValue}` : `${growth.currentValue}`}
               </strong>
@@ -154,23 +168,23 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
             </div>
             <footer>
               <span>Lv.{growth.current.level}</span>
-              <span>{growth.next ? `Lv.${growth.next.level} · ${growth.next.name}` : "已达最高等级"}</span>
+              <span>{growth.next ? `Lv.${growth.next.level} · ${displayNextLevelName}` : tr("已达最高等级")}</span>
             </footer>
           </section>
 
-          <div className="accountPermissionList" aria-label="当前等级权限">
+          <div className="accountPermissionList" aria-label={tr("当前等级权限")}>
             {USER_PERMISSION_DEFINITIONS.filter((permission) => level.permissions.includes(permission.key)).map((permission) => (
               <span className="isEnabled" key={permission.key}>
                 <Check size={13} aria-hidden="true" />
-                {permission.label}
+                {permissionLabels.get(permission.key) || permission.label}
               </span>
             ))}
           </div>
 
           <form className="accountCheckin" action={claimDailySodaAction}>
             <div className="accountCheckinCopy">
-              <strong>{checkin.checkedIn ? "今日已签到" : "每日签到"}</strong>
-              <small>{checkin.checkedIn ? `获得 ${checkin.reward} 苏打` : "今日份惊喜等你开启"}</small>
+              <strong>{tr(checkin.checkedIn ? "今日已签到" : "每日签到")}</strong>
+              <small>{checkin.checkedIn ? `${tr("获得")} ${checkin.reward} ${tr("苏打")}` : tr("今日份惊喜等你开启")}</small>
             </div>
             <div className="accountCheckinActions">
               <CheckinLeaderboardDialog
@@ -178,28 +192,29 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
                 currentUserId={user.id}
                 entries={checkinLeaderboard}
                 autoOpen={showCheckinDialog}
+                locale={locale}
               />
               <button
                 className="accountCheckinButton"
                 type="submit"
                 disabled={checkin.checkedIn}
-                aria-label={checkin.checkedIn ? "今日已签到" : "试试手气"}
-                title={checkin.checkedIn ? "今日已签到" : "试试手气"}
+                aria-label={tr(checkin.checkedIn ? "今日已签到" : "试试手气")}
+                title={tr(checkin.checkedIn ? "今日已签到" : "试试手气")}
               >
-                {checkin.checkedIn ? "已签到" : "试试手气"}
+                {tr(checkin.checkedIn ? "已签到" : "试试手气")}
               </button>
             </div>
           </form>
 
           <section className="accountSodaHistory">
-            <h2>苏打记录</h2>
+            <h2>{tr("苏打记录")}</h2>
             {transactions.length ? (
               <div>
                 {transactions.map((item) => (
                   <article key={item.id}>
                     <span>
                       <strong>{item.note || item.source}</strong>
-                      <small>{new Date(item.createdAt).toLocaleString("zh-CN", { hour12: false })}</small>
+                      <small>{new Date(item.createdAt).toLocaleString(locale === "zh-Hant" ? "zh-TW" : "zh-CN", { hour12: false })}</small>
                     </span>
                     <b className={item.amount > 0 ? "isPositive" : ""}>
                       {item.amount > 0 ? "+" : ""}{item.amount}
@@ -207,7 +222,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
                   </article>
                 ))}
               </div>
-            ) : <p className="messageEmpty">暂无记录</p>}
+            ) : <p className="messageEmpty">{tr("暂无记录")}</p>}
           </section>
         </article>
       ) : null}

@@ -5,6 +5,14 @@ import type { CSSProperties } from "react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
+  DEFAULT_LOCALE,
+  LOCALE_COOKIE,
+  TRADITIONAL_LOCALE,
+  uiText,
+  withLocalePath,
+  type AppLocale,
+} from "@/lib/locale";
+import {
   COLOR_PALETTES,
   DEFAULT_READER_LINE_HEIGHT,
   getColorPalette,
@@ -110,6 +118,7 @@ export function SettingsPanel({
   defaultReaderTagsMode,
   canConfigureReaderTags,
   canConfigureReaderHotwords,
+  currentLocale,
 }: {
   previewText: string;
   defaultFontSize: number;
@@ -119,6 +128,7 @@ export function SettingsPanel({
   defaultReaderTagsMode: ReaderTagsMode;
   canConfigureReaderTags: boolean;
   canConfigureReaderHotwords: boolean;
+  currentLocale: AppLocale;
 }) {
   const [theme, setTheme] = useState<ThemeChoice>(defaultTheme);
   const [uiMode, setUiMode] = useState<UiMode>("standard");
@@ -129,6 +139,10 @@ export function SettingsPanel({
   const [showReaderHotwords, setShowReaderHotwords] = useState(true);
   const [showTopMenu, setShowTopMenu] = useState(true);
   const [hasHotwordPreference, setHasHotwordPreference] = useState(false);
+  const [locale, setLocale] = useState<AppLocale>(currentLocale);
+  const [preferencePending, setPreferencePending] = useState(false);
+  const [preferenceMessage, setPreferenceMessage] = useState("");
+  const tr = (text: string) => uiText(locale, text);
 
   useEffect(() => {
     const savedTheme = readLocalSetting("novel-theme") as ThemeChoice | null;
@@ -228,23 +242,69 @@ export function SettingsPanel({
     document.documentElement.dataset.topMenu = visible ? "show" : "hide";
   }
 
+  async function changeLanguage(nextLocale: AppLocale) {
+    if (nextLocale === locale || preferencePending) return;
+    setPreferencePending(true);
+    setPreferenceMessage("");
+    try {
+      const response = await fetch("/api/account/preferences", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locale: nextLocale }),
+      });
+      if (!response.ok) throw new Error("locale update failed");
+      document.cookie = `${LOCALE_COOKIE}=${nextLocale}; Path=/; Max-Age=31536000; SameSite=Lax`;
+      setLocale(nextLocale);
+      const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      window.location.assign(withLocalePath(current, nextLocale));
+    } catch {
+      setPreferenceMessage("语言设置保存失败");
+      setPreferencePending(false);
+    }
+  }
+
   return (
-    <section className="settingsPanel" aria-label="阅读设置">
+    <section className="settingsPanel" aria-label={tr("阅读设置")}>
       <div className="settingsGrid">
         <section className="settingBlock">
           <div className="settingBlockHeader">
-            <h2>外观</h2>
+            <h2>{tr("外观")}</h2>
           </div>
           <div className="settingRows">
             <div className="settingRow">
               <div className="settingRowTitle">
-                <span>界面</span>
-                <strong>{uiMode === "minimal" ? "极简" : "标准"}</strong>
+                <span>{tr("语言")}</span>
+                <strong>{locale === TRADITIONAL_LOCALE ? "繁體" : tr("简体")}</strong>
               </div>
-              <div className="segmentedControl" role="group" aria-label="界面模式">
+              <div className="segmentedControl settingCompactSegments" role="group" aria-label={tr("语言")}>
+                <button
+                  className={locale === DEFAULT_LOCALE ? "isActive" : ""}
+                  type="button"
+                  disabled={preferencePending}
+                  onClick={() => void changeLanguage(DEFAULT_LOCALE)}
+                >
+                  {tr("简体")}
+                </button>
+                <button
+                  className={locale === TRADITIONAL_LOCALE ? "isActive" : ""}
+                  type="button"
+                  disabled={preferencePending}
+                  onClick={() => void changeLanguage(TRADITIONAL_LOCALE)}
+                >
+                  繁體
+                </button>
+              </div>
+            </div>
+
+            <div className="settingRow">
+              <div className="settingRowTitle">
+                <span>{tr("界面")}</span>
+                <strong>{tr(uiMode === "minimal" ? "极简" : "标准")}</strong>
+              </div>
+              <div className="segmentedControl settingCompactSegments" role="group" aria-label="界面模式">
                 {uiModes.map((item) => (
                   <button className={uiMode === item.value ? "isActive" : ""} key={item.value} type="button" onClick={() => changeUiMode(item.value)}>
-                    {item.label}
+                    {tr(item.label)}
                   </button>
                 ))}
               </div>
@@ -252,16 +312,16 @@ export function SettingsPanel({
 
             <div className="settingRow">
               <div className="settingRowTitle">
-                <span>明暗</span>
-                <strong>{themes.find((item) => item.value === theme)?.label}</strong>
+                <span>{tr("明暗")}</span>
+                <strong>{tr(themes.find((item) => item.value === theme)?.label || "")}</strong>
               </div>
-              <div className="segmentedControl" role="group" aria-label="主题模式">
+              <div className="segmentedControl settingCompactSegments" role="group" aria-label="主题模式">
                 {themes.map((item) => {
                   const Icon = item.icon;
                   return (
                     <button className={theme === item.value ? "isActive" : ""} key={item.value} type="button" onClick={() => changeTheme(item.value)}>
                       <Icon size={17} aria-hidden="true" />
-                      <span>{item.label}</span>
+                      <span>{tr(item.label)}</span>
                     </button>
                   );
                 })}
@@ -270,7 +330,7 @@ export function SettingsPanel({
 
             <div className="settingRow settingPaletteRow">
               <div className="settingRowTitle">
-                <span>配色</span>
+                <span>{tr("配色")}</span>
               </div>
               <div className="settingPalettePicker">
                 <span className="paletteSwatches" aria-hidden="true">
@@ -297,12 +357,12 @@ export function SettingsPanel({
 
         <section className="settingBlock">
           <div className="settingBlockHeader">
-            <h2>阅读</h2>
+            <h2>{tr("阅读")}</h2>
           </div>
           <div className="settingRows">
             <div className="settingRow">
               <div className="settingRowTitle">
-                <span>字号</span>
+                <span>{tr("字号")}</span>
               </div>
               <div className="fontSizeStepper" role="group" aria-label="正文字号">
                 <button type="button" onClick={() => changeFontSize(fontSize - 1)} disabled={fontSize <= 8} aria-label="减小字号" title="减小字号">
@@ -317,7 +377,7 @@ export function SettingsPanel({
 
             <div className="settingRow">
               <div className="settingRowTitle">
-                <span>行距</span>
+                <span>{tr("行距")}</span>
               </div>
               <div
                 className="readerLineHeightControl"
@@ -345,12 +405,12 @@ export function SettingsPanel({
 
             <div className="settingRow">
               <div className="settingRowTitle">
-                <span>布局</span>
+                <span>{tr("布局")}</span>
               </div>
               <div className="settingMetaToggles">
                 {canConfigureReaderTags ? (
                   <div className="settingReaderTagsMode">
-                    <span>文章标签</span>
+                    <span>{tr("文章标签")}</span>
                     <div className="segmentedControl settingCompactSegments" role="group" aria-label="文章标签显示方式">
                       {([
                         ["expanded", "展开"],
@@ -364,7 +424,7 @@ export function SettingsPanel({
                           key={value}
                           onClick={() => changeReaderTags(value)}
                         >
-                          {label}
+                          {tr(label)}
                         </button>
                       ))}
                     </div>
@@ -373,13 +433,13 @@ export function SettingsPanel({
                 {canConfigureReaderHotwords ? (
                   <label className="settingToggle">
                     <input type="checkbox" checked={showReaderHotwords} onChange={(event) => changeReaderHotwords(event.target.checked)} />
-                    <span>文末热词</span>
+                    <span>{tr("文末热词")}</span>
                     <span className="settingToggleTrack" aria-hidden="true"><span /></span>
                   </label>
                 ) : null}
                 <label className="settingToggle">
                   <input type="checkbox" checked={showTopMenu} onChange={(event) => changeTopMenu(event.target.checked)} />
-                  <span>顶部导航</span>
+                  <span>{tr("顶部导航")}</span>
                   <span className="settingToggleTrack" aria-hidden="true"><span /></span>
                 </label>
               </div>
@@ -387,6 +447,10 @@ export function SettingsPanel({
           </div>
         </section>
       </div>
+
+      {preferenceMessage ? (
+        <p className="settingsPreferenceNotice" role="status">{preferenceMessage}</p>
+      ) : null}
 
       {previewText ? (
         <div className="previewReader" aria-label="阅读效果预览">

@@ -1,16 +1,18 @@
 import { BookOpenText } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
 import { cache, Suspense } from "react";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { AdminReaderActions } from "@/components/AdminReaderActions";
+import Link from "@/components/LocalizedLink";
+import { ReadingProgressTracker } from "@/components/ReadingProgressTracker";
 import { ReaderTagLinks } from "@/components/ReaderTagLinks";
 import { ReportNovelButton } from "@/components/ReportNovelButton";
 import { NovelRecommendationButton } from "@/components/NovelRecommendationButton";
 import { NovelFavoriteButton } from "@/components/NovelFavoriteButton";
+import { NovelViewTracker } from "@/components/NovelViewTracker";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getClientIp } from "@/lib/admin-access";
 import { recordAnalyticsEvent } from "@/lib/analytics";
@@ -25,6 +27,18 @@ import {
 } from "@/lib/config";
 import { checkContentAccess } from "@/lib/content-access";
 import { isNovelFavorite } from "@/lib/favorites";
+import { languageAlternates, withLocalePath } from "@/lib/locale";
+import {
+  getRequestLocale,
+  localizeNovelSegments,
+  localizeText,
+  localizeTexts,
+} from "@/lib/locale-server";
+import {
+  getReadingProgress,
+  novelContentVersion,
+  type ReadingProgress,
+} from "@/lib/reading-progress";
 import { listHotwordsForNovel, listTagsForNovel } from "@/lib/tags";
 import { isNovelPinned } from "@/lib/pinned-novels";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
@@ -45,24 +59,28 @@ type BookPageProps = {
   searchParams: Promise<{
     from?: string;
     hit?: string;
+    resume?: string;
   }>;
 };
 
 export async function generateMetadata({ params }: BookPageProps): Promise<Metadata> {
+  const locale = await getRequestLocale();
   const bookId = Number((await params).id);
   const book = Number.isInteger(bookId) && bookId > 0 ? getBookById(bookId) : null;
   if (!book) {
-    return { title: "小说不存在", robots: NO_INDEX_ROBOTS };
+    return { title: await localizeText("小说不存在", locale), robots: NO_INDEX_ROBOTS };
   }
-  const canonical = `/books/${book.id}`;
-  const description = `在线阅读《${book.title}》。`;
+  const title = await localizeText(book.title, locale);
+  const canonicalPath = `/books/${book.id}`;
+  const canonical = withLocalePath(canonicalPath, locale);
+  const description = await localizeText(`在线阅读《${book.title}》。`, locale);
   return {
-    title: book.title,
+    title,
     description,
-    alternates: { canonical },
+    alternates: { canonical, languages: languageAlternates(canonicalPath) },
     openGraph: {
       type: "article",
-      title: book.title,
+      title,
       description,
       url: canonical,
     },
@@ -104,48 +122,69 @@ async function ReaderContent({
   hitSegment,
   requestHeaders,
   user,
+  locale,
+  initialProgress,
+  resume,
 }: {
   book: Novel;
   hitSegment: number;
   requestHeaders: Awaited<ReturnType<typeof headers>>;
   user: CurrentUser;
+  locale: Awaited<ReturnType<typeof getRequestLocale>>;
+  initialProgress: ReadingProgress | null;
+  resume: boolean;
 }) {
-  const segments = await readNovelSegments(book);
-  after(() => {
-    recordNovelVisit(book.id, getClientIp(requestHeaders), requestHeaders.get("user-agent") || "");
-    recordAnalyticsEvent({
-      headers: requestHeaders,
-      userId: user?.id ?? null,
-      eventType: "book_view",
-      path: `/books/${book.id}`,
-      referrer: requestHeaders.get("referer"),
-      novelId: book.id,
-    });
-    if (user) {
+  const sourceSegments = await readNovelSegments(book);
+  const contentVersion = novelContentVersion(book);
+  const segments = await localizeNovelSegments(sourceSegments, locale, contentVersion);
+  if (user) {
+    after(() => {
+      recordNovelVisit(book.id, getClientIp(requestHeaders), requestHeaders.get("user-agent") || "");
+      recordAnalyticsEvent({
+        headers: requestHeaders,
+        userId: user.id,
+        eventType: "book_view",
+        path: `/books/${book.id}`,
+        referrer: requestHeaders.get("referer"),
+        novelId: book.id,
+      });
       recordReadingHistory(user.id, book, hitSegment);
-    }
-  });
+    });
+  }
 
   return (
-    <div className="readerText">
-      {segments.map((segment) => (
-        <section
-          className="readerSegment"
-          data-segment-index={segment.segmentIndex}
-          data-search-target={segment.segmentIndex === hitSegment ? "true" : undefined}
-          id={`seg-${segment.segmentIndex}`}
-          key={segment.segmentIndex}
-        >
-          {segment.content}
-        </section>
-      ))}
-    </div>
+    <>
+      <div className="readerText">
+        {segments.map((segment) => (
+          <section
+            className="readerSegment"
+            data-segment-index={segment.segmentIndex}
+            data-search-target={segment.segmentIndex === hitSegment ? "true" : undefined}
+            id={`seg-${segment.segmentIndex}`}
+            key={segment.segmentIndex}
+          >
+            {segment.content}
+          </section>
+        ))}
+      </div>
+      {user ? (
+        <ReadingProgressTracker
+          novelId={book.id}
+          userId={user.id}
+          contentVersion={contentVersion}
+          totalSegments={segments.length}
+          initialProgress={initialProgress}
+          resume={resume}
+        />
+      ) : null}
+    </>
   );
 }
 
 export default async function BookPage({ params, searchParams }: BookPageProps) {
   const { id } = await params;
   const query = await searchParams;
+  const locale = await getRequestLocale();
   const bookId = Number(id);
 
   if (!Number.isInteger(bookId) || bookId < 1) {
@@ -187,6 +226,13 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
   const sourceTags = showTags ? listTagsForNovel(book.id, { audience: tagAudience }) : [];
   const tags = filterTagsForUser(sourceTags, user?.id);
   const hotwords = showHotwords ? listHotwordsForNovel(book.id) : [];
+  const displayTitle = await localizeText(book.title, locale);
+  const localizedTagNames = await Promise.all(tags.map((tag) => localizeText(tag.name, locale)));
+  const localizedHotwords = await Promise.all(hotwords.map((term) => localizeText(term, locale)));
+  const [homeLabel, novelsLabel] = await localizeTexts(["首页", "小说"] as const, locale);
+  const initialProgress = user
+    ? getReadingProgress(user.id, book.id)
+    : null;
   const recommendation = user ? getNovelRecommendationState(user.id, book.id) : null;
   const favorite = user ? isNovelFavorite(user.id, book.id) : false;
   const canRecommend = hasUserPermission(user, "novel_feedback");
@@ -197,24 +243,39 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
       <SiteHeader defaultSearchMode="current" showCurrentSearch readerMode currentUser={user} />
 
       <article className="readerPage hasReaderPreferences">
+        {!user ? <NovelViewTracker novelId={book.id} /> : null}
         <Breadcrumbs
           className="readerBreadcrumbs"
           items={[
-            { label: "首页", href: "/" },
-            { label: "小说", href: safeReturnHref(query.from) },
-            { label: book.title },
+            { label: homeLabel, href: "/" },
+            { label: novelsLabel, href: safeReturnHref(query.from) },
+            { label: displayTitle },
           ]}
         />
         <header className="readerTitle">
           <BookOpenText size={26} aria-hidden="true" />
-          <h1>{book.title}</h1>
+          <h1>{displayTitle}</h1>
           {user?.role === "admin" ? (
-            <AdminReaderActions bookId={book.id} title={book.title} isPinned={isNovelPinned(book.id)} />
+            <AdminReaderActions bookId={book.id} title={displayTitle} isPinned={isNovelPinned(book.id)} />
           ) : null}
         </header>
-        <ReaderTagLinks tags={tags.map(({ id: tagId, name, slug }) => ({ id: tagId, name, slug }))} />
+        <ReaderTagLinks
+          tags={tags.map(({ id: tagId, slug }, index) => ({
+            id: tagId,
+            name: localizedTagNames[index],
+            slug,
+          }))}
+        />
         <Suspense fallback={<ReaderContentLoading />}>
-          <ReaderContent book={book} hitSegment={hitSegment} requestHeaders={headerStore} user={user} />
+          <ReaderContent
+            book={book}
+            hitSegment={hitSegment}
+            requestHeaders={headerStore}
+            user={user}
+            locale={locale}
+            initialProgress={initialProgress}
+            resume={query.resume === "1"}
+          />
         </Suspense>
         {user ? (
           <div className="readerFeedbackActions feedbackActionTrio" aria-label="文章操作">
@@ -225,10 +286,10 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
               />
             ) : null}
             <NovelFavoriteButton novelId={book.id} initialFavorite={favorite} />
-            {canReport ? <ReportNovelButton novelId={book.id} title={book.title} /> : null}
+            {canReport ? <ReportNovelButton novelId={book.id} title={displayTitle} /> : null}
           </div>
         ) : null}
-        <ReaderHotwordLinks hotwords={hotwords} novelId={book.id} />
+        <ReaderHotwordLinks hotwords={localizedHotwords} novelId={book.id} />
       </article>
     </main>
   );

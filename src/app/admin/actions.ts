@@ -54,6 +54,7 @@ import { deleteNovelIds, renameNovelFile, updateNovelFile } from "@/lib/novel-fi
 import { hashPassword } from "@/lib/password";
 import { replacePinnedNovels, togglePinnedNovel } from "@/lib/pinned-novels";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { setNovelRecommendationPool } from "@/lib/recommendation-pool";
 import { validateSearchKeyword } from "@/lib/search";
 import { detectSiteIconFormat, MAX_SITE_ICON_BYTES, removeSiteIconFile, writeSiteIconFile } from "@/lib/site-icon";
 import { readSiteSettings, type SiteSettings, writeSiteSettings } from "@/lib/site-settings";
@@ -530,6 +531,10 @@ export async function saveNovelEditorAction(formData: FormData) {
     }
     setNovelTags(bookId, tagIds);
     setNovelHotwords(bookId, hotwords);
+    setNovelRecommendationPool(
+      bookId,
+      formData.get("recommendationPool") === "on",
+    );
     setNovelRecommendationCount(
       bookId,
       intField(formData, "recommendationCount", 0, 0, 2_000_000_000),
@@ -539,6 +544,7 @@ export async function saveNovelEditorAction(formData: FormData) {
   }
 
   revalidatePath("/");
+  revalidatePath("/novels");
   revalidatePath("/search");
   revalidatePath(`/books/${bookId}`);
   revalidatePath("/tags");

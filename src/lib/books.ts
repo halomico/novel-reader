@@ -3,6 +3,7 @@ import path from "node:path";
 import { getCatalogFeatureSettings, getLibraryDir } from "./config";
 import { getDb } from "./db";
 import { sampleNovelIds } from "./novel-id-sampler";
+import { sampleRecommendationPoolNovelIds } from "./recommendation-pool";
 import { createNovelSegments, NovelSegment } from "./segments";
 import { parseSearchQuery, type ParsedSearchQuery, type SearchExpression } from "./search-query";
 import { decodeNovelBuffer } from "./text";
@@ -49,6 +50,7 @@ type NovelSegmentCacheEntry = {
 type NovelSegmentCacheGlobal = typeof globalThis & {
   novelSegmentCache?: Map<string, NovelSegmentCacheEntry>;
   novelSegmentCacheBytes?: number;
+  novelSegmentLoads?: Map<string, Promise<NovelSegment[]>>;
 };
 
 function novelSegmentCacheKey(book: Novel): string {
@@ -94,6 +96,7 @@ function cacheNovelSegments(book: Novel, segments: NovelSegment[], estimatedByte
 export function clearNovelSegmentCache() {
   const state = globalThis as NovelSegmentCacheGlobal;
   state.novelSegmentCache?.clear();
+  state.novelSegmentLoads?.clear();
   state.novelSegmentCacheBytes = 0;
 }
 
@@ -175,7 +178,7 @@ function listCatalogNovels(pageSize: number, offset: number): Novel[] {
   const pinnedIds = new Set(manualIds);
   const intervalMs = settings.randomRecommendationIntervalMinutes * 60_000;
   const randomIds = settings.randomRecommendationsEnabled
-    ? sampleNovelIds(
+    ? sampleRecommendationPoolNovelIds(
         db,
         settings.randomRecommendationCount,
         `catalog-recommendations:${Math.floor(Date.now() / intervalMs)}`,
@@ -321,8 +324,25 @@ export async function readNovelSegments(book: Novel): Promise<NovelSegment[]> {
     return cached.segments;
   }
 
-  const content = await readNovelContent(book);
-  const segments = createNovelSegments(content);
-  cacheNovelSegments(book, segments, Math.max(book.size_bytes, content.length * 2));
-  return segments;
+  const state = globalThis as NovelSegmentCacheGlobal;
+  state.novelSegmentLoads ||= new Map();
+  const pending = state.novelSegmentLoads.get(key);
+  if (pending) {
+    return pending;
+  }
+
+  const loading = (async () => {
+    const content = await readNovelContent(book);
+    const segments = createNovelSegments(content);
+    cacheNovelSegments(book, segments, Math.max(book.size_bytes, content.length * 2));
+    return segments;
+  })();
+  state.novelSegmentLoads.set(key, loading);
+  try {
+    return await loading;
+  } finally {
+    if (state.novelSegmentLoads.get(key) === loading) {
+      state.novelSegmentLoads.delete(key);
+    }
+  }
 }

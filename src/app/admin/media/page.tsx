@@ -1,4 +1,4 @@
-import { File, FolderPen, FolderPlus, ImageIcon, LayoutGrid, List, RefreshCw, Save, Search, Trash2 } from "lucide-react";
+import { ChevronDown, File, FolderCog, FolderPen, FolderPlus, ImageIcon, RefreshCw, Save, Search, Trash2 } from "lucide-react";
 import Form from "next/form";
 import Link from "next/link";
 import { AdminMediaManager } from "@/components/AdminMediaManager";
@@ -39,7 +39,6 @@ type AdminMediaPageProps = {
     sort?: string;
     order?: string;
     category?: string;
-    view?: string;
     notice?: string;
     tone?: "success" | "warning" | "error";
   }>;
@@ -58,12 +57,10 @@ function compatibleMediaSort(kind: MediaKind, sortBy: MediaSortBy): MediaSortBy 
   return sortBy === "duration" || sortBy === "plays" ? "name" : sortBy;
 }
 
-function filterHref(kind: MediaKind, sortBy: MediaSortBy, sortOrder: MediaSortOrder, view: "table" | "grid"): string {
+function filterHref(kind: MediaKind, sortBy: MediaSortBy, sortOrder: MediaSortOrder): string {
   const nextSortBy = compatibleMediaSort(kind, sortBy);
   const nextSortOrder = nextSortBy === sortBy ? sortOrder : normalizeMediaSortOrder(undefined, nextSortBy);
-  const params = new URLSearchParams({ kind, sort: nextSortBy, order: nextSortOrder });
-  if (kind === "video" && view === "grid") params.set("view", view);
-  return `/admin/media?${params.toString()}`;
+  return `/admin/media?${new URLSearchParams({ kind, sort: nextSortBy, order: nextSortOrder }).toString()}`;
 }
 
 function currentPath(
@@ -73,13 +70,11 @@ function currentPath(
   sortBy: MediaSortBy,
   sortOrder: MediaSortOrder,
   category: string,
-  view: "table" | "grid",
 ): string {
   const params = new URLSearchParams({ kind, sort: sortBy, order: sortOrder });
   if (folder) params.set("folder", folder);
   if (query) params.set("q", query);
   if (kind === "video" && category) params.set("category", category);
-  if (kind === "video" && view === "grid") params.set("view", view);
   const value = params.toString();
   return value ? `/admin/media?${value}` : "/admin/media";
 }
@@ -106,7 +101,6 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
       ? requestedCategoryId
       : undefined;
   const categoryParam = categoryValue === null ? "none" : categoryValue ? String(categoryValue) : "";
-  const view = kind === "video" && params.view === "grid" ? "grid" : "table";
   const result = listMediaAssets({
     kind,
     videoCategoryId: categoryValue,
@@ -132,7 +126,7 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
     sortBy,
     sortOrder,
   );
-  const returnPath = currentPath(kind, result.folder, result.query, sortBy, sortOrder, categoryParam, view);
+  const returnPath = currentPath(kind, result.folder, result.query, sortBy, sortOrder, categoryParam);
   const currentFolderName = result.folder.split("/").at(-1) || "";
   const settings = readSiteSettings();
 
@@ -150,7 +144,6 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
             <input name="kind" type="hidden" value={kind} />
             {result.folder ? <input name="folder" type="hidden" value={result.folder} /> : null}
             {categoryParam ? <input name="category" type="hidden" value={categoryParam} /> : null}
-            {view === "grid" ? <input name="view" type="hidden" value={view} /> : null}
             <input name="sort" type="hidden" value={sortBy} />
             <input name="order" type="hidden" value={sortOrder} />
             <button type="submit">搜索</button>
@@ -160,7 +153,7 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
         <div className="adminMediaToolbar">
           <nav className="adminMediaFilters" aria-label="资源类型筛选">
             {FILTERS.map((item) => (
-              <Link className={item.kind === kind ? "isActive" : ""} href={filterHref(item.kind, sortBy, sortOrder, view)} key={item.label}>
+              <Link className={item.kind === kind ? "isActive" : ""} href={filterHref(item.kind, sortBy, sortOrder)} key={item.label}>
                 {item.label}
               </Link>
             ))}
@@ -173,18 +166,7 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
               sortBy={sortBy}
               sortOrder={sortOrder}
               category={categoryParam}
-              view={view}
             />
-            {kind === "video" ? (
-              <div className="adminMediaViewSwitch" role="group" aria-label="视频列表视图">
-                <Link className={view === "table" ? "isActive" : ""} href={withMediaParam(returnPath, "view", "")} aria-label="表格视图" title="表格视图">
-                  <List size={15} aria-hidden="true" />
-                </Link>
-                <Link className={view === "grid" ? "isActive" : ""} href={withMediaParam(returnPath, "view", "grid")} aria-label="缩略图视图" title="缩略图视图">
-                  <LayoutGrid size={15} aria-hidden="true" />
-                </Link>
-              </div>
-            ) : null}
           </div>
         </div>
 
@@ -249,40 +231,56 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
                 sortBy={sortBy}
                 sortOrder={sortOrder}
                 category={categoryParam}
-                view={view}
               />
-              <div className="adminMediaFolderActions">
-                <form action={createAdminMediaFolderAction}>
-                  <input name="kind" type="hidden" value={kind} />
-                  <input name="parentFolder" type="hidden" value={result.folder} />
-                  <input name="returnPath" type="hidden" value={returnPath} />
-                  <input name="folderName" maxLength={100} placeholder="新建子文件夹" aria-label="新建子文件夹名称" required />
-                  <button className="adminTableIconButton" type="submit" aria-label="新建文件夹" title="新建文件夹">
-                    <FolderPlus size={15} aria-hidden="true" />
-                  </button>
-                </form>
-                {result.folder ? (
-                  <>
-                    <form action={renameAdminMediaFolderAction} key={result.folder}>
-                      <input name="kind" type="hidden" value={kind} />
-                      <input name="folder" type="hidden" value={result.folder} />
-                      <input name="returnPath" type="hidden" value={returnPath} />
-                      <input name="folderName" defaultValue={currentFolderName} maxLength={100} aria-label="文件夹新名称" required />
-                      <button className="adminTableIconButton" type="submit" aria-label="重命名文件夹" title="重命名文件夹">
-                        <FolderPen size={15} aria-hidden="true" />
-                      </button>
-                    </form>
-                    <form className="adminMediaDeleteFolderForm" action={deleteAdminMediaFolderAction}>
-                      <input name="kind" type="hidden" value={kind} />
-                      <input name="folder" type="hidden" value={result.folder} />
-                      <input name="returnPath" type="hidden" value={returnPath} />
-                      <button className="adminTableIconButton" type="submit" aria-label="删除空文件夹" title="删除空文件夹">
-                        <Trash2 size={15} aria-hidden="true" />
-                      </button>
-                    </form>
-                  </>
-                ) : null}
-              </div>
+              <details className="adminMediaFolderManager">
+                <summary>
+                  <span><FolderCog size={15} aria-hidden="true" />管理目录</span>
+                  <ChevronDown size={14} aria-hidden="true" />
+                </summary>
+                <div className="adminMediaFolderActions">
+                  <form action={createAdminMediaFolderAction}>
+                    <label>
+                      <span>新建子目录</span>
+                      <span className="adminMediaFolderInput">
+                        <input name="folderName" maxLength={100} placeholder="目录名称" required />
+                        <button className="adminTableIconButton" type="submit" aria-label="新建目录" title="新建目录">
+                          <FolderPlus size={15} aria-hidden="true" />
+                        </button>
+                      </span>
+                    </label>
+                    <input name="kind" type="hidden" value={kind} />
+                    <input name="parentFolder" type="hidden" value={result.folder} />
+                    <input name="returnPath" type="hidden" value={returnPath} />
+                  </form>
+                  {result.folder ? (
+                    <>
+                      <form action={renameAdminMediaFolderAction} key={result.folder}>
+                        <label>
+                          <span>当前目录名称</span>
+                          <span className="adminMediaFolderInput">
+                            <input name="folderName" defaultValue={currentFolderName} maxLength={100} required />
+                            <button className="adminTableIconButton" type="submit" aria-label="保存目录名称" title="保存目录名称">
+                              <FolderPen size={15} aria-hidden="true" />
+                            </button>
+                          </span>
+                        </label>
+                        <input name="kind" type="hidden" value={kind} />
+                        <input name="folder" type="hidden" value={result.folder} />
+                        <input name="returnPath" type="hidden" value={returnPath} />
+                      </form>
+                      <form className="adminMediaDeleteFolderForm" action={deleteAdminMediaFolderAction}>
+                        <input name="kind" type="hidden" value={kind} />
+                        <input name="folder" type="hidden" value={result.folder} />
+                        <input name="returnPath" type="hidden" value={returnPath} />
+                        <button className="adminDangerButton" type="submit">
+                          <Trash2 size={15} aria-hidden="true" />
+                          删除空目录
+                        </button>
+                      </form>
+                    </>
+                  ) : null}
+                </div>
+              </details>
           </aside>
           <div className="adminMediaWorkspaceMain">
             <AdminMediaManager
@@ -298,10 +296,6 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
               returnPath={returnPath}
               categories={categories}
               categoryParam={categoryParam}
-              view={view}
-              thumbnail={{
-                singlePercent: settings.videoThumbnailSinglePercent,
-              }}
             />
             {!result.assets.length && !directFolders.length ? (
               <div className="adminMediaEmpty"><File size={22} aria-hidden="true" />未找到资源。</div>
@@ -317,7 +311,6 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
                 sort: sortBy,
                 order: sortOrder,
                 category: categoryParam || undefined,
-                view: view === "grid" ? view : undefined,
               }}
             />
           </div>

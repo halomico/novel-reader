@@ -987,6 +987,85 @@ textarea {
   font-weight: 700;
 }
 
+.tagLibraryTools {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.tagLibraryTools .tagAdvancedSearchLink {
+  flex: 0 0 auto;
+  margin-left: 0;
+}
+
+.tagLibrarySearch {
+  display: grid;
+  width: min(230px, 32vw);
+  min-height: 34px;
+  grid-template-columns: 18px minmax(0, 1fr) 26px;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0 4px 0 9px;
+  background: var(--surface);
+  color: var(--muted);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.tagLibrarySearch:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.tagLibrarySearch input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 6px 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.tagLibrarySearch input::placeholder {
+  color: var(--muted);
+}
+
+.tagLibrarySearch button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tagLibrarySearch button:hover,
+.tagLibrarySearch button:focus-visible {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+}
+
+.tagLibraryFilterEmpty {
+  margin: 0;
+  padding: 30px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.tagLibrary [hidden] {
+  display: none !important;
+}
+
 .tagAdvancedSearchLink:hover,
 .tagAdvancedSearchLink:focus-visible {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
@@ -3633,7 +3712,7 @@ mark {
 }
 
 .mediaVideoActions {
-  justify-content: end;
+  justify-content: flex-end;
 }
 
 .mediaVideoInfo .mediaDescription {
@@ -3697,8 +3776,17 @@ mark {
 }
 
 .mediaAudioActions {
-  min-height: 34px;
-  justify-content: start;
+  display: flex;
+  min-height: 31px;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.mediaAudioActions .novelRecommendationControl > button,
+.mediaAudioActions .novelFavoriteControl > button,
+.mediaAudioActions .readerReportAction > button {
+  width: 31px;
+  height: 31px;
 }
 
 .mediaAudioPlayerPanel {
@@ -3712,6 +3800,18 @@ mark {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+
+.mediaAudioPlaybackControls {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.mediaAudioControls > .mediaPlaybackModes {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .mediaAudioTransport,
@@ -5463,6 +5563,43 @@ mark {
   font: inherit;
 }
 
+.adminBookEditorSection .adminBookPoolToggle {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  background: color-mix(in srgb, var(--surface-strong) 32%, transparent);
+  color: var(--text);
+}
+
+.adminBookPoolCopy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.adminBookPoolCopy strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.adminBookPoolCopy strong svg {
+  color: var(--accent);
+}
+
+.adminBookPoolCopy small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .adminNovelContentEditor {
   min-height: min(62vh, 760px);
   resize: vertical;
@@ -6753,6 +6890,33 @@ a.analyticsSearchTag:focus-visible {
   white-space: nowrap;
 }
 
+.analyticsRealtimeFilters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-strong) 36%, transparent);
+}
+
+.analyticsRealtimeFilters .adminSelectControl {
+  width: auto;
+  min-width: 128px;
+}
+
+.analyticsRealtimeFilters .adminSelectControl select {
+  min-height: 32px;
+  padding-block: 5px;
+  font-size: 12px;
+}
+
+.analyticsRealtimeFilters .adminIconTextButton {
+  min-height: 32px;
+}
+
 .analyticsRealtimeTable {
   min-width: 880px;
 }
@@ -7123,15 +7287,27 @@ a.analyticsSearchTag:focus-visible {
 
 .adminMediaFolderActions {
   display: grid;
-  gap: 6px;
-  padding-top: 9px;
+  gap: 12px;
+  padding: 12px;
   border-top: 1px solid var(--border);
 }
 
 .adminMediaFolderActions form {
+  display: block;
+}
+
+.adminMediaFolderActions label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.adminMediaFolderInput {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 30px;
-  gap: 5px;
+  gap: 6px;
 }
 
 .adminMediaFolderActions input {
@@ -7148,11 +7324,58 @@ a.analyticsSearchTag:focus-visible {
 .adminMediaFolderActions .adminMediaDeleteFolderForm {
   display: flex;
   justify-content: flex-end;
+  padding-top: 2px;
 }
 
-.adminMediaFolderActions .adminMediaDeleteFolderForm button {
+.adminMediaFolderActions .adminMediaDeleteFolderForm .adminDangerButton {
+  min-height: 30px;
+  padding: 5px 9px;
   background: color-mix(in srgb, #b42318 10%, transparent);
   color: #b42318;
+  font-size: 11px;
+}
+
+.adminMediaFolderManager {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+}
+
+.adminMediaFolderManager summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 34px;
+  padding: 0 10px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  list-style: none;
+}
+
+.adminMediaFolderManager summary::-webkit-details-marker {
+  display: none;
+}
+
+.adminMediaFolderManager summary span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adminMediaFolderManager summary > svg {
+  transition: transform 160ms ease;
+}
+
+.adminMediaFolderManager[open] summary > svg {
+  transform: rotate(180deg);
+}
+
+.adminMediaFolderManager summary:hover,
+.adminMediaFolderManager summary:focus-visible {
+  color: var(--accent);
 }
 
 .adminMediaFilters {
@@ -7176,38 +7399,13 @@ a.analyticsSearchTag:focus-visible {
   margin-bottom: 12px;
 }
 
-.adminMediaToolbarControls,
-.adminMediaViewSwitch {
+.adminMediaToolbarControls {
   display: inline-flex;
   align-items: center;
 }
 
 .adminMediaToolbarControls {
   gap: 7px;
-}
-
-.adminMediaViewSwitch {
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface-strong) 30%, transparent);
-}
-
-.adminMediaViewSwitch a {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border-radius: 999px;
-  color: var(--muted);
-}
-
-.adminMediaViewSwitch a:hover,
-.adminMediaViewSwitch a:focus-visible,
-.adminMediaViewSwitch a.isActive {
-  background: color-mix(in srgb, var(--accent) 13%, transparent);
-  color: var(--accent);
 }
 
 .adminVideoCategoryTabs {
@@ -7635,119 +7833,6 @@ a.analyticsSearchTag:focus-visible {
   max-width: 170px;
 }
 
-.adminMediaGridContent {
-  display: grid;
-  gap: 10px;
-}
-
-.adminMediaGridFolders {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-  gap: 7px;
-}
-
-.adminMediaGridFolders button {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) 16px;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 8px 9px;
-  background: var(--bg-soft);
-  color: var(--muted);
-  cursor: pointer;
-  text-align: left;
-}
-
-.adminMediaGridFolders button span {
-  overflow: hidden;
-  color: var(--text);
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.adminMediaVideoGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 12px;
-}
-
-.adminMediaVideoItem {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  min-width: 0;
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-}
-
-.adminMediaVideoItem.isSelected {
-  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
-}
-
-.adminMediaVideoSelect {
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  z-index: 2;
-  display: grid;
-  width: 26px;
-  height: 26px;
-  place-items: center;
-  border-radius: 6px;
-  background: rgb(16 19 21 / 74%);
-  cursor: pointer;
-}
-
-.adminMediaVideoThumbnail {
-  position: relative;
-  grid-column: 1 / -1;
-  aspect-ratio: 16 / 9;
-  overflow: hidden;
-  border-radius: 7px;
-  background: #101214;
-}
-
-.adminMediaVideoThumbnail .mediaVideoPreviewImage {
-  width: 100%;
-  height: 100%;
-}
-
-.adminMediaVideoCopy {
-  display: grid;
-  min-width: 0;
-  gap: 3px;
-}
-
-.adminMediaVideoCopy strong,
-.adminMediaVideoCopy small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.adminMediaVideoCopy strong {
-  color: var(--text);
-  font-size: 13px;
-}
-
-.adminMediaVideoCopy .adminMediaPreviewLink strong {
-  display: block;
-}
-
-.adminMediaVideoCopy span,
-.adminMediaVideoCopy small {
-  color: var(--muted);
-  font-size: 11px;
-}
-
 .adminMediaKind {
   display: inline-flex;
   align-items: center;
@@ -7793,13 +7878,6 @@ a.analyticsSearchTag:focus-visible {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent);
   cursor: pointer;
-}
-
-.adminMediaGridActions {
-  display: grid;
-  align-content: end;
-  justify-items: end;
-  gap: 4px;
 }
 
 .adminMediaFooter form button:disabled {
@@ -8697,10 +8775,6 @@ a.analyticsSearchTag:focus-visible {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .adminMediaVideoGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .adminMediaUploadStatus {
     grid-template-columns: 1fr;
   }
@@ -8725,6 +8799,15 @@ a.analyticsSearchTag:focus-visible {
 
   .analyticsRealtimeTable {
     min-width: 880px;
+  }
+
+  .analyticsRealtimeFilters .adminSelectControl {
+    flex: 1 1 130px;
+  }
+
+  .analyticsRealtimeFilters .adminIconTextButton {
+    flex: 1 1 90px;
+    justify-content: center;
   }
 
   .pageJumpPanel {
@@ -8824,12 +8907,31 @@ a.analyticsSearchTag:focus-visible {
     align-items: center;
   }
 
-  .mediaAudioActions {
-    grid-column: 2;
-  }
-
   .mediaAudioDetailCover {
     width: 72px;
+  }
+
+  .mediaAudioControls {
+    gap: 8px;
+  }
+
+  .mediaAudioPlaybackControls {
+    gap: 6px;
+  }
+
+  .tagLibraryHeader {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .tagLibraryTools {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .tagLibrarySearch {
+    width: auto;
+    flex: 1 1 auto;
   }
 
   .mediaAudioQueue button {
@@ -8843,10 +8945,6 @@ a.analyticsSearchTag:focus-visible {
 
   .adminVideoCategoryOrder > span {
     display: none;
-  }
-
-  .adminMediaVideoGrid {
-    grid-template-columns: minmax(0, 1fr);
   }
 
   .adminMediaFooter,
@@ -11032,30 +11130,39 @@ a.analyticsSearchTag:focus-visible {
   color: var(--accent);
 }
 
-.tagPreferenceList {
-  display: grid;
-}
-
-.tagPreferenceRow {
+.tagPreferenceCloud {
   display: flex;
-  min-height: 42px;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  padding: 6px 0;
+  gap: 8px 12px;
 }
 
-.tagPreferenceRow:first-child {
-  border-top: 0;
-}
-
-.tagPreferenceRow .tagChip {
+.tagPreferenceItem {
+  display: inline-flex;
   min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 3px;
 }
 
-.tagPreferenceRow form {
+.tagPreferenceItem .tagChip {
+  min-width: 0;
+  max-width: min(280px, calc(100vw - 104px));
+}
+
+.tagPreferenceItem .tagChip > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tagPreferenceItem form {
   flex: 0 0 auto;
+}
+
+.tagPreferenceItem .tagVisibilityControl {
+  width: 28px;
 }
 
 .tagGroupBlock.isUserHidden,
@@ -11541,4 +11648,836 @@ a.analyticsSearchTag:focus-visible {
     padding-left: 0;
   }
 
+}
+
+.continueReadingStrip {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0 18px;
+  border-block: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  padding: 10px 2px;
+}
+
+.continueReadingIcon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--accent);
+}
+
+.continueReadingStrip > a {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+  color: var(--text);
+}
+
+.continueReadingStrip > a > span:first-child {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.continueReadingStrip small {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.continueReadingStrip strong {
+  overflow: hidden;
+  font-family: var(--font-title);
+  font-size: 14px;
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.continueReadingMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.continueReadingStrip i {
+  position: relative;
+  display: block;
+  height: 2px;
+  grid-column: 1 / -1;
+  overflow: hidden;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--border) 78%, transparent);
+}
+
+.continueReadingStrip i > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.continueReadingStrip > a:hover strong,
+.continueReadingStrip > a:focus-visible strong {
+  color: var(--accent);
+}
+
+.activityLibrary {
+  display: grid;
+  gap: 14px;
+}
+
+.activityTabs,
+.favoriteTabs {
+  margin: 0;
+}
+
+.readingHistory {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.favoriteManageControls {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.readingProgressSetting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 58px;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: var(--surface);
+}
+
+.readingProgressSetting > strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.readingProgressOptions {
+  display: grid;
+  width: 112px;
+  justify-self: end;
+}
+
+.readingProgressOption {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  min-height: 22px;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.readingProgressOption .settingToggleTrack {
+  grid-column: 2;
+}
+
+.readingHistoryToolbar {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.activitySelectAll {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.activitySelectAll input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.activitySelectAll > span,
+.favoriteSelectControl > span {
+  display: grid;
+  width: 17px;
+  height: 17px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: transparent;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+}
+
+.activitySelectAll input:checked + span,
+.favoriteSelectControl input:checked + span {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.activitySelectAll input:focus-visible + span,
+.favoriteSelectControl input:focus-visible + span {
+  outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  outline-offset: 2px;
+}
+
+.activitySelectAll em {
+  font-style: normal;
+}
+
+.readingHistoryNotice {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.readingHistoryList {
+  display: grid;
+  border-top: 1px solid var(--border);
+}
+
+.readingHistoryItem {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  transition: background-color 140ms ease;
+}
+
+.readingHistoryItem.isSelected {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.readingHistorySelect {
+  display: grid;
+  width: 34px;
+  height: 100%;
+  place-items: center;
+  cursor: pointer;
+}
+
+.readingHistorySelect input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.readingHistorySelect > span {
+  display: grid;
+  width: 17px;
+  height: 17px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: transparent;
+}
+
+.readingHistorySelect input:checked + span {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.readingHistoryMain {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+  padding: 13px 3px;
+  color: var(--text);
+}
+
+.readingHistoryCopy {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.readingHistoryCopy strong {
+  overflow: hidden;
+  font-family: var(--font-title);
+  font-size: 15px;
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 140ms ease;
+}
+
+.readingHistoryCopy small {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.readingHistoryMain:hover strong,
+.readingHistoryMain:focus-visible strong {
+  color: var(--accent);
+}
+
+.readingHistoryProgress {
+  display: block;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--border) 74%, transparent);
+}
+
+.readingHistoryProgress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.readingHistoryActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.readingHistoryActions > button,
+.readingHistoryClearConfirm button {
+  display: inline-flex;
+  min-height: 31px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.readingHistoryActions > button:hover,
+.readingHistoryActions > button:focus-visible,
+.readingHistoryClearConfirm button:hover,
+.readingHistoryClearConfirm button:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  color: var(--accent);
+}
+
+.readingHistoryActions button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.readingHistoryClearConfirm {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.readingHistoryClearConfirm button {
+  width: 31px;
+  padding: 0;
+}
+
+.favoriteManageToolbar {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.favoriteManageToolbar .readingHistoryNotice {
+  min-height: 1em;
+}
+
+.favoriteCollection {
+  min-width: 0;
+}
+
+.favoriteSelectableItem {
+  position: relative;
+  min-width: 0;
+  height: 100%;
+}
+
+.favoriteSelectableItem > .bookCard,
+.favoriteSelectableItem > .mediaVideoCard,
+.favoriteSelectableItem > .mediaResourceRow {
+  width: 100%;
+  height: 100%;
+}
+
+.favoriteSelectableItem.isSelected > .bookCard,
+.favoriteSelectableItem.isSelected > .mediaVideoCard,
+.favoriteSelectableItem.isSelected > .mediaResourceRow {
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent);
+}
+
+.favoriteCollection.isManaging .favoriteSelectableItem {
+  cursor: pointer;
+}
+
+.favoriteSelectControl {
+  position: absolute;
+  z-index: 3;
+  top: 9px;
+  right: 9px;
+  display: grid;
+  cursor: pointer;
+}
+
+.favoriteSelectControl input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.favoriteAudioList .favoriteSelectControl {
+  top: 50%;
+  right: auto;
+  left: 12px;
+  transform: translateY(-50%);
+}
+
+.favoriteCollection.isManaging .favoriteAudioList .favoriteSelectableItem > .mediaResourceRow {
+  padding-left: 44px;
+}
+
+.favoriteManageActions {
+  min-height: 31px;
+}
+
+.favoriteEmpty {
+  min-height: 140px;
+  display: grid;
+  place-content: center;
+  text-align: center;
+}
+
+.activityEmpty {
+  display: grid;
+  min-height: 180px;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.activityEmpty p {
+  margin: 0;
+}
+
+.activityEmpty a {
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.settingsPreferenceNotice {
+  margin: -4px 2px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.analyticsReadingPanel {
+  grid-column: 1 / -1;
+}
+
+.analyticsReadingPanel h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.analyticsReadingSummary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.analyticsReadingSummary > span {
+  display: grid;
+  gap: 3px;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 42%, var(--border));
+  padding: 4px 8px;
+}
+
+.analyticsReadingSummary small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.analyticsReadingSummary strong {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.analyticsReadingColumns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.analyticsReadingColumns h4 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 620px) {
+  .continueReadingStrip {
+    margin-bottom: 14px;
+  }
+
+  .continueReadingStrip > a > span:first-child {
+    display: grid;
+    gap: 2px;
+  }
+
+  .readingHistoryCopy {
+    display: grid;
+    gap: 4px;
+  }
+
+  .readingHistoryCopy small {
+    justify-self: start;
+  }
+
+  .analyticsReadingSummary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .analyticsReadingColumns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Structured content-access editor. */
+.accessSectionHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.accessSectionHeading > span {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.accessCreateDisclosure,
+.accessRuleDisclosure,
+.accessPolicyDisclosure,
+.accessGeneratedDisclosure {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-strong) 22%, transparent);
+}
+
+.accessCreateDisclosure > summary,
+.accessRuleDisclosure > summary,
+.accessPolicyDisclosure > summary,
+.accessGeneratedDisclosure > summary {
+  display: grid;
+  min-height: 44px;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.accessCreateDisclosure > summary::-webkit-details-marker,
+.accessRuleDisclosure > summary::-webkit-details-marker,
+.accessPolicyDisclosure > summary::-webkit-details-marker,
+.accessGeneratedDisclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.accessCreateDisclosure > summary {
+  grid-template-columns: minmax(0, 1fr) auto;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.accessCreateDisclosure > summary > span,
+.accessGeneratedDisclosure > summary > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.accessRuleDisclosure > summary,
+.accessPolicyDisclosure > summary {
+  grid-template-columns: minmax(150px, 1.2fr) auto auto minmax(160px, 1fr) auto;
+  font-size: 12px;
+}
+
+.accessRuleDisclosure > summary small,
+.accessPolicyDisclosure > summary small,
+.accessGeneratedDisclosure > summary small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accessRuleDisclosure[open] > summary,
+.accessPolicyDisclosure[open] > summary,
+.accessCreateDisclosure[open] > summary,
+.accessGeneratedDisclosure[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.accessRuleDisclosure[open] > summary > svg,
+.accessPolicyDisclosure[open] > summary > svg,
+.accessCreateDisclosure[open] > summary > svg,
+.accessGeneratedDisclosure[open] > summary > svg {
+  transform: rotate(180deg);
+}
+
+.accessRuleChip {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.accessRuleBuilder {
+  gap: 13px;
+  padding: 14px;
+  background: transparent;
+}
+
+.accessConditionRow {
+  grid-template-columns: minmax(110px, 0.7fr) minmax(138px, 0.85fr) minmax(220px, 1.8fr);
+}
+
+.accessRuleContext {
+  grid-template-columns: minmax(120px, 0.7fr) minmax(120px, 0.7fr) minmax(132px, 0.8fr) minmax(150px, 0.9fr) minmax(180px, 1.4fr);
+}
+
+.accessRuleContext .accessReasonField {
+  grid-column: auto;
+}
+
+.accessEnabledToggle {
+  flex-direction: row;
+  min-height: 30px;
+  gap: 7px;
+  font-size: 12px;
+}
+
+.accessRuleBuilder .accessEnabledToggle input,
+.accessPolicyEditor .accessEnabledToggle input {
+  position: absolute;
+  width: 1px;
+  min-height: 1px;
+  overflow: hidden;
+  padding: 0;
+  opacity: 0;
+}
+
+.accessPolicyEditor {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  align-items: end;
+  gap: 10px;
+  border: 0;
+  padding: 14px;
+  background: transparent;
+}
+
+.accessPolicyEditor > label {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.accessPolicyEditor .accessPolicyName {
+  grid-column: span 2;
+}
+
+.accessPolicyEditor input {
+  width: 100%;
+  min-width: 0;
+  min-height: 37px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.accessPolicyEditor .adminSelectControl {
+  width: 100%;
+}
+
+.accessPolicyActions {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  padding-top: 11px;
+}
+
+.accessPolicyActions .accessEnabledToggle {
+  margin-right: auto;
+}
+
+.accessGeneratedDisclosure {
+  margin: 16px;
+}
+
+.accessGeneratedDisclosure > summary {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.accessGeneratedList {
+  padding: 6px 12px 12px;
+}
+
+.accessGeneratedRow {
+  grid-template-columns: minmax(120px, 1fr) auto auto minmax(130px, 1fr) auto auto;
+  border-bottom: 1px solid var(--border);
+  padding: 9px 0;
+}
+
+.accessGeneratedRow:last-child {
+  border-bottom: 0;
+}
+
+@media (max-width: 1040px) {
+  .accessRuleContext {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .accessRuleContext .accessReasonField {
+    grid-column: span 2;
+  }
+
+  .accessPolicyEditor {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .accessRuleDisclosure > summary,
+  .accessPolicyDisclosure > summary {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+
+  .accessRuleDisclosure > summary small,
+  .accessPolicyDisclosure > summary small {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .accessRuleDisclosure > summary > svg,
+  .accessPolicyDisclosure > summary > svg {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .accessConditionRow,
+  .accessRuleContext,
+  .accessPolicyEditor {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .accessValueField,
+  .accessRuleContext .accessReasonField,
+  .accessPolicyEditor .accessPolicyName {
+    grid-column: 1 / -1;
+  }
+
+  .accessGeneratedRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .accessGeneratedRow > span:not(.accessRuleTarget) {
+    grid-column: 1;
+  }
+
+  .accessGeneratedRow > form {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
+@media (max-width: 520px) {
+  .accessConditionRow,
+  .accessRuleContext,
+  .accessPolicyEditor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .accessValueField,
+  .accessRuleContext .accessReasonField,
+  .accessPolicyEditor .accessPolicyName {
+    grid-column: auto;
+  }
+
+  .accessRuleDisclosure > summary,
+  .accessPolicyDisclosure > summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .accessRuleDisclosure > summary .accessRuleChip,
+  .accessPolicyDisclosure > summary .accessRuleChip {
+    grid-column: 1;
+    justify-self: start;
+  }
+
+  .accessRuleDisclosure > summary > svg,
+  .accessPolicyDisclosure > summary > svg {
+    grid-column: 2;
+  }
+
+  .accessPolicyActions,
+  .accessRuleBuilder .accessRuleActions {
+    flex-wrap: wrap;
+  }
 }

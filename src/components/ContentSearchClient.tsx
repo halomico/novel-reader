@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { BookText } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Pagination } from "@/components/Pagination";
 import { ResultCount } from "@/components/ResultCount";
@@ -8,6 +9,7 @@ import { SearchTrackedLink } from "@/components/SearchTrackedLink";
 import type { ContentJobSnapshot } from "@/lib/content-jobs";
 import type { SearchResult } from "@/lib/search";
 import { findSearchTermRanges, type SearchTermPattern } from "@/lib/search-query";
+import { localeFromPathname, uiText, type AppLocale } from "@/lib/locale";
 
 type ContentSearchClientProps = {
   keyword: string;
@@ -124,7 +126,15 @@ function highlightSnippet(snippet: string, terms: SearchTermPattern[]) {
   return nodes;
 }
 
-function SearchProgress({ job, showProgressBars }: { job: ContentJobSnapshot | null; showProgressBars: boolean }) {
+function SearchProgress({
+  job,
+  showProgressBars,
+  locale,
+}: {
+  job: ContentJobSnapshot | null;
+  showProgressBars: boolean;
+  locale: AppLocale;
+}) {
   const progress = job?.progress || 0;
   const scannedBooks = job?.scannedBooks || 0;
   const totalBooks = job?.totalBooks || 0;
@@ -136,20 +146,20 @@ function SearchProgress({ job, showProgressBars }: { job: ContentJobSnapshot | n
   return (
     <section className="contentProgressPanel" aria-live="polite">
       <div className="contentProgressHeader">
-        <span>{job.message || "正在搜索正文"}</span>
+        <span>{job.message || uiText(locale, "正在搜索正文")}</span>
         {showProgressBars ? <strong>{progress}%</strong> : null}
       </div>
       {showProgressBars ? (
-        <div className="contentProgressTrack" aria-label="搜索进度">
+        <div className="contentProgressTrack" aria-label={uiText(locale, "搜索进度")}>
           <span style={{ width: `${progress}%` }} />
         </div>
       ) : null}
       {totalBooks ? (
-        <p>
-          已扫描 {scannedBooks} / {totalBooks} 本，当前匹配 {job.resultCount} 本
-        </p>
+        <p>{locale === "zh-Hant"
+          ? `已掃描 ${scannedBooks} / ${totalBooks} 本，目前符合 ${job.resultCount} 本`
+          : `已扫描 ${scannedBooks} / ${totalBooks} 本，当前匹配 ${job.resultCount} 本`}</p>
       ) : (
-        <p>正在启动搜索任务</p>
+        <p>{uiText(locale, "正在启动搜索任务")}</p>
       )}
     </section>
   );
@@ -170,6 +180,9 @@ export function ContentSearchClient({
   resultReturnParams = {},
   scrollTargetId,
 }: ContentSearchClientProps) {
+  const pathname = usePathname();
+  const locale = localeFromPathname(pathname);
+  const tr = (text: string) => uiText(locale, text);
   const [job, setJob] = useState<ContentJobSnapshot | null>(null);
   const [message, setMessage] = useState("");
   const [page, setPage] = useState(initialPage);
@@ -253,7 +266,7 @@ export function ContentSearchClient({
         return;
       }
       if (!response.ok || !data.ok || !data.job) {
-        throw new Error(data.message || "搜索任务状态读取失败");
+        throw new Error(data.message || tr("搜索任务状态读取失败"));
       }
       let nextJob = data.job;
       if (nextJob.status === "done" && !nextJob.results) {
@@ -263,7 +276,7 @@ export function ContentSearchClient({
         );
         const resultData = (await resultResponse.json()) as SearchApiResponse;
         if (!resultResponse.ok || !resultData.ok || !resultData.job) {
-          throw new Error(resultData.message || "搜索结果读取失败");
+          throw new Error(resultData.message || tr("搜索结果读取失败"));
         }
         nextJob = resultData.job;
       }
@@ -272,7 +285,7 @@ export function ContentSearchClient({
       rememberSnapshot(nextJob, currentPageRef.current, data.showProgressBars ?? showProgressBars);
       if (nextJob.status === "running" || nextJob.status === "queued") {
         timer = setTimeout(() => {
-          poll(jobId).catch((error) => setMessage(error instanceof Error ? error.message : "搜索失败"));
+          poll(jobId).catch((error) => setMessage(error instanceof Error ? error.message : tr("搜索失败")));
         }, document.visibilityState === "hidden" ? 2_000 : 800);
       }
     }
@@ -310,7 +323,7 @@ export function ContentSearchClient({
           return;
         }
         if (cached.job.status === "running" || cached.job.status === "queued") {
-          poll(cached.job.id).catch((error) => setMessage(error instanceof Error ? error.message : "搜索失败"));
+          poll(cached.job.id).catch((error) => setMessage(error instanceof Error ? error.message : tr("搜索失败")));
           return;
         }
       }
@@ -328,7 +341,7 @@ export function ContentSearchClient({
         return;
       }
       if (!response.ok || !data.ok || !data.jobId || !data.job) {
-        throw new Error(data.message || "搜索启动失败");
+        throw new Error(data.message || tr("搜索启动失败"));
       }
       if (data.job.status === "done" && !data.job.results) {
         await poll(data.jobId);
@@ -338,7 +351,7 @@ export function ContentSearchClient({
       setDisplayProgress(data.showProgressBars ?? showProgressBars);
       rememberSnapshot(data.job, nextPage, data.showProgressBars ?? showProgressBars);
       if (data.job.status === "running" || data.job.status === "queued") {
-        poll(data.jobId).catch((error) => setMessage(error instanceof Error ? error.message : "搜索失败"));
+        poll(data.jobId).catch((error) => setMessage(error instanceof Error ? error.message : tr("搜索失败")));
       }
     }
 
@@ -373,7 +386,7 @@ export function ContentSearchClient({
 
     startSearch().catch((error) => {
       if (!cancelled) {
-        setMessage(error instanceof Error ? error.message : "搜索失败");
+        setMessage(error instanceof Error ? error.message : tr("搜索失败"));
       }
     });
     window.addEventListener("pagehide", handlePageHide);
@@ -429,12 +442,12 @@ export function ContentSearchClient({
     <>
       <section className={showResultCount ? "searchHero hasResultCount" : "searchHero"}>
         {showResultCount ? <ResultCount count={matchedBookCount} /> : null}
-        {failed ? <p className="searchMessage">{job?.error || job?.message || "搜索失败"}</p> : null}
-        {cancelled ? <p className="searchMessage">{job?.message || "全文搜索任务已取消"}</p> : null}
+        {failed ? <p className="searchMessage">{job?.error || job?.message || tr("搜索失败")}</p> : null}
+        {cancelled ? <p className="searchMessage">{job?.message || tr("全文搜索任务已取消")}</p> : null}
         {message ? <p className="searchMessage">{message}</p> : null}
       </section>
 
-      <SearchProgress job={job} showProgressBars={displayProgress} />
+      <SearchProgress job={job} showProgressBars={displayProgress} locale={locale} />
 
       {pagedResults.length > 0 ? (
         <section className="searchResults">

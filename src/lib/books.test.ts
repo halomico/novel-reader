@@ -90,11 +90,15 @@ test("reuses segmented content until the novel file version changes", async () =
 
   try {
     fs.writeFileSync(path.join(libraryDir, book.relative_path), "第一版正文", "utf8");
-    const first = await readNovelSegments(book);
+    const [first, concurrent] = await Promise.all([
+      readNovelSegments(book),
+      readNovelSegments(book),
+    ]);
     fs.writeFileSync(path.join(libraryDir, book.relative_path), "第二版正文", "utf8");
     const cached = await readNovelSegments(book);
     const refreshed = await readNovelSegments({ ...book, content_hash: "version-2", mtime_ms: 2 });
 
+    assert.strictEqual(concurrent, first);
     assert.strictEqual(cached, first);
     assert.equal(first[0]?.content, "第一版正文");
     assert.notStrictEqual(refreshed, first);

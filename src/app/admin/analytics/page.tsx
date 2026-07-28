@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
-import { CalendarDays, Globe2, MonitorSmartphone, MousePointerClick, Radio, Search, Tags, X } from "lucide-react";
+import { BookOpenText, CalendarDays, Globe2, ListFilter, MonitorSmartphone, MousePointerClick, Radio, Search, Tags, X } from "lucide-react";
 import Form from "next/form";
 import Link from "next/link";
+import { AdminSelect } from "@/components/AdminSelect";
 import { LocalDateTime } from "@/components/LocalDateTime";
 import { Pagination } from "@/components/Pagination";
 import { getAnalyticsOverview, type AnalyticsMetric } from "@/lib/analytics";
 import { getAnalyticsRealtimeLimit, isAnalyticsEnabled } from "@/lib/config";
+import { getReadingAnalytics, type ReadingAnalytics } from "@/lib/reading-progress";
 import { AdminFrame } from "../AdminFrame";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +25,8 @@ type AdminAnalyticsPageProps = {
     to?: string;
     page?: string;
     realtimePage?: string;
+    realtimeType?: string;
+    realtimeCountry?: string;
     hotPage?: string;
     contentPage?: string;
     tagPage?: string;
@@ -215,6 +219,55 @@ function PopularTagPanel({
   );
 }
 
+function ReadingAnalyticsPanel({ analytics }: { analytics: ReadingAnalytics }) {
+  const summary = [
+    { label: "打开", value: analytics.opens },
+    { label: "继续", value: analytics.resumes },
+    { label: "读完", value: analytics.completions },
+    { label: "平均进度", value: `${Math.round(analytics.averageProgress)}%` },
+  ];
+  return (
+    <details className="analyticsMetricPanel analyticsReadingPanel" open>
+      <summary>
+        <h3><BookOpenText size={15} aria-hidden="true" />近 30 日阅读</h3>
+        <span>聚合数据</span>
+      </summary>
+      <div className="analyticsReadingSummary">
+        {summary.map((item) => (
+          <span key={item.label}>
+            <small>{item.label}</small>
+            <strong>{typeof item.value === "number" ? formatCount(item.value) : item.value}</strong>
+          </span>
+        ))}
+      </div>
+      <div className="analyticsReadingColumns">
+        <section>
+          <h4>热门小说</h4>
+          <div className="analyticsMetricList">
+            {analytics.novels.length ? analytics.novels.map((item) => (
+              <div className="analyticsMetricRow" key={`reading-novel-${item.id}`}>
+                <span title={item.label}>{item.label}</span>
+                <strong>{formatCount(item.opens)}</strong>
+              </div>
+            )) : <p className="analyticsEmpty">暂无数据</p>}
+          </div>
+        </section>
+        <section>
+          <h4>活跃读者</h4>
+          <div className="analyticsMetricList">
+            {analytics.users.length ? analytics.users.map((item) => (
+              <div className="analyticsMetricRow" key={`reading-user-${item.id}`}>
+                <span title={item.label}>{item.label}</span>
+                <strong>{formatCount(item.opens)}</strong>
+              </div>
+            )) : <p className="analyticsEmpty">暂无数据</p>}
+          </div>
+        </section>
+      </div>
+    </details>
+  );
+}
+
 export default async function AdminAnalyticsPage({ searchParams }: AdminAnalyticsPageProps) {
   const params = await searchParams;
   const realtimeLimit = getAnalyticsRealtimeLimit();
@@ -222,6 +275,8 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
     realtimeLimit,
     realtimePage: params.page || params.realtimePage,
     realtimePageSize: 30,
+    realtimeContentType: params.realtimeType,
+    realtimeCountry: params.realtimeCountry,
     searchQueryPage: params.hotPage,
     searchQueryPageSize: 100,
     contentPage: params.contentPage,
@@ -232,6 +287,11 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
     customTo: params.to,
   });
   const enabled = isAnalyticsEnabled();
+  const readingAnalytics = getReadingAnalytics(30, 10);
+  const realtimeFilterParams = {
+    realtimeType: overview.realtimeContentType === "all" ? undefined : overview.realtimeContentType,
+    realtimeCountry: overview.realtimeCountry === "all" ? undefined : overview.realtimeCountry,
+  };
   const paginationParams: Record<string, string | undefined> = {
     range: overview.range,
     from: overview.range === "custom" ? overview.customFrom : undefined,
@@ -239,6 +299,7 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
     hotPage: overview.searchQueryPage > 1 ? String(overview.searchQueryPage) : undefined,
     contentPage: overview.contentPage > 1 ? String(overview.contentPage) : undefined,
     tagPage: overview.tagPage > 1 ? String(overview.tagPage) : undefined,
+    ...realtimeFilterParams,
   };
   const searchPaginationParams: Record<string, string | undefined> = {
     range: overview.range,
@@ -247,6 +308,7 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
     page: overview.realtimePage > 1 ? String(overview.realtimePage) : undefined,
     contentPage: overview.contentPage > 1 ? String(overview.contentPage) : undefined,
     tagPage: overview.tagPage > 1 ? String(overview.tagPage) : undefined,
+    ...realtimeFilterParams,
   };
   const contentPaginationParams: Record<string, string | undefined> = {
     range: overview.range,
@@ -255,6 +317,7 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
     page: overview.realtimePage > 1 ? String(overview.realtimePage) : undefined,
     hotPage: overview.searchQueryPage > 1 ? String(overview.searchQueryPage) : undefined,
     tagPage: overview.tagPage > 1 ? String(overview.tagPage) : undefined,
+    ...realtimeFilterParams,
   };
   const tagPaginationParams: Record<string, string | undefined> = {
     range: overview.range,
@@ -263,7 +326,11 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
     page: overview.realtimePage > 1 ? String(overview.realtimePage) : undefined,
     hotPage: overview.searchQueryPage > 1 ? String(overview.searchQueryPage) : undefined,
     contentPage: overview.contentPage > 1 ? String(overview.contentPage) : undefined,
+    ...realtimeFilterParams,
   };
+  const realtimeResetSearch = new URLSearchParams({ range: overview.range });
+  if (overview.range === "custom" && overview.customFrom) realtimeResetSearch.set("from", overview.customFrom);
+  if (overview.range === "custom" && overview.customTo) realtimeResetSearch.set("to", overview.customTo);
 
   return (
     <AdminFrame active="analytics" notice={params.notice} tone={params.tone}>
@@ -356,6 +423,7 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
             totalPages={overview.tagTotalPages}
             paginationParams={tagPaginationParams}
           />
+          <ReadingAnalyticsPanel analytics={readingAnalytics} />
           <MetricTable title="IP 地址" items={overview.topIps} />
           <MetricTable title="国家/地区" items={overview.topCountries} />
           <MetricTable title="来源网站" items={overview.topReferrers} />
@@ -369,11 +437,43 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
             <div>
               <h2>实时访问</h2>
               <p>
-                当前范围 {overview.realtimeTotal} / {realtimeLimit} 条内容访问记录，每页 {overview.realtimePageSize} 条。
+                共 {overview.realtimeTotal} 条，最多保留当前范围内最近 {realtimeLimit} 条。
               </p>
             </div>
             <MonitorSmartphone size={20} aria-hidden="true" />
           </div>
+          <Form className="analyticsRealtimeFilters" action="/admin/analytics">
+            <input name="range" type="hidden" value={overview.range} />
+            {overview.range === "custom" && overview.customFrom ? <input name="from" type="hidden" value={overview.customFrom} /> : null}
+            {overview.range === "custom" && overview.customTo ? <input name="to" type="hidden" value={overview.customTo} /> : null}
+            <AdminSelect name="realtimeType" defaultValue={overview.realtimeContentType} aria-label="按内容类型过滤">
+              <option value="all">全部内容</option>
+              <option value="novel">小说</option>
+              <option value="video">视频</option>
+              <option value="audio">音频</option>
+              <option value="file">文件</option>
+            </AdminSelect>
+            <AdminSelect name="realtimeCountry" defaultValue={overview.realtimeCountry} aria-label="按国家或地区过滤">
+              <option value="all">全部地区</option>
+              {overview.realtimeCountries.map((country) => (
+                <option value={country} key={country}>{prettyLabel(country)}</option>
+              ))}
+            </AdminSelect>
+            <button className="adminIconTextButton" type="submit">
+              <ListFilter size={15} aria-hidden="true" />
+              筛选
+            </button>
+            {overview.realtimeContentType !== "all" || overview.realtimeCountry !== "all" ? (
+              <Link
+                className="adminTableIconButton"
+                href={`/admin/analytics?${realtimeResetSearch.toString()}#realtime-activity`}
+                aria-label="清除实时访问筛选"
+                title="清除筛选"
+              >
+                <X size={15} aria-hidden="true" />
+              </Link>
+            ) : null}
+          </Form>
           <div className="adminTableWrap">
             <table className="adminTable analyticsRealtimeTable">
               <thead>

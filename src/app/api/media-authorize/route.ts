@@ -13,14 +13,17 @@ export function GET(request: NextRequest) {
     return new Response(null, { status: 404 });
   }
   const delivery = resolveMediaDeliveryUri(originalUri);
+  if (!delivery) {
+    return new Response(null, { status: 404 });
+  }
   const user = getCurrentUserFromRequest(request);
   const access = checkContentAccess(request.headers, {
-    scope: "media",
+    scope: delivery.asset.kind,
     authenticated: Boolean(user),
     admin: user?.role === "admin",
     rateLimit: false,
   });
-  if (!delivery || !access.allowed || !authorizeMediaDelivery(delivery, Boolean(user))) {
+  if (!access.allowed || !authorizeMediaDelivery(delivery, Boolean(user))) {
     return new Response(null, { status: 404 });
   }
 

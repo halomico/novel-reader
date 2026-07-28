@@ -1,9 +1,10 @@
 ﻿"use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import Link from "@/components/LocalizedLink";
+import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState, useTransition } from "react";
+import { localeFromPathname, withLocalePath } from "@/lib/locale";
 import { beginNavigationProgress } from "./NavigationProgress";
 
 type PageItem = number | "ellipsis";
@@ -79,6 +80,7 @@ function PageJump({
   onPageChange?: (page: number) => void;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [value, setValue] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -112,7 +114,10 @@ function PageJump({
       return;
     }
     clearCloseTimer();
-    const href = pageHrefWithParams(nextPage, query, basePath, extraParams, pageParam, hash);
+    const href = withLocalePath(
+      pageHrefWithParams(nextPage, query, basePath, extraParams, pageParam, hash),
+      localeFromPathname(pathname),
+    );
     beginNavigationProgress();
     startTransition(() => router.push(href));
     setIsOpen(false);

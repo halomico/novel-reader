@@ -7,6 +7,7 @@ import test, { type TestContext } from "node:test";
 import {
   checkContentAccess,
   hasGlobalContentAccessRules,
+  hasScopedContentAccessControls,
   hasScopedContentAccessRules,
   listContentAccessPolicies,
   listContentAccessRules,
@@ -51,14 +52,17 @@ function requestHeaders(ip: string, country = "US", userAgent = ""): Headers {
 test("matches structured content access rules by audience and scope", (t) => {
   withTempDatabase(t);
   assert.deepEqual(listContentAccessPolicies(), []);
+  assert.equal(hasScopedContentAccessControls("video"), false);
   saveContentAccessRule({
     targetType: "cidr",
     targetValue: "203.0.113.0/24",
-    scope: "media",
+    scope: "video",
     audience: "guest",
     reason: "test",
   });
-  assert.equal(hasScopedContentAccessRules("media"), true);
+  assert.equal(hasScopedContentAccessRules("video"), true);
+  assert.equal(hasScopedContentAccessControls("video"), true);
+  assert.equal(hasScopedContentAccessRules("audio"), false);
   assert.equal(hasScopedContentAccessRules("novel"), false);
   saveContentAccessRule({
     targetType: "country",
@@ -69,11 +73,12 @@ test("matches structured content access rules by audience and scope", (t) => {
   });
   assert.equal(hasScopedContentAccessRules("novel"), true);
 
-  assert.equal(checkContentAccess(requestHeaders("203.0.113.8"), { scope: "media" }).allowed, false);
+  assert.equal(checkContentAccess(requestHeaders("203.0.113.8"), { scope: "video" }).allowed, false);
   assert.equal(
-    checkContentAccess(requestHeaders("203.0.113.8"), { scope: "media", authenticated: true }).allowed,
+    checkContentAccess(requestHeaders("203.0.113.8"), { scope: "video", authenticated: true }).allowed,
     true,
   );
+  assert.equal(checkContentAccess(requestHeaders("203.0.113.8"), { scope: "audio" }).allowed, true);
   assert.equal(checkContentAccess(requestHeaders("203.0.113.8"), { scope: "novel" }).allowed, true);
   assert.equal(checkContentAccess(requestHeaders("198.51.100.2", "DE"), { scope: "novel" }).allowed, false);
   assert.equal(checkContentAccess(requestHeaders("198.51.100.2", "FR"), { scope: "novel" }).allowed, false);
@@ -83,11 +88,23 @@ test("matches structured content access rules by audience and scope", (t) => {
   saveContentAccessRule({
     targetType: "crawler",
     targetValue: "",
-    scope: "all",
+    scope: "novel",
     audience: "guest",
   });
   assert.equal(checkContentAccess(requestHeaders("198.51.100.3", "US", "ExampleBot/1.0"), { scope: "novel" }).allowed, false);
   assert.equal(checkContentAccess(requestHeaders("198.51.100.3", "US", "Mozilla/5.0"), { scope: "novel" }).allowed, true);
+
+  saveContentAccessRule({
+    targetType: "crawler",
+    targetValue: "headless",
+    scope: "audio",
+    countryMode: "cn",
+    audience: "all",
+  });
+  assert.equal(checkContentAccess(requestHeaders("198.51.100.5", "CN", "Playwright/1.0"), { scope: "audio" }).allowed, false);
+  assert.equal(checkContentAccess(requestHeaders("198.51.100.5", "CN", "ExampleBot/1.0"), { scope: "audio" }).allowed, true);
+  assert.equal(checkContentAccess(requestHeaders("198.51.100.5", "US", "Playwright/1.0"), { scope: "audio" }).allowed, true);
+  assert.equal(checkContentAccess(requestHeaders("198.51.100.5", "", "Playwright/1.0"), { scope: "audio" }).allowed, true);
 });
 
 test("supports whole-site country allowlists without affecting the admin bypass", (t) => {
@@ -114,20 +131,26 @@ test("supports whole-site country allowlists without affecting the admin bypass"
 test("creates a temporary rule after a configured access policy is exceeded", (t) => {
   withTempDatabase(t);
   saveContentAccessPolicy({
-    name: "媒体保护",
-    scope: "media",
+    name: "视频保护",
+    scope: "video",
+    countryMode: "non_cn",
     audience: "guest",
     windowSeconds: 60,
     maxRequests: 1,
     blockSeconds: 120,
   });
+  assert.equal(hasScopedContentAccessControls("video"), true);
   const headers = requestHeaders("198.51.100.9");
+  const cnHeaders = requestHeaders("198.51.100.9", "CN");
   const now = Date.now();
-  assert.equal(checkContentAccess(headers, { scope: "media", now }).allowed, true);
-  const blocked = checkContentAccess(headers, { scope: "media", now: now + 1 });
+  assert.equal(checkContentAccess(cnHeaders, { scope: "video", now }).allowed, true);
+  assert.equal(checkContentAccess(cnHeaders, { scope: "video", now: now + 1 }).allowed, true);
+  assert.equal(checkContentAccess(headers, { scope: "video", now: now + 2 }).allowed, true);
+  const blocked = checkContentAccess(headers, { scope: "video", now: now + 3 });
   assert.equal(blocked.allowed, false);
   assert.equal(blocked.allowed ? 0 : blocked.status, 429);
   const generated = listContentAccessRules().find((rule) => rule.source === "rate_limit");
   assert.equal(generated?.targetValue, "198.51.100.9");
-  assert.equal(generated?.expiresAt, now + 120_001);
+  assert.equal(generated?.countryMode, "non_cn");
+  assert.equal(generated?.expiresAt, now + 120_003);
 });

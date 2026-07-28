@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  Bookmark,
+  Activity,
   KeyRound,
   LogOut,
   Menu,
@@ -11,10 +11,12 @@ import {
   UserPlus,
   UserRound,
 } from "lucide-react";
-import Link from "next/link";
+import Link from "@/components/LocalizedLink";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { logoutUserAction } from "@/app/account/actions";
 import type { MediaKind } from "@/lib/media";
+import { localeFromPathname, uiText } from "@/lib/locale";
 import { HeaderPrimaryNav } from "./HeaderPrimaryNav";
 
 type HeaderUserMenuProps = {
@@ -43,6 +45,8 @@ export function HeaderUserMenu({
   unreadMessages,
 }: HeaderUserMenuProps) {
   const [open, setOpen] = useState(false);
+  const locale = localeFromPathname(usePathname());
+  const tr = (text: string) => uiText(locale, text);
   const menuRef = useRef<HTMLDivElement>(null);
   const hasNavigation = showLibrary || showTags || mediaKinds.length > 0;
 
@@ -82,9 +86,9 @@ export function HeaderUserMenu({
       <button
         className="iconLink userMenuButton"
         type="button"
-        aria-label="打开导航菜单"
+        aria-label={tr("导航菜单")}
         aria-expanded={open}
-        title="导航菜单"
+        title={tr("导航菜单")}
         onClick={() => setOpen((value) => !value)}
       >
         <Menu size={21} aria-hidden="true" />
@@ -104,15 +108,15 @@ export function HeaderUserMenu({
               </Link>
               <Link href="/account?view=growth" onClick={closeMenu}>
                 <Sparkles size={16} aria-hidden="true" />
-                成长
+                {tr("成长")}
               </Link>
-              <Link href="/favorites" onClick={closeMenu}>
-                <Bookmark size={16} aria-hidden="true" />
-                收藏
+              <Link href="/activity" onClick={closeMenu}>
+                <Activity size={16} aria-hidden="true" />
+                {tr("动态")}
               </Link>
               <Link href="/messages" onClick={closeMenu}>
                 <MessageCircle size={16} aria-hidden="true" />
-                消息
+                {tr("消息")}
                 {unreadMessages > 0 ? <span className="userMenuUnreadDot" aria-label={`${unreadMessages} 条未读消息`} /> : null}
               </Link>
             </>
@@ -121,20 +125,20 @@ export function HeaderUserMenu({
               {loginEnabled ? (
                 <Link href="/login" onClick={closeMenu}>
                   <KeyRound size={16} aria-hidden="true" />
-                  登录
+                  {tr("登录")}
                 </Link>
               ) : null}
               {registrationEnabled ? (
                 <Link href="/register" onClick={closeMenu}>
                   <UserPlus size={16} aria-hidden="true" />
-                  注册
+                  {tr("注册")}
                 </Link>
               ) : null}
             </>
           )}
           <Link href="/settings" onClick={closeMenu}>
             <Settings size={16} aria-hidden="true" />
-            设置
+            {tr("设置")}
           </Link>
           {hasNavigation ? (
             <HeaderPrimaryNav
@@ -150,7 +154,7 @@ export function HeaderUserMenu({
             <form action={logoutUserAction}>
               <button type="submit">
                 <LogOut size={16} aria-hidden="true" />
-                退出
+                {tr("退出")}
               </button>
             </form>
           ) : null}

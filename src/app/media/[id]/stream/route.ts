@@ -14,7 +14,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return new Response(null, { status: 404 });
   }
   const access = checkContentAccess(request.headers, {
-    scope: "media",
+    scope: asset.kind,
     authenticated: Boolean(user),
     admin: user?.role === "admin",
   });
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return new Response(null, { status: 404 });
   }
   let location: string;
-  const publiclyAccessible = isMediaKindPublic(asset.kind) && !hasScopedContentAccessRules("media");
+  const publiclyAccessible = isMediaKindPublic(asset.kind) && !hasScopedContentAccessRules(asset.kind);
   try {
     location = mediaDeliveryUrl(asset, false, {
       publiclyAccessible,

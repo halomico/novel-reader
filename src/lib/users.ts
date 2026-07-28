@@ -3,6 +3,8 @@ import path from "node:path";
 import type { Novel } from "./books";
 import { getDb } from "./db";
 import type { MediaAsset, MediaKind } from "./media";
+import { DEFAULT_LOCALE, normalizeLocale, type AppLocale } from "./locale";
+import { recordReadingOpen } from "./reading-progress";
 import { getUserLevelForExperience } from "./user-levels";
 
 export type UserStatus = "active" | "disabled";
@@ -18,6 +20,8 @@ export type UserProfile = {
   trustLevel: number;
   sodaBalance: number;
   sodaExperience: number;
+  localePreference: AppLocale;
+  readingHistoryEnabled: boolean;
   registrationIp: string | null;
   createdAt: string;
   updatedAt: string;
@@ -80,6 +84,8 @@ type UserRow = {
   trust_level: number;
   soda_balance: number;
   soda_experience: number;
+  locale_preference: string;
+  reading_history_enabled: number;
   registration_ip: string | null;
   created_at: string;
   updated_at: string;
@@ -135,6 +141,8 @@ function toUserProfile(row: UserRow): UserProfile {
     trustLevel: Math.min(Math.max(Math.floor(row.trust_level || 1), 1), 6),
     sodaBalance: Math.max(Math.floor(row.soda_balance || 0), 0),
     sodaExperience: Math.max(Math.floor(row.soda_experience || 0), 0),
+    localePreference: normalizeLocale(row.locale_preference),
+    readingHistoryEnabled: row.reading_history_enabled !== 0,
     registrationIp: row.registration_ip,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -147,7 +155,8 @@ export function getUserById(id: number): UserProfile | null {
   const row = getDb()
     .prepare(
       `SELECT id, username, display_name, avatar_path, status, role, trust_level, soda_balance, soda_experience,
-              registration_ip, created_at, updated_at, last_login_at, last_login_ip
+              locale_preference, reading_history_enabled, registration_ip,
+              created_at, updated_at, last_login_at, last_login_ip
        FROM users
        WHERE id = ?`,
     )
@@ -160,7 +169,8 @@ export function getUserPasswordRow(username: string): (UserRow & { password_hash
   const row = getDb()
     .prepare(
       `SELECT id, username, display_name, password_hash, avatar_path, status, role, trust_level, soda_balance, soda_experience,
-              registration_ip, created_at, updated_at, last_login_at, last_login_ip
+              locale_preference, reading_history_enabled, registration_ip,
+              created_at, updated_at, last_login_at, last_login_ip
        FROM users
        WHERE username = ?`,
     )
@@ -177,6 +187,7 @@ export function createUserRecord(params: {
   role?: UserRole;
   sodaBalance?: number;
   sodaExperience?: number;
+  localePreference?: AppLocale;
   registrationIp?: string | null;
 }): number {
   const sodaBalance = Math.max(Math.floor(params.sodaBalance || 0), 0);
@@ -185,9 +196,10 @@ export function createUserRecord(params: {
     .prepare(
       `INSERT INTO users (
          username, display_name, password_hash, status, role,
-         trust_level, soda_balance, soda_experience, registration_ip, updated_at
+         trust_level, soda_balance, soda_experience, locale_preference,
+         registration_ip, updated_at
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
     )
     .run(
       normalizeUsername(params.username),
@@ -198,6 +210,7 @@ export function createUserRecord(params: {
       getUserLevelForExperience(sodaExperience),
       sodaBalance,
       sodaExperience,
+      normalizeLocale(params.localePreference || DEFAULT_LOCALE),
       params.registrationIp || null,
     );
 
@@ -226,7 +239,8 @@ export function listUsers(params: { page?: number; q?: string; pageSize?: number
   const users = db
     .prepare(
       `SELECT id, username, display_name, avatar_path, status, role, trust_level, soda_balance, soda_experience,
-              registration_ip, created_at, updated_at, last_login_at, last_login_ip
+              locale_preference, reading_history_enabled, registration_ip,
+              created_at, updated_at, last_login_at, last_login_ip
        FROM users
        ${where}
        ORDER BY updated_at DESC, id DESC
@@ -289,6 +303,20 @@ export function updateUserDisplayName(userId: number, displayName: string) {
   getDb()
     .prepare("UPDATE users SET display_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
     .run(displayName.trim(), userId);
+}
+
+export function updateUserLocalePreference(userId: number, locale: AppLocale): boolean {
+  const info = getDb()
+    .prepare("UPDATE users SET locale_preference = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .run(normalizeLocale(locale), userId);
+  return Number(info.changes) > 0;
+}
+
+export function updateUserReadingHistoryPreference(userId: number, enabled: boolean): boolean {
+  const info = getDb()
+    .prepare("UPDATE users SET reading_history_enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .run(enabled ? 1 : 0, userId);
+  return Number(info.changes) > 0;
 }
 
 export function getUserPasswordHashById(userId: number): string | null {
@@ -382,19 +410,8 @@ export function recordNovelVisit(novelId: number, ip = "", userAgent = "") {
     .run(ip.slice(0, 64), userAgent.slice(0, 240), novelId);
 }
 
-export function recordReadingHistory(userId: number, book: Pick<Novel, "id" | "title">, segmentIndex: number) {
-  const normalizedSegment = Number.isInteger(segmentIndex) && segmentIndex >= 0 ? segmentIndex : 0;
-  getDb()
-    .prepare(
-      `INSERT INTO user_reading_history (user_id, novel_id, title, segment_index, visit_count, last_read_at)
-       VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
-       ON CONFLICT(user_id, novel_id) DO UPDATE SET
-         title = excluded.title,
-         segment_index = excluded.segment_index,
-         visit_count = user_reading_history.visit_count + 1,
-         last_read_at = CURRENT_TIMESTAMP`,
-    )
-    .run(userId, book.id, book.title, normalizedSegment);
+export function recordReadingHistory(userId: number, book: Novel, _segmentIndex = 0) {
+  recordReadingOpen(userId, book);
 }
 
 export function recordMediaHistory(userId: number, asset: Pick<MediaAsset, "id" | "kind" | "title">) {

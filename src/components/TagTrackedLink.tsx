@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/LocalizedLink";
 import type { ReactNode } from "react";
 
 function recordTagClick(slug: string) {
@@ -22,14 +22,23 @@ export function TagTrackedLink({
   className,
   title,
   children,
+  "data-tag-search": tagSearchText,
 }: {
   slug: string;
   className?: string;
   title?: string;
+  "data-tag-search"?: string;
   children: ReactNode;
 }) {
   return (
-    <Link className={className} href={`/tags/${slug}`} title={title} prefetch={false} onClick={() => recordTagClick(slug)}>
+    <Link
+      className={className}
+      href={`/tags/${slug}`}
+      title={title}
+      prefetch={false}
+      onClick={() => recordTagClick(slug)}
+      data-tag-search={tagSearchText}
+    >
       {children}
     </Link>
   );

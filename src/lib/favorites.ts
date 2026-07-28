@@ -46,6 +46,26 @@ export function toggleNovelFavorite(userId: number, novelId: number): { ok: bool
   return { ok: added.changes > 0, favorite: added.changes > 0 };
 }
 
+function normalizeFavoriteIds(values: readonly number[]): number[] {
+  return Array.from(new Set(values))
+    .filter((id) => Number.isInteger(id) && id > 0)
+    .slice(0, 500);
+}
+
+export function removeNovelFavorites(userId: number, novelIds: readonly number[]): number {
+  const ids = normalizeFavoriteIds(novelIds);
+  if (!ids.length) {
+    return 0;
+  }
+  const placeholders = ids.map(() => "?").join(",");
+  return Number(getDb()
+    .prepare(
+      `DELETE FROM user_novel_favorites
+       WHERE user_id = ? AND novel_id IN (${placeholders})`,
+    )
+    .run(userId, ...ids).changes);
+}
+
 export function listFavoriteNovels(userId: number, pageValue = 1, pageSizeValue = 20): FavoriteNovelPage {
   const db = getDb();
   const pageSize = Math.min(Math.max(Math.floor(pageSizeValue), 1), 100);
@@ -92,6 +112,29 @@ export function toggleMediaFavorite(userId: number, mediaId: number): { ok: bool
     )
     .run(userId, mediaId);
   return { ok: added.changes > 0, favorite: added.changes > 0 };
+}
+
+export function removeMediaFavorites(
+  userId: number,
+  kind: FeedbackMediaKind,
+  mediaIds: readonly number[],
+): number {
+  const ids = normalizeFavoriteIds(mediaIds);
+  if (!ids.length) {
+    return 0;
+  }
+  const placeholders = ids.map(() => "?").join(",");
+  return Number(getDb()
+    .prepare(
+      `DELETE FROM user_media_favorites
+       WHERE user_id = ?
+         AND media_id IN (
+           SELECT id
+           FROM media_assets
+           WHERE kind = ? AND id IN (${placeholders})
+         )`,
+    )
+    .run(userId, kind, ...ids).changes);
 }
 
 export function listFavoriteMedia(

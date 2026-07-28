@@ -24,7 +24,6 @@ const COUNTRY_OPTIONS = [
   ["IN", "印度"],
   ["BR", "巴西"],
   ["T1", "Tor 网络"],
-  ["XX", "未知地区"],
 ] as const;
 
 const COUNTRY_LABELS = new Map<string, string>(COUNTRY_OPTIONS);
@@ -51,6 +50,11 @@ export function ContentAccessTargetFields({
   const [matchMode, setMatchMode] = useState<ContentAccessMatchMode>(defaultMatchMode);
   const [targetText, setTargetText] = useState(defaultType === "ip" || defaultType === "cidr" ? defaultValue : "");
   const [countryText, setCountryText] = useState(defaultType === "country" ? defaultValue : "");
+  const [crawlerProfile, setCrawlerProfile] = useState(
+    defaultType === "crawler" && (defaultValue === "crawler" || defaultValue === "headless")
+      ? defaultValue
+      : "all",
+  );
   const countries = countryCodes(countryText);
 
   function toggleCountry(code: string) {
@@ -145,10 +149,15 @@ export function ContentAccessTargetFields({
             </details>
           </div>
         ) : type === "crawler" ? (
-          <>
-            <input name="targetValue" type="hidden" value="known" />
-            <span className="accessFixedTarget">已识别爬虫</span>
-          </>
+          <AdminSelect
+            name="targetValue"
+            value={crawlerProfile}
+            onChange={(event) => setCrawlerProfile(event.target.value)}
+          >
+            <option value="all">爬虫与无头浏览器</option>
+            <option value="crawler">常规爬虫</option>
+            <option value="headless">无头浏览器</option>
+          </AdminSelect>
         ) : (
           <label>
             <input

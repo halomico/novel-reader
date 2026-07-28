@@ -12,7 +12,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return new Response(null, { status: 404 });
   }
   const access = checkContentAccess(request.headers, {
-    scope: "media",
+    scope: asset.kind,
     authenticated: Boolean(user),
     admin: user?.role === "admin",
     rateLimit: false,

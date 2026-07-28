@@ -2,9 +2,10 @@
 
 import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import Form from "next/form";
-import Link from "next/link";
+import Link from "@/components/LocalizedLink";
 import { usePathname } from "next/navigation";
 import { FormEvent, useEffect, useId, useRef, useState } from "react";
+import { localeFromPathname, stripLocalePath, uiText, withLocalePath } from "@/lib/locale";
 import { beginNavigationProgress } from "./NavigationProgress";
 
 type SearchMode = "title" | "content" | "current";
@@ -105,6 +106,9 @@ export function HeaderSearch({
   noticeDisplaySeconds?: number;
 }) {
   const pathname = usePathname();
+  const normalizedPathname = stripLocalePath(pathname);
+  const locale = localeFromPathname(pathname);
+  const tr = (text: string) => uiText(locale, text);
   const [mode, setMode] = useState<SearchMode>(defaultMode);
   const [keyword, setKeyword] = useState(query);
   const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
@@ -124,14 +128,14 @@ export function HeaderSearch({
   const searchInputId = useId();
   const visibleOptions = showCurrentSearch ? options : options.filter((option) => option.value !== "current");
   const activeOption = visibleOptions.find((option) => option.value === mode) || visibleOptions[0];
-  const showAdvancedOption = showAdvancedSearch && pathname === "/novels";
+  const showAdvancedOption = showAdvancedSearch && normalizedPathname === "/novels";
   const advancedSearchParams = new URLSearchParams();
   const advancedKeyword = keyword.normalize("NFKC").replace(/\s+/gu, " ").trim();
   if (advancedKeyword) {
     advancedSearchParams.set(mode === "content" ? "content" : "q", advancedKeyword);
   }
   const advancedSearchHref = `/tags/search${advancedSearchParams.size ? `?${advancedSearchParams.toString()}` : ""}`;
-  const originNovelId = Number(/^\/books\/(\d+)/.exec(pathname)?.[1] || 0);
+  const originNovelId = Number(/^\/books\/(\d+)/.exec(normalizedPathname)?.[1] || 0);
   const searchSource = mode === "title" ? "header_title" : mode === "content" ? "header_content" : "reader_current";
   const isPinnedOpen = visibility === "open" || (visibility === "default" && uiMode === "standard");
   const formClassName = [
@@ -298,12 +302,12 @@ export function HeaderSearch({
     resetCurrentMatches();
 
     if (!segments.length) {
-      showMessage("请先打开小说正文页再搜索本文", "error");
+      showMessage(tr("请先打开小说正文页再搜索本文"), "error");
       return;
     }
 
     if (!nextKeyword) {
-      showMessage("请输入要查找的文字", "warning");
+      showMessage(tr("请输入要查找的文字"), "warning");
       return;
     }
 
@@ -333,7 +337,7 @@ export function HeaderSearch({
       setIsMessageVisible(false);
       showCurrentMatch(0);
     } else {
-      showMessage("当前小说没有匹配内容", "warning");
+      showMessage(tr("当前小说没有匹配内容"), "warning");
     }
   }
 
@@ -370,7 +374,7 @@ export function HeaderSearch({
   return (
     <Form
       className={formClassName}
-      action={activeOption.action}
+      action={withLocalePath(activeOption.action, locale)}
       role="search"
       onSubmit={handleSubmit}
       onBlur={(event) => {
@@ -383,10 +387,10 @@ export function HeaderSearch({
       <button
         className="searchIconButton"
         type="button"
-        aria-label={isPinnedOpen ? "收起搜索框" : "展开搜索框"}
+        aria-label={tr(isPinnedOpen ? "收起搜索框" : "展开搜索框")}
         aria-controls={searchInputId}
         aria-expanded={isPinnedOpen}
-        title={isPinnedOpen ? "收起搜索框" : "展开搜索框"}
+        title={tr(isPinnedOpen ? "收起搜索框" : "展开搜索框")}
         onPointerDown={(event) => event.preventDefault()}
         onClick={(event) => {
           if (event.detail > 0) {
@@ -402,8 +406,8 @@ export function HeaderSearch({
         name="q"
         type="search"
         value={keyword}
-        placeholder={activeOption.placeholder}
-        aria-label={activeOption.ariaLabel || activeOption.placeholder}
+        placeholder={tr(activeOption.placeholder)}
+        aria-label={tr(activeOption.ariaLabel || activeOption.placeholder)}
         onChange={(event) => {
           setKeyword(event.target.value);
           if (mode === "current" && currentMatchesRef.current.length) {
@@ -415,19 +419,19 @@ export function HeaderSearch({
       />
       <input name="source" type="hidden" value={searchSource} />
       {originNovelId ? <input name="origin" type="hidden" value={originNovelId} /> : null}
-      <button className="searchSubmit" type="submit" aria-label={`按${activeOption.label}搜索`} title={`按${activeOption.label}搜索`} disabled={isCurrentSearching}>
+      <button className="searchSubmit" type="submit" aria-label={`按${tr(activeOption.label)}${tr("搜索")}`} title={`按${tr(activeOption.label)}${tr("搜索")}`} disabled={isCurrentSearching}>
         <Search className="searchSubmitIcon" size={16} aria-hidden="true" />
-        <span>搜索</span>
+        <span>{tr("搜索")}</span>
       </button>
       {mode === "current" && currentMatchCount > 0 ? (
-        <div className="currentFindControls" role="group" aria-label="本文查找结果">
+        <div className="currentFindControls" role="group" aria-label={tr("本文查找结果")}>
           <output aria-live="polite">
             {currentMatchIndex + 1} / {currentMatchCount}
           </output>
           <button
             type="button"
-            aria-label="上一个匹配项"
-            title="上一个匹配项"
+            aria-label={tr("上一个匹配项")}
+            title={tr("上一个匹配项")}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => showCurrentMatch(currentMatchIndex - 1)}
           >
@@ -435,8 +439,8 @@ export function HeaderSearch({
           </button>
           <button
             type="button"
-            aria-label="下一个匹配项"
-            title="下一个匹配项"
+            aria-label={tr("下一个匹配项")}
+            title={tr("下一个匹配项")}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => showCurrentMatch(currentMatchIndex + 1)}
           >
@@ -444,8 +448,8 @@ export function HeaderSearch({
           </button>
           <button
             type="button"
-            aria-label="关闭本文查找"
-            title="关闭本文查找"
+            aria-label={tr("关闭本文查找")}
+            title={tr("关闭本文查找")}
             onMouseDown={(event) => event.preventDefault()}
             onClick={(event) => closeCurrentFind(event.currentTarget.form)}
           >
@@ -454,7 +458,7 @@ export function HeaderSearch({
         </div>
       ) : null}
       {isModeMenuOpen ? (
-        <div className="segmentedControl searchModeMenu" role="group" aria-label="搜索范围">
+        <div className="segmentedControl searchModeMenu" role="group" aria-label={tr("搜索范围")}>
           {visibleOptions.map((option) => (
             <button
               className={mode === option.value ? "isActive" : ""}
@@ -464,7 +468,7 @@ export function HeaderSearch({
               onPointerDown={(event) => event.preventDefault()}
               onClick={() => chooseMode(option.value)}
             >
-              {option.label}
+              {tr(option.label)}
             </button>
           ))}
           {showAdvancedOption ? (
@@ -476,7 +480,7 @@ export function HeaderSearch({
                 beginNavigationProgress();
               }}
             >
-              高级
+              {tr("高级")}
             </Link>
           ) : null}
         </div>
