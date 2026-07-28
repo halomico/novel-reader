@@ -134,7 +134,6 @@ export function ReadingHistoryList({
         <strong>{tr("阅读进度")}</strong>
         <div className="readingProgressOptions">
           <label className="settingToggle readingProgressOption">
-            <span>{tr("阅读记录")}</span>
             <input
               type="checkbox"
               checked={readingHistoryEnabled}
@@ -173,8 +172,9 @@ export function ReadingHistoryList({
       ) : null}
       {readingHistoryEnabled && items.length ? (
         <div className="readingHistoryList">
-          {items.map((item) => {
+          {items.map((item, index) => {
             const progress = Math.round(item.progressPercent);
+            const isContinueItem = page === 1 && index === 0 && !item.completed && progress > 0;
             return (
               <article className={selected.has(item.novelId) ? "readingHistoryItem isSelected" : "readingHistoryItem"} key={item.novelId}>
                 {managing ? (
@@ -192,6 +192,8 @@ export function ReadingHistoryList({
                   <span className="readingHistoryCopy">
                     <strong>{item.title}</strong>
                     <small>
+                      {isContinueItem ? <span className="readingHistoryResumeLabel">{tr("继续阅读")}</span> : null}
+                      {isContinueItem ? <span aria-hidden="true">·</span> : null}
                       {item.completed ? tr("已读完") : progress > 0 ? `${progress}%` : null}
                       {item.completed || progress > 0 ? <span aria-hidden="true">·</span> : null}
                       <LocalDateTime value={item.lastReadAt} />

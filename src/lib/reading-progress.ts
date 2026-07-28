@@ -288,10 +288,22 @@ export function listReadingProgressPage(
        FROM user_reading_history h
        INNER JOIN novels n ON n.id = h.novel_id
        WHERE h.user_id = ? AND h.recorded_in_history = 1
-       ORDER BY h.last_read_at DESC, h.id DESC
+       ORDER BY
+         CASE WHEN h.id = (
+           SELECT latest.id
+           FROM user_reading_history latest
+           WHERE latest.user_id = ?
+             AND latest.recorded_in_history = 1
+             AND latest.completed = 0
+             AND latest.progress_percent > 0
+           ORDER BY latest.last_read_at DESC, latest.id DESC
+           LIMIT 1
+         ) THEN 0 ELSE 1 END,
+         h.last_read_at DESC,
+         h.id DESC
        LIMIT ? OFFSET ?`,
     )
-    .all(userId, pageSize, (page - 1) * pageSize) as ReadingProgressRow[];
+    .all(userId, userId, pageSize, (page - 1) * pageSize) as ReadingProgressRow[];
   return {
     items: rows.map(toReadingProgress),
     page,
@@ -304,23 +316,6 @@ export function listReadingProgressPage(
 export function listRecentReadingProgress(userId: number, limit = 3): ReadingProgress[] {
   const pageSize = Math.min(Math.max(Math.floor(limit), 1), 100);
   return listReadingProgressPage(userId, { page: 1, pageSize }).items;
-}
-
-export function listContinueReadingProgress(userId: number, limit = 1): ReadingProgress[] {
-  const pageSize = Math.min(Math.max(Math.floor(limit), 1), 10);
-  const rows = getDb()
-    .prepare(
-      `SELECT h.id, h.novel_id, n.title, h.segment_index, h.segment_ratio,
-              h.progress_percent, h.content_version, h.completed,
-              h.visit_count, h.last_read_at
-       FROM user_reading_history h
-       INNER JOIN novels n ON n.id = h.novel_id
-       WHERE h.user_id = ? AND h.completed = 0 AND h.progress_percent > 0
-       ORDER BY h.last_read_at DESC, h.id DESC
-       LIMIT ?`,
-    )
-    .all(userId, pageSize) as ReadingProgressRow[];
-  return rows.map(toReadingProgress);
 }
 
 export function deleteReadingProgress(userId: number, novelId: number): boolean {

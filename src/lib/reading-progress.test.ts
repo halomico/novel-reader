@@ -17,7 +17,6 @@ test("separates exact reading progress from durable aggregate analytics", async 
     clearReadingProgress,
     getReadingAnalytics,
     getReadingProgress,
-    listContinueReadingProgress,
     listReadingProgressPage,
     recordReadingOpen,
     updateReadingProgress,
@@ -45,7 +44,7 @@ test("separates exact reading progress from durable aggregate analytics", async 
   });
   assert.equal(updated.saved, true);
   assert.equal(Math.round(getReadingProgress(1, 1)?.progressPercent || 0), 42);
-  assert.equal(listContinueReadingProgress(1, 1)[0]?.novelId, 1);
+  assert.equal(listReadingProgressPage(1).items[0]?.novelId, 1);
 
   recordReadingOpen(1, book);
   db.prepare("UPDATE users SET reading_history_enabled = 0 WHERE id = 1").run();

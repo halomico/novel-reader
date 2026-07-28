@@ -11650,89 +11650,6 @@ a.analyticsSearchTag:focus-visible {
 
 }
 
-.continueReadingStrip {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  margin: 2px 0 18px;
-  border-block: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  padding: 10px 2px;
-}
-
-.continueReadingIcon {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  color: var(--accent);
-}
-
-.continueReadingStrip > a {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 4px 12px;
-  color: var(--text);
-}
-
-.continueReadingStrip > a > span:first-child {
-  display: flex;
-  min-width: 0;
-  align-items: baseline;
-  gap: 9px;
-}
-
-.continueReadingStrip small {
-  flex: 0 0 auto;
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.continueReadingStrip strong {
-  overflow: hidden;
-  font-family: var(--font-title);
-  font-size: 14px;
-  font-weight: 560;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.continueReadingMeta {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.continueReadingStrip i {
-  position: relative;
-  display: block;
-  height: 2px;
-  grid-column: 1 / -1;
-  overflow: hidden;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--border) 78%, transparent);
-}
-
-.continueReadingStrip i > span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--accent);
-}
-
-.continueReadingStrip > a:hover strong,
-.continueReadingStrip > a:focus-visible strong {
-  color: var(--accent);
-}
-
 .activityLibrary {
   display: grid;
   gap: 14px;
@@ -11776,21 +11693,20 @@ a.analyticsSearchTag:focus-visible {
 
 .readingProgressOptions {
   display: grid;
-  width: 112px;
+  width: 30px;
   justify-self: end;
 }
 
 .readingProgressOption {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 30px;
+  grid-template-columns: 30px;
   min-height: 22px;
   align-items: center;
-  gap: 12px;
   font-size: 12px;
 }
 
 .readingProgressOption .settingToggleTrack {
-  grid-column: 2;
+  grid-column: 1;
 }
 
 .readingHistoryToolbar {
@@ -11934,6 +11850,11 @@ a.analyticsSearchTag:focus-visible {
   color: var(--muted);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+
+.readingHistoryResumeLabel {
+  color: var(--accent);
+  font-weight: 700;
 }
 
 .readingHistoryMain:hover strong,
@@ -12153,15 +12074,6 @@ a.analyticsSearchTag:focus-visible {
 }
 
 @media (max-width: 620px) {
-  .continueReadingStrip {
-    margin-bottom: 14px;
-  }
-
-  .continueReadingStrip > a > span:first-child {
-    display: grid;
-    gap: 2px;
-  }
-
   .readingHistoryCopy {
     display: grid;
     gap: 4px;

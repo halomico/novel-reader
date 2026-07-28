@@ -4,7 +4,6 @@ import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { CatalogBookGrid } from "@/components/CatalogBookGrid";
 import { CatalogRandomButton } from "@/components/CatalogRandomButton";
-import { ContinueReadingStrip } from "@/components/ContinueReadingStrip";
 import { Pagination } from "@/components/Pagination";
 import { ResultCount } from "@/components/ResultCount";
 import { SearchEventUrlSync } from "@/components/SearchEventUrlSync";
@@ -28,7 +27,6 @@ import {
 import { canonicalPagePath, NO_INDEX_ROBOTS } from "@/lib/seo";
 import { languageAlternates, withLocalePath } from "@/lib/locale";
 import { getRequestLocale, localizeText, localizeTexts, normalizeSearchText } from "@/lib/locale-server";
-import { listContinueReadingProgress } from "@/lib/reading-progress";
 import { filterTagsByNovelForUser } from "@/lib/tag-preferences";
 import { listTagsForNovels, type Tag } from "@/lib/tags";
 import { getCurrentUser } from "@/lib/user-auth";
@@ -136,12 +134,6 @@ export default async function NovelsPage({ searchParams }: NovelsPageProps) {
       }))),
     );
   }
-  const continueItem = user
-    ? listContinueReadingProgress(user.id, 1)[0] || null
-    : null;
-  const displayContinueItem = continueItem
-    ? { ...continueItem, title: await localizeText(continueItem.title, locale) }
-    : null;
   const [homeLabel, novelsLabel, randomLabel] = await localizeTexts(
     ["首页", "小说", "随便看看"] as const,
     locale,
@@ -170,7 +162,6 @@ export default async function NovelsPage({ searchParams }: NovelsPageProps) {
           <ResultCount count={result.totalBooks} />
         </div>
       </section>
-      <ContinueReadingStrip item={displayContinueItem} locale={locale} />
 
       {result.books.length > 0 ? (
         <CatalogBookGrid
