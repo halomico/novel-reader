@@ -655,7 +655,7 @@ export function getAnalyticsOverview(
   const realtimeBaseParams = [...realtimeTime.params, ...realtimeContent.params];
   const realtimeWhereSql = `${realtimeBaseSql} AND ${realtimeRegion.sql}`;
   const realtimeWhereParams = [...realtimeBaseParams, ...realtimeRegion.params];
-  const realtimeLimit = Math.min(Math.max(Math.floor(options.realtimeLimit || 300), 30), 2000);
+  const realtimeLimit = Math.min(Math.max(Math.floor(options.realtimeLimit || 300), 30), 10_000);
   const realtimePageSize = Math.min(Math.max(Math.floor(options.realtimePageSize || 30), 1), 100);
   const searchQueryPageSize = Math.min(Math.max(Math.floor(options.searchQueryPageSize || 100), 1), 100);
   const contentPageSize = Math.min(Math.max(Math.floor(options.contentPageSize || 50), 1), 100);

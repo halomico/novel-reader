@@ -106,9 +106,11 @@ export function recommendNovelWithSoda(
        VALUES (?, ?, ?)`,
     ).run(novelId, userId, normalizedCost);
     db.prepare(
-      `INSERT INTO user_soda_transactions (user_id, amount, balance_after, source, note)
-       VALUES (?, ?, ?, 'novel_recommendation', ?)`,
-    ).run(userId, -normalizedCost, balance, `推荐《${row.title.slice(0, 80)}》`);
+      `INSERT INTO user_currency_transactions (
+         user_id, currency, amount, balance_after, source, reference_key, note
+       )
+       VALUES (?, 'soda', ?, ?, 'novel_recommendation', ?, ?)`,
+    ).run(userId, -normalizedCost, balance, `novel-recommendation:${userId}:${novelId}`, `推荐《${row.title.slice(0, 80)}》`);
     db.exec("COMMIT");
     return {
       ok: true,
@@ -227,9 +229,17 @@ export function recommendMediaWithSoda(
        VALUES (?, ?, ?)`,
     ).run(mediaId, userId, normalizedCost);
     db.prepare(
-      `INSERT INTO user_soda_transactions (user_id, amount, balance_after, source, note)
-       VALUES (?, ?, ?, 'media_recommendation', ?)`,
-    ).run(userId, -normalizedCost, balance, `推荐${row.kind === "audio" ? "音频" : "视频"}「${row.title.slice(0, 80)}」`);
+      `INSERT INTO user_currency_transactions (
+         user_id, currency, amount, balance_after, source, reference_key, note
+       )
+       VALUES (?, 'soda', ?, ?, 'media_recommendation', ?, ?)`,
+    ).run(
+      userId,
+      -normalizedCost,
+      balance,
+      `media-recommendation:${userId}:${mediaId}`,
+      `推荐${row.kind === "audio" ? "音频" : "视频"}「${row.title.slice(0, 80)}」`,
+    );
     db.exec("COMMIT");
     return {
       ok: true,

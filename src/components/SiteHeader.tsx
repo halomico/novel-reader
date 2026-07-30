@@ -12,6 +12,7 @@ import {
   isAudioLibraryEnabled,
   isFileLibraryEnabled,
   isGuestTagLibraryNavEnabled,
+  isMarketEnabled,
   isNovelLibraryEnabled,
   isUserLoginEnabled,
   isUserRegistrationEnabled,
@@ -81,6 +82,7 @@ export async function SiteHeader({
   const unreadCount = user ? unreadMessages ?? countUserUnreadMessages(user.id) : 0;
   const showAdvancedSearch = canAccessAdvancedTagSearch(false) ||
     (canAccessAdvancedTagSearch(Boolean(user)) && hasUserPermission(user, "advanced_search"));
+  const showMarket = Boolean(user && isMarketEnabled() && hasUserPermission(user, "market_access"));
 
   const headerClassName = [
     "siteHeader",
@@ -131,6 +133,7 @@ export async function SiteHeader({
                 mediaKinds={mediaKinds}
                 showLibrary={showLibraryNav}
                 showTags={showTagNav}
+                showMarket={showMarket}
               />
             </div>
           </div>

@@ -437,12 +437,12 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
             <div>
               <h2>实时访问</h2>
               <p>
-                共 {overview.realtimeTotal} 条，最多保留当前范围内最近 {realtimeLimit} 条。
+                共 {overview.realtimeTotal} 条，最多读取当前范围内最近 {realtimeLimit} 条。
               </p>
             </div>
             <MonitorSmartphone size={20} aria-hidden="true" />
           </div>
-          <Form className="analyticsRealtimeFilters" action="/admin/analytics">
+          <Form className="analyticsRealtimeFilters" action="/admin/analytics#realtime-activity">
             <input name="range" type="hidden" value={overview.range} />
             {overview.range === "custom" && overview.customFrom ? <input name="from" type="hidden" value={overview.customFrom} /> : null}
             {overview.range === "custom" && overview.customTo ? <input name="to" type="hidden" value={overview.customTo} /> : null}

@@ -5,31 +5,19 @@ import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
+import { mutationResult, type MutationResult } from "@/lib/mutation-result";
+import { deleteContentReport, setContentReportStatus } from "@/lib/reports";
 import {
   addStationReply,
   deleteAnnouncement,
   deleteStationThread,
+  listStationMessages,
   saveAnnouncement,
   setStationThreadStatus,
   StationInputError,
+  type Announcement,
+  type StationMessage,
 } from "@/lib/station";
-import { deleteContentReport } from "@/lib/reports";
-
-function safeReturnPath(formData: FormData): string {
-  const path = String(formData.get("returnPath") || "/admin/station");
-  return path === "/admin/station" || (path.startsWith("/admin/station?") && !/[\r\n#\\]/.test(path))
-    ? path
-    : "/admin/station";
-}
-
-function stationNotice(
-  message: string,
-  tone: "success" | "warning" | "error" = "success",
-  returnPath = "/admin/station",
-): never {
-  const separator = returnPath.includes("?") ? "&" : "?";
-  redirect(`${returnPath}${separator}notice=${encodeURIComponent(message)}&tone=${tone}`);
-}
 
 async function requireAdmin() {
   const headerStore = await headers();
@@ -46,83 +34,116 @@ function optionalDate(value: FormDataEntryValue | null): string | null {
   return Number.isFinite(date.getTime()) ? date.toISOString() : null;
 }
 
-export async function saveAnnouncementAction(formData: FormData) {
+function stationError(error: unknown, fallback: string): string {
+  if (error instanceof StationInputError) return error.message;
+  console.error(fallback, error);
+  return fallback;
+}
+
+export async function saveAnnouncementInlineAction(
+  formData: FormData,
+): Promise<MutationResult<{ announcement: Announcement }>> {
   await requireAdmin();
-  const returnPath = safeReturnPath(formData);
   try {
-    saveAnnouncement({
+    const announcement = saveAnnouncement({
       id: Number(formData.get("id") || 0),
       title: formData.get("title"),
       body: formData.get("body"),
       audience: formData.get("audience"),
       importance: formData.get("importance"),
-      status: formData.get("status"),
+      status: formData.get("status") === "archived" ? "archived" : "published",
       publishedAt: optionalDate(formData.get("publishedAt")),
       expiresAt: optionalDate(formData.get("expiresAt")),
     });
-  } catch (error) {
-    stationNotice(error instanceof StationInputError ? error.message : "公告保存失败", "warning", returnPath);
-  }
-  revalidatePath("/");
-  revalidatePath("/announcements");
-  revalidatePath("/messages");
-  revalidatePath("/admin/station");
-  stationNotice("公告已保存", "success", returnPath);
-}
-
-export async function deleteAnnouncementAction(formData: FormData) {
-  await requireAdmin();
-  const deleted = deleteAnnouncement(Number(formData.get("id")));
-  revalidatePath("/");
-  revalidatePath("/announcements");
-  revalidatePath("/messages");
-  revalidatePath("/admin/station");
-  stationNotice(deleted ? "公告已删除" : "公告已不存在", deleted ? "success" : "warning", "/admin/station?view=announcements");
-}
-
-export async function deleteStationThreadAction(formData: FormData) {
-  await requireAdmin();
-  const deleted = deleteStationThread(Number(formData.get("threadId")));
-  revalidatePath("/messages");
-  revalidatePath("/admin/station");
-  stationNotice(deleted ? "留言已删除" : "留言已不存在", deleted ? "success" : "warning", "/admin/station");
-}
-
-export async function deleteContentReportAction(formData: FormData) {
-  await requireAdmin();
-  const deleted = deleteContentReport(Number(formData.get("reportId")));
-  revalidatePath("/admin/station");
-  stationNotice(
-    deleted ? "举报记录已删除" : "举报记录已不存在",
-    deleted ? "success" : "warning",
-    safeReturnPath(formData),
-  );
-}
-
-export async function replyStationThreadAdminAction(formData: FormData) {
-  await requireAdmin();
-  const threadId = Number(formData.get("threadId"));
-  const returnPath = safeReturnPath(formData);
-  try {
-    const replied = addStationReply({ threadId, body: formData.get("body"), authorRole: "admin" });
+    revalidatePath("/");
+    revalidatePath("/announcements");
     revalidatePath("/messages");
-    revalidatePath("/admin/station");
-    stationNotice(replied ? "回复已发送" : "该留言已关闭", replied ? "success" : "warning", returnPath);
+    return mutationResult(
+      true,
+      announcement.status === "published" ? "公告已发布" : "公告已下线",
+      "success",
+      { announcement },
+    );
   } catch (error) {
-    stationNotice(error instanceof StationInputError ? error.message : "回复发送失败", "warning", returnPath);
+    return mutationResult(false, stationError(error, "公告保存失败"), "warning");
   }
 }
 
-export async function setStationThreadStatusAction(formData: FormData) {
+export async function deleteAnnouncementInlineAction(idValue: number): Promise<MutationResult> {
   await requireAdmin();
-  const threadId = Number(formData.get("threadId"));
-  const status = formData.get("status") === "open" ? "open" : "closed";
-  const changed = setStationThreadStatus(threadId, status);
+  const deleted = deleteAnnouncement(Math.floor(Number(idValue)));
+  if (!deleted) return mutationResult(false, "公告不存在", "warning");
+  revalidatePath("/");
+  revalidatePath("/announcements");
   revalidatePath("/messages");
-  revalidatePath("/admin/station");
-  stationNotice(
-    changed ? (status === "open" ? "留言已重新打开" : "留言已结束") : "留言不存在",
-    changed ? "success" : "warning",
-    safeReturnPath(formData),
+  return mutationResult(true, "公告已删除", "success");
+}
+
+export async function deleteStationThreadInlineAction(idValue: number): Promise<MutationResult> {
+  await requireAdmin();
+  const deleted = deleteStationThread(Math.floor(Number(idValue)));
+  if (!deleted) return mutationResult(false, "留言不存在", "warning");
+  revalidatePath("/messages");
+  return mutationResult(true, "留言已删除", "success");
+}
+
+export async function replyStationThreadInlineAction(
+  threadIdValue: number,
+  bodyValue: string,
+): Promise<MutationResult<{ messages: StationMessage[] }>> {
+  await requireAdmin();
+  const threadId = Math.floor(Number(threadIdValue));
+  try {
+    const replied = addStationReply({ threadId, body: bodyValue, authorRole: "admin" });
+    if (!replied) return mutationResult(false, "该留言已结束", "warning");
+    revalidatePath("/messages");
+    return mutationResult(true, "回复已发送", "success", {
+      messages: listStationMessages(threadId),
+    });
+  } catch (error) {
+    return mutationResult(false, stationError(error, "回复发送失败"), "warning");
+  }
+}
+
+export async function setStationThreadStatusInlineAction(
+  threadIdValue: number,
+  status: "open" | "closed",
+): Promise<MutationResult<{ status: "open" | "closed" }>> {
+  await requireAdmin();
+  const threadId = Math.floor(Number(threadIdValue));
+  if (!setStationThreadStatus(threadId, status)) {
+    return mutationResult(false, "留言不存在", "warning");
+  }
+  revalidatePath("/messages");
+  return mutationResult(
+    true,
+    status === "open" ? "留言已重新打开" : "留言已结束",
+    "success",
+    { status },
   );
+}
+
+export async function setContentReportStatusInlineAction(
+  reportIdValue: number,
+  status: "open" | "resolved",
+): Promise<MutationResult<{ status: "open" | "resolved" }>> {
+  const session = await requireAdmin();
+  const reportId = Math.floor(Number(reportIdValue));
+  if (!setContentReportStatus(reportId, status, session.username)) {
+    return mutationResult(false, "举报记录不存在", "warning");
+  }
+  return mutationResult(
+    true,
+    status === "resolved" ? "举报已处理" : "举报已重新打开",
+    "success",
+    { status },
+  );
+}
+
+export async function deleteContentReportInlineAction(idValue: number): Promise<MutationResult> {
+  await requireAdmin();
+  const deleted = deleteContentReport(Math.floor(Number(idValue)));
+  return deleted
+    ? mutationResult(true, "举报记录已删除", "success")
+    : mutationResult(false, "举报记录不存在", "warning");
 }

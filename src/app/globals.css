@@ -1845,8 +1845,7 @@ button.pageNumber {
   justify-content: flex-end;
 }
 
-.readerReportDialog footer button,
-.adminReportStatusButton {
+.readerReportDialog footer button {
   display: inline-flex;
   min-height: 32px;
   align-items: center;
@@ -8962,6 +8961,1981 @@ a.analyticsSearchTag:focus-visible {
   }
 }
 
+/* Marketplace, protected delivery, and media playback */
+.marketOverview,
+.marketProductPage,
+.marketOrderPage {
+  display: grid;
+  gap: 24px;
+}
+
+.marketPageHeader,
+.marketProductPage > header,
+.marketOrderPage > header {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.marketPageHeader h1,
+.marketProductPage h1,
+.marketOrderPage h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: 25px;
+  font-weight: 720;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.marketPageHeader p,
+.marketProductPage > header p,
+.marketOrderPage > header p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.marketBalances {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.marketBalances span,
+.marketProductPrice span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.marketBalances svg,
+.marketProductPrice svg,
+.marketProductMeta svg {
+  color: var(--accent);
+}
+
+.marketBalances strong {
+  color: var(--text);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.marketWalletTools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 0.38fr);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.marketExchangeLine {
+  display: grid;
+  min-width: 0;
+  min-height: 58px;
+  grid-template-columns: auto minmax(112px, 0.65fr) auto minmax(112px, 0.65fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+}
+
+.marketExchangeName {
+  display: grid;
+  min-width: 84px;
+  gap: 1px;
+}
+
+.marketExchangeName strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.marketExchangeName small {
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.marketExchangeValue {
+  display: flex;
+  min-width: 0;
+  min-height: 36px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px 9px;
+  background: color-mix(in srgb, var(--surface-strong) 40%, var(--surface));
+}
+
+.marketExchangeValue > span {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.marketExchangeValue input,
+.marketExchangeValue output {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 680;
+  font-variant-numeric: tabular-nums;
+}
+
+.marketExchangeValue svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.marketExchangeArrow {
+  color: var(--muted);
+}
+
+.marketCodeLine {
+  display: flex;
+  min-width: 0;
+  min-height: 58px;
+  align-items: center;
+  gap: 8px;
+  border-left: 1px solid var(--border);
+  padding: 10px 12px;
+  color: var(--accent);
+}
+
+.marketCodeLine label {
+  min-width: 0;
+  flex: 1;
+}
+
+.marketCodeLine input {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 7px 10px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.marketExchangeLine button,
+.marketCodeLine button,
+.marketPurchaseActions button,
+.marketOrderFile a,
+.marketOrderSecret button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 5px;
+  padding: 6px 11px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.marketExchangeLine button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.marketProductGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 10px;
+}
+
+.marketProductCard {
+  display: grid;
+  min-width: 0;
+  min-height: 110px;
+  grid-template-columns: 96px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 12px;
+  background: var(--surface);
+  transition: border-color 150ms ease, background-color 150ms ease, transform 150ms ease;
+}
+
+.marketProductCard:hover,
+.marketProductCard:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: color-mix(in srgb, var(--accent) 3%, var(--surface));
+  transform: translateY(-1px);
+}
+
+.marketProductVisual {
+  display: grid;
+  width: 96px;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  grid-row: 1 / 3;
+  place-items: center;
+  align-self: start;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface-strong));
+  color: var(--accent);
+}
+
+.marketProductVisual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.marketProductCopy {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 4px;
+}
+
+.marketProductCopy strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.marketProductCopy small {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.marketProductMeta {
+  display: flex;
+  grid-column: 2;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  color: var(--muted);
+}
+
+.marketProductMeta > small:first-child {
+  margin-right: auto;
+}
+
+.marketProductMeta > small.isEmpty,
+.marketStockLine.isEmpty {
+  color: #b33c32;
+}
+
+.marketProductMeta b {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.marketEmpty,
+.marketStatusText {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.marketRecentOrders {
+  display: grid;
+  gap: 8px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border);
+}
+
+.marketRecentOrders > header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+}
+
+.marketRecentOrders h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.marketRecentOrders > div,
+.marketOrderDeliveries {
+  display: grid;
+}
+
+.marketRecentOrders a,
+.marketOrderFile,
+.marketOrderEntitlement {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  padding: 10px 1px;
+}
+
+.marketRecentOrders a > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.marketRecentOrders strong,
+.marketOrderFile strong,
+.marketOrderEntitlement strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.marketRecentOrders small,
+.marketRecentOrders time,
+.marketOrderPage time {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.marketProductPage,
+.marketOrderPage {
+  width: min(860px, 100%);
+  margin: 8px auto 48px;
+}
+
+.marketProductPage > header.hasCover {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.marketProductHeroCover {
+  width: 200px;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+.marketProductPrice {
+  display: grid;
+  flex: 0 0 auto;
+  justify-items: end;
+  gap: 5px;
+}
+
+.marketProductPrice span {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.marketStockLine {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  margin: -10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.marketStockLine svg {
+  color: var(--accent);
+}
+
+.marketMarkdown {
+  color: color-mix(in srgb, var(--text) 88%, var(--muted));
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.marketMarkdown > :first-child {
+  margin-top: 0;
+}
+
+.marketMarkdown > :last-child {
+  margin-bottom: 0;
+}
+
+.marketMarkdown a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.marketMarkdown pre,
+.marketMarkdown code {
+  overflow-wrap: anywhere;
+  border-radius: 5px;
+  background: var(--surface-strong);
+}
+
+.marketMarkdown pre {
+  overflow-x: auto;
+  padding: 12px;
+}
+
+.marketDeliveryPreview,
+.marketPurchaseActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.marketDeliveryPreview span {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 9px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.marketDeliveryPreview svg {
+  color: var(--accent);
+}
+
+.marketPurchaseActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.marketOrderDeliveries {
+  gap: 14px;
+}
+
+.marketOrderSecret,
+.marketOrderDeliveries > .marketMarkdown {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 14px;
+  background: var(--surface);
+}
+
+.marketOrderSecret > header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.marketOrderSecret h2,
+.marketOrderDeliveries .marketMarkdown h2 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.marketOrderSecret code {
+  overflow-x: auto;
+  border-radius: 5px;
+  padding: 10px;
+  background: var(--surface-strong);
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.marketOrderSecret button {
+  width: fit-content;
+  background: var(--surface-strong);
+  color: var(--text);
+}
+
+.marketOrderFile > span,
+.marketOrderEntitlement {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.marketOrderFile svg,
+.marketOrderEntitlement svg {
+  color: var(--accent);
+}
+
+.adminWorkspace {
+  display: grid;
+  min-width: 0;
+  gap: 20px;
+}
+
+.adminWorkspaceBar {
+  display: flex;
+  min-width: 0;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.adminWorkspaceNav {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 24px;
+}
+
+.adminWorkspaceNav a {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 2px solid transparent;
+  padding: 0 1px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.adminWorkspaceNav a:hover,
+.adminWorkspaceNav a:focus-visible,
+.adminWorkspaceNav a.isActive {
+  color: var(--accent);
+}
+
+.adminWorkspaceNav a.isActive {
+  border-bottom-color: var(--accent);
+}
+
+.adminPrimaryLink,
+.adminCommerceHeaderActions a,
+.adminCommerceHeaderActions button,
+.adminCommerceStickyActions button,
+.adminDeliveryEditor footer button,
+.adminSecretStockEditor button,
+.adminMarketCodeTool button,
+.adminMarketFileUpload button,
+.adminMarketCoverControls button {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 5px;
+  padding: 6px 11px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.adminPrimaryLink {
+  margin-bottom: 7px;
+}
+
+.adminWorkspaceHeader {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.adminWorkspaceHeader h1,
+.adminCommerceProductHeader h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 720;
+}
+
+.adminWorkspaceHeader p,
+.adminCommerceProductHeader small {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.adminCommerceList,
+.adminCodeWorkspace {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
+
+.adminCommerceToolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.adminCompactTabs {
+  display: flex;
+  width: fit-content;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.adminCompactTabs button,
+.adminCompactTabs a {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 5px;
+  padding: 5px 9px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.adminCompactTabs button:hover,
+.adminCompactTabs button:focus-visible,
+.adminCompactTabs a:hover,
+.adminCompactTabs a:focus-visible,
+.adminCompactTabs .isActive {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--accent);
+}
+
+.adminCompactTabs span {
+  color: inherit;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.72;
+}
+
+.adminCommerceSearch {
+  display: flex;
+  width: min(240px, 100%);
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0 9px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.adminCommerceSearch:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 54%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.adminCommerceSearch input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.adminCommerceTableWrap {
+  min-width: 0;
+  overflow-x: auto;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.adminCommerceTable {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.adminCommerceTable th {
+  height: 38px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.adminCommerceTable td {
+  min-height: 52px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  padding: 10px 8px 10px 0;
+  color: var(--muted);
+  vertical-align: middle;
+}
+
+.adminCommerceTable tr:last-child td {
+  border-bottom: 0;
+}
+
+.adminCommerceTable tr:hover td {
+  background: color-mix(in srgb, var(--accent) 2.5%, transparent);
+}
+
+.adminCommerceProductName {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.adminCommerceProductName strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminCommerceProductName:hover strong,
+.adminCommerceProductName:focus-visible strong {
+  color: var(--accent);
+}
+
+.adminCommerceProductName small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.adminCommercePrice {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.adminCommercePrice svg {
+  color: var(--accent);
+}
+
+.adminStatusBadge {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  border-radius: 4px;
+  padding: 2px 7px;
+  background: color-mix(in srgb, var(--muted) 9%, transparent);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.adminStatusBadge.isLive {
+  background: color-mix(in srgb, #168052 11%, transparent);
+  color: #168052;
+}
+
+.adminStatusBadge.isPending {
+  background: color-mix(in srgb, #ad6b00 12%, transparent);
+  color: #9b6100;
+}
+
+.adminCommerceRowActions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.adminCommerceEmpty {
+  height: 92px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.adminWorkspaceEmpty {
+  min-height: 180px;
+  margin: 0;
+  border-block: 1px solid var(--border);
+  padding: 32px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.adminCommerceProductHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px 24px;
+}
+
+.adminCommerceProductHeader > div:first-child {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+}
+
+.adminCommerceHeaderActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.adminCommerceHeaderActions a {
+  background: transparent;
+  color: var(--muted);
+}
+
+.adminCommerceHeaderActions .adminSecondaryButton,
+.adminCommerceStickyActions .adminDangerButton {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+}
+
+.adminCommerceProductHeader > .inlineMutationNotice {
+  grid-column: 1 / -1;
+}
+
+.adminProductTabs {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.adminProductTabs a {
+  min-height: 38px;
+  border-bottom: 2px solid transparent;
+  padding: 8px 1px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.adminProductTabs a:hover,
+.adminProductTabs a:focus-visible,
+.adminProductTabs a.isActive {
+  color: var(--accent);
+}
+
+.adminProductTabs a.isActive {
+  border-bottom-color: var(--accent);
+}
+
+.adminCommerceForm,
+.adminAnnouncementComposer {
+  display: grid;
+  width: 100%;
+  max-width: 1040px;
+  gap: 0;
+}
+
+.adminProductInfoWorkspace {
+  display: grid;
+  width: 100%;
+  max-width: 1040px;
+}
+
+.adminCommerceFormSection {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  gap: 28px;
+  border-bottom: 1px solid var(--border);
+  padding: 22px 0;
+}
+
+.adminCommerceFormSection > header h2,
+.adminDeliveryList h2,
+.adminDeliveryEditor h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.adminCommerceFormSection > header p,
+.adminDeliveryEditor header p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.adminCommerceFieldGrid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+}
+
+.adminCommerceFieldGrid label,
+.adminMarketCodeTool label {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.adminCommerceFieldGrid label > span:first-child,
+.adminMarketCodeTool label > span:first-child {
+  color: var(--text);
+  font-weight: 650;
+}
+
+.adminCommerceFieldGrid label.isFull {
+  grid-column: 1 / -1;
+}
+
+.adminCommerceFieldGrid input,
+.adminCommerceFieldGrid textarea,
+.adminCommerceFieldGrid select,
+.adminMarketCodeTool input,
+.adminMarketCodeTool select,
+.adminMarketCodeOutput textarea,
+.adminSecretStockEditor textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 9px;
+  outline: 0;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.adminCommerceFieldGrid textarea,
+.adminMarketCodeOutput textarea,
+.adminSecretStockEditor textarea {
+  resize: vertical;
+  line-height: 1.65;
+}
+
+.adminCommerceFieldGrid input:focus,
+.adminCommerceFieldGrid textarea:focus,
+.adminCommerceFieldGrid select:focus,
+.adminMarketCodeTool input:focus,
+.adminMarketCodeTool select:focus,
+.adminMarketCodeOutput textarea:focus,
+.adminSecretStockEditor textarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 54%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.adminCommerceFieldGrid label > small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.adminMarketPriceSelector {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(120px, 170px);
+  align-items: end;
+  justify-content: start;
+  gap: 8px 14px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.adminMarketPriceRow {
+  grid-column: 1 / -1;
+}
+
+.adminMarketPriceSelector legend,
+.adminMarketPriceAmount > span {
+  margin-bottom: 5px;
+  padding: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.adminMarketPriceSelector legend {
+  grid-column: 1;
+}
+
+.adminMarketCurrencyOptions {
+  display: inline-grid;
+  grid-column: 1;
+  grid-row: 2;
+  grid-template-columns: repeat(2, minmax(84px, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.adminMarketCurrencyOptions label {
+  position: relative;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.adminMarketCurrencyOptions label + label {
+  border-left: 1px solid var(--border);
+}
+
+.adminMarketCurrencyOptions input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.adminMarketCurrencyOptions label > span {
+  display: inline-flex;
+  width: 100%;
+  min-height: 37px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.adminMarketCurrencyOptions label:hover > span,
+.adminMarketCurrencyOptions label:focus-within > span {
+  color: var(--text);
+}
+
+.adminMarketCurrencyOptions label:has(input:checked) > span {
+  background: color-mix(in srgb, var(--accent) 11%, var(--surface));
+  color: var(--accent);
+}
+
+.adminMarketCurrencyOptions label:focus-within {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.adminMarketPriceAmount {
+  display: grid;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: end;
+  gap: 0 !important;
+}
+
+.adminMarketPriceAmount input {
+  width: 100%;
+  min-height: 39px;
+}
+
+.adminCommerceStickyActions {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding: 10px 0;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.adminCommerceStickyActions > .inlineMutationNotice,
+.adminDeliveryEditor > footer > .inlineMutationNotice {
+  margin-right: auto;
+}
+
+@media (max-width: 520px) {
+  .adminMarketPriceSelector {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .adminMarketPriceSelector legend,
+  .adminMarketCurrencyOptions,
+  .adminMarketPriceAmount {
+    grid-column: 1;
+  }
+
+  .adminMarketPriceSelector legend {
+    grid-row: 1;
+  }
+
+  .adminMarketCurrencyOptions {
+    grid-row: 2;
+  }
+
+  .adminMarketPriceAmount {
+    grid-row: 3;
+  }
+}
+
+.adminPublishSteps {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  gap: 18px;
+}
+
+.adminPublishSteps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.adminPublishSteps li span {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  font-size: 10px;
+}
+
+.adminPublishSteps li.isActive {
+  color: var(--accent);
+}
+
+.adminPublishSteps li.isActive span {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.adminPublishStepsInline {
+  justify-self: end;
+}
+
+.adminDeliveryWorkspace {
+  display: grid;
+  min-height: 520px;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.adminDeliveryList {
+  display: grid;
+  align-content: start;
+  border-right: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-strong) 22%, var(--surface));
+}
+
+.adminDeliveryList > header {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  padding: 10px 12px;
+}
+
+.adminDeliveryList > header > div {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.adminDeliveryList > header small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.adminDeliveryList > header button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.adminDeliveryList > header button:hover,
+.adminDeliveryList > header button:focus-visible {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--accent);
+}
+
+.adminDeliveryList > button {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  padding: 11px 12px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  text-align: left;
+}
+
+.adminDeliveryList > button.isActive {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--accent);
+}
+
+.adminDeliveryList > button > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.adminDeliveryList > button strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminDeliveryList > button small {
+  display: block;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminDeliveryEditor {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  padding: 22px 24px;
+}
+
+.adminDeliveryEditor > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.adminDeliveryEditorHeading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.adminDeliveryEditorHeading > svg {
+  margin-top: 2px;
+  color: var(--accent);
+}
+
+.adminDeliveryEditorHeading > span {
+  min-width: 0;
+}
+
+.adminDeliveryEditor > footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.adminDeliveryEmpty {
+  margin: 0;
+  padding: 24px 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.adminDeliveryTypePicker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.adminDeliveryTypePicker > button {
+  display: grid;
+  min-width: 0;
+  min-height: 58px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 9px 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  text-align: left;
+}
+
+.adminDeliveryTypePicker > button:hover,
+.adminDeliveryTypePicker > button:focus-visible,
+.adminDeliveryTypePicker > button.isActive {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  color: var(--accent);
+}
+
+.adminDeliveryTypePicker > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.adminDeliveryTypePicker > button > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.adminDeliveryTypePicker strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.adminDeliveryTypePicker small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminDeliveryFields > .isFull {
+  grid-column: 1 / -1;
+}
+
+.adminDeliveryInlineHint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.adminMarketFilePicker,
+.adminSecretStockEditor {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--surface-strong) 32%, var(--surface));
+}
+
+.adminMarketFilePicker > label {
+  display: grid;
+  gap: 6px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.adminMarketSelectedFile {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+}
+
+.adminMarketSelectedFile > span {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.adminMarketSelectedFile strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminMarketSelectedFile small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.adminMarketFileUpload {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.adminMarketFileUpload > input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.adminMarketFileUpload > span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminMarketFilePicker progress {
+  width: 100%;
+  height: 4px;
+  accent-color: var(--accent);
+}
+
+.adminSecretStockEditor > header > span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.adminSecretStockEditor strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.adminSecretStockEditor header small,
+.adminSecretStockEditor footer small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.adminSecretStockEditor > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.adminCodeWorkspace .adminCommerceFormSection {
+  grid-template-columns: 1fr;
+  align-content: start;
+  gap: 16px;
+}
+
+.adminMarketCoverEditor {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+
+.adminMarketCoverPreview {
+  display: grid;
+  width: 180px;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface-strong) 45%, var(--surface));
+  color: var(--muted);
+}
+
+.adminMarketCoverPreview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.adminMarketCoverControls {
+  display: grid;
+  min-width: 0;
+  justify-items: start;
+  gap: 8px;
+}
+
+.adminMarketCoverControls > input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.adminMarketCoverControls > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.adminMarketCoverControls button.isDanger {
+  width: 32px;
+  padding-inline: 0;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: #b33c32;
+}
+
+.adminMarketCoverControls > small {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adminMarketCodeTool,
+.adminMarketCodeOutput {
+  display: grid;
+  gap: 10px;
+}
+
+.adminMarketCodeOutput button {
+  justify-self: end;
+}
+
+.adminMarketCodeTool > form {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(110px, 1fr)) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.adminMarketCodeTool > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.mediaVideoWatch {
+  display: grid;
+  gap: 16px;
+  scroll-margin-top: 76px;
+}
+
+.mediaVideoPlayerShell {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  background: #0c0f11;
+  isolation: isolate;
+}
+
+.mediaVideoPlayerShell .mediaVideoPlayer {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  object-fit: contain;
+}
+
+.mediaVideoStartLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  background: rgb(5 7 9 / 22%);
+}
+
+.mediaVideoStartLayer button {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 42%);
+  border-radius: 50%;
+  padding: 0;
+  background: rgb(10 13 15 / 76%);
+  color: #fff;
+  cursor: pointer;
+  backdrop-filter: blur(5px);
+}
+
+.mediaVideoStartLayer button:hover,
+.mediaVideoStartLayer button:focus-visible {
+  background: var(--accent);
+}
+
+.mediaVideoStartLayer button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.mediaVideoStartLayer p {
+  max-width: min(90%, 420px);
+  margin: 0;
+  border-radius: 5px;
+  padding: 5px 8px;
+  background: rgb(10 13 15 / 74%);
+  color: #fff;
+  font-size: 12px;
+  text-align: center;
+}
+
+.mediaTextDocument {
+  width: min(100%, 900px);
+  margin: 0 auto;
+  padding: 22px 0;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.8;
+  user-select: text;
+}
+
+.mediaTextDocument pre {
+  margin: 0;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mediaTextDocument.is-markdown > :first-child {
+  margin-top: 0;
+}
+
+.mediaTextDocument.is-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.mediaTextDocument.is-markdown a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.mediaTextDocument.is-markdown img {
+  max-width: 100%;
+  height: auto;
+}
+
+.mediaTextDocument.is-markdown pre,
+.mediaTextDocument.is-markdown code {
+  border-radius: 5px;
+  background: var(--surface-strong);
+}
+
+.mediaTextDocument.is-markdown pre {
+  overflow-x: auto;
+  padding: 12px;
+}
+
+.mediaTextPreviewState {
+  display: flex;
+  min-height: 120px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.mediaTextTruncated {
+  margin: 22px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.verifyEmailPanel .authPanelIcon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface-strong));
+  color: var(--accent);
+}
+
+.adminUserLevelRow {
+  grid-template-columns: 52px minmax(120px, 180px) minmax(110px, 145px) minmax(100px, 135px) minmax(0, 1fr);
+}
+
+.adminUserLevelRow > .adminUserLevelThreshold:nth-of-type(2) {
+  grid-column: 3;
+}
+
+.adminUserLevelRow > .adminUserLevelThreshold:nth-of-type(3) {
+  grid-column: 4;
+}
+
+.adminUserLevelPermissions {
+  grid-column: 5;
+}
+
+@media (max-width: 1040px) {
+  .adminMarketCodeTool > form {
+    grid-template-columns: repeat(3, minmax(110px, 1fr));
+  }
+
+  .adminMarketCodeTool > form button {
+    justify-self: start;
+  }
+
+  .adminUserLevelRow {
+    grid-template-columns: 48px minmax(130px, 1fr) minmax(110px, 140px) minmax(100px, 130px);
+  }
+
+  .adminUserLevelPermissions {
+    grid-column: 2 / -1;
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .marketPageHeader,
+  .marketProductPage > header,
+  .marketOrderPage > header {
+    display: grid;
+    gap: 12px;
+  }
+
+  .marketBalances {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .marketWalletTools {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .marketCodeLine {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .marketProductGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .marketProductPrice {
+    justify-items: start;
+  }
+
+  .marketProductPage > header.hasCover {
+    grid-template-columns: 150px minmax(0, 1fr);
+  }
+
+  .marketProductPage > header.hasCover .marketProductPrice {
+    grid-column: 2;
+  }
+
+  .marketProductHeroCover {
+    width: 150px;
+  }
+
+  .marketRecentOrders a,
+  .marketOrderFile {
+    align-items: flex-start;
+  }
+
+  .marketRecentOrders time {
+    flex: 0 0 auto;
+  }
+
+  .adminCommerceFormSection {
+    grid-template-columns: 140px minmax(0, 1fr);
+    gap: 20px;
+  }
+
+  .adminUserLevelRow {
+    grid-template-columns: 44px minmax(0, 1fr) minmax(100px, 128px);
+  }
+
+  .adminUserLevelName {
+    grid-column: 2;
+  }
+
+  .adminUserLevelRow > .adminUserLevelThreshold:nth-of-type(2),
+  .adminUserLevelRow > .adminUserLevelThreshold:nth-of-type(3) {
+    grid-column: 3;
+  }
+
+  .adminUserLevelRow > .adminUserLevelThreshold:nth-of-type(3) {
+    grid-row: 2;
+  }
+
+  .adminUserLevelPermissions {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 520px) {
+  .marketPageHeader h1,
+  .marketProductPage h1,
+  .marketOrderPage h1 {
+    font-size: 21px;
+  }
+
+  .marketExchangeLine {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  }
+
+  .marketExchangeName {
+    display: flex;
+    grid-column: 1 / -1;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .marketProductPage > header.hasCover {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .marketProductPage > header.hasCover .marketProductPrice {
+    grid-column: 1;
+  }
+
+  .marketProductHeroCover {
+    width: min(100%, 320px);
+  }
+
+  .marketRecentOrders a {
+    display: grid;
+  }
+
+  .marketRecentOrders time {
+    justify-self: start;
+  }
+
+  .adminWorkspaceBar {
+    align-items: flex-end;
+  }
+
+  .adminWorkspaceNav {
+    gap: 17px;
+  }
+
+  .adminWorkspaceHeader,
+  .adminCommerceToolbar {
+    display: grid;
+  }
+
+  .adminCommerceSearch {
+    width: 100%;
+  }
+
+  .adminCommerceProductHeader {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .adminCommerceHeaderActions {
+    justify-self: start;
+  }
+
+  .adminCommerceFormSection {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .adminCommerceFieldGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .adminCommerceFieldGrid label.isFull {
+    grid-column: auto;
+  }
+
+  .adminDeliveryWorkspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .adminDeliveryList {
+    max-height: 250px;
+    overflow-y: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .adminDeliveryEditor {
+    padding: 18px 14px;
+  }
+
+  .adminDeliveryTypePicker {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .adminMarketCodeTool > form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .adminMarketFileUpload {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .adminMarketFileUpload > span {
+    width: 100%;
+  }
+
+  .adminSecretStockEditor > footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .adminMarketCoverEditor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .adminMarketCoverPreview {
+    width: min(100%, 240px);
+  }
+
+  .adminUserLevelRow {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .adminUserLevelName,
+  .adminUserLevelRow > .adminUserLevelThreshold:nth-of-type(2),
+  .adminUserLevelRow > .adminUserLevelThreshold:nth-of-type(3) {
+    grid-column: 2;
+    grid-row: auto;
+  }
+
+  .adminUserLevelPermissions {
+    grid-column: 1 / -1;
+  }
+
+  .mediaVideoWatch {
+    scroll-margin-top: 62px;
+  }
+
+  .mediaVideoStartLayer button {
+    width: 46px;
+    height: 46px;
+  }
+
+  .mediaTextDocument {
+    padding: 14px 0;
+    font-size: 14px;
+  }
+}
+
 /* Frontend account workspace and soda economy */
 .headerMessageLink {
   position: relative;
@@ -9595,21 +11569,6 @@ a.analyticsSearchTag:focus-visible {
   width: 100%;
 }
 
-.adminStationReports {
-  display: grid;
-  gap: 12px;
-  padding: 16px;
-}
-
-.adminAnnouncementFields {
-  grid-template-columns: repeat(3, minmax(140px, 200px));
-  justify-content: start;
-}
-
-.adminAnnouncementFields .adminSelectControl {
-  width: 100%;
-}
-
 .accessCreateDisclosure,
 .accessRuleDisclosure {
   border: 1px solid var(--border);
@@ -9847,7 +11806,6 @@ a.analyticsSearchTag:focus-visible {
     align-items: flex-start;
   }
 
-  .adminAnnouncementFields,
   .adminUserGrowthFields,
   .adminBookBasicFields,
   .accessRuleEditor,
@@ -9925,26 +11883,6 @@ a.analyticsSearchTag:focus-visible {
   }
 }
 
-.adminReportFilters {
-  display: inline-flex;
-  gap: 4px;
-  margin-bottom: 14px;
-  border-bottom: 1px solid var(--border);
-}
-
-.adminReportFilters a {
-  padding: 7px 10px;
-  border-bottom: 2px solid transparent;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.adminReportFilters a.isActive {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
 .adminReportsTable td:first-child {
   max-width: 260px;
 }
@@ -9964,12 +11902,6 @@ a.analyticsSearchTag:focus-visible {
   color: var(--muted);
   line-height: 1.5;
   white-space: normal;
-}
-
-.adminReportStatusButton.isResolved {
-  border-color: var(--border);
-  background: transparent;
-  color: var(--muted);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -10267,9 +12199,25 @@ a.analyticsSearchTag:focus-visible {
   padding-left: 12px;
 }
 
-.stationMessageList small {
+.stationMessageList article > header {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stationMessageList article > header strong {
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 680;
+}
+
+.stationMessageList article > header time,
+.stationMessageList article > header small {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 .stationMessageList p,
@@ -10290,8 +12238,6 @@ a.analyticsSearchTag:focus-visible {
 .stationReplyForm textarea,
 .stationNewThread input,
 .stationNewThread textarea,
-.adminAnnouncementEditor input,
-.adminAnnouncementEditor textarea,
 .accessRuleEditor input,
 .accessPolicyEditor input {
   width: 100%;
@@ -10304,8 +12250,7 @@ a.analyticsSearchTag:focus-visible {
 }
 
 .stationReplyForm textarea,
-.stationNewThread textarea,
-.adminAnnouncementEditor textarea {
+.stationNewThread textarea {
   resize: vertical;
 }
 
@@ -10325,6 +12270,59 @@ a.analyticsSearchTag:focus-visible {
   cursor: pointer;
   font-size: 13px;
   font-weight: 680;
+}
+
+.stationConversation .stationMessageList {
+  gap: 12px;
+  border: 0;
+  padding: 16px 0;
+}
+
+.stationConversation .stationMessageList article {
+  width: fit-content;
+  max-width: min(82%, 680px);
+  gap: 6px;
+  border: 0;
+  border-radius: 7px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--surface-strong) 54%, var(--surface));
+}
+
+.stationConversation .stationMessageList article.isAdmin {
+  justify-self: start;
+  border: 0;
+  padding: 10px 12px;
+}
+
+.stationConversation .stationMessageList article.isUser {
+  justify-self: end;
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+}
+
+.stationConversation .stationReplyForm {
+  grid-template-columns: minmax(0, 1fr) 36px;
+  align-items: end;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 6px;
+  background: var(--surface);
+}
+
+.stationConversation .stationReplyForm textarea {
+  min-height: 64px;
+  border: 0;
+  padding: 7px 8px;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.stationConversation .stationReplyForm button {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
 }
 
 .stationNewThread {
@@ -10353,7 +12351,6 @@ a.analyticsSearchTag:focus-visible {
 }
 
 .stationNewThread label,
-.adminAnnouncementEditor label,
 .accessRuleEditor label,
 .accessPolicyEditor label {
   display: grid;
@@ -10380,13 +12377,11 @@ a.analyticsSearchTag:focus-visible {
   font-size: 16px;
 }
 
-.accessAdminPanel,
-.stationAdminPanel {
+.accessAdminPanel {
   padding: 0;
 }
 
-.accessAdminPanel > .adminPanelHeader,
-.stationAdminPanel > .adminPanelHeader {
+.accessAdminPanel > .adminPanelHeader {
   margin: 0;
   padding: 16px;
   border-bottom: 1px solid var(--border);
@@ -10570,91 +12565,210 @@ a.analyticsSearchTag:focus-visible {
   font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
 }
 
-.adminStationLayout,
-.adminAnnouncementLayout {
+.adminInboxWorkspace {
   display: grid;
-  grid-template-columns: minmax(190px, 260px) minmax(0, 1fr);
-  min-height: 540px;
+  min-height: 580px;
+  grid-template-columns: minmax(220px, 290px) minmax(0, 1fr);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--surface);
 }
 
-.adminStationThreadList,
-.adminAnnouncementList {
+.adminStationThreadList {
   display: grid;
   align-content: start;
+  max-height: 680px;
+  overflow-y: auto;
   border-right: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-strong) 22%, var(--surface));
+  scrollbar-width: thin;
 }
 
-.adminStationThreadList > a,
-.adminAnnouncementList > a {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 8px;
+.adminStationThreadList > header {
+  display: flex;
+  min-height: 50px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   border-bottom: 1px solid var(--border);
-  padding: 11px 13px;
+  padding: 10px 12px;
+}
+
+.adminStationThreadList > header strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.adminStationThreadList > header small {
+  margin: 0;
+  font-size: 10px;
 }
 
 .adminStationThreadList > a {
+  display: grid;
+  min-width: 0;
   grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  border-bottom: 1px solid var(--border);
+  padding: 11px 12px;
 }
 
-.adminStationThreadList > a.isActive,
-.adminAnnouncementList > a.isActive {
+.adminStationThreadList > a:hover,
+.adminStationThreadList > a:focus-visible,
+.adminStationThreadList > a.isActive {
   background: color-mix(in srgb, var(--accent) 7%, transparent);
   color: var(--accent);
+  box-shadow: inset 2px 0 var(--accent);
 }
 
-.adminStationThreadList strong,
-.adminAnnouncementList strong {
+.adminStationThreadList > a > span:nth-child(2) {
+  min-width: 0;
+}
+
+.adminStationThreadList strong {
   display: block;
   overflow: hidden;
-  font-size: 13px;
+  color: var(--text);
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.adminStationThreadList small,
-.adminAnnouncementList small {
+.adminStationThreadList small {
   display: block;
   margin-top: 3px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
 }
 
-.adminStationConversation,
-.adminAnnouncementEditor {
+.adminStationConversation {
+  display: grid;
   min-width: 0;
-  padding: 16px;
+  align-content: start;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 0;
 }
 
 .adminStationConversation > header {
   display: flex;
+  min-width: 0;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  padding: 14px 16px;
 }
 
-.adminStationConversation h2,
-.adminStationConversation h3 {
+.adminStationConversationTitle {
+  min-width: 0;
+}
+
+.adminStationConversationTitle h2 {
+  min-width: 0;
   margin: 0;
-  font-size: 17px;
+  overflow: hidden;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.adminAnnouncementEditor {
+.adminStationConversationTitle small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.adminStationConversation .stationMessageList {
   display: grid;
   align-content: start;
   gap: 12px;
+  overflow-y: auto;
+  border: 0;
+  padding: 18px;
+  background: color-mix(in srgb, var(--surface-strong) 14%, var(--surface));
 }
 
-.adminAnnouncementEditor > h3 {
+.adminStationConversation .stationMessageList article {
+  width: fit-content;
+  max-width: min(78%, 680px);
+  gap: 6px;
+  border: 0;
+  border-radius: 7px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--surface-strong) 52%, var(--surface));
+}
+
+.adminStationConversation .stationMessageList article.isAdmin {
+  justify-self: end;
+  border: 0;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+}
+
+.adminStationConversation .stationMessageList p {
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.adminStationConversation .stationReplyForm {
+  grid-template-columns: minmax(0, 1fr) 36px;
+  align-items: end;
+  gap: 6px;
+  border-top: 1px solid var(--border);
+  padding: 12px 16px;
+  background: var(--surface);
+}
+
+.adminStationConversation .stationReplyForm textarea {
+  min-height: 66px;
+  resize: vertical;
+}
+
+.adminStationConversation .stationReplyForm button {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+}
+
+.adminStationThreadActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.adminConversationClosed {
   margin: 0;
-  font-size: 17px;
+  border-top: 1px solid var(--border);
+  padding: 14px 16px;
+  color: var(--muted);
+  font-size: 11px;
 }
 
-.adminAnnouncementFields {
+.adminStationEmpty {
   display: grid;
-  grid-template-columns: repeat(3, minmax(110px, 1fr));
-  gap: 10px;
+  min-height: 260px;
+  place-content: center;
+  gap: 4px;
+  border-block: 1px solid var(--border);
+  text-align: center;
+}
+
+.adminStationEmpty strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.adminStationEmpty small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.adminAnnouncementComposer {
+  max-width: 980px;
 }
 
 .adminTagTreePreview .tagChip.is-public {
@@ -10727,18 +12841,21 @@ a.analyticsSearchTag:focus-visible {
     gap: 12px;
   }
 
-  .adminStationLayout,
-  .adminAnnouncementLayout {
+  .adminInboxWorkspace {
     grid-template-columns: minmax(0, 1fr);
     min-height: 0;
   }
 
-  .adminStationThreadList,
-  .adminAnnouncementList {
+  .adminStationThreadList {
     max-height: 260px;
     overflow-y: auto;
     border-right: 0;
     border-bottom: 1px solid var(--border);
+  }
+
+  .adminStationConversation {
+    min-height: 420px;
+    padding: 0;
   }
 
   .accessPolicyEditor {
@@ -10805,8 +12922,7 @@ a.analyticsSearchTag:focus-visible {
   }
 
   .accessRuleEditor,
-  .accessPolicyEditor,
-  .adminAnnouncementFields {
+  .accessPolicyEditor {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -12391,5 +14507,81 @@ a.analyticsSearchTag:focus-visible {
   .accessPolicyActions,
   .accessRuleBuilder .accessRuleActions {
     flex-wrap: wrap;
+  }
+}
+
+/* Keep both level thresholds compact after all legacy responsive overrides. */
+.adminUserLevelRow {
+  grid-template-columns: 52px minmax(120px, 180px) minmax(110px, 145px) minmax(100px, 135px) minmax(0, 1fr);
+}
+
+.adminUserLevelThreshold.isSoda {
+  grid-column: 3;
+}
+
+.adminUserLevelThreshold.isVideo {
+  grid-column: 4;
+}
+
+.adminUserLevelPermissions {
+  grid-column: 5;
+}
+
+@media (max-width: 1040px) {
+  .adminUserLevelRow {
+    grid-template-columns: 48px minmax(130px, 1fr) minmax(110px, 140px) minmax(100px, 130px);
+  }
+
+  .adminUserLevelThreshold.isSoda {
+    grid-column: 3;
+  }
+
+  .adminUserLevelThreshold.isVideo {
+    grid-column: 4;
+  }
+
+  .adminUserLevelPermissions {
+    grid-column: 2 / -1;
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .adminUserLevelRow {
+    grid-template-columns: 44px minmax(0, 1fr) minmax(100px, 128px);
+  }
+
+  .adminUserLevelName {
+    grid-column: 2;
+  }
+
+  .adminUserLevelThreshold.isSoda,
+  .adminUserLevelThreshold.isVideo {
+    grid-column: 3;
+  }
+
+  .adminUserLevelThreshold.isVideo {
+    grid-row: 2;
+  }
+
+  .adminUserLevelPermissions {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 520px) {
+  .adminUserLevelRow {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .adminUserLevelName,
+  .adminUserLevelThreshold.isSoda,
+  .adminUserLevelThreshold.isVideo {
+    grid-column: 2;
+    grid-row: auto;
+  }
+
+  .adminUserLevelPermissions {
+    grid-column: 1 / -1;
   }
 }

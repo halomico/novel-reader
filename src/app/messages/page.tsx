@@ -110,7 +110,10 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
             <div className="stationMessageList">
               {messages.map((message) => (
                 <article className={message.authorRole === "admin" ? "isAdmin" : "isUser"} key={message.id}>
-                  <small>{message.authorRole === "admin" ? stationDisplayName : tr("我")} · {new Date(message.createdAt).toLocaleString(locale === "zh-Hant" ? "zh-TW" : "zh-CN", { hour12: false })}</small>
+                  <header>
+                    <strong>{message.authorRole === "admin" ? stationDisplayName : tr("我")}</strong>
+                    <time>{new Date(message.createdAt).toLocaleString(locale === "zh-Hant" ? "zh-TW" : "zh-CN", { hour12: false })}</time>
+                  </header>
                   <p>{message.body}</p>
                 </article>
               ))}
@@ -120,9 +123,9 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
                 <input name="threadId" type="hidden" value={selectedThread.id} />
                 <label>
                   <span className="srOnly">{tr("回复")}</span>
-                  <textarea name="body" rows={3} maxLength={4000} placeholder={tr("补充说明")} required />
+                  <textarea name="body" rows={3} maxLength={4000} placeholder={tr("回复")} required />
                 </label>
-                <button type="submit"><Send size={15} aria-hidden="true" />{tr("发送")}</button>
+                <button type="submit" title={tr("发送")} aria-label={tr("发送")}><Send size={16} aria-hidden="true" /></button>
               </form>
             ) : null}
           </div>

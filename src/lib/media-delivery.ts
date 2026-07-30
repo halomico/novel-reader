@@ -91,7 +91,7 @@ export function resolveMediaDeliveryUri(uri: string): ResolvedMediaDelivery | nu
     return null;
   }
   const download = url.searchParams.get("download") === "1";
-  if ((asset.kind === "file") !== download) {
+  if (download && asset.kind !== "file" && asset.kind !== "video") {
     return null;
   }
   return { asset, download };

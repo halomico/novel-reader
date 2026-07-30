@@ -7,19 +7,22 @@ import { DEFAULT_LOCALE, normalizeLocale, type AppLocale } from "./locale";
 import { recordReadingOpen } from "./reading-progress";
 import { getUserLevelForExperience } from "./user-levels";
 
-export type UserStatus = "active" | "disabled";
+export type UserStatus = "active" | "disabled" | "pending";
 export type UserRole = "user" | "admin";
 
 export type UserProfile = {
   id: number;
   username: string;
   displayName: string;
+  email: string | null;
+  emailVerifiedAt: string | null;
   avatarPath: string | null;
   status: UserStatus;
   role: UserRole;
   trustLevel: number;
   sodaBalance: number;
   sodaExperience: number;
+  cookieBalance: number;
   localePreference: AppLocale;
   readingHistoryEnabled: boolean;
   registrationIp: string | null;
@@ -78,12 +81,15 @@ type UserRow = {
   id: number;
   username: string;
   display_name: string;
+  email: string | null;
+  email_verified_at: string | null;
   avatar_path: string | null;
   status: string;
   role: string;
   trust_level: number;
   soda_balance: number;
   soda_experience: number;
+  cookie_balance: number;
   locale_preference: string;
   reading_history_enabled: number;
   registration_ip: string | null;
@@ -130,17 +136,32 @@ export function validateDisplayName(value: string): string | null {
   return null;
 }
 
+export function normalizeEmail(value: string): string {
+  return value.trim().toLocaleLowerCase("en-US");
+}
+
+export function validateEmail(value: string): string | null {
+  const email = normalizeEmail(value);
+  if (email.length < 3 || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return "请输入有效的邮箱地址";
+  }
+  return null;
+}
+
 function toUserProfile(row: UserRow): UserProfile {
   return {
     id: row.id,
     username: row.username,
     displayName: row.display_name,
+    email: row.email || null,
+    emailVerifiedAt: row.email_verified_at || null,
     avatarPath: row.avatar_path,
-    status: row.status === "disabled" ? "disabled" : "active",
+    status: row.status === "disabled" ? "disabled" : row.status === "pending" ? "pending" : "active",
     role: row.role === "admin" ? "admin" : "user",
     trustLevel: Math.min(Math.max(Math.floor(row.trust_level || 1), 1), 6),
     sodaBalance: Math.max(Math.floor(row.soda_balance || 0), 0),
     sodaExperience: Math.max(Math.floor(row.soda_experience || 0), 0),
+    cookieBalance: Math.max(Math.floor(row.cookie_balance || 0), 0),
     localePreference: normalizeLocale(row.locale_preference),
     readingHistoryEnabled: row.reading_history_enabled !== 0,
     registrationIp: row.registration_ip,
@@ -154,7 +175,8 @@ function toUserProfile(row: UserRow): UserProfile {
 export function getUserById(id: number): UserProfile | null {
   const row = getDb()
     .prepare(
-      `SELECT id, username, display_name, avatar_path, status, role, trust_level, soda_balance, soda_experience,
+      `SELECT id, username, display_name, email, email_verified_at, avatar_path, status, role,
+              trust_level, soda_balance, soda_experience, cookie_balance,
               locale_preference, reading_history_enabled, registration_ip,
               created_at, updated_at, last_login_at, last_login_ip
        FROM users
@@ -168,7 +190,8 @@ export function getUserById(id: number): UserProfile | null {
 export function getUserPasswordRow(username: string): (UserRow & { password_hash: string }) | null {
   const row = getDb()
     .prepare(
-      `SELECT id, username, display_name, password_hash, avatar_path, status, role, trust_level, soda_balance, soda_experience,
+      `SELECT id, username, display_name, email, email_verified_at, password_hash, avatar_path, status, role,
+              trust_level, soda_balance, soda_experience, cookie_balance,
               locale_preference, reading_history_enabled, registration_ip,
               created_at, updated_at, last_login_at, last_login_ip
        FROM users
@@ -183,33 +206,40 @@ export function createUserRecord(params: {
   username: string;
   displayName: string;
   passwordHash: string;
+  email?: string | null;
+  emailVerifiedAt?: string | null;
   status?: UserStatus;
   role?: UserRole;
   sodaBalance?: number;
   sodaExperience?: number;
+  cookieBalance?: number;
   localePreference?: AppLocale;
   registrationIp?: string | null;
 }): number {
   const sodaBalance = Math.max(Math.floor(params.sodaBalance || 0), 0);
   const sodaExperience = Math.max(Math.floor(params.sodaExperience ?? sodaBalance), sodaBalance, 0);
+  const cookieBalance = Math.max(Math.floor(params.cookieBalance || 0), 0);
   const info = getDb()
     .prepare(
       `INSERT INTO users (
-         username, display_name, password_hash, status, role,
-         trust_level, soda_balance, soda_experience, locale_preference,
+         username, display_name, email, email_verified_at, password_hash, status, role,
+         trust_level, soda_balance, soda_experience, cookie_balance, locale_preference,
          registration_ip, updated_at
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
     )
     .run(
       normalizeUsername(params.username),
       params.displayName.trim(),
+      params.email ? normalizeEmail(params.email) : null,
+      params.emailVerifiedAt || null,
       params.passwordHash,
       params.status || "active",
       params.role || "user",
       getUserLevelForExperience(sodaExperience),
       sodaBalance,
       sodaExperience,
+      cookieBalance,
       normalizeLocale(params.localePreference || DEFAULT_LOCALE),
       params.registrationIp || null,
     );
@@ -229,16 +259,17 @@ export function listUsers(params: { page?: number; q?: string; pageSize?: number
   const pageSize = Math.min(Math.max(Math.floor(params.pageSize || 30), 1), 200);
   const query = (params.q || "").trim();
   const where = query
-    ? "WHERE username LIKE ? OR display_name LIKE ? OR COALESCE(last_login_ip, '') LIKE ? OR COALESCE(registration_ip, '') LIKE ?"
+    ? "WHERE username LIKE ? OR display_name LIKE ? OR COALESCE(email, '') LIKE ? OR COALESCE(last_login_ip, '') LIKE ? OR COALESCE(registration_ip, '') LIKE ?"
     : "";
-  const bind = query ? [`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`] : [];
+  const bind = query ? [`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`] : [];
   const total = db.prepare(`SELECT COUNT(*) AS count FROM users ${where}`).get(...bind) as { count: number };
   const totalPages = Math.max(1, Math.ceil(total.count / pageSize));
   const page = normalizePage(params.page || 1, totalPages);
   const offset = (page - 1) * pageSize;
   const users = db
     .prepare(
-      `SELECT id, username, display_name, avatar_path, status, role, trust_level, soda_balance, soda_experience,
+      `SELECT id, username, display_name, email, email_verified_at, avatar_path, status, role,
+              trust_level, soda_balance, soda_experience, cookie_balance,
               locale_preference, reading_history_enabled, registration_ip,
               created_at, updated_at, last_login_at, last_login_ip
        FROM users

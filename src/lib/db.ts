@@ -355,6 +355,267 @@ function migrateUserEconomy(db: DatabaseSync) {
   }
 }
 
+function migrateMarketplaceAndRegistration(db: DatabaseSync) {
+  addColumnIfMissing(db, "users", "email", "email TEXT");
+  addColumnIfMissing(db, "users", "email_verified_at", "email_verified_at TEXT");
+  addColumnIfMissing(db, "users", "cookie_balance", "cookie_balance INTEGER NOT NULL DEFAULT 0 CHECK(cookie_balance >= 0)");
+  addColumnIfMissing(
+    db,
+    "user_levels",
+    "video_concurrency_limit",
+    "video_concurrency_limit INTEGER NOT NULL DEFAULT 1 CHECK(video_concurrency_limit BETWEEN 0 AND 20)",
+  );
+
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
+      ON users(email COLLATE NOCASE)
+      WHERE email IS NOT NULL AND email <> '';
+
+    CREATE TABLE IF NOT EXISTS user_currency_transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      currency TEXT NOT NULL CHECK(currency IN ('soda', 'cookie')),
+      amount INTEGER NOT NULL,
+      balance_after INTEGER NOT NULL CHECK(balance_after >= 0),
+      source TEXT NOT NULL,
+      reference_key TEXT,
+      note TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_user_currency_transactions_user_time
+      ON user_currency_transactions(user_id, created_at DESC, id DESC);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_user_currency_transactions_reference
+      ON user_currency_transactions(reference_key)
+      WHERE reference_key IS NOT NULL;
+
+    CREATE TABLE IF NOT EXISTS market_products (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slug TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      title TEXT NOT NULL,
+      summary TEXT NOT NULL DEFAULT '',
+      description TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'published', 'archived')),
+      min_level INTEGER NOT NULL DEFAULT 1 CHECK(min_level BETWEEN 1 AND 6),
+      price_cookie INTEGER CHECK(price_cookie IS NULL OR price_cookie >= 0),
+      price_soda INTEGER CHECK(price_soda IS NULL OR price_soda >= 0),
+      purchase_limit_per_user INTEGER NOT NULL DEFAULT 1 CHECK(purchase_limit_per_user >= 0),
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      cover_key TEXT,
+      cover_storage_node_id TEXT,
+      deleted_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_market_products_visible
+      ON market_products(status, sort_order, updated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS market_assets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id INTEGER NOT NULL,
+      storage_node_id TEXT,
+      file_name TEXT NOT NULL,
+      stored_name TEXT NOT NULL,
+      mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+      size_bytes INTEGER NOT NULL CHECK(size_bytes > 0),
+      mtime_ms INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(storage_node_id, stored_name),
+      FOREIGN KEY(product_id) REFERENCES market_products(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_market_assets_product
+      ON market_assets(product_id, id);
+
+    CREATE TABLE IF NOT EXISTS market_delivery_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id INTEGER NOT NULL,
+      kind TEXT NOT NULL CHECK(kind IN ('text', 'secret', 'file', 'entitlement')),
+      title TEXT NOT NULL DEFAULT '',
+      content TEXT NOT NULL DEFAULT '',
+      market_asset_id INTEGER,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(product_id) REFERENCES market_products(id) ON DELETE CASCADE,
+      FOREIGN KEY(market_asset_id) REFERENCES market_assets(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_market_delivery_items_product
+      ON market_delivery_items(product_id, sort_order, id);
+
+    CREATE TABLE IF NOT EXISTS market_secret_inventory (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id INTEGER NOT NULL,
+      ciphertext TEXT NOT NULL,
+      iv TEXT NOT NULL,
+      auth_tag TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'available' CHECK(status IN ('available', 'delivered', 'disabled')),
+      order_id INTEGER,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      delivered_at TEXT,
+      FOREIGN KEY(product_id) REFERENCES market_products(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_market_secret_inventory_available
+      ON market_secret_inventory(product_id, status, id);
+
+    CREATE TABLE IF NOT EXISTS market_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_no TEXT NOT NULL UNIQUE,
+      user_id INTEGER NOT NULL,
+      product_id INTEGER,
+      product_title TEXT NOT NULL,
+      currency TEXT NOT NULL CHECK(currency IN ('soda', 'cookie')),
+      amount INTEGER NOT NULL CHECK(amount >= 0),
+      status TEXT NOT NULL DEFAULT 'paid' CHECK(status IN ('paid', 'fulfilled', 'cancelled', 'refunded')),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      fulfilled_at TEXT,
+      admin_deleted_at TEXT,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(product_id) REFERENCES market_products(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_market_orders_user_time
+      ON market_orders(user_id, created_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_market_orders_status_time
+      ON market_orders(status, created_at DESC, id DESC);
+
+    CREATE TABLE IF NOT EXISTS market_order_deliveries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      kind TEXT NOT NULL CHECK(kind IN ('text', 'secret', 'file', 'entitlement')),
+      title TEXT NOT NULL DEFAULT '',
+      content TEXT NOT NULL DEFAULT '',
+      market_asset_id INTEGER,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(order_id) REFERENCES market_orders(id) ON DELETE CASCADE,
+      FOREIGN KEY(market_asset_id) REFERENCES market_assets(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_market_order_deliveries_order
+      ON market_order_deliveries(order_id, sort_order, id);
+
+    CREATE TABLE IF NOT EXISTS user_entitlements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      resource_type TEXT NOT NULL,
+      resource_id TEXT NOT NULL,
+      rights TEXT NOT NULL DEFAULT '[]',
+      source_order_id INTEGER,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      expires_at TEXT,
+      UNIQUE(user_id, resource_type, resource_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(source_order_id) REFERENCES market_orders(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS redemption_code_batches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      reward_type TEXT NOT NULL CHECK(reward_type IN ('cookie', 'soda', 'product')),
+      reward_amount INTEGER NOT NULL DEFAULT 0 CHECK(reward_amount >= 0),
+      product_id INTEGER,
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'disabled')),
+      expires_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(product_id) REFERENCES market_products(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS redemption_codes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      batch_id INTEGER NOT NULL,
+      code_hash TEXT NOT NULL UNIQUE,
+      code_hint TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'available' CHECK(status IN ('available', 'redeemed', 'disabled')),
+      redeemed_by INTEGER,
+      redeemed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(batch_id) REFERENCES redemption_code_batches(id) ON DELETE CASCADE,
+      FOREIGN KEY(redeemed_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_redemption_codes_batch_status
+      ON redemption_codes(batch_id, status, id);
+
+    CREATE TABLE IF NOT EXISTS registration_invites (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code_hash TEXT NOT NULL UNIQUE,
+      code_hint TEXT NOT NULL,
+      label TEXT NOT NULL DEFAULT '',
+      max_uses INTEGER NOT NULL DEFAULT 1 CHECK(max_uses > 0),
+      used_count INTEGER NOT NULL DEFAULT 0 CHECK(used_count >= 0),
+      enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+      expires_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS email_verification_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at INTEGER NOT NULL,
+      consumed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_user
+      ON email_verification_tokens(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_email_verification_tokens_expiry
+      ON email_verification_tokens(expires_at);
+
+    CREATE TABLE IF NOT EXISTS video_playback_sessions (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      media_id INTEGER NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at INTEGER NOT NULL,
+      last_seen_at INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_video_playback_sessions_user_active
+      ON video_playback_sessions(user_id, expires_at, last_seen_at);
+    CREATE INDEX IF NOT EXISTS idx_video_playback_sessions_expiry
+      ON video_playback_sessions(expires_at);
+  `);
+  addColumnIfMissing(
+    db,
+    "market_products",
+    "purchase_limit_per_user",
+    "purchase_limit_per_user INTEGER NOT NULL DEFAULT 1 CHECK(purchase_limit_per_user >= 0)",
+  );
+  addColumnIfMissing(db, "market_products", "cover_key", "cover_key TEXT");
+  addColumnIfMissing(db, "market_products", "cover_storage_node_id", "cover_storage_node_id TEXT");
+  addColumnIfMissing(db, "market_products", "deleted_at", "deleted_at TEXT");
+  addColumnIfMissing(db, "market_orders", "admin_deleted_at", "admin_deleted_at TEXT");
+
+  const currencyMigrationKey = "currency_transactions_v1";
+  if (!db.prepare("SELECT 1 AS found FROM app_metadata WHERE key = ?").get(currencyMigrationKey)) {
+    db.exec("BEGIN");
+    try {
+      db.exec(`
+        INSERT OR IGNORE INTO user_currency_transactions (
+          user_id, currency, amount, balance_after, source, reference_key, note, created_at
+        )
+        SELECT user_id, 'soda', amount, balance_after, source, 'legacy-soda:' || id, note, created_at
+        FROM user_soda_transactions;
+      `);
+      db.prepare("INSERT INTO app_metadata (key, value) VALUES (?, '1')").run(currencyMigrationKey);
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+}
+
 function migrateNovelRecommendations(db: DatabaseSync) {
   const novelColumns = db.prepare("PRAGMA table_info(novels)").all() as Array<{ name: string }>;
   const addedRecommendCount = !novelColumns.some((column) => column.name === "recommend_count");
@@ -484,11 +745,11 @@ function seedUserLevels(db: DatabaseSync) {
   const defaults = [
     [0, "访客", 0, []],
     [1, "初见", 0, ["content_report", "station_message", "novel_feedback"]],
-    [2, "熟客", 50, ["content_report", "station_message", "novel_feedback", "advanced_search"]],
-    [3, "常驻", 200, ["content_report", "station_message", "novel_feedback", "advanced_search"]],
-    [4, "活跃", 500, ["content_report", "station_message", "novel_feedback", "advanced_search"]],
-    [5, "资深", 1200, ["content_report", "station_message", "novel_feedback", "advanced_search"]],
-    [6, "核心", 2500, ["content_report", "station_message", "novel_feedback", "advanced_search"]],
+    [2, "熟客", 50, ["content_report", "station_message", "novel_feedback", "advanced_search", "market_access", "market_purchase", "video_download"]],
+    [3, "常驻", 200, ["content_report", "station_message", "novel_feedback", "advanced_search", "market_access", "market_purchase", "video_download"]],
+    [4, "活跃", 500, ["content_report", "station_message", "novel_feedback", "advanced_search", "market_access", "market_purchase", "video_download"]],
+    [5, "资深", 1200, ["content_report", "station_message", "novel_feedback", "advanced_search", "market_access", "market_purchase", "video_download"]],
+    [6, "核心", 2500, ["content_report", "station_message", "novel_feedback", "advanced_search", "market_access", "market_purchase", "video_download"]],
   ] as const;
   const insert = db.prepare(
     "INSERT OR IGNORE INTO user_levels (level, name, soda_required, permissions) VALUES (?, ?, ?, ?)",
@@ -508,6 +769,33 @@ function seedUserLevels(db: DatabaseSync) {
         .run(JSON.stringify(defaults[0][3]));
     }
     db.prepare("INSERT INTO app_metadata (key, value) VALUES (?, '1')").run(migrationKey);
+  }
+
+  db.prepare("UPDATE user_levels SET video_concurrency_limit = 0 WHERE level = 0").run();
+  db.prepare("UPDATE user_levels SET video_concurrency_limit = 1 WHERE level = 1 AND video_concurrency_limit < 1").run();
+
+  const marketDefaultsKey = "user_level_market_defaults_v1";
+  if (!db.prepare("SELECT 1 AS found FROM app_metadata WHERE key = ?").get(marketDefaultsKey)) {
+    const rows = db
+      .prepare("SELECT level, permissions FROM user_levels WHERE level >= 2")
+      .all() as Array<{ level: number; permissions: string }>;
+    const update = db.prepare(
+      `UPDATE user_levels
+       SET permissions = ?, video_concurrency_limit = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE level = ?`,
+    );
+    for (const row of rows) {
+      let permissions: string[] = [];
+      try {
+        const parsed = JSON.parse(row.permissions);
+        if (Array.isArray(parsed)) permissions = parsed.filter((item): item is string => typeof item === "string");
+      } catch {
+        // Invalid legacy permissions are replaced by the explicit defaults below.
+      }
+      permissions = [...new Set([...permissions, "market_access", "market_purchase", "video_download"])];
+      update.run(JSON.stringify(permissions), row.level >= 5 ? 3 : 2, row.level);
+    }
+    db.prepare("INSERT INTO app_metadata (key, value) VALUES (?, '1')").run(marketDefaultsKey);
   }
 }
 
@@ -1070,6 +1358,7 @@ function initialize(db: DatabaseSync) {
       ON content_access_policies(enabled, scope, country_mode, audience);
   `);
   migrateUserEconomy(db);
+  migrateMarketplaceAndRegistration(db);
   migrateNovelRecommendations(db);
   seedUserLevels(db);
   migrateNovelsContentHash(db);

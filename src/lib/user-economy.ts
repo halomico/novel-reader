@@ -113,9 +113,11 @@ export function claimDailySoda(
        WHERE id = ?`,
     ).run(balance, experience, trustLevel, userId);
     db.prepare(
-      `INSERT INTO user_soda_transactions (user_id, amount, balance_after, source, note)
-       VALUES (?, ?, ?, 'daily_checkin', '每日签到')`,
-    ).run(userId, reward, balance);
+      `INSERT INTO user_currency_transactions (
+         user_id, currency, amount, balance_after, source, reference_key, note
+       )
+       VALUES (?, 'soda', ?, ?, 'daily_checkin', ?, '每日签到')`,
+    ).run(userId, reward, balance, `daily-checkin:${userId}:${date}`);
     db.exec("COMMIT");
     return { ok: true, reward, balance, alreadyCheckedIn: false };
   } catch (error) {
@@ -129,8 +131,8 @@ export function listSodaTransactions(userId: number, limit = 20): SodaTransactio
   return (getDb()
     .prepare(
       `SELECT id, amount, balance_after, source, note, created_at
-       FROM user_soda_transactions
-       WHERE user_id = ?
+       FROM user_currency_transactions
+       WHERE user_id = ? AND currency = 'soda'
        ORDER BY id DESC
        LIMIT ?`,
     )
@@ -155,6 +157,7 @@ export function updateUserGrowth(input: {
   userId: number;
   sodaBalance: number;
   sodaExperience: number;
+  cookieBalance?: number;
   adminName: string;
 }): boolean {
   const sodaBalance = Math.min(Math.max(Math.floor(input.sodaBalance), 0), 2_000_000_000);
@@ -164,23 +167,37 @@ export function updateUserGrowth(input: {
   db.exec("BEGIN IMMEDIATE");
   try {
     const current = db
-      .prepare("SELECT soda_balance FROM users WHERE id = ?")
-      .get(input.userId) as { soda_balance: number } | undefined;
+      .prepare("SELECT soda_balance, cookie_balance FROM users WHERE id = ?")
+      .get(input.userId) as { soda_balance: number; cookie_balance: number } | undefined;
     if (!current) {
       db.exec("ROLLBACK");
       return false;
     }
+    const cookieBalance = input.cookieBalance == null
+      ? current.cookie_balance
+      : Math.min(Math.max(Math.floor(input.cookieBalance), 0), 2_000_000_000);
     db.prepare(
       `UPDATE users
-       SET trust_level = ?, soda_balance = ?, soda_experience = ?, updated_at = CURRENT_TIMESTAMP
+       SET trust_level = ?, soda_balance = ?, soda_experience = ?, cookie_balance = ?, updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-    ).run(trustLevel, sodaBalance, sodaExperience, input.userId);
+    ).run(trustLevel, sodaBalance, sodaExperience, cookieBalance, input.userId);
     const difference = sodaBalance - current.soda_balance;
     if (difference !== 0) {
       db.prepare(
-        `INSERT INTO user_soda_transactions (user_id, amount, balance_after, source, note)
-         VALUES (?, ?, ?, 'admin_adjustment', ?)`,
+        `INSERT INTO user_currency_transactions (
+           user_id, currency, amount, balance_after, source, note
+         )
+         VALUES (?, 'soda', ?, ?, 'admin_adjustment', ?)`,
       ).run(input.userId, difference, sodaBalance, `由 ${input.adminName.slice(0, 40)} 调整`);
+    }
+    const cookieDifference = cookieBalance - current.cookie_balance;
+    if (cookieDifference !== 0) {
+      db.prepare(
+        `INSERT INTO user_currency_transactions (
+           user_id, currency, amount, balance_after, source, note
+         )
+         VALUES (?, 'cookie', ?, ?, 'admin_adjustment', ?)`,
+      ).run(input.userId, cookieDifference, cookieBalance, `由 ${input.adminName.slice(0, 40)} 调整`);
     }
     db.exec("COMMIT");
     return true;

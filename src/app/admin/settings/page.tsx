@@ -30,6 +30,7 @@ import {
   type HomePortalContentCardKey,
 } from "@/lib/home-portal";
 import { countRecommendationPoolNovels } from "@/lib/recommendation-pool";
+import { isEmailVerificationConfigured } from "@/lib/email-verification";
 import { normalizeReaderLineHeight, READER_LINE_HEIGHTS } from "@/lib/ui-preferences";
 import {
   cancelFrontendSearchJobsAction,
@@ -90,6 +91,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
   const frontendSearchConcurrencyLimit = settings.frontendSearchConcurrencyLimit || getFrontendSearchConcurrencyLimit();
   const siteIconHref = getSiteIconHref();
   const recommendationPoolCount = countRecommendationPoolNovels();
+  const mailConfigured = isEmailVerificationConfigured();
 
   return (
     <AdminFrame active="settings" notice={params.notice} tone={params.tone}>
@@ -313,8 +315,8 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
             </label>
             <div className="adminFieldGrid">
               <label>
-                <span>随机推荐数量 / 本</span>
-                <input name="randomRecommendationCount" type="number" min="1" max="50" defaultValue={settings.randomRecommendationCount} />
+                <span>每轮随机展示 / 本</span>
+                <input name="randomRecommendationCount" type="number" min="1" max="100" defaultValue={settings.randomRecommendationCount} />
               </label>
               <label>
                 <span>推荐切换周期 / 分钟</span>
@@ -358,12 +360,37 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               </span>
               <input name="userLoginEnabled" type="checkbox" defaultChecked={settings.userLoginEnabled} />
             </label>
+            <label className="adminCompactField">
+              <span>注册方式</span>
+              <AdminSelect name="userRegistrationMode" defaultValue={settings.userRegistrationMode}>
+                <option value="closed">关闭</option>
+                <option value="invite">邀请码</option>
+                <option value="open">开放注册</option>
+              </AdminSelect>
+            </label>
             <label className="adminSwitchLabel">
               <span>
-                <strong>开放前台注册</strong>
-                <small>关闭后注册页和右上角注册入口会隐藏或不可用。</small>
+                <strong>注册后验证邮箱</strong>
+                <small>{mailConfigured ? "邮件服务已就绪，验证通过后账号可登录。" : "SMTP 或 SITE_URL 尚未配置，开启后注册会暂停并提示管理员。"}</small>
               </span>
-              <input name="userRegistrationEnabled" type="checkbox" defaultChecked={settings.userRegistrationEnabled} />
+              <input name="emailVerificationRequired" type="checkbox" defaultChecked={settings.emailVerificationRequired} />
+            </label>
+            <label className="adminSwitchLabel">
+              <span>
+                <strong>启用集市</strong>
+                <small>入口仍受用户等级权限控制。</small>
+              </span>
+              <input name="marketEnabled" type="checkbox" defaultChecked={settings.marketEnabled} />
+            </label>
+            <label className="adminCompactField isNarrow">
+              <span>每曲奇兑换苏打</span>
+              <input
+                name="cookieToSodaRate"
+                type="number"
+                min="1"
+                max="10000"
+                defaultValue={settings.cookieToSodaRate}
+              />
             </label>
             <label className="adminSwitchLabel">
               <span>
@@ -462,7 +489,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
             <div className="adminFieldGrid">
               <label>
                 <span>实时访问最多保留 / 条</span>
-                <input name="analyticsRealtimeLimit" type="number" min="30" max="2000" defaultValue={analyticsRealtimeLimit} />
+                <input name="analyticsRealtimeLimit" type="number" min="30" max="10000" defaultValue={analyticsRealtimeLimit} />
               </label>
             </div>
           </details>

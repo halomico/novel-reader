@@ -1,4 +1,4 @@
-import { Activity, CupSoda, LogOut, MessageCircle, Settings, Sparkles, UserRound } from "lucide-react";
+import { Activity, Cookie, CupSoda, LogOut, MessageCircle, Settings, Sparkles, Store, UserRound } from "lucide-react";
 import Link from "@/components/LocalizedLink";
 import { logoutUserAction } from "@/app/account/actions";
 import type { UserProfile } from "@/lib/users";
@@ -6,16 +6,19 @@ import { uiText } from "@/lib/locale";
 import { getRequestLocale } from "@/lib/locale-server";
 import { countUserUnreadMessages } from "@/lib/station";
 import { getUserLevelDefinition } from "@/lib/user-levels";
+import { hasUserPermission } from "@/lib/user-levels";
+import { isMarketEnabled } from "@/lib/config";
 import { Breadcrumbs } from "./Breadcrumbs";
 import { SiteHeader } from "./SiteHeader";
 
-export type UserWorkspaceKey = "profile" | "growth" | "activity" | "messages" | "settings";
+export type UserWorkspaceKey = "profile" | "growth" | "activity" | "messages" | "market" | "settings";
 
 const NAV_ITEMS = [
   { key: "profile", href: "/account", label: "账户", icon: UserRound },
   { key: "growth", href: "/account?view=growth", label: "成长", icon: Sparkles },
   { key: "activity", href: "/activity", label: "动态", icon: Activity },
   { key: "messages", href: "/messages", label: "消息", icon: MessageCircle },
+  { key: "market", href: "/market", label: "集市", icon: Store },
   { key: "settings", href: "/settings", label: "设置", icon: Settings },
 ] as const;
 
@@ -33,6 +36,7 @@ export async function UserWorkspace({
   const locale = await getRequestLocale();
   const unreadMessages = countUserUnreadMessages(user.id);
   const level = getUserLevelDefinition(user.trustLevel);
+  const showMarket = isMarketEnabled() && hasUserPermission(user, "market_access");
 
   return (
     <main className="appShell userWorkspaceShell">
@@ -49,11 +53,12 @@ export async function UserWorkspace({
               <span className="userWorkspaceGrowth">
                 <small title={level.name}><Sparkles size={12} aria-hidden="true" />Lv.{user.trustLevel}</small>
                 <small title="苏打余额"><CupSoda size={12} aria-hidden="true" />{user.sodaBalance}</small>
+                <small title="曲奇余额"><Cookie size={12} aria-hidden="true" />{user.cookieBalance}</small>
               </span>
             </span>
           </div>
           <nav>
-            {NAV_ITEMS.map((item) => {
+            {NAV_ITEMS.filter((item) => item.key !== "market" || showMarket).map((item) => {
               const Icon = item.icon;
               return (
                 <Link className={active === item.key ? "isActive" : ""} href={item.href} key={item.key}>

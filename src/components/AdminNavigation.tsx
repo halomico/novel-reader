@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   MessagesSquare,
   Settings,
+  Store,
   Tags,
   Users,
 } from "lucide-react";
@@ -19,7 +20,18 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ADMIN_SIDEBAR_STORAGE_KEY } from "@/lib/ui-preferences";
 
-export type AdminNavKey = "home" | "books" | "indexes" | "settings" | "users" | "analytics" | "media" | "tags" | "access" | "station";
+export type AdminNavKey =
+  | "home"
+  | "books"
+  | "indexes"
+  | "settings"
+  | "users"
+  | "analytics"
+  | "media"
+  | "market"
+  | "tags"
+  | "access"
+  | "station";
 
 const navItems = [
   { href: "/admin", label: "后台首页", value: "home", icon: House },
@@ -28,6 +40,7 @@ const navItems = [
   { href: "/admin/access", label: "内容访问", value: "access", icon: ShieldCheck },
   { href: "/admin/station", label: "站务中心", value: "station", icon: MessagesSquare },
   { href: "/admin/media", label: "资源管理", value: "media", icon: LibraryBig },
+  { href: "/admin/market", label: "集市管理", value: "market", icon: Store },
   { href: "/admin/indexes", label: "搜索索引", value: "indexes", icon: Search },
   { href: "/admin/users", label: "用户管理", value: "users", icon: Users },
   { href: "/admin/analytics", label: "数据分析", value: "analytics", icon: BarChart3 },

@@ -24,6 +24,7 @@ export type AnnouncementCardTarget = "list" | "latest";
 export type SiteIconMimeType = "" | "image/png" | "image/jpeg" | "image/webp" | "image/x-icon";
 export type RelatedVideoMode = "next" | "random";
 export type AudioPlaybackMode = "stop" | "next" | "repeat-one";
+export type UserRegistrationMode = "closed" | "invite" | "open";
 
 export type IpRateLimitRule = {
   id: string;
@@ -82,6 +83,10 @@ export type SiteSettings = {
   globalSearchMaxResults: number;
   userLoginEnabled: boolean;
   userRegistrationEnabled: boolean;
+  userRegistrationMode: UserRegistrationMode;
+  emailVerificationRequired: boolean;
+  marketEnabled: boolean;
+  cookieToSodaRate: number;
   userDailyRegistrationLimitPerIp: number;
   userDailyReportLimit: number;
   userAvatarMaxBytes: number;
@@ -127,7 +132,7 @@ type SiteSettingsGlobal = typeof globalThis & {
   siteSettingsCache?: SiteSettingsCache;
 };
 
-const SITE_SETTINGS_CACHE_SCHEMA_VERSION = 7;
+const SITE_SETTINGS_CACHE_SCHEMA_VERSION = 9;
 
 const DEFAULT_SETTINGS_PREVIEW_TEXT =
   process.env.SETTINGS_PREVIEW_TEXT?.trim() ||
@@ -197,6 +202,10 @@ const DEFAULT_SETTINGS: SiteSettings = {
   globalSearchMaxResults: 0,
   userLoginEnabled: true,
   userRegistrationEnabled: true,
+  userRegistrationMode: "open",
+  emailVerificationRequired: false,
+  marketEnabled: true,
+  cookieToSodaRate: 10,
   userDailyRegistrationLimitPerIp: 0,
   userDailyReportLimit: 50,
   userAvatarMaxBytes: 0,
@@ -268,6 +277,13 @@ function cleanRelatedVideoMode(value: unknown): RelatedVideoMode {
 
 function cleanAudioPlaybackMode(value: unknown): AudioPlaybackMode {
   return value === "stop" || value === "repeat-one" ? value : "next";
+}
+
+function cleanUserRegistrationMode(value: unknown, legacyEnabled: boolean): UserRegistrationMode {
+  if (value === "closed" || value === "invite" || value === "open") {
+    return value;
+  }
+  return legacyEnabled ? "open" : "closed";
 }
 
 function cleanBrandLinkTarget(value: unknown): BrandLinkTarget {
@@ -439,7 +455,7 @@ function readSiteSettingsFromDisk(): SiteSettings {
         parsed.randomRecommendationCount,
         DEFAULT_SETTINGS.randomRecommendationCount,
         1,
-        50,
+        100,
       ),
       randomRecommendationIntervalMinutes: cleanInt(
         parsed.randomRecommendationIntervalMinutes,
@@ -454,6 +470,16 @@ function readSiteSettingsFromDisk(): SiteSettings {
       globalSearchMaxResults: cleanInt(parsed.globalSearchMaxResults, DEFAULT_SETTINGS.globalSearchMaxResults, 0, 1000),
       userLoginEnabled: cleanBool(parsed.userLoginEnabled, DEFAULT_SETTINGS.userLoginEnabled),
       userRegistrationEnabled: cleanBool(parsed.userRegistrationEnabled, DEFAULT_SETTINGS.userRegistrationEnabled),
+      userRegistrationMode: cleanUserRegistrationMode(
+        parsed.userRegistrationMode,
+        cleanBool(parsed.userRegistrationEnabled, DEFAULT_SETTINGS.userRegistrationEnabled),
+      ),
+      emailVerificationRequired: cleanBool(
+        parsed.emailVerificationRequired,
+        DEFAULT_SETTINGS.emailVerificationRequired,
+      ),
+      marketEnabled: cleanBool(parsed.marketEnabled, DEFAULT_SETTINGS.marketEnabled),
+      cookieToSodaRate: cleanInt(parsed.cookieToSodaRate, DEFAULT_SETTINGS.cookieToSodaRate, 1, 10_000),
       userDailyRegistrationLimitPerIp: cleanInt(
         parsed.userDailyRegistrationLimitPerIp,
         DEFAULT_SETTINGS.userDailyRegistrationLimitPerIp,
@@ -472,7 +498,7 @@ function readSiteSettingsFromDisk(): SiteSettings {
       homePortalOrder: normalizeHomePortalOrder(parsed.homePortalOrder),
       publicDisplayHomeCards: normalizePublicDisplayHomeCards(parsed.publicDisplayHomeCards),
       analyticsEnabled: cleanBool(parsed.analyticsEnabled, DEFAULT_SETTINGS.analyticsEnabled),
-      analyticsRealtimeLimit: cleanInt(parsed.analyticsRealtimeLimit, DEFAULT_SETTINGS.analyticsRealtimeLimit, 0, 2000),
+      analyticsRealtimeLimit: cleanInt(parsed.analyticsRealtimeLimit, DEFAULT_SETTINGS.analyticsRealtimeLimit, 0, 10_000),
       novelLibraryEnabled: cleanBool(parsed.novelLibraryEnabled, DEFAULT_SETTINGS.novelLibraryEnabled),
       videoLibraryEnabled: cleanBool(parsed.videoLibraryEnabled, DEFAULT_SETTINGS.videoLibraryEnabled),
       audioLibraryEnabled: cleanBool(parsed.audioLibraryEnabled, DEFAULT_SETTINGS.audioLibraryEnabled),

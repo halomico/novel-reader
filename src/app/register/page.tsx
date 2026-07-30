@@ -7,8 +7,9 @@ import { HumanVerificationField } from "@/components/HumanVerificationField";
 import { SiteHeader } from "@/components/SiteHeader";
 import {
   getNoticeDisplaySeconds,
+  getUserRegistrationMode,
+  isEmailVerificationRequired,
   isUserLoginEnabled,
-  isUserRegistrationEnabled,
 } from "@/lib/config";
 import { getCurrentUser } from "@/lib/user-auth";
 import { getTurnstileSiteKey } from "@/lib/human-verification";
@@ -40,7 +41,9 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
     redirect(withLocalePath(returnTo, locale));
   }
   const loginEnabled = isUserLoginEnabled();
-  const registrationEnabled = isUserRegistrationEnabled();
+  const registrationMode = getUserRegistrationMode();
+  const registrationEnabled = registrationMode !== "closed";
+  const emailVerificationRequired = isEmailVerificationRequired();
   const turnstileSiteKey = getTurnstileSiteKey();
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
 
@@ -68,6 +71,23 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
             <span>{uiText(locale, "显示名称")}</span>
             <input name="displayName" maxLength={40} placeholder={uiText(locale, "可留空，默认使用用户名")} disabled={!registrationEnabled} />
           </label>
+          <label>
+            <span>邮箱{emailVerificationRequired ? "" : "（可选）"}</span>
+            <input
+              name="email"
+              type="email"
+              autoComplete="email"
+              maxLength={254}
+              disabled={!registrationEnabled}
+              required={emailVerificationRequired}
+            />
+          </label>
+          {registrationMode === "invite" ? (
+            <label>
+              <span>邀请码</span>
+              <input name="inviteCode" autoComplete="off" maxLength={120} disabled={!registrationEnabled} required />
+            </label>
+          ) : null}
           <label>
             <span>{uiText(locale, "密码")}</span>
             <input name="password" type="password" autoComplete="new-password" minLength={6} maxLength={72} disabled={!registrationEnabled} required />

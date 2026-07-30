@@ -77,7 +77,19 @@ export async function writeMediaCustomCover(
   }
   if (isRemoteMediaStorage()) {
     const node = resolveRemoteMediaNodeForAsset(asset.storageNodeId, asset.kind);
-    await writeRemoteMediaCover(node.id, key, buffer);
+    await writeStoredCover(node.id, key, buffer);
+    return;
+  }
+  await writeStoredCover(null, key, buffer);
+}
+
+export async function writeStoredCover(
+  storageNodeId: string | null,
+  key: string,
+  buffer: Buffer,
+): Promise<void> {
+  if (storageNodeId) {
+    await writeRemoteMediaCover(storageNodeId, key, buffer);
     return;
   }
   const targetPath = localCoverPath(key);
@@ -98,7 +110,18 @@ export async function deleteMediaCustomCover(
   if (!key) return false;
   if (isRemoteMediaStorage()) {
     const node = resolveRemoteMediaNodeForAsset(asset.storageNodeId, asset.kind);
-    return deleteRemoteMediaCover(node.id, key);
+    return deleteStoredCover(node.id, key);
+  }
+  return deleteStoredCover(null, key);
+}
+
+export async function deleteStoredCover(
+  storageNodeId: string | null,
+  key: string | null,
+): Promise<boolean> {
+  if (!key) return false;
+  if (storageNodeId) {
+    return deleteRemoteMediaCover(storageNodeId, key);
   }
   const targetPath = localCoverPath(key);
   const found = fs.existsSync(targetPath);
@@ -107,6 +130,10 @@ export async function deleteMediaCustomCover(
 }
 
 export async function findLocalMediaCustomCover(key: string): Promise<string | null> {
+  return findLocalStoredCover(key);
+}
+
+export async function findLocalStoredCover(key: string): Promise<string | null> {
   const targetPath = localCoverPath(key);
   try {
     const stat = await fs.promises.stat(targetPath);

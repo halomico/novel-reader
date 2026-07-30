@@ -10,13 +10,17 @@ import { getClientIp } from "@/lib/admin-access";
 import {
   getUserAvatarMaxBytes,
   getUserDailyRegistrationLimitPerIp,
+  getUserRegistrationMode,
+  isEmailVerificationRequired,
   isUserLoginEnabled,
-  isUserRegistrationEnabled,
 } from "@/lib/config";
+import { getDb } from "@/lib/db";
+import { isEmailVerificationConfigured, sendUserVerificationEmail } from "@/lib/email-verification";
 import { verifyHumanRequest } from "@/lib/human-verification";
 import { LOCALE_REQUEST_HEADER, normalizeLocale } from "@/lib/locale";
 import { normalizeUserReturnPath } from "@/lib/return-path";
 import { claimDailySoda } from "@/lib/user-economy";
+import { consumeRegistrationInviteInCurrentTransaction } from "@/lib/registration-invites";
 import {
   clearCurrentUserSession,
   createUserSession,
@@ -32,10 +36,12 @@ import {
   getUserPasswordHashById,
   removeAvatarFile,
   normalizeUsername,
+  normalizeEmail,
   updateUserDisplayName,
   updateUserPasswordHash,
   updateUserAvatar,
   validateDisplayName,
+  validateEmail,
   validatePassword,
   validateUsername,
 } from "@/lib/users";
@@ -56,6 +62,16 @@ function cleanText(formData: FormData, name: string): string {
 
 function isUsernameConflict(error: unknown): boolean {
   return error instanceof Error && error.message.includes("UNIQUE constraint failed: users.username");
+}
+
+function isEmailConflict(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("UNIQUE constraint failed: users.email");
+}
+
+function requestOrigin(headerStore: Awaited<ReturnType<typeof headers>>): string {
+  const protocol = headerStore.get("x-forwarded-proto")?.split(",")[0]?.trim() || "http";
+  const host = headerStore.get("x-forwarded-host")?.split(",")[0]?.trim() || headerStore.get("host");
+  return host ? `${protocol}://${host}` : process.env.SITE_URL || "";
 }
 
 function avatarExtension(file: File): string | null {
@@ -102,7 +118,8 @@ function hasAvatarSignature(buffer: Buffer, extension: string): boolean {
 export async function registerUserAction(formData: FormData) {
   const returnTo = normalizeUserReturnPath(formData.get("returnTo"));
   const returnValues = { returnTo };
-  if (!isUserRegistrationEnabled()) {
+  const registrationMode = getUserRegistrationMode();
+  if (registrationMode === "closed") {
     authNotice("/register", "注册暂未开放", "warning", returnValues);
   }
 
@@ -115,6 +132,8 @@ export async function registerUserAction(formData: FormData) {
 
   const username = normalizeUsername(cleanText(formData, "username"));
   const displayName = cleanText(formData, "displayName") || username;
+  const email = normalizeEmail(cleanText(formData, "email"));
+  const inviteCode = cleanText(formData, "inviteCode");
   const password = String(formData.get("password") || "");
   const confirmPassword = String(formData.get("confirmPassword") || "");
 
@@ -125,6 +144,16 @@ export async function registerUserAction(formData: FormData) {
   const displayNameError = validateDisplayName(displayName);
   if (displayNameError) {
     authNotice("/register", displayNameError, "warning", returnValues);
+  }
+  const verificationRequired = isEmailVerificationRequired();
+  if ((verificationRequired || email) && validateEmail(email)) {
+    authNotice("/register", "请输入有效的邮箱地址", "warning", returnValues);
+  }
+  if (verificationRequired && !isEmailVerificationConfigured()) {
+    authNotice("/register", "邮箱验证尚未配置，请联系管理员", "error", returnValues);
+  }
+  if (registrationMode === "invite" && !inviteCode) {
+    authNotice("/register", "请输入邀请码", "warning", returnValues);
   }
   const passwordError = validatePassword(password);
   if (passwordError) {
@@ -139,21 +168,57 @@ export async function registerUserAction(formData: FormData) {
     authNotice("/register", verification.message, "warning", returnValues);
   }
 
+  let userId = 0;
+  const db = getDb();
   try {
-    createUserRecord({
+    if (registrationMode === "invite") db.exec("BEGIN IMMEDIATE");
+    if (registrationMode === "invite" && !consumeRegistrationInviteInCurrentTransaction(inviteCode)) {
+      throw new Error("INVALID_REGISTRATION_INVITE");
+    }
+    userId = createUserRecord({
       username,
       displayName,
+      email: email || null,
       passwordHash: hashUserPassword(password),
-      status: "active",
+      status: verificationRequired ? "pending" : "active",
       localePreference: normalizeLocale(headerStore.get(LOCALE_REQUEST_HEADER)),
       registrationIp: clientIp,
     });
+    if (registrationMode === "invite") db.exec("COMMIT");
   } catch (error) {
+    if (registrationMode === "invite") {
+      try {
+        db.exec("ROLLBACK");
+      } catch {
+        // The transaction may already have been rolled back by the validation branch.
+      }
+    }
     if (isUsernameConflict(error)) {
       authNotice("/register", "用户名已存在", "warning", returnValues);
     }
+    if (error instanceof Error && error.message === "INVALID_REGISTRATION_INVITE") {
+      authNotice("/register", "邀请码无效或已失效", "warning", returnValues);
+    }
+    if (isEmailConflict(error)) {
+      authNotice("/register", "邮箱已被使用", "warning", returnValues);
+    }
     console.error("Failed to create user", error);
     authNotice("/register", "账号创建失败，请稍后重试", "error", returnValues);
+  }
+
+  if (verificationRequired) {
+    try {
+      await sendUserVerificationEmail({
+        userId,
+        email,
+        displayName,
+        requestOrigin: requestOrigin(headerStore),
+      });
+      authNotice("/verify-email", "验证邮件已发送，请在 24 小时内完成验证", "success");
+    } catch (error) {
+      console.error("Failed to send verification email", error);
+      authNotice("/verify-email", "账号已创建，但邮件发送失败，请稍后重新发送", "warning");
+    }
   }
 
   if (!isUserLoginEnabled()) {

@@ -29,7 +29,7 @@ export function MediaVideoCard({
 }) {
   const title = displayTitle(asset.title, asset.fileName);
   return (
-    <Link className="mediaVideoCard" href={`/media/${asset.id}`}>
+    <Link className="mediaVideoCard" href={`/media/${asset.id}#watch`}>
       <span className="mediaVideoPreview">
         <MediaVideoPreview
           id={asset.id}

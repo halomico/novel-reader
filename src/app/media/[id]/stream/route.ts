@@ -3,6 +3,7 @@ import { getMediaAsset, isMediaKindAccessible, isMediaKindPublic } from "@/lib/m
 import { mediaDeliveryUrl } from "@/lib/media-delivery";
 import { checkContentAccess, hasScopedContentAccessRules } from "@/lib/content-access";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
+import { validateVideoPlaybackLease } from "@/lib/video-playback";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -27,6 +28,18 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const requestedVersion = request.nextUrl.searchParams.get("v");
   if (requestedVersion && Math.floor(Number(requestedVersion)) !== Math.floor(asset.mtimeMs)) {
     return new Response(null, { status: 404 });
+  }
+  if (
+    asset.kind === "video" &&
+    user &&
+    !validateVideoPlaybackLease({
+      id: request.nextUrl.searchParams.get("ps") || "",
+      token: request.nextUrl.searchParams.get("pt") || "",
+      userId: user.id,
+      mediaId: asset.id,
+    })
+  ) {
+    return new Response(null, { status: 403 });
   }
   let location: string;
   const publiclyAccessible = isMediaKindPublic(asset.kind) && !hasScopedContentAccessRules(asset.kind);

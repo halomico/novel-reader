@@ -72,7 +72,6 @@ import {
 import { deleteUserSessions, hashUserPassword } from "@/lib/user-auth";
 import { recalculateUserLevels, saveUserLevelDefinition } from "@/lib/user-levels";
 import { updateUserGrowth } from "@/lib/user-economy";
-import { setContentReportStatus } from "@/lib/reports";
 import { setNovelRecommendationCount } from "@/lib/recommendations";
 import {
   clearBrowseHistory,
@@ -255,22 +254,6 @@ export async function loginAdminAction(formData: FormData) {
 export async function logoutAdminAction() {
   await clearAdminSession();
   redirect("/admin/login");
-}
-
-export async function updateContentReportStatusAction(formData: FormData) {
-  const requestedReturnPath = String(formData.get("returnPath") || "");
-  const returnPath = requestedReturnPath.startsWith("/admin/station?view=reports")
-    ? requestedReturnPath
-    : "/admin/station?view=reports";
-  const session = await requireAdminRequest();
-  const reportId = Number(formData.get("reportId"));
-  const status = formData.get("status") === "open" ? "open" : "resolved";
-  if (!Number.isInteger(reportId) || reportId < 1 || !setContentReportStatus(reportId, status, session.username)) {
-    adminNotice("举报记录不存在", "warning", returnPath);
-  }
-  revalidatePath("/admin/reports");
-  revalidatePath("/admin/station");
-  adminNotice(status === "resolved" ? "举报已处理" : "举报已重新打开", "success", returnPath);
 }
 
 export async function cancelFrontendSearchJobsAction() {
@@ -697,7 +680,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
       "randomRecommendationCount",
       previous.randomRecommendationCount || 8,
       1,
-      50,
+      100,
     ),
     randomRecommendationIntervalMinutes: intField(
       formData,
@@ -713,7 +696,20 @@ export async function saveAdminSettingsAction(formData: FormData) {
         : "next",
     globalSearchMaxResults: intField(formData, "globalSearchMaxResults", previous.globalSearchMaxResults || getGlobalSearchMaxResults(), 1, 1000),
     userLoginEnabled: formData.get("userLoginEnabled") === "on",
-    userRegistrationEnabled: formData.get("userRegistrationEnabled") === "on",
+    userRegistrationEnabled: formData.get("userRegistrationMode") !== "closed",
+    userRegistrationMode:
+      formData.get("userRegistrationMode") === "invite" || formData.get("userRegistrationMode") === "closed"
+        ? formData.get("userRegistrationMode") as "invite" | "closed"
+        : "open",
+    emailVerificationRequired: formData.get("emailVerificationRequired") === "on",
+    marketEnabled: formData.get("marketEnabled") === "on",
+    cookieToSodaRate: intField(
+      formData,
+      "cookieToSodaRate",
+      previous.cookieToSodaRate || 10,
+      1,
+      10_000,
+    ),
     userDailyRegistrationLimitPerIp: intField(
       formData,
       "userDailyRegistrationLimitPerIp",
@@ -734,7 +730,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
     homePortalOrder: normalizeHomePortalOrder(formData.get("homePortalOrder")),
     publicDisplayHomeCards: HOME_PORTAL_CONTENT_CARD_KEYS.filter((key) => homeCardModes[key] === "preview"),
     analyticsEnabled: formData.get("analyticsEnabled") === "on",
-    analyticsRealtimeLimit: intField(formData, "analyticsRealtimeLimit", previous.analyticsRealtimeLimit || 300, 30, 2000),
+    analyticsRealtimeLimit: intField(formData, "analyticsRealtimeLimit", previous.analyticsRealtimeLimit || 300, 30, 10_000),
     novelLibraryEnabled: novelAccessMode !== "off",
     videoLibraryEnabled: videoAccessMode !== "off",
     audioLibraryEnabled: audioAccessMode !== "off",
@@ -1130,7 +1126,11 @@ export async function createAdminUserAction(formData: FormData) {
   const username = String(formData.get("username") || "").trim();
   const displayName = String(formData.get("displayName") || "").trim() || username;
   const password = String(formData.get("password") || "");
-  const status = formData.get("status") === "disabled" ? "disabled" : "active";
+  const status = formData.get("status") === "disabled"
+    ? "disabled"
+    : formData.get("status") === "pending"
+      ? "pending"
+      : "active";
   const role = formData.get("role") === "admin" ? "admin" : "user";
 
   const usernameError = validateUsername(username);
@@ -1155,6 +1155,7 @@ export async function createAdminUserAction(formData: FormData) {
       role,
       sodaBalance: Math.max(Math.floor(Number(formData.get("sodaBalance")) || 0), 0),
       sodaExperience: Math.max(Math.floor(Number(formData.get("sodaExperience")) || 0), 0),
+      cookieBalance: Math.max(Math.floor(Number(formData.get("cookieBalance")) || 0), 0),
     });
   } catch (error) {
     if (isUsernameConflict(error)) {
@@ -1174,11 +1175,16 @@ export async function updateAdminUserAction(
   const session = await requireAdminRequest();
   const userId = Number(formData.get("userId"));
   const displayName = String(formData.get("displayName") || "").trim();
-  const status = formData.get("status") === "disabled" ? "disabled" : "active";
+  const status = formData.get("status") === "disabled"
+    ? "disabled"
+    : formData.get("status") === "pending"
+      ? "pending"
+      : "active";
   const role = formData.get("role") === "admin" ? "admin" : "user";
   const newPassword = String(formData.get("newPassword") || "");
   const sodaBalance = Math.max(Math.floor(Number(formData.get("sodaBalance")) || 0), 0);
   const sodaExperience = Math.max(Math.floor(Number(formData.get("sodaExperience")) || 0), sodaBalance, 0);
+  const cookieBalance = Math.max(Math.floor(Number(formData.get("cookieBalance")) || 0), 0);
 
   if (!Number.isInteger(userId) || userId < 1) {
     return mutationResult(false, "用户不存在", "warning");
@@ -1207,6 +1213,7 @@ export async function updateAdminUserAction(
     userId,
     sodaBalance,
     sodaExperience,
+    cookieBalance,
     adminName: session.username,
   });
   if (newPassword || status === "disabled" || previousUser?.role !== role) {
@@ -1224,6 +1231,9 @@ export async function saveUserLevelsAction(formData: FormData) {
     level,
     name: String(formData.get(`levelName:${level}`) || "").trim(),
     sodaRequired: level < 2 ? 0 : Math.max(Math.floor(Number(formData.get(`sodaRequired:${level}`)) || 0), 1),
+    videoConcurrencyLimit: level === 0
+      ? 0
+      : Math.min(Math.max(Math.floor(Number(formData.get(`videoConcurrencyLimit:${level}`)) || 0), 0), 20),
     permissions: formData.getAll(`permissions:${level}`).map(String),
   }));
   if (levels.some((level) => !level.name)) {
@@ -1238,6 +1248,7 @@ export async function saveUserLevelsAction(formData: FormData) {
       level: level.level,
       name: level.name,
       sodaRequired: level.sodaRequired,
+      videoConcurrencyLimit: level.videoConcurrencyLimit,
       permissions: level.permissions,
     })) {
       saved += 1;
@@ -1258,7 +1269,11 @@ export async function updateAdminUserStatusAction(
 ): Promise<MutationResult<{ user: UserProfile }>> {
   await requireAdminRequest();
   const userId = Number(formData.get("userId"));
-  const status = formData.get("status") === "disabled" ? "disabled" : "active";
+  const status = formData.get("status") === "disabled"
+    ? "disabled"
+    : formData.get("status") === "pending"
+      ? "pending"
+      : "active";
 
   if (!Number.isInteger(userId) || userId < 1 || !updateUserStatus(userId, status)) {
     return mutationResult(false, "用户不存在", "warning");

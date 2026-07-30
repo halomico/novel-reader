@@ -6,6 +6,7 @@ import {
   type AudioPlaybackMode,
   type IpRateLimitRule,
   type RelatedVideoMode,
+  type UserRegistrationMode,
 } from "./site-settings";
 
 const readSiteSettings = cache(readSiteSettingsFromDisk);
@@ -131,7 +132,31 @@ export function isUserLoginEnabled(): boolean {
 }
 
 export function isUserRegistrationEnabled(): boolean {
-  return readSiteSettings().userRegistrationEnabled && readBoolConfig("USER_REGISTRATION_ENABLED", true);
+  return getUserRegistrationMode() !== "closed";
+}
+
+export function getUserRegistrationMode(): UserRegistrationMode {
+  if (!readBoolConfig("USER_REGISTRATION_ENABLED", true)) {
+    return "closed";
+  }
+  const configured = process.env.USER_REGISTRATION_MODE?.trim().toLocaleLowerCase("en-US");
+  if (configured === "closed" || configured === "invite" || configured === "open") {
+    return configured;
+  }
+  const settings = readSiteSettings();
+  return settings.userRegistrationEnabled ? settings.userRegistrationMode : "closed";
+}
+
+export function isEmailVerificationRequired(): boolean {
+  return readSiteSettings().emailVerificationRequired && readBoolConfig("EMAIL_VERIFICATION_REQUIRED", true);
+}
+
+export function isMarketEnabled(): boolean {
+  return readSiteSettings().marketEnabled && readBoolConfig("MARKET_ENABLED", true);
+}
+
+export function getCookieToSodaRate(): number {
+  return readSettingInt(readSiteSettings().cookieToSodaRate, "COOKIE_TO_SODA_RATE", 10, 1, 10_000);
 }
 
 export function getUserDailyRegistrationLimitPerIp(): number {
@@ -168,7 +193,7 @@ export function isAnalyticsEnabled(): boolean {
 }
 
 export function getAnalyticsRealtimeLimit(): number {
-  return readSettingInt(readSiteSettings().analyticsRealtimeLimit, "ANALYTICS_REALTIME_LIMIT", 300, 30, 2000);
+  return readSettingInt(readSiteSettings().analyticsRealtimeLimit, "ANALYTICS_REALTIME_LIMIT", 300, 30, 10_000);
 }
 
 export function isNovelLibraryEnabled(): boolean {

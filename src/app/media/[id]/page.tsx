@@ -9,6 +9,7 @@ import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { MediaConnectionHint } from "@/components/MediaConnectionHint";
 import { MediaFavoriteButton } from "@/components/MediaFavoriteButton";
 import { MediaPlayer } from "@/components/MediaPlayer";
+import { MediaTextDocument } from "@/components/MediaTextDocument";
 import { MediaRecommendationButton } from "@/components/MediaRecommendationButton";
 import { MediaVideoCard } from "@/components/MediaVideoCard";
 import { ReportMediaButton } from "@/components/ReportMediaButton";
@@ -30,6 +31,7 @@ import {
 import { formatMediaDuration } from "@/lib/media-format";
 import { getMediaPublicUrlForAsset } from "@/lib/media-storage-config";
 import { directMediaThumbnailUrl } from "@/lib/media-thumbnail-url";
+import { isMediaTextPreviewSupported } from "@/lib/media-text-preview";
 import { getMediaRecommendationState } from "@/lib/recommendations";
 import { getCurrentUser } from "@/lib/user-auth";
 import { hasUserPermission } from "@/lib/user-levels";
@@ -161,6 +163,8 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
   const recommendation = user && feedbackMedia ? getMediaRecommendationState(user.id, asset.id) : null;
   const canRecommend = feedbackMedia && hasUserPermission(user, "novel_feedback");
   const canReport = Boolean(feedbackMedia && user?.role === "user" && hasUserPermission(user, "content_report"));
+  const canDownloadVideo = asset.kind === "video" && hasUserPermission(user, "video_download");
+  const textPreviewSupported = isMediaTextPreviewSupported(asset);
 
   return (
     <>
@@ -191,12 +195,17 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
         ) : null}
 
         {asset.kind === "video" ? (
-          <>
+          <section className="mediaVideoWatch" id="watch">
             <header className="mediaVideoHeading">
               <h1>{title}</h1>
               <div className="mediaVideoStats" aria-label={uiText(locale, "视频信息")}>
                 <span><Eye size={15} aria-hidden="true" />{formatCompactCount(asset.playCount, locale)}</span>
                 <span><Clock3 size={15} aria-hidden="true" />{formatMediaDuration(asset.durationSeconds)}</span>
+                {canDownloadVideo ? (
+                  <a href={`/media/${asset.id}/download`} aria-label="下载视频" title="下载视频">
+                    <Download size={15} aria-hidden="true" />
+                  </a>
+                ) : null}
               </div>
             </header>
             <div className="mediaVideoStage">
@@ -205,6 +214,7 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
                 posterVersion={posterVersion}
                 posterUrl={posterUrl}
                 sourceVersion={asset.mtimeMs}
+                leaseRequired={Boolean(user)}
               />
             </div>
             <section className="mediaVideoInfo" aria-label={uiText(locale, "作者与简介")}>
@@ -231,7 +241,7 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
               </div>
               {displayDescription ? <p className="mediaDescription">{displayDescription}</p> : null}
             </section>
-          </>
+          </section>
         ) : asset.kind === "audio" ? (
           <MediaAudioPlayer
             initialId={asset.id}
@@ -246,10 +256,13 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
             } : undefined}
           />
         ) : (
-          <a className="mediaDownloadButton" href={`/media/${asset.id}/download`}>
-            <Download size={18} aria-hidden="true" />
-            {uiText(locale, "下载文件")}
-          </a>
+          <section className="mediaFileContent">
+            {textPreviewSupported ? <MediaTextDocument mediaId={asset.id} /> : null}
+            <a className="mediaDownloadButton" href={`/media/${asset.id}/download`}>
+              <Download size={18} aria-hidden="true" />
+              {uiText(locale, "下载文件")}
+            </a>
+          </section>
         )}
 
         {asset.kind !== "video" && displayDescription ? <p className="mediaDescription">{displayDescription}</p> : null}

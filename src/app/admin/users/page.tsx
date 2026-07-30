@@ -1,4 +1,4 @@
-import { ChevronDown, Search, ShieldCheck, UserPlus, Users } from "lucide-react";
+import { ChevronDown, KeyRound, Search, ShieldCheck, UserPlus, Users } from "lucide-react";
 import type { Metadata } from "next";
 import Form from "next/form";
 import Link from "next/link";
@@ -48,6 +48,10 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
             <p>管理前台用户、头像资料、登录状态和权限组。</p>
           </div>
           <div className="adminUserHeaderActions">
+            <Link className="adminIconTextButton" href="/admin/users/invites">
+              <KeyRound size={16} aria-hidden="true" />
+              邀请码
+            </Link>
             <Link className="adminIconTextButton" href="/admin/users/levels">
               <ShieldCheck size={16} aria-hidden="true" />
               等级权限
@@ -100,6 +104,10 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
             <label>
               <span>累计苏打</span>
               <input name="sodaExperience" type="number" min="0" max="1000000000" defaultValue="0" />
+            </label>
+            <label>
+              <span>曲奇余额</span>
+              <input name="cookieBalance" type="number" min="0" max="1000000000" defaultValue="0" />
             </label>
             <button type="submit"><UserPlus size={15} aria-hidden="true" />创建用户</button>
           </form>

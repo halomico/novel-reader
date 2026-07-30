@@ -197,7 +197,7 @@ test("normalizes palette rotation and random recommendation settings", () => {
     assert.equal(settings.manualPinnedNovelsEnabled, false);
     assert.equal(settings.randomRecommendationsEnabled, true);
     assert.equal(settings.catalogPromotionOrder, "random-first");
-    assert.equal(settings.randomRecommendationCount, 50);
+    assert.equal(settings.randomRecommendationCount, 100);
     assert.equal(settings.randomRecommendationIntervalMinutes, 10_080);
   } finally {
     if (previousPath === undefined) {

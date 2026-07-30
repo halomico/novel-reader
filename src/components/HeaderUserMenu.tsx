@@ -8,6 +8,7 @@ import {
   MessageCircle,
   Settings,
   Sparkles,
+  Store,
   UserPlus,
   UserRound,
 } from "lucide-react";
@@ -32,6 +33,7 @@ type HeaderUserMenuProps = {
   mediaKinds: MediaKind[];
   showLibrary: boolean;
   showTags: boolean;
+  showMarket: boolean;
   unreadMessages: number;
 };
 
@@ -42,6 +44,7 @@ export function HeaderUserMenu({
   mediaKinds,
   showLibrary,
   showTags,
+  showMarket,
   unreadMessages,
 }: HeaderUserMenuProps) {
   const [open, setOpen] = useState(false);
@@ -114,6 +117,12 @@ export function HeaderUserMenu({
                 <Activity size={16} aria-hidden="true" />
                 {tr("动态")}
               </Link>
+              {showMarket ? (
+                <Link href="/market" onClick={closeMenu}>
+                  <Store size={16} aria-hidden="true" />
+                  {tr("集市")}
+                </Link>
+              ) : null}
               <Link href="/messages" onClick={closeMenu}>
                 <MessageCircle size={16} aria-hidden="true" />
                 {tr("消息")}

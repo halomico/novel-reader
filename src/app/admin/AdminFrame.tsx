@@ -50,6 +50,9 @@ function titleFor(active: AdminFrameProps["active"]): string {
   if (active === "media") {
     return "资源管理";
   }
+  if (active === "market") {
+    return "集市管理";
+  }
   return "系统设置";
 }
 

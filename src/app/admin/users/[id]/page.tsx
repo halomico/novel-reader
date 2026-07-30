@@ -70,7 +70,7 @@ export default async function AdminUserDetailPage({ params, searchParams }: Admi
           <div className="adminUserDetailGrid">
             <p>
               <strong>状态</strong>
-              <span>{user.status === "active" ? "启用" : "停用"}</span>
+              <span>{user.status === "active" ? "启用" : user.status === "pending" ? "待验证" : "停用"}</span>
             </p>
             <p>
               <strong>权限组</strong>
@@ -78,7 +78,7 @@ export default async function AdminUserDetailPage({ params, searchParams }: Admi
             </p>
             <p>
               <strong>成长</strong>
-              <span>Lv.{user.trustLevel} · 苏打 {user.sodaBalance}</span>
+              <span>Lv.{user.trustLevel} · 苏打 {user.sodaBalance} · 曲奇 {user.cookieBalance}</span>
             </p>
             <p>
               <strong>注册时间</strong>
@@ -155,8 +155,8 @@ export default async function AdminUserDetailPage({ params, searchParams }: Admi
         <section className="adminLoginAudit">
           <div className="adminPanelHeader">
             <div>
-              <h2>浏览记录</h2>
-              <p>小说与资源访问，共 {history.totalItems} 条。</p>
+              <h2>最近内容</h2>
+              <p>用户的继续阅读与最近访问状态，共 {history.totalItems} 条；分析统计独立聚合。</p>
             </div>
             <Clock size={20} aria-hidden="true" />
           </div>

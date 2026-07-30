@@ -47,7 +47,7 @@ export default async function AdminUserLevelsPage({ searchParams }: AdminUserLev
                     required
                   />
                 </label>
-                <label className="adminUserLevelThreshold">
+                <label className="adminUserLevelThreshold isSoda">
                   <span className="srOnly">所需累计苏打</span>
                   <input
                     name={`sodaRequired:${level.level}`}
@@ -59,6 +59,19 @@ export default async function AdminUserLevelsPage({ searchParams }: AdminUserLev
                     aria-label={`Lv.${level.level} 所需累计苏打`}
                   />
                   <small>累计苏打</small>
+                </label>
+                <label className="adminUserLevelThreshold isVideo">
+                  <span className="srOnly">视频并发</span>
+                  <input
+                    name={`videoConcurrencyLimit:${level.level}`}
+                    type="number"
+                    min="0"
+                    max="20"
+                    defaultValue={level.videoConcurrencyLimit}
+                    disabled={level.level === 0}
+                    aria-label={`Lv.${level.level} 视频并发`}
+                  />
+                  <small>视频并发</small>
                 </label>
                 <div className="adminUserLevelPermissions">
                   {USER_PERMISSION_DEFINITIONS.map((permission) => (

@@ -46,3 +46,14 @@ export function InlineMutationNotice({ notice }: { notice: MutationNotice | null
     </p>
   );
 }
+
+export function mutationNoticePath(
+  pathname: string,
+  result: Pick<MutationResult, "message" | "tone">,
+): string {
+  const params = new URLSearchParams({
+    notice: result.message,
+    tone: result.tone,
+  });
+  return `${pathname}${pathname.includes("?") ? "&" : "?"}${params.toString()}`;
+}

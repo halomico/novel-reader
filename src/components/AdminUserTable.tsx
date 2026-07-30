@@ -110,7 +110,7 @@ export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; re
                       <small>
                         {user.displayName}
                         {user.role === "admin" ? " · 前台管理员" : ""}
-                        {" · "}Lv.{user.trustLevel} · 苏打 {user.sodaBalance}
+                        {" · "}Lv.{user.trustLevel} · 苏打 {user.sodaBalance} · 曲奇 {user.cookieBalance}
                       </small>
                     </span>
                   </td>
@@ -155,6 +155,7 @@ export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; re
                         aria-label={`${user.username} 状态`}
                       >
                         <option value="active">启用</option>
+                        <option value="pending">待验证</option>
                         <option value="disabled">停用</option>
                       </AdminSelect>
                     </form>
@@ -228,6 +229,10 @@ export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; re
               <label>
                 <span>累计苏打</span>
                 <input name="sodaExperience" type="number" min="0" max="1000000000" defaultValue={editingUser.sodaExperience} />
+              </label>
+              <label>
+                <span>曲奇余额</span>
+                <input name="cookieBalance" type="number" min="0" max="1000000000" defaultValue={editingUser.cookieBalance} />
               </label>
             </div>
             <label>

@@ -17,12 +17,15 @@ type SessionUserRow = {
   id: number;
   username: string;
   display_name: string;
+  email: string | null;
+  email_verified_at: string | null;
   avatar_path: string | null;
   status: string;
   role: string;
   trust_level: number;
   soda_balance: number;
   soda_experience: number;
+  cookie_balance: number;
   locale_preference: string;
   reading_history_enabled: number;
   registration_ip: string | null;
@@ -41,12 +44,15 @@ function toUserProfile(row: SessionUserRow): UserProfile {
     id: row.id,
     username: row.username,
     displayName: row.display_name,
+    email: row.email || null,
+    emailVerifiedAt: row.email_verified_at || null,
     avatarPath: row.avatar_path,
-    status: row.status === "disabled" ? "disabled" : "active",
+    status: row.status === "disabled" ? "disabled" : row.status === "pending" ? "pending" : "active",
     role: row.role === "admin" ? "admin" : "user",
     trustLevel: Math.min(Math.max(Math.floor(row.trust_level || 1), 1), 6),
     sodaBalance: Math.max(Math.floor(row.soda_balance || 0), 0),
     sodaExperience: Math.max(Math.floor(row.soda_experience || 0), 0),
+    cookieBalance: Math.max(Math.floor(row.cookie_balance || 0), 0),
     localePreference: normalizeLocale(row.locale_preference),
     readingHistoryEnabled: row.reading_history_enabled !== 0,
     registrationIp: row.registration_ip,
@@ -77,8 +83,8 @@ function readUserFromSessionValue(value: string | undefined): UserProfile | null
 
   const row = getDb()
     .prepare(
-      `SELECT u.id, u.username, u.display_name, u.avatar_path, u.status, u.role,
-              u.trust_level, u.soda_balance, u.soda_experience,
+      `SELECT u.id, u.username, u.display_name, u.email, u.email_verified_at, u.avatar_path, u.status, u.role,
+              u.trust_level, u.soda_balance, u.soda_experience, u.cookie_balance,
               u.locale_preference, u.reading_history_enabled,
               u.registration_ip, u.created_at, u.updated_at, u.last_login_at, u.last_login_ip
        FROM user_sessions s
@@ -130,6 +136,9 @@ export async function loginUser(
   const row = getUserPasswordRow(username);
   if (!row || row.status === "disabled" || !verifyUserPassword(password, row.password_hash)) {
     return { ok: false, message: "用户名或密码不正确" };
+  }
+  if (row.status === "pending") {
+    return { ok: false, message: "邮箱尚未验证，请先完成验证" };
   }
 
   const headerStore = await headers();

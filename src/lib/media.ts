@@ -174,6 +174,8 @@ const MEDIA_MIME_TYPES: Record<string, string> = {
   ".wav": "audio/wav",
   ".epub": "application/epub+zip",
   ".pdf": "application/pdf",
+  ".md": "text/markdown",
+  ".markdown": "text/markdown",
   ".txt": "text/plain",
   ".zip": "application/zip",
 };
