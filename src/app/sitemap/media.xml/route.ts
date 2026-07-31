@@ -3,6 +3,7 @@ import {
   isMediaKindPublic,
   listMediaFolders,
   listVideoCategories,
+  listVideoTags,
   type MediaKind,
 } from "@/lib/media";
 import { absoluteSiteUrl } from "@/lib/seo";
@@ -28,9 +29,16 @@ export function GET() {
   for (const kind of publicKinds) {
     entries.push({ url: mediaListUrl(kind), changeFrequency: "daily", priority: 0.6 });
     if (kind === "video") {
+      entries.push({ url: absoluteSiteUrl("/media/tags"), changeFrequency: "weekly", priority: 0.5 });
       entries.push(...listVideoCategories().map((category) => ({
         url: mediaListUrl(kind, { category: String(category.id) }),
         lastModified: category.updatedAt,
+        changeFrequency: "weekly" as const,
+        priority: 0.5,
+      })));
+      entries.push(...listVideoTags({ pageSize: 5_000 }).tags.map((tag) => ({
+        url: mediaListUrl(kind, { tag: tag.slug }),
+        lastModified: tag.updatedAt,
         changeFrequency: "weekly" as const,
         priority: 0.5,
       })));

@@ -1282,8 +1282,34 @@ function initialize(db: DatabaseSync) {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS video_tags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      slug TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      description TEXT NOT NULL DEFAULT '',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_visible INTEGER NOT NULL DEFAULT 1 CHECK(is_visible IN (0, 1)),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS media_asset_tags (
+      media_id INTEGER NOT NULL,
+      tag_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(media_id, tag_id),
+      FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE CASCADE,
+      FOREIGN KEY(tag_id) REFERENCES video_tags(id) ON DELETE CASCADE
+    );
+
     CREATE INDEX IF NOT EXISTS idx_media_assets_kind_created ON media_assets(kind, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_media_assets_title ON media_assets(title);
+    CREATE INDEX IF NOT EXISTS idx_video_tags_visible_sort
+      ON video_tags(is_visible, sort_order, name COLLATE NOCASE, id);
+    CREATE INDEX IF NOT EXISTS idx_media_asset_tags_tag_media
+      ON media_asset_tags(tag_id, media_id);
+    CREATE INDEX IF NOT EXISTS idx_media_asset_tags_media_tag
+      ON media_asset_tags(media_id, tag_id);
     CREATE TABLE IF NOT EXISTS media_prepare_jobs (
       media_id INTEGER PRIMARY KEY,
       source_version INTEGER NOT NULL,
@@ -1474,6 +1500,7 @@ function initialize(db: DatabaseSync) {
   db.exec("CREATE INDEX IF NOT EXISTS idx_analytics_events_media_time ON analytics_events(media_id, created_at);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_analytics_events_tag_time ON analytics_events(tag_id, created_at);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_media_assets_video_category ON media_assets(kind, category_id, updated_at DESC);");
+  db.exec("DROP INDEX IF EXISTS idx_media_assets_video_author;");
   db.exec("CREATE INDEX IF NOT EXISTS idx_media_assets_storage_node ON media_assets(storage_node_id, stored_name);");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_search_query_events_event_key ON search_query_events(event_key) WHERE event_key IS NOT NULL;");
   db.exec("CREATE INDEX IF NOT EXISTS idx_search_query_events_source_time ON search_query_events(source, created_at);");

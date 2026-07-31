@@ -28,9 +28,10 @@ export function MediaVideoCard({
   priority?: boolean;
 }) {
   const title = displayTitle(asset.title, asset.fileName);
+  const watchHref = `/media/${asset.id}#watch`;
   return (
-    <Link className="mediaVideoCard" href={`/media/${asset.id}#watch`}>
-      <span className="mediaVideoPreview">
+    <article className="mediaVideoCard">
+      <Link className="mediaVideoPreview" href={watchHref} aria-label={`播放 ${title}`}>
         <MediaVideoPreview
           id={asset.id}
           singlePercent={thumbnail.singlePercent}
@@ -42,11 +43,10 @@ export function MediaVideoCard({
         <span className="mediaVideoPlay" aria-hidden="true"><Play size={20} fill="currentColor" /></span>
         <span className="mediaVideoViews"><Eye size={12} aria-hidden="true" />{formatCompactCount(asset.playCount)}</span>
         <span className="mediaVideoMeta">{formatMediaDuration(asset.durationSeconds)}</span>
-      </span>
+      </Link>
       <span className="mediaCardCopy">
-        <strong title={title}>{title}</strong>
-        <small title={asset.artist || "未标注作者"}>{asset.artist || "未标注作者"}</small>
+        <Link className="mediaVideoTitleLink" href={watchHref} title={title}>{title}</Link>
       </span>
-    </Link>
+    </article>
   );
 }

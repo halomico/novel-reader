@@ -26,23 +26,31 @@ import {
 } from "@/lib/home-portal";
 import {
   createVideoCategory,
+  createVideoTag,
   createMediaFolder,
   deleteVideoCategory,
+  deleteVideoTag,
   deleteMediaAssets,
   deleteMediaFolder,
   getMediaAsset,
   isMediaKind,
   listMediaAssetsByIds,
   listVideoCategories,
+  listVideoTags,
+  listVideoTagsForAssets,
   MediaCategoryError,
   MediaFolderError,
+  MediaTagError,
   renameMediaFolder,
   setVideoCategoryForAssets,
+  setVideoTagsForAssets,
   syncMediaLibrary,
   type MediaAsset,
   type MediaKind,
   type VideoCategory,
+  type VideoTag,
   updateVideoCategory,
+  updateVideoTag,
   updateMediaAsset,
 } from "@/lib/media";
 import { mutationResult, type MutationResult } from "@/lib/mutation-result";
@@ -150,7 +158,7 @@ function mediaFolderMessage(error: unknown): string {
 }
 
 function mediaOperationMessage(error: unknown): string {
-  return error instanceof MediaFolderError || error instanceof MediaCategoryError
+  return error instanceof MediaFolderError || error instanceof MediaCategoryError || error instanceof MediaTagError
     ? error.message
     : "资源操作失败，请检查媒体目录和数据库状态";
 }
@@ -797,16 +805,16 @@ export async function loadAdminMediaSelectionAction(requestedIds: number[]) {
 
 export async function updateAdminMediaAction(
   formData: FormData,
-): Promise<MutationResult<{ asset: MediaAsset }>> {
+): Promise<MutationResult<{ asset: MediaAsset; tags: VideoTag[] }>> {
   await requireAdminRequest();
   const id = Number(formData.get("mediaId"));
   const title = String(formData.get("title") || "").trim();
-  const artist = String(formData.get("artist") || "").trim();
   const description = String(formData.get("description") || "").trim();
   const asset = Number.isInteger(id) && id > 0 ? getMediaAsset(id) : null;
   if (!asset) {
     return mutationResult(false, "资源不存在", "warning");
   }
+  const artist = asset.kind === "audio" ? String(formData.get("artist") || "").trim() : "";
   if (!title || title.length > 120) {
     return mutationResult(false, "标题应为 1 到 120 个字符", "warning");
   }
@@ -820,18 +828,28 @@ export async function updateAdminMediaAction(
     const updated = await updateMediaAsset(
       id,
       title,
-      asset.kind === "file" ? "" : artist,
+      artist,
       description,
       String(formData.get("targetFolder") || ""),
       asset.kind === "video" && formData.has("categoryId") ? formData.get("categoryId") : undefined,
     );
-    const nextAsset = updated ? getMediaAsset(id) : null;
+    if (!updated) {
+      return mutationResult(false, "资源不存在", "warning");
+    }
+    if (asset.kind === "video") {
+      setVideoTagsForAssets([id], formData.getAll("tagIds").map(Number));
+    }
+    const nextAsset = getMediaAsset(id);
     if (!nextAsset) {
       return mutationResult(false, "资源不存在", "warning");
     }
     revalidatePath("/media");
+    revalidatePath("/media/tags");
     revalidatePath(`/media/${id}`);
-    return mutationResult(true, "资源信息已更新", "success", { asset: nextAsset });
+    return mutationResult(true, "资源信息已更新", "success", {
+      asset: nextAsset,
+      tags: listVideoTagsForAssets([id])[id] || [],
+    });
   } catch (error) {
     return mutationResult(false, mediaOperationMessage(error), "warning");
   }
@@ -839,7 +857,7 @@ export async function updateAdminMediaAction(
 
 export async function batchUpdateAdminMediaAction(
   formData: FormData,
-): Promise<MutationResult<{ assets: MediaAsset[] }>> {
+): Promise<MutationResult<{ assets: MediaAsset[]; tagsByAsset: Record<number, VideoTag[]> }>> {
   await requireAdminRequest();
   const ids = Array.from(new Set(
     formData
@@ -853,10 +871,12 @@ export async function batchUpdateAdminMediaAction(
 
   const applyArtist = formData.get("applyArtist") === "on";
   const applyDescription = formData.get("applyDescription") === "on";
+  const applyTags = formData.get("applyTags") === "on";
   const artist = String(formData.get("artist") || "").trim();
   const description = String(formData.get("description") || "").trim();
   const targetFolder = String(formData.get("targetFolder") || "__keep__");
   const categoryId = String(formData.get("categoryId") || "__keep__");
+  const tagIds = formData.getAll("tagIds").map(Number);
   if (artist.length > 80 || description.length > 1000) {
     return mutationResult(
       false,
@@ -874,11 +894,12 @@ export async function batchUpdateAdminMediaAction(
       await updateMediaAsset(
         id,
         title,
-        asset.kind === "file" ? "" : applyArtist ? artist : asset.artist,
+        asset.kind === "audio" && applyArtist ? artist : asset.kind === "audio" ? asset.artist : "",
         applyDescription ? description : asset.description,
         targetFolder === "__keep__" ? undefined : targetFolder,
         asset.kind === "video" && categoryId !== "__keep__" ? categoryId : undefined,
       );
+      if (asset.kind === "video" && applyTags) setVideoTagsForAssets([id], tagIds);
       updated += 1;
       revalidatePath(`/media/${id}`);
     }
@@ -887,15 +908,17 @@ export async function batchUpdateAdminMediaAction(
       false,
       mediaOperationMessage(error),
       "warning",
-      { assets: listMediaAssetsByIds(ids) },
+      { assets: listMediaAssetsByIds(ids), tagsByAsset: listVideoTagsForAssets(ids) },
     );
   }
   revalidatePath("/media");
+  revalidatePath("/media/tags");
+  revalidatePath("/sitemap/media.xml");
   return mutationResult(
     updated > 0,
     `已更新 ${updated} 个资源`,
     updated ? "success" : "warning",
-    { assets: listMediaAssetsByIds(ids) },
+    { assets: listMediaAssetsByIds(ids), tagsByAsset: listVideoTagsForAssets(ids) },
   );
 }
 
@@ -976,6 +999,87 @@ export async function assignAdminVideoCategoryAction(
     updated ? `已归类 ${updated} 个视频` : "所选视频不存在",
     updated ? "success" : "warning",
     { assets: listMediaAssetsByIds(ids) },
+  );
+}
+
+export async function createAdminVideoTagAction(
+  formData: FormData,
+): Promise<MutationResult<{ tags: VideoTag[] }>> {
+  await requireAdminRequest();
+  try {
+    createVideoTag(formData.get("name"), formData.get("description"));
+  } catch (error) {
+    return mutationResult(false, mediaOperationMessage(error), "warning");
+  }
+  revalidatePath("/media");
+  revalidatePath("/media/tags");
+  revalidatePath("/sitemap/media.xml");
+  return mutationResult(true, "视频标签已创建", "success", {
+    tags: listVideoTags({ includeHidden: true, pageSize: 5_000 }).tags,
+  });
+}
+
+export async function updateAdminVideoTagAction(
+  formData: FormData,
+): Promise<MutationResult<{ tags: VideoTag[] }>> {
+  await requireAdminRequest();
+  let updated = false;
+  try {
+    updated = updateVideoTag(
+      Number(formData.get("tagId")),
+      formData.get("name"),
+      formData.get("description"),
+      Number(formData.get("sortOrder") || 0),
+      formData.get("visible") === "on",
+    );
+  } catch (error) {
+    return mutationResult(false, mediaOperationMessage(error), "warning");
+  }
+  if (!updated) return mutationResult(false, "视频标签不存在", "warning");
+  revalidatePath("/media");
+  revalidatePath("/media/tags");
+  revalidatePath("/sitemap/media.xml");
+  return mutationResult(true, "视频标签已更新", "success", {
+    tags: listVideoTags({ includeHidden: true, pageSize: 5_000 }).tags,
+  });
+}
+
+export async function deleteAdminVideoTagAction(
+  formData: FormData,
+): Promise<MutationResult<{ tags: VideoTag[] }>> {
+  await requireAdminRequest();
+  const deleted = deleteVideoTag(Number(formData.get("tagId")));
+  revalidatePath("/media");
+  revalidatePath("/media/tags");
+  revalidatePath("/sitemap/media.xml");
+  return mutationResult(
+    deleted,
+    deleted ? "视频标签已删除" : "视频标签不存在",
+    deleted ? "success" : "warning",
+    { tags: listVideoTags({ includeHidden: true, pageSize: 5_000 }).tags },
+  );
+}
+
+export async function assignAdminVideoTagsAction(
+  formData: FormData,
+): Promise<MutationResult<{ tagsByAsset: Record<number, VideoTag[]> }>> {
+  await requireAdminRequest();
+  const ids = Array.from(new Set(formData.getAll("mediaIds").map(Number).filter((id) => Number.isInteger(id) && id > 0)));
+  if (!ids.length) return mutationResult(false, "请选择视频", "warning");
+  let updated = 0;
+  try {
+    updated = setVideoTagsForAssets(ids, formData.getAll("tagIds").map(Number));
+  } catch (error) {
+    return mutationResult(false, mediaOperationMessage(error), "warning");
+  }
+  revalidatePath("/media");
+  revalidatePath("/media/tags");
+  revalidatePath("/sitemap/media.xml");
+  return mutationResult(
+    updated > 0,
+    updated ? `已更新 ${updated} 个视频的标签` : "所选视频不存在",
+    updated ? "success" : "warning",
+    { tagsByAsset: listVideoTagsForAssets(ids) },
   );
 }
 

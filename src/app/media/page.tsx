@@ -13,11 +13,13 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { getVideoThumbnailSettings } from "@/lib/config";
 import {
   getAccessibleMediaKinds,
+  getVideoTagBySlug,
   isMediaKind,
   isMediaKindPublic,
   listMediaAssets,
   listMediaFolders,
   listVideoCategories,
+  listVideoTags,
   normalizeMediaFolder,
   sortMediaFolders,
   type MediaAsset,
@@ -38,7 +40,7 @@ import { languageAlternates, uiText, withLocalePath, type AppLocale } from "@/li
 export const dynamic = "force-dynamic";
 
 type MediaPageProps = {
-  searchParams: Promise<{ kind?: string; folder?: string; q?: string; page?: string; folderPage?: string; category?: string; sort?: string; order?: string }>;
+  searchParams: Promise<{ kind?: string; folder?: string; q?: string; page?: string; folderPage?: string; category?: string; tag?: string; sort?: string; order?: string }>;
 };
 
 const KIND_LABELS: Record<MediaKind, string> = { video: "视频", audio: "音频", file: "文件" };
@@ -58,6 +60,8 @@ export async function generateMetadata({ searchParams }: MediaPageProps): Promis
   const canonicalParams = new URLSearchParams({ kind });
   if (kind !== "video" && params.folder) canonicalParams.set("folder", params.folder);
   if (kind === "video" && /^\d+$/.test(params.category || "")) canonicalParams.set("category", params.category!);
+  const videoTag = kind === "video" ? getVideoTagBySlug(params.tag) : null;
+  if (videoTag) canonicalParams.set("tag", videoTag.slug);
   const page = Number(params.page || 1);
   if (Number.isInteger(page) && page > 1) canonicalParams.set("page", String(page));
   const folderPage = Number(params.folderPage || 1);
@@ -65,8 +69,10 @@ export async function generateMetadata({ searchParams }: MediaPageProps): Promis
   const canonicalPath = `/media?${canonicalParams.toString()}`;
   const canonical = withLocalePath(canonicalPath, locale);
   const label = uiText(locale, KIND_LABELS[kind]);
-  const title = `${label}${uiText(locale, "资源")}`;
-  const description = locale === "zh-Hant" ? `瀏覽站內${label}資源。` : `浏览站内${label}资源。`;
+  const title = videoTag ? `#${videoTag.name} · ${label}` : `${label}${uiText(locale, "资源")}`;
+  const description = videoTag
+    ? locale === "zh-Hant" ? `瀏覽標記為 ${videoTag.name} 的站內視頻。` : `浏览标记为 ${videoTag.name} 的站内视频。`
+    : locale === "zh-Hant" ? `瀏覽站內${label}資源。` : `浏览站内${label}资源。`;
   return {
     title,
     description,
@@ -100,6 +106,7 @@ function mediaHref(
   category = "",
   sort?: MediaSortBy,
   order?: MediaSortOrder,
+  tag = "",
 ): string {
   const defaultSort: MediaSortBy = kind === "audio" && !folder ? "duration" : "name";
   const selectedSort = sort || defaultSort;
@@ -108,6 +115,7 @@ function mediaHref(
   if (folder) params.set("folder", folder);
   if (query) params.set("q", query);
   if (kind === "video" && category) params.set("category", category);
+  if (kind === "video" && tag) params.set("tag", tag);
   if (selectedSort !== defaultSort) params.set("sort", selectedSort);
   if (selectedOrder !== (selectedSort === "name" ? "asc" : "desc")) params.set("order", selectedOrder);
   return `/media?${params.toString()}`;
@@ -159,11 +167,12 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
   const kind = requestedKind || accessibleKinds[0];
   const mediaPublicOrigin = getMediaPublicUrlForKind(kind);
   const requestedFolder = kind === "video" ? "" : normalizeMediaFolder(params.folder || "") || "";
-  const timedKind = kind === "video" || kind === "audio";
   const defaultSortBy: MediaSortBy = kind === "audio" && !requestedFolder ? "duration" : "name";
-  const sortBy: MediaSortBy = timedKind
-    ? params.sort === "duration" ? "duration" : params.sort === "name" ? "name" : defaultSortBy
-    : params.sort === "size" ? "size" : "name";
+  const sortBy: MediaSortBy = kind === "video"
+    ? params.sort === "duration" || params.sort === "plays" ? params.sort : "name"
+    : kind === "audio"
+      ? params.sort === "duration" || params.sort === "name" ? params.sort : defaultSortBy
+      : params.sort === "size" ? "size" : "name";
   const sortOrder: MediaSortOrder = params.order === "asc" || params.order === "desc"
     ? params.order
     : sortBy === "name" ? "asc" : "desc";
@@ -174,10 +183,14 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
     : undefined;
   const categoryParam = videoCategoryId ? String(videoCategoryId) : "";
   const activeVideoCategory = videoCategories.find((category) => category.id === videoCategoryId);
+  const videoTags = kind === "video" ? listVideoTags({ pageSize: 5_000 }).tags : [];
+  const activeVideoTag = kind === "video" ? getVideoTagBySlug(params.tag) : null;
+  const tagParam = activeVideoTag?.slug || "";
   const queryInput = (params.q || "").trim();
   const sourceResult = listMediaAssets({
     kind,
     videoCategoryId,
+    videoTagId: activeVideoTag?.id,
     folder: requestedFolder,
     recursive: kind === "video",
     query: queryInput ? await normalizeSearchText(queryInput) : "",
@@ -191,7 +204,6 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
     ...asset,
     title: await localizeText(asset.title, locale),
     description: await localizeText(asset.description, locale),
-    artist: asset.artist ? await localizeText(asset.artist, locale) : asset.artist,
   })));
   const displayCategories = await Promise.all(videoCategories.map(async (category) => ({
     ...category,
@@ -199,6 +211,14 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
   })));
   const displayCategory = activeVideoCategory
     ? displayCategories.find((category) => category.id === activeVideoCategory.id)
+    : undefined;
+  const displayVideoTags = await Promise.all(videoTags.map(async (tag) => ({
+    ...tag,
+    name: await localizeText(tag.name, locale),
+    description: await localizeText(tag.description, locale),
+  })));
+  const displayVideoTag = activeVideoTag
+    ? displayVideoTags.find((tag) => tag.id === activeVideoTag.id)
     : undefined;
   const thumbnailSettings = getVideoThumbnailSettings();
   const directThumbnails = kind === "video" && !hasScopedContentAccessRules("video");
@@ -232,9 +252,12 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
   const displaySegments = await Promise.all(segments.map((segment) => localizeText(segment, locale)));
   const breadcrumbItems: BreadcrumbItem[] = [
     { label: uiText(locale, "首页"), href: "/" },
-    { label: uiText(locale, KIND_LABELS[kind]), href: segments.length || activeVideoCategory ? mediaHref(kind) : undefined },
+    { label: uiText(locale, KIND_LABELS[kind]), href: segments.length || activeVideoCategory || activeVideoTag ? mediaHref(kind) : undefined },
   ];
-  if (displayCategory) {
+  if (displayVideoTag) {
+    breadcrumbItems.push({ label: uiText(locale, "视频标签"), href: "/media/tags" });
+    breadcrumbItems.push({ label: `#${displayVideoTag.name}` });
+  } else if (displayCategory) {
     breadcrumbItems.push({ label: displayCategory.name });
   } else {
     segments.forEach((segment, index) => {
@@ -260,8 +283,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
       <section className="mediaLibrary">
         <header className="mediaLibraryHeader">
           <div className="mediaLibraryHeading">
-            <span className="mediaLibraryTitleIcon" aria-hidden="true"><EmptyIcon size={23} /></span>
-            <h1>{uiText(locale, KIND_LABELS[kind])}</h1>
+            <h1>{displayVideoTag ? `#${displayVideoTag.name}` : displayCategory?.name || uiText(locale, KIND_LABELS[kind])}</h1>
           </div>
           <div className="mediaLibraryActions">
             <MediaPublicSort
@@ -269,6 +291,8 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
               folder={kind === "video" ? "" : result.folder}
               query={result.query}
               category={categoryParam}
+              tag={tagParam}
+              tags={displayVideoTags}
               sortBy={sortBy}
               sortOrder={sortOrder}
               locale={locale}
@@ -284,9 +308,10 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
               {sortBy !== defaultSortBy ? <input name="sort" type="hidden" value={sortBy} /> : null}
               {sortOrder !== (sortBy === "name" ? "asc" : "desc") ? <input name="order" type="hidden" value={sortOrder} /> : null}
               {categoryParam ? <input name="category" type="hidden" value={categoryParam} /> : null}
+              {tagParam ? <input name="tag" type="hidden" value={tagParam} /> : null}
               {kind !== "video" && result.folder ? <input name="folder" type="hidden" value={result.folder} /> : null}
               {result.query ? (
-                <Link className="mediaSearchIconButton" href={mediaHref(kind, kind === "video" ? "" : result.folder, "", categoryParam, sortBy, sortOrder)} aria-label={uiText(locale, "清除资源搜索")} title={uiText(locale, "清除搜索")}>
+                <Link className="mediaSearchIconButton" href={mediaHref(kind, kind === "video" ? "" : result.folder, "", categoryParam, sortBy, sortOrder, tagParam)} aria-label={uiText(locale, "清除资源搜索")} title={uiText(locale, "清除搜索")}>
                   <X size={15} aria-hidden="true" />
                 </Link>
               ) : null}
@@ -297,13 +322,13 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
           </div>
         </header>
 
-        {kind === "video" && videoCategories.length ? (
+        {kind === "video" ? (
           <nav className="mediaVideoChannels" aria-label={uiText(locale, "视频分类")}>
-            <Link className={!categoryParam ? "isActive" : ""} href={mediaHref(kind, "", result.query, "", sortBy, sortOrder)}>{uiText(locale, "全部")}</Link>
+            <Link className={!categoryParam ? "isActive" : ""} href={mediaHref(kind, "", result.query, "", sortBy, sortOrder, tagParam)}>{uiText(locale, "全部")}</Link>
             {displayCategories.map((category) => (
               <Link
                 className={categoryParam === String(category.id) ? "isActive" : ""}
-                href={mediaHref(kind, "", result.query, String(category.id), sortBy, sortOrder)}
+                href={mediaHref(kind, "", result.query, String(category.id), sortBy, sortOrder, tagParam)}
                 key={category.id}
               >
                 {category.name}
@@ -368,6 +393,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
                 kind,
                 folder: kind === "video" ? undefined : result.folder || undefined,
                 category: categoryParam || undefined,
+                tag: tagParam || undefined,
                 folderPage: folderPage > 1 ? String(folderPage) : undefined,
                 sort: sortBy === defaultSortBy ? undefined : sortBy,
                 order: sortOrder === (sortBy === "name" ? "asc" : "desc") ? undefined : sortOrder,
@@ -383,6 +409,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
                 kind,
                 folder: kind === "video" ? undefined : result.folder || undefined,
                 category: categoryParam || undefined,
+                tag: tagParam || undefined,
                 page: result.page > 1 ? String(result.page) : undefined,
                 sort: sortBy === defaultSortBy ? undefined : sortBy,
                 order: sortOrder === (sortBy === "name" ? "asc" : "desc") ? undefined : sortOrder,

@@ -8,7 +8,7 @@ export const READER_LINE_HEIGHTS = [1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2] as const;
 export const DEFAULT_READER_LINE_HEIGHT = 1.7;
 
 export const COLOR_PALETTES = [
-  { value: "default", label: "Default", lightAccent: "#a42828", lightStrong: "#7c1e1e", darkAccent: "#b65d2d", darkStrong: "#d1743e" },
+  { value: "default", label: "Default", lightAccent: "#9f3142", lightStrong: "#7d2433", darkAccent: "#b65d2d", darkStrong: "#d1743e" },
   { value: "spacelab", label: "Spacelab", lightAccent: "#446e9b", lightStrong: "#2f557d", darkAccent: "#5f7da0", darkStrong: "#7694b6" },
   { value: "nordic", label: "Nordic", lightAccent: "#3f6f78", lightStrong: "#2d555d", darkAccent: "#65a0a8", darkStrong: "#82bbc2" },
   { value: "flatly", label: "Flatly", lightAccent: "#25765d", lightStrong: "#185b46", darkAccent: "#2c7e63", darkStrong: "#41977a" },

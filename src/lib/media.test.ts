@@ -5,10 +5,13 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import {
+  createVideoTag,
   isMediaKindAccessible,
   listMediaAssets,
   listMediaAssetsNeedingPreparation,
   listMediaFolders,
+  listVideoTags,
+  listVideoTagsForAsset,
   mediaThumbnailVersion,
   normalizeMediaFile,
   normalizeMediaSortBy,
@@ -16,7 +19,9 @@ import {
   parseMediaByteRange,
   saveMediaDuration,
   saveMediaThumbnailVersion,
+  setVideoTagsForAssets,
   sortMediaFolders,
+  updateVideoTag,
   type MediaFolder,
 } from "./media";
 import { getDb } from "./db";
@@ -144,6 +149,37 @@ test("searches media recursively with multiple terms and exposes matching folder
     listMediaFolders("audio").filter((folder) => folder.path.includes("归档")).map((folder) => folder.path),
     ["归档", "归档/古典", "归档/民谣"],
   );
+});
+
+test("manages video tags and filters tagged videos before pagination", (t) => {
+  withTempDatabase(t);
+  const db = getDb();
+  const insert = db.prepare(
+    `INSERT INTO media_assets
+      (kind, title, file_name, stored_name, mime_type, size_bytes, mtime_ms, play_count)
+     VALUES ('video', ?, ?, ?, 'video/mp4', 100, 1, ?)`,
+  );
+  const firstId = Number(insert.run("第一集", "one.mp4", "video/one.mp4", 12).lastInsertRowid);
+  const secondId = Number(insert.run("第二集", "two.mp4", "video/two.mp4", 8).lastInsertRowid);
+  insert.run("访谈", "three.mp4", "video/three.mp4", 3);
+
+  const story = createVideoTag("剧情", "故事类视频");
+  const interview = createVideoTag("访谈");
+  assert.equal(setVideoTagsForAssets([firstId, secondId], [story.id]), 2);
+  assert.equal(setVideoTagsForAssets([secondId], [story.id, interview.id]), 1);
+
+  const tags = listVideoTags();
+  assert.equal(tags.totalTags, 2);
+  assert.equal(tags.tags.find((tag) => tag.id === story.id)?.videoCount, 2);
+  assert.deepEqual(listVideoTagsForAsset(secondId).map((tag) => tag.name), ["剧情", "访谈"]);
+  assert.equal(listVideoTags({ query: "故事" }).tags[0]?.id, story.id);
+  assert.deepEqual(
+    listMediaAssets({ kind: "video", videoTagId: story.id, recursive: true }).assets.map((asset) => asset.title),
+    ["第一集", "第二集"],
+  );
+  assert.equal(updateVideoTag(story.id, "剧情片", "故事类视频", 10, false), true);
+  assert.equal(listVideoTags().tags.some((tag) => tag.id === story.id), false);
+  assert.equal(listVideoTags({ includeHidden: true }).tags.find((tag) => tag.id === story.id)?.slug, story.slug);
 });
 
 test("tracks media preparation independently from public list requests", (t) => {

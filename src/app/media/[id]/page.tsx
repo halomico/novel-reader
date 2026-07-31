@@ -1,4 +1,4 @@
-import { Clapperboard, Clock3, Download, Eye, File, Headphones, UserRound } from "lucide-react";
+import { Clapperboard, Clock3, Download, Eye, File, Headphones } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
@@ -6,6 +6,7 @@ import { after } from "next/server";
 import { cache } from "react";
 import { MediaAudioPlayer, type AudioQueueTrack } from "@/components/MediaAudioPlayer";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import Link from "@/components/LocalizedLink";
 import { MediaConnectionHint } from "@/components/MediaConnectionHint";
 import { MediaFavoriteButton } from "@/components/MediaFavoriteButton";
 import { MediaPlayer } from "@/components/MediaPlayer";
@@ -26,6 +27,7 @@ import {
   isMediaKindPublic,
   listMediaFolderAssets,
   listRelatedVideoAssets,
+  listVideoTagsForAsset,
   type MediaKind,
 } from "@/lib/media";
 import { formatMediaDuration } from "@/lib/media-format";
@@ -128,7 +130,6 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
 
   const Icon = KIND_ICONS[asset.kind];
   const title = await localizeText(displayTitle(asset.title, asset.fileName), locale);
-  const displayArtist = asset.artist ? await localizeText(asset.artist, locale) : "";
   const displayDescription = await localizeText(asset.description, locale);
   const displayFolder = await localizeText(asset.folder, locale);
   const listFolder = asset.kind === "video" ? "" : asset.folder;
@@ -156,7 +157,11 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
     ...item,
     title: await localizeText(item.title, locale),
     description: await localizeText(item.description, locale),
-    artist: item.artist ? await localizeText(item.artist, locale) : item.artist,
+  })));
+  const videoTags = asset.kind === "video" ? listVideoTagsForAsset(asset.id).filter((tag) => tag.visible) : [];
+  const displayVideoTags = await Promise.all(videoTags.map(async (tag) => ({
+    ...tag,
+    name: await localizeText(tag.name, locale),
   })));
   const feedbackMedia = isFeedbackMediaKind(asset.kind);
   const favorite = user && feedbackMedia ? isMediaFavorite(user.id, asset.id) : false;
@@ -217,15 +222,17 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
                 leaseRequired={Boolean(user)}
               />
             </div>
-            <section className="mediaVideoInfo" aria-label={uiText(locale, "作者与简介")}>
-              <div className="mediaVideoInfoBar">
-                <div className="mediaVideoAuthor">
-                  <span aria-hidden="true"><UserRound size={20} /></span>
-                  <div>
-                    <strong>{displayArtist || uiText(locale, "未标注作者")}</strong>
-                    <small>{uiText(locale, "作者")}</small>
-                  </div>
-                </div>
+            <section className="mediaVideoInfo" aria-label={uiText(locale, "标签与简介")}>
+              {displayVideoTags.length || user ? <div className="mediaVideoInfoBar">
+                {displayVideoTags.length ? (
+                  <nav className="mediaVideoTags" aria-label={uiText(locale, "视频标签")}>
+                    {displayVideoTags.map((tag) => (
+                      <Link className="contentTag contentTagLink" href={`/media?${new URLSearchParams({ kind: "video", tag: tag.slug }).toString()}`} key={tag.id}>
+                        #{tag.name}
+                      </Link>
+                    ))}
+                  </nav>
+                ) : <span />}
                 {user ? (
                   <div className="readerFeedbackActions feedbackActionTrio mediaVideoActions" aria-label={uiText(locale, "视频操作")}>
                     {canRecommend && recommendation ? (
@@ -238,7 +245,7 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
                     {canReport ? <ReportMediaButton mediaId={asset.id} title={title} kind="video" /> : null}
                   </div>
                 ) : null}
-              </div>
+              </div> : null}
               {displayDescription ? <p className="mediaDescription">{displayDescription}</p> : null}
             </section>
           </section>

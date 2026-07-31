@@ -1,15 +1,14 @@
 "use client";
 
-import { BookOpen, Clapperboard, File, Headphones, Tags } from "lucide-react";
 import Link from "@/components/LocalizedLink";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { MediaKind } from "@/lib/media";
 import { localeFromPathname, stripLocalePath, uiText } from "@/lib/locale";
 
-const MEDIA_LINKS: Record<MediaKind, { label: string; icon: typeof Clapperboard }> = {
-  video: { label: "视频", icon: Clapperboard },
-  audio: { label: "音频", icon: Headphones },
-  file: { label: "文件", icon: File },
+const MEDIA_LINKS: Record<MediaKind, string> = {
+  video: "视频",
+  audio: "音频",
+  file: "文件",
 };
 
 export function HeaderPrimaryNav({
@@ -38,24 +37,19 @@ export function HeaderPrimaryNav({
     <nav className={className} aria-label={ariaLabel}>
       {showLibrary ? (
         <Link href="/novels" aria-current={pathname === "/novels" ? "page" : undefined} onClick={onNavigate}>
-          <BookOpen size={15} aria-hidden="true" />
           {uiText(locale, "小说")}
         </Link>
       ) : null}
       {showTags ? (
         <Link href="/tags" aria-current={pathname.startsWith("/tags") ? "page" : undefined} onClick={onNavigate}>
-          <Tags size={15} aria-hidden="true" />
           {uiText(locale, "标签")}
         </Link>
       ) : null}
       {mediaKinds.map((kind) => {
-        const item = MEDIA_LINKS[kind];
-        const Icon = item.icon;
-        const active = pathname === "/media" && activeKind === kind;
+        const active = (pathname === "/media" && activeKind === kind) || (kind === "video" && pathname.startsWith("/media/tags"));
         return (
           <Link href={`/media?kind=${kind}`} aria-current={active ? "page" : undefined} key={kind} onClick={onNavigate}>
-            <Icon size={15} aria-hidden="true" />
-            {uiText(locale, item.label)}
+            {uiText(locale, MEDIA_LINKS[kind])}
           </Link>
         );
       })}

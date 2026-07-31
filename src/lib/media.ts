@@ -70,6 +70,18 @@ export type VideoCategory = {
   updatedAt: string;
 };
 
+export type VideoTag = {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+  sortOrder: number;
+  visible: boolean;
+  videoCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type MediaFolder = {
   path: string;
   name: string;
@@ -119,6 +131,20 @@ type VideoCategoryRow = {
   updated_at: string;
 };
 
+type VideoTagRow = {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+  sort_order: number;
+  is_visible: number;
+  video_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type MediaVideoTagRow = VideoTagRow & { media_id: number };
+
 type ScannedMediaFile = {
   kind: MediaKind;
   storageNodeId: string | null;
@@ -148,6 +174,7 @@ type MediaGlobal = typeof globalThis & {
 
 export class MediaFolderError extends Error {}
 export class MediaCategoryError extends Error {}
+export class MediaTagError extends Error {}
 
 function remoteMediaError(error: unknown): never {
   if (error instanceof MediaNodeClientError) {
@@ -275,6 +302,20 @@ function toVideoCategory(row: VideoCategoryRow): VideoCategory {
   };
 }
 
+function toVideoTag(row: VideoTagRow): VideoTag {
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    description: row.description,
+    sortOrder: row.sort_order,
+    visible: row.is_visible === 1,
+    videoCount: row.video_count,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 function normalizeVideoCategoryName(value: string): string | null {
   const name = value.normalize("NFKC").trim().replace(/\s+/gu, " ");
   return name && name.length <= 24 && !/[\u0000-\u001f\u007f]/u.test(name) ? name : null;
@@ -282,6 +323,202 @@ function normalizeVideoCategoryName(value: string): string | null {
 
 function normalizeVideoCategorySortOrder(value: number): number {
   return Number.isFinite(value) ? Math.min(Math.max(Math.floor(value), -9_999), 9_999) : 0;
+}
+
+function normalizeVideoTagName(value: unknown): string | null {
+  const name = String(value || "").normalize("NFKC").trim().replace(/\s+/gu, " ");
+  return name && name.length <= 40 && !/[\u0000-\u001f\u007f]/u.test(name) ? name : null;
+}
+
+function normalizeVideoTagDescription(value: unknown): string | null {
+  const description = String(value || "").normalize("NFKC").trim();
+  return description.length <= 500 && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(description)
+    ? description
+    : null;
+}
+
+function videoTagSlugBase(name: string): string {
+  return name
+    .normalize("NFKC")
+    .toLocaleLowerCase("zh-CN")
+    .replace(/\s+/gu, "-")
+    .replace(/[^\p{L}\p{N}_-]+/gu, "")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 64) || "tag";
+}
+
+function nextVideoTagSlug(name: string): string {
+  const db = getDb();
+  const base = videoTagSlugBase(name);
+  let slug = base;
+  let suffix = 2;
+  while (db.prepare("SELECT id FROM video_tags WHERE slug = ? COLLATE NOCASE").get(slug)) {
+    slug = `${base.slice(0, Math.max(1, 64 - String(suffix).length - 1))}-${suffix}`;
+    suffix += 1;
+  }
+  return slug;
+}
+
+export function listVideoTags(options: { includeHidden?: boolean; query?: string; page?: number; pageSize?: number } = {}): {
+  tags: VideoTag[];
+  page: number;
+  totalPages: number;
+  totalTags: number;
+  query: string;
+} {
+  const query = String(options.query || "").normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, 80);
+  const terms = query.split(" ").filter(Boolean).slice(0, 4);
+  const pageSize = Math.min(Math.max(Math.floor(options.pageSize || 48), 1), 5_000);
+  const filters = options.includeHidden ? [] : ["t.is_visible = 1"];
+  const values: string[] = [];
+  for (const term of terms) {
+    filters.push("(t.name COLLATE NOCASE LIKE ? ESCAPE '\\' OR t.description COLLATE NOCASE LIKE ? ESCAPE '\\')");
+    const escaped = `%${escapeLike(term)}%`;
+    values.push(escaped, escaped);
+  }
+  const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+  const count = getDb().prepare(`SELECT COUNT(*) AS count FROM video_tags t ${where}`).get(...values) as { count: number };
+  const totalPages = Math.max(1, Math.ceil(count.count / pageSize));
+  const page = Math.min(Math.max(Math.floor(options.page || 1), 1), totalPages);
+  const rows = getDb()
+    .prepare(
+      `SELECT t.id, t.name, t.slug, t.description, t.sort_order, t.is_visible, t.created_at, t.updated_at,
+              COUNT(a.id) AS video_count
+       FROM video_tags t
+       LEFT JOIN media_asset_tags mat ON mat.tag_id = t.id
+       LEFT JOIN media_assets a ON a.id = mat.media_id AND a.kind = 'video'
+       ${where}
+       GROUP BY t.id
+       ORDER BY t.sort_order ASC, natural_sort_key(t.name) ASC, t.name COLLATE NOCASE ASC, t.id ASC
+       LIMIT ? OFFSET ?`,
+    )
+    .all(...values, pageSize, (page - 1) * pageSize) as VideoTagRow[];
+  return {
+    tags: rows.map(toVideoTag),
+    page,
+    totalPages,
+    totalTags: count.count,
+    query,
+  };
+}
+
+export function getVideoTagBySlug(slugValue: unknown, options: { includeHidden?: boolean } = {}): VideoTag | null {
+  const slug = String(slugValue || "").normalize("NFKC").trim().slice(0, 80);
+  if (!slug) return null;
+  const row = getDb()
+    .prepare(
+      `SELECT t.id, t.name, t.slug, t.description, t.sort_order, t.is_visible, t.created_at, t.updated_at,
+              COUNT(a.id) AS video_count
+       FROM video_tags t
+       LEFT JOIN media_asset_tags mat ON mat.tag_id = t.id
+       LEFT JOIN media_assets a ON a.id = mat.media_id AND a.kind = 'video'
+       WHERE t.slug = ? COLLATE NOCASE ${options.includeHidden ? "" : "AND t.is_visible = 1"}
+       GROUP BY t.id`,
+    )
+    .get(slug) as VideoTagRow | undefined;
+  return row ? toVideoTag(row) : null;
+}
+
+export function createVideoTag(nameValue: unknown, descriptionValue: unknown = ""): VideoTag {
+  const name = normalizeVideoTagName(nameValue);
+  const description = normalizeVideoTagDescription(descriptionValue);
+  if (!name || description === null) {
+    throw new MediaTagError("标签名称应为 1 到 40 个字符，描述不能超过 500 个字符");
+  }
+  const db = getDb();
+  if (db.prepare("SELECT id FROM video_tags WHERE name = ? COLLATE NOCASE").get(name)) {
+    throw new MediaTagError("同名视频标签已存在");
+  }
+  const sortOrder = Number((db.prepare("SELECT COALESCE(MAX(sort_order), -10) + 10 AS value FROM video_tags").get() as { value: number }).value);
+  const result = db
+    .prepare("INSERT INTO video_tags (name, slug, description, sort_order) VALUES (?, ?, ?, ?)")
+    .run(name, nextVideoTagSlug(name), description, sortOrder);
+  return listVideoTags({ includeHidden: true, pageSize: 5_000 }).tags.find((tag) => tag.id === Number(result.lastInsertRowid))!;
+}
+
+export function updateVideoTag(
+  id: number,
+  nameValue: unknown,
+  descriptionValue: unknown,
+  sortOrder: number,
+  visible: boolean,
+): boolean {
+  if (!Number.isInteger(id) || id <= 0) return false;
+  const name = normalizeVideoTagName(nameValue);
+  const description = normalizeVideoTagDescription(descriptionValue);
+  if (!name || description === null) {
+    throw new MediaTagError("标签名称应为 1 到 40 个字符，描述不能超过 500 个字符");
+  }
+  const db = getDb();
+  if (db.prepare("SELECT id FROM video_tags WHERE name = ? COLLATE NOCASE AND id <> ?").get(name, id)) {
+    throw new MediaTagError("同名视频标签已存在");
+  }
+  return Number(db.prepare(
+    "UPDATE video_tags SET name = ?, description = ?, sort_order = ?, is_visible = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+  ).run(name, description, normalizeVideoCategorySortOrder(sortOrder), visible ? 1 : 0, id).changes) > 0;
+}
+
+export function deleteVideoTag(id: number): boolean {
+  return Number.isInteger(id) && id > 0
+    ? Number(getDb().prepare("DELETE FROM video_tags WHERE id = ?").run(id).changes) > 0
+    : false;
+}
+
+export function listVideoTagsForAssets(assetIds: number[]): Record<number, VideoTag[]> {
+  const ids = Array.from(new Set(assetIds.filter((id) => Number.isInteger(id) && id > 0)));
+  if (!ids.length) return {};
+  const rows = getDb()
+    .prepare(
+      `SELECT mat.media_id, t.id, t.name, t.slug, t.description, t.sort_order, t.is_visible,
+              t.created_at, t.updated_at, 0 AS video_count
+       FROM media_asset_tags mat
+       JOIN video_tags t ON t.id = mat.tag_id
+       WHERE mat.media_id IN (${ids.map(() => "?").join(", ")})
+       ORDER BY t.sort_order ASC, natural_sort_key(t.name) ASC, t.name COLLATE NOCASE ASC, t.id ASC`,
+    )
+    .all(...ids) as MediaVideoTagRow[];
+  const result: Record<number, VideoTag[]> = {};
+  for (const row of rows) {
+    (result[row.media_id] ||= []).push(toVideoTag(row));
+  }
+  return result;
+}
+
+export function listVideoTagsForAsset(assetId: number): VideoTag[] {
+  return listVideoTagsForAssets([assetId])[assetId] || [];
+}
+
+export function setVideoTagsForAssets(assetIds: number[], tagIds: number[]): number {
+  const ids = Array.from(new Set(assetIds.filter((id) => Number.isInteger(id) && id > 0)));
+  const tags = Array.from(new Set(tagIds.filter((id) => Number.isInteger(id) && id > 0)));
+  if (!ids.length) return 0;
+  const db = getDb();
+  const videos = db
+    .prepare(`SELECT id FROM media_assets WHERE kind = 'video' AND id IN (${ids.map(() => "?").join(", ")})`)
+    .all(...ids) as Array<{ id: number }>;
+  if (tags.length) {
+    const found = db
+      .prepare(`SELECT id FROM video_tags WHERE id IN (${tags.map(() => "?").join(", ")})`)
+      .all(...tags) as Array<{ id: number }>;
+    if (found.length !== tags.length) throw new MediaTagError("所选视频标签不存在");
+  }
+  db.exec("BEGIN");
+  try {
+    const remove = db.prepare("DELETE FROM media_asset_tags WHERE media_id = ?");
+    const insert = db.prepare("INSERT INTO media_asset_tags (media_id, tag_id) VALUES (?, ?)");
+    const touch = db.prepare("UPDATE media_assets SET updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+    for (const video of videos) {
+      remove.run(video.id);
+      for (const tagId of tags) insert.run(video.id, tagId);
+      touch.run(video.id);
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+  return videos.length;
 }
 
 export function listVideoCategories(options: { includeHidden?: boolean } = {}): VideoCategory[] {
@@ -937,7 +1174,7 @@ export function createMediaAsset(params: {
       params.storageNodeId || null,
       categoryId,
       params.title,
-      params.kind === "file" ? "" : params.artist || "",
+      params.kind === "audio" ? params.artist || "" : "",
       params.description || "",
       params.fileName,
       params.storedName,
@@ -1050,6 +1287,7 @@ export function sortMediaFolders(folders: MediaFolder[], sortBy: MediaSortBy, so
 export function listMediaAssets(params: {
   kind?: MediaKind;
   videoCategoryId?: number | null;
+  videoTagId?: number;
   folder?: string;
   recursive?: boolean;
   query?: string;
@@ -1079,10 +1317,19 @@ export function listMediaAssets(params: {
       values.push(resolveVideoCategoryId(params.videoCategoryId)!);
     }
   }
+  if (params.kind === "video" && params.videoTagId !== undefined) {
+    filters.push("EXISTS (SELECT 1 FROM media_asset_tags mat WHERE mat.media_id = media_assets.id AND mat.tag_id = ?)");
+    values.push(params.videoTagId);
+  }
   for (const term of queryTerms) {
-    filters.push("(title LIKE ? ESCAPE '\\' OR file_name LIKE ? ESCAPE '\\' OR artist LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' OR stored_name LIKE ? ESCAPE '\\')");
     const escaped = `%${escapeLike(term)}%`;
-    values.push(escaped, escaped, escaped, escaped, escaped);
+    if (params.kind === "video") {
+      filters.push("(title LIKE ? ESCAPE '\\' OR file_name LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' OR stored_name LIKE ? ESCAPE '\\')");
+      values.push(escaped, escaped, escaped, escaped);
+    } else {
+      filters.push("(title LIKE ? ESCAPE '\\' OR file_name LIKE ? ESCAPE '\\' OR artist LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' OR stored_name LIKE ? ESCAPE '\\')");
+      values.push(escaped, escaped, escaped, escaped, escaped);
+    }
   }
   const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
   const count = getDb().prepare(`SELECT COUNT(*) AS count FROM media_assets ${where}`).get(...values) as { count: number };
@@ -1432,7 +1679,7 @@ export async function updateMediaAsset(
     const result = db
       .prepare(
         `UPDATE media_assets
-         SET title = ?, artist = CASE WHEN kind IN ('video', 'audio') THEN ? ELSE '' END, description = ?,
+         SET title = ?, artist = CASE WHEN kind = 'audio' THEN ? ELSE '' END, description = ?,
              file_name = ?, stored_name = ?, updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`,
       )

@@ -140,13 +140,13 @@ test("uploads media in chunks, records it, and removes the stored file", async (
     await upload.appendMediaUploadChunk(videoStarted.uploadId, 0, videoSource);
     const videoAsset = await upload.finishMediaUpload(videoStarted.uploadId);
     assert.equal(videoAsset.categoryId, animation.id);
-    assert.equal(videoAsset.artist, "测试作者");
+    assert.equal(videoAsset.artist, "");
     assert.equal(media.listMediaAssets({ kind: "video", videoCategoryId: animation.id }).totalAssets, 1);
     assert.equal(media.listMediaAssets({ kind: "video", videoCategoryId: null }).totalAssets, 0);
     assert.equal(media.setVideoCategoryForAssets([videoAsset.id], technology.id), 1);
     assert.equal(media.getMediaAsset(videoAsset.id)?.categoryId, technology.id);
     assert.equal(await media.updateMediaAsset(videoAsset.id, "分类视频", "新视频作者", "视频分类测试", "", technology.id), true);
-    assert.equal(media.getMediaAsset(videoAsset.id)?.artist, "新视频作者");
+    assert.equal(media.getMediaAsset(videoAsset.id)?.artist, "");
     assert.equal(media.updateVideoCategory(technology.id, "数码", 15, true), true);
     assert.equal(media.listVideoCategories().find((item) => item.id === technology.id)?.videoCount, 1);
     assert.equal(media.deleteVideoCategory(technology.id), true);

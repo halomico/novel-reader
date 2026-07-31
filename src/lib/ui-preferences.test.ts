@@ -18,7 +18,7 @@ test("ships 20 unique local palettes with Default first", () => {
   assert.equal(new Set(values).size, 20);
   assert.equal(COLOR_PALETTES[0].value, "default");
   assert.equal(COLOR_PALETTES[0].label, "Default");
-  assert.equal(getColorPalette("default").lightAccent, "#a42828");
+  assert.equal(getColorPalette("default").lightAccent, "#9f3142");
   assert.equal(getColorPalette("default").darkAccent, "#b65d2d");
   assert.equal(isColorPalette("journal"), false);
   assert.equal(isColorPalette("united"), false);

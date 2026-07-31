@@ -1,4 +1,3 @@
-import { BookText } from "lucide-react";
 import type { Novel } from "@/lib/books";
 import type { Tag } from "@/lib/tags";
 import { SearchTrackedLink } from "@/components/SearchTrackedLink";
@@ -21,13 +20,10 @@ export function CatalogBookCard({
       href={`/books/${book.id}?from=${encodeURIComponent(returnHref)}`}
       novelId={book.id}
     >
-      <span className="bookMark" aria-hidden="true">
-        <BookText size={20} />
-      </span>
       <span className="bookCardBody">
         <span className="bookTitle">{book.title}</span>
         {tags.length ? (
-          <span className="bookCardTags" aria-label={`标签：${tags.map((tag) => tag.name).join("、")}`}>
+          <span className="bookCardTags contentTag" aria-label={`标签：${tags.map((tag) => tag.name).join("、")}`}>
             {tags.map((tag) => `#${tag.name}`).join("  ")}
           </span>
         ) : null}
