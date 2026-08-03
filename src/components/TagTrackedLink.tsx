@@ -21,19 +21,21 @@ export function TagTrackedLink({
   slug,
   className,
   title,
+  library,
   children,
   "data-tag-search": tagSearchText,
 }: {
   slug: string;
   className?: string;
   title?: string;
+  library?: string;
   "data-tag-search"?: string;
   children: ReactNode;
 }) {
   return (
     <Link
       className={className}
-      href={`/tags/${slug}`}
+      href={`/tags/${slug}${library && library !== "default" ? `?library=${encodeURIComponent(library)}` : ""}`}
       title={title}
       prefetch={false}
       onClick={() => recordTagClick(slug)}

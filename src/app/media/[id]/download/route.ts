@@ -1,9 +1,9 @@
 import { NextRequest } from "next/server";
-import { getMediaAsset, incrementMediaDownloadCount, isMediaKindAccessible } from "@/lib/media";
+import { getMediaAsset, incrementMediaDownloadCount, isMediaKindConsumable } from "@/lib/media";
 import { mediaDeliveryUrl } from "@/lib/media-delivery";
 import { checkContentAccess } from "@/lib/content-access";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
-import { hasUserPermission } from "@/lib/user-levels";
+import { hasMediaAssetEntitlement } from "@/lib/entitlements";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,8 +14,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (
     !asset ||
     (asset.kind !== "file" && asset.kind !== "video") ||
-    !isMediaKindAccessible(asset.kind, Boolean(user)) ||
-    (asset.kind === "video" && (!user || !hasUserPermission(user, "video_download")))
+    !isMediaKindConsumable(asset.kind, Boolean(user)) ||
+    (asset.kind === "video" && (
+      !user || (user.role !== "admin" && !hasMediaAssetEntitlement(user.id, asset, "download"))
+    ))
   ) {
     return new Response(null, { status: 404 });
   }

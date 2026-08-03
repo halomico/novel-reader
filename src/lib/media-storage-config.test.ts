@@ -37,6 +37,8 @@ test("requires a complete remote control and delivery configuration", () => {
     signingSecret: valid.MEDIA_SIGNING_SECRET,
     controlSecret: valid.MEDIA_CONTROL_SECRET,
     ttlSeconds: 21_600,
+    maxVideoStreams: 0,
+    videoBandwidthMbps: 0,
   });
   assert.throws(
     () => getRemoteMediaStorageConfig({ ...valid, MEDIA_CONTROL_SECRET: "" }),

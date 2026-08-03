@@ -6,9 +6,11 @@ import { useEffect, useState, useTransition } from "react";
 export function NovelFavoriteButton({
   novelId,
   initialFavorite,
+  showLabel = false,
 }: {
   novelId: number;
   initialFavorite: boolean;
+  showLabel?: boolean;
 }) {
   const [favorite, setFavorite] = useState(initialFavorite);
   const [message, setMessage] = useState("");
@@ -50,6 +52,7 @@ export function NovelFavoriteButton({
         onClick={toggleFavorite}
       >
         <Bookmark size={18} fill={favorite ? "currentColor" : "none"} aria-hidden="true" />
+        {showLabel ? <span>收藏</span> : null}
       </button>
       {message ? <span className="readerActionToast" role="status">{message}</span> : null}
     </span>

@@ -9,6 +9,7 @@ export function ReaderHeaderBehavior() {
     const header = document.querySelector<HTMLElement>(".readerSiteHeader");
     const reader = document.querySelector<HTMLElement>(".readerPage");
     if (!header || !reader) return;
+    const shell = header.closest<HTMLElement>(".readerShell");
 
     const mobile = window.matchMedia(MOBILE_READER_QUERY);
     let lastScrollY = Math.max(0, window.scrollY);
@@ -16,12 +17,33 @@ export function ReaderHeaderBehavior() {
     let pointerStartY: number | null = null;
     let pointerMoved = false;
 
-    function showHeader() {
-      header!.classList.remove("isReaderHeaderHidden");
+    function resetChrome() {
+      header!.classList.remove("isReaderHeaderOverlay");
+      shell?.style.removeProperty("--reader-header-flow-height");
+      document.documentElement.classList.remove("isReaderChromeHidden");
     }
 
-    function isMinimalMobileReader() {
-      return mobile.matches && document.documentElement.dataset.uiMode === "minimal";
+    function showCompactChrome() {
+      if (window.scrollY > 24) {
+        if (!header!.classList.contains("isReaderHeaderOverlay")) {
+          shell?.style.setProperty("--reader-header-flow-height", `${header!.offsetHeight}px`);
+        }
+        header!.classList.add("isReaderHeaderOverlay");
+      } else {
+        header!.classList.remove("isReaderHeaderOverlay");
+        shell?.style.removeProperty("--reader-header-flow-height");
+      }
+      document.documentElement.classList.remove("isReaderChromeHidden");
+    }
+
+    function hideChrome() {
+      header!.classList.remove("isReaderHeaderOverlay");
+      shell?.style.removeProperty("--reader-header-flow-height");
+      document.documentElement.classList.add("isReaderChromeHidden");
+    }
+
+    function isMobileReader() {
+      return mobile.matches;
     }
 
     function headerHasOpenControl() {
@@ -31,10 +53,12 @@ export function ReaderHeaderBehavior() {
     function updateAfterScroll() {
       frame = 0;
       const scrollY = Math.max(0, window.scrollY);
-      if (!isMinimalMobileReader() || scrollY <= 24 || headerHasOpenControl()) {
-        showHeader();
-      } else if (Math.abs(scrollY - lastScrollY) >= 6) {
-        header!.classList.add("isReaderHeaderHidden");
+      if (!isMobileReader()) {
+        resetChrome();
+      } else if (headerHasOpenControl()) {
+        showCompactChrome();
+      } else if (scrollY > 24 && Math.abs(scrollY - lastScrollY) >= 6) {
+        hideChrome();
       }
       lastScrollY = scrollY;
     }
@@ -44,7 +68,7 @@ export function ReaderHeaderBehavior() {
     }
 
     function handlePointerDown(event: PointerEvent) {
-      if (!isMinimalMobileReader()) return;
+      if (!isMobileReader()) return;
       pointerStartY = event.clientY;
       pointerMoved = false;
     }
@@ -56,7 +80,7 @@ export function ReaderHeaderBehavior() {
     }
 
     function handleReaderTap(event: MouseEvent) {
-      if (!isMinimalMobileReader()) return;
+      if (!isMobileReader()) return;
       const target = event.target instanceof Element ? event.target : null;
       if (!target?.closest(".readerPage") || target.closest("a, button, input, select, textarea, label")) return;
       if (pointerMoved || window.getSelection()?.toString()) {
@@ -64,51 +88,45 @@ export function ReaderHeaderBehavior() {
         pointerStartY = null;
         return;
       }
-      header!.classList.toggle("isReaderHeaderHidden");
+      const chromeHidden = document.documentElement.classList.contains("isReaderChromeHidden");
+      const compactVisible = header!.classList.contains("isReaderHeaderOverlay");
+      const chromeVisible = !chromeHidden && (window.scrollY <= 24 || compactVisible);
+      if (chromeVisible) hideChrome();
+      else showCompactChrome();
       pointerStartY = null;
     }
 
     function handleViewportOrModeChange() {
-      if (!isMinimalMobileReader()) showHeader();
+      if (isMobileReader()) hideChrome();
+      else resetChrome();
     }
 
-    const modeObserver = new MutationObserver(handleViewportOrModeChange);
-    updateAfterScroll();
+    function initializeChrome() {
+      handleViewportOrModeChange();
+      shell?.classList.add("isReaderChromeReady");
+    }
+
+    initializeChrome();
     window.addEventListener("scroll", handleScroll, { passive: true });
-    window.addEventListener("pageshow", showHeader);
+    window.addEventListener("pageshow", initializeChrome);
     document.addEventListener("pointerdown", handlePointerDown, { passive: true });
     document.addEventListener("pointermove", handlePointerMove, { passive: true });
     document.addEventListener("click", handleReaderTap);
     mobile.addEventListener("change", handleViewportOrModeChange);
-    modeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-ui-mode"] });
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
       window.removeEventListener("scroll", handleScroll);
-      window.removeEventListener("pageshow", showHeader);
+      window.removeEventListener("pageshow", initializeChrome);
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("pointermove", handlePointerMove);
       document.removeEventListener("click", handleReaderTap);
       mobile.removeEventListener("change", handleViewportOrModeChange);
-      modeObserver.disconnect();
-      header.classList.remove("isReaderHeaderHidden");
+      header.classList.remove("isReaderHeaderOverlay");
+      shell?.classList.remove("isReaderChromeReady");
+      shell?.style.removeProperty("--reader-header-flow-height");
+      document.documentElement.classList.remove("isReaderChromeHidden");
     };
   }, []);
 
-  function scrollToTop() {
-    document.querySelector<HTMLElement>(".readerSiteHeader")?.classList.remove("isReaderHeaderHidden");
-    window.scrollTo({
-      top: 0,
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-    });
-  }
-
-  return (
-    <button
-      className="readerHeaderTopArea"
-      type="button"
-      onClick={scrollToTop}
-      aria-label="返回顶部"
-      title="返回顶部"
-    />
-  );
+  return null;
 }

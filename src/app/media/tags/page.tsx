@@ -1,16 +1,17 @@
-import { ArrowUpRight, Search, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import type { Metadata } from "next";
 import Form from "next/form";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import Link from "@/components/LocalizedLink";
 import { Pagination } from "@/components/Pagination";
 import { SiteHeader } from "@/components/SiteHeader";
 import { checkContentAccess } from "@/lib/content-access";
 import { languageAlternates, uiText, withLocalePath } from "@/lib/locale";
 import { getRequestLocale, localizeText, normalizeSearchText } from "@/lib/locale-server";
-import { isMediaKindAccessible, isMediaKindPublic, listVideoTags } from "@/lib/media";
+import { isMediaKindAccessible, isMediaKindEntryVisible, isMediaKindPublic, listVideoTags } from "@/lib/media";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { getCurrentUser } from "@/lib/user-auth";
 
@@ -43,7 +44,13 @@ export default async function VideoTagsPage({ searchParams }: VideoTagsPageProps
   const locale = await getRequestLocale();
   const user = await getCurrentUser();
   const headerStore = await headers();
-  if (!isMediaKindAccessible("video", Boolean(user)) || !checkContentAccess(headerStore, {
+  if (!isMediaKindAccessible("video", Boolean(user))) {
+    if (!user && isMediaKindEntryVisible("video", false)) {
+      return <ContentEntryGatePage locale={locale} label={uiText(locale, "视频标签")} returnTo="/media/tags" />;
+    }
+    notFound();
+  }
+  if (!checkContentAccess(headerStore, {
     scope: "video",
     authenticated: Boolean(user),
     admin: user?.role === "admin",
@@ -55,12 +62,11 @@ export default async function VideoTagsPage({ searchParams }: VideoTagsPageProps
   const result = listVideoTags({
     query: queryInput ? await normalizeSearchText(queryInput) : "",
     page: Number(params.page || 1),
-    pageSize: 48,
+    pageSize: 96,
   });
   const tags = await Promise.all(result.tags.map(async (tag) => ({
     ...tag,
     name: await localizeText(tag.name, locale),
-    description: await localizeText(tag.description, locale),
   })));
 
   return (
@@ -97,13 +103,9 @@ export default async function VideoTagsPage({ searchParams }: VideoTagsPageProps
         {tags.length ? (
           <div className="mediaTagGrid">
             {tags.map((tag) => (
-              <Link className="mediaTagCard" href={`/media?${new URLSearchParams({ kind: "video", tag: tag.slug }).toString()}`} key={tag.id}>
-                <div>
-                  <strong className="contentTag">#{tag.name}</strong>
-                  {tag.description ? <p>{tag.description}</p> : null}
-                </div>
-                <span>{tag.videoCount.toLocaleString("zh-CN")} {uiText(locale, "个视频")}</span>
-                <ArrowUpRight size={16} aria-hidden="true" />
+              <Link className="mediaTagItem" href={`/media?${new URLSearchParams({ kind: "video", tag: tag.slug }).toString()}`} key={tag.id}>
+                <strong>#{tag.name}</strong>
+                <span>{tag.videoCount.toLocaleString("zh-CN")}</span>
               </Link>
             ))}
           </div>

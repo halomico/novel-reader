@@ -21,10 +21,12 @@ type ContentSearchClientProps = {
   searchEventKey: string | null;
   searchSource: string;
   originNovelId: number | null;
+  library?: string;
   requestFilters?: {
     includeTags: string[];
     excludeTags: string[];
     titleQuery: string;
+    sourceLibrary?: string;
   };
   resultReturnPath?: string;
   resultReturnParams?: Record<string, string>;
@@ -175,6 +177,7 @@ export function ContentSearchClient({
   searchEventKey,
   searchSource,
   originNovelId,
+  library = "default",
   requestFilters,
   resultReturnPath = "/search",
   resultReturnParams = {},
@@ -188,7 +191,7 @@ export function ContentSearchClient({
   const [page, setPage] = useState(initialPage);
   const [displayProgress, setDisplayProgress] = useState(showProgressBars);
   const requestFiltersKey = useMemo(() => JSON.stringify(requestFilters || null), [requestFilters]);
-  const searchIdentity = `${keyword}:${requestFiltersKey}`;
+  const searchIdentity = `${library}:${keyword}:${requestFiltersKey}`;
   const pageStateKey = useMemo(() => `content-search-page:${searchIdentity}`, [searchIdentity]);
   const resultCacheKey = useMemo(() => `content-search-results:${searchIdentity}`, [searchIdentity]);
   const currentPageRef = useRef(initialPage);
@@ -333,6 +336,7 @@ export function ContentSearchClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           q: keyword,
+          library,
           ...(requestFiltersKey === "null" ? {} : { filters: JSON.parse(requestFiltersKey) }),
         }),
       });
@@ -463,10 +467,12 @@ export function ContentSearchClient({
               <SearchTrackedLink
                 className="searchResultCard"
                 eventKey={searchEventKey}
-                href={`/books/${result.novelId}?from=${encodeURIComponent(from)}&hit=${result.segmentIndex}#seg-${result.segmentIndex}`}
+                href={`${result.chapterId
+                  ? `/books/${result.novelId}/chapters/${result.chapterId}`
+                  : `/books/${result.novelId}`}?from=${encodeURIComponent(from)}&hit=${result.segmentIndex}#seg-${result.segmentIndex}`}
                 novelId={result.novelId}
                 segmentIndex={result.segmentIndex}
-                key={`${result.novelId}-${result.segmentIndex}`}
+                key={`${result.novelId}-${result.chapterId || 0}-${result.segmentIndex}`}
                 onClick={() => {
                   keepJobOnUnmountRef.current = true;
                   rememberPage(currentPage);

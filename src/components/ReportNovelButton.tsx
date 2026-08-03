@@ -12,7 +12,7 @@ const REPORT_OPTIONS: Array<{ value: ContentReportCategory; label: string }> = [
   { value: "other", label: "其他" },
 ];
 
-export function ReportNovelButton({ novelId, title }: { novelId: number; title: string }) {
+export function ReportNovelButton({ novelId, title, variant = "icon" }: { novelId: number; title: string; variant?: "icon" | "text" | "responsive" }) {
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState<ContentReportCategory>("tag_error");
   const [details, setDetails] = useState("");
@@ -79,7 +79,8 @@ export function ReportNovelButton({ novelId, title }: { novelId: number; title: 
   return (
     <div className="readerReportAction">
       <button type="button" aria-label={`举报 ${title}`} title="举报" onClick={() => setOpen(true)}>
-        <Flag size={16} aria-hidden="true" />
+        {variant !== "text" ? <Flag size={16} aria-hidden="true" /> : null}
+        {variant !== "icon" ? <span>举报</span> : null}
       </button>
       {notice ? <span className="readerActionToast" role="status">{notice}</span> : null}
       {open ? (

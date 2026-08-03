@@ -12,6 +12,7 @@ import {
   canAccessAdvancedTagSearch,
   canAccessHomeAnnouncementCard,
   canAccessNovelLibrary,
+  canConsumeNovelLibrary,
   getSettingsPreviewText,
   isAdvancedTagSearchPublic,
   isNovelLibraryPublic,
@@ -25,14 +26,16 @@ test("atomically replaces an existing settings file", () => {
 
   try {
     const defaults = readSiteSettings();
-    assert.equal(defaults.novelLibraryEnabled, true);
-    assert.equal(defaults.videoLibraryEnabled, true);
-    assert.equal(defaults.audioLibraryEnabled, true);
-    assert.equal(defaults.fileLibraryEnabled, true);
-    assert.equal(defaults.tagLibraryEnabled, true);
+    assert.deepEqual(defaults.homePortalAccessModes, {
+      announcement: "public",
+      novels: "member",
+      tags: "member",
+      video: "member",
+      audio: "member",
+      file: "member",
+    });
     assert.equal(defaults.advancedTagSearchEnabled, false);
     assert.equal(defaults.hotwordLinksEnabled, true);
-    assert.equal(defaults.guestTagLibraryNavEnabled, false);
     assert.equal(defaults.guestAdvancedTagSearchEnabled, false);
     assert.equal(defaults.guestHotwordLinksEnabled, false);
     assert.equal(defaults.randomCatalogEnabled, true);
@@ -48,9 +51,9 @@ test("atomically replaces an existing settings file", () => {
     assert.equal(defaults.audioDefaultPlaybackMode, "next");
     assert.equal(defaults.userDailyReportLimit, 50);
     assert.equal(defaults.announcementCardTarget, "list");
+    assert.equal(defaults.adminTheme, "system");
     assert.equal(defaults.adminIpAllowlistEnabled, false);
     assert.deepEqual(defaults.adminAllowedNetworks, []);
-    assert.deepEqual(defaults.publicDisplayHomeCards, []);
     writeSiteSettings({ ...defaults, siteName: "第一次" });
     writeSiteSettings({ ...readSiteSettings(), siteName: "第二次" });
     assert.equal(readSiteSettings().siteName, "第二次");
@@ -94,22 +97,24 @@ test("preserves an empty settings preview and normalizes home portal settings", 
     writeSiteSettings({
       ...readSiteSettings(),
       settingsPreviewText: "",
-      announcementCardEnabled: true,
-      guestAnnouncementCardEnabled: false,
+      homePortalAccessModes: {
+        ...readSiteSettings().homePortalAccessModes,
+        announcement: "member",
+        video: "browse",
+      },
       announcementCardTarget: "latest",
       adminIpAllowlistEnabled: true,
       adminAllowedNetworks: ["203.0.113.8", "203.0.113.0/24", "203.0.113.8"],
-      publicDisplayHomeCards: ["announcement", "video"],
       homePortalOrder: ["random", "novels", "random"] as HomePortalCardKey[],
     });
     const settings = readSiteSettings();
     assert.equal(getSettingsPreviewText(), "");
-    assert.deepEqual(settings.homePortalOrder.slice(0, 3), ["random", "novels", "announcement"]);
+    assert.deepEqual(settings.homePortalOrder.slice(0, 3), ["recent", "novels", "announcement"]);
     assert.equal(canAccessHomeAnnouncementCard(false), false);
     assert.equal(canAccessHomeAnnouncementCard(true), true);
     assert.equal(settings.announcementCardTarget, "latest");
     assert.deepEqual(settings.adminAllowedNetworks, ["203.0.113.8", "203.0.113.0/24"]);
-    assert.deepEqual(settings.publicDisplayHomeCards, ["announcement", "video"]);
+    assert.equal(settings.homePortalAccessModes.video, "browse");
   } finally {
     if (previousPath === undefined) {
       delete process.env.ADMIN_SETTINGS_PATH;
@@ -122,12 +127,12 @@ test("preserves an empty settings preview and normalizes home portal settings", 
 
 test("separates public home-card display from public content access", () => {
   const publicMode = resolveHomePortalAccessMode(true, true, false);
-  const previewMode = resolveHomePortalAccessMode(true, false, true);
+  const browseMode = resolveHomePortalAccessMode(true, false, true);
   const memberMode = resolveHomePortalAccessMode(true, false, false);
   assert.equal(publicMode, "public");
-  assert.equal(previewMode, "preview");
+  assert.equal(browseMode, "browse");
   assert.equal(memberMode, "member");
-  assert.equal(isHomePortalCardVisible(previewMode, false), true);
+  assert.equal(isHomePortalCardVisible(browseMode, false), true);
   assert.equal(isHomePortalCardVisible(memberMode, false), false);
   assert.equal(isHomePortalCardVisible(memberMode, true), true);
   assert.equal(isHomePortalCardVisible(resolveHomePortalAccessMode(false, true, true), true), false);
@@ -257,19 +262,34 @@ test("applies disabled, signed-in, and public novel access modes", () => {
 
   try {
     const defaults = readSiteSettings();
-    writeSiteSettings({ ...defaults, novelLibraryEnabled: false, guestLibraryNavEnabled: true });
+    writeSiteSettings({ ...defaults, homePortalAccessModes: { ...defaults.homePortalAccessModes, novels: "off" } });
     assert.equal(canAccessNovelLibrary(false), false);
     assert.equal(canAccessNovelLibrary(true), false);
     assert.equal(isNovelLibraryPublic(), false);
 
-    writeSiteSettings({ ...readSiteSettings(), novelLibraryEnabled: true, guestLibraryNavEnabled: false });
+    writeSiteSettings({
+      ...readSiteSettings(),
+      homePortalAccessModes: { ...readSiteSettings().homePortalAccessModes, novels: "member" },
+    });
     assert.equal(canAccessNovelLibrary(false), false);
     assert.equal(canAccessNovelLibrary(true), true);
     assert.equal(isNovelLibraryPublic(), false);
 
-    writeSiteSettings({ ...readSiteSettings(), guestLibraryNavEnabled: true });
-    assert.equal(canAccessNovelLibrary(false), true);
-    assert.equal(isNovelLibraryPublic(), true);
+    writeSiteSettings({
+      ...readSiteSettings(),
+      homePortalAccessModes: { ...readSiteSettings().homePortalAccessModes, novels: "browse" },
+    });
+    assert.equal(isHomePortalCardVisible("browse", false), true);
+    assert.equal(canAccessNovelLibrary(false), false);
+    assert.equal(canConsumeNovelLibrary(false), false);
+    assert.equal(canConsumeNovelLibrary(true), true);
+    assert.equal(isNovelLibraryPublic(), false);
+
+    writeSiteSettings({
+      ...readSiteSettings(),
+      homePortalAccessModes: { ...readSiteSettings().homePortalAccessModes, novels: "public" },
+    });
+    assert.equal(canConsumeNovelLibrary(false), true);
   } finally {
     if (previousPath === undefined) {
       delete process.env.ADMIN_SETTINGS_PATH;
@@ -291,7 +311,11 @@ test("applies disabled, signed-in, and public advanced tag search modes", () => 
       ...defaults,
       advancedTagSearchEnabled: false,
       guestAdvancedTagSearchEnabled: false,
-      guestLibraryNavEnabled: true,
+      homePortalAccessModes: {
+        ...defaults.homePortalAccessModes,
+        novels: "public",
+        tags: "member",
+      },
     });
     assert.equal(canAccessAdvancedTagSearch(false), false);
     assert.equal(canAccessAdvancedTagSearch(true), false);
@@ -301,7 +325,11 @@ test("applies disabled, signed-in, and public advanced tag search modes", () => 
     assert.equal(canAccessAdvancedTagSearch(true), true);
     assert.equal(isAdvancedTagSearchPublic(), false);
 
-    writeSiteSettings({ ...readSiteSettings(), guestAdvancedTagSearchEnabled: true });
+    writeSiteSettings({
+      ...readSiteSettings(),
+      guestAdvancedTagSearchEnabled: true,
+      homePortalAccessModes: { ...readSiteSettings().homePortalAccessModes, tags: "public" },
+    });
     assert.equal(canAccessAdvancedTagSearch(false), true);
     assert.equal(isAdvancedTagSearchPublic(), true);
   } finally {

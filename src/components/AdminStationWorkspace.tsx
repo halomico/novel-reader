@@ -1,12 +1,13 @@
 "use client";
 
-import { Check, RotateCcw, Send, Trash2 } from "lucide-react";
+import { Check, Plus, RotateCcw, Send, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import {
   deleteContentReportInlineAction,
   deleteStationThreadInlineAction,
+  createAdminStationThreadInlineAction,
   replyStationThreadInlineAction,
   setContentReportStatusInlineAction,
   setStationThreadStatusInlineAction,
@@ -33,6 +34,72 @@ function reportCategoryLabel(report: ContentReport): string {
   return "其他问题";
 }
 
+function resizeReplyTextarea(textarea: HTMLTextAreaElement | null) {
+  if (!textarea) return;
+  textarea.style.height = "0px";
+  const nextHeight = Math.min(textarea.scrollHeight, 120);
+  textarea.style.height = `${Math.max(nextHeight, 36)}px`;
+  textarea.style.overflowY = textarea.scrollHeight > 120 ? "auto" : "hidden";
+}
+
+export function AdminStationComposer({ initialUsername = "" }: { initialUsername?: string }) {
+  const router = useRouter();
+  const mutation = useInlineMutation();
+  const [username, setUsername] = useState(initialUsername);
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [open, setOpen] = useState(Boolean(initialUsername));
+
+  useEffect(() => {
+    if (initialUsername) {
+      setUsername(initialUsername);
+      setOpen(true);
+    }
+  }, [initialUsername]);
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    mutation.run(
+      () => createAdminStationThreadInlineAction(username, subject, body),
+      (result) => {
+        if (!result.ok || !result.data) return;
+        setUsername("");
+        setSubject("");
+        setBody("");
+        setOpen(false);
+        router.replace(`/admin/station?thread=${result.data.threadId}`, { scroll: false });
+        router.refresh();
+      },
+    );
+  }
+
+  return (
+    <div className="adminStationComposer">
+      <button className="adminStationNewButton" type="button" onClick={() => setOpen((current) => !current)} aria-expanded={open}>
+        <Plus size={15} aria-hidden="true" />发起对话
+      </button>
+      {open ? (
+        <section className="adminStationComposePanel" aria-label="发起站务对话">
+          <header><strong>新对话</strong><button type="button" onClick={() => setOpen(false)} aria-label="关闭" title="关闭"><X size={16} aria-hidden="true" /></button></header>
+          <form onSubmit={submit}>
+            <div className="adminFieldGrid">
+              <label><span>用户名</span><input value={username} onChange={(event) => setUsername(event.target.value)} maxLength={32} placeholder="输入完整用户名" required /></label>
+              <label><span>主题</span><input value={subject} onChange={(event) => setSubject(event.target.value)} maxLength={80} placeholder="简要说明事项" required /></label>
+            </div>
+            <label><span>消息</span><textarea value={body} onChange={(event) => setBody(event.target.value)} rows={4} placeholder="输入消息内容" required /></label>
+            <footer>
+              <InlineMutationNotice notice={mutation.notice} />
+              <button className="adminPrimaryButton" type="submit" disabled={mutation.pending || !username.trim() || !subject.trim() || !body.trim()}>
+                <Send size={15} aria-hidden="true" />发送
+              </button>
+            </footer>
+          </form>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
 export function AdminStationConversation({
   thread,
   messages: initialMessages,
@@ -54,6 +121,50 @@ export function AdminStationConversation({
     const list = messageListRef.current;
     if (list) list.scrollTop = list.scrollHeight;
   }, [messages]);
+
+  useEffect(() => {
+    setMessages(initialMessages);
+    setStatus(thread.status);
+  }, [initialMessages, thread.id, thread.status]);
+
+  useEffect(() => {
+    resizeReplyTextarea(replyRef.current);
+  }, [reply, thread.id]);
+
+  useEffect(() => {
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    async function syncConversation() {
+      try {
+        const response = await fetch(`/admin/api/station/threads/${thread.id}`, { cache: "no-store" });
+        if (response.ok && active) {
+          const payload = await response.json() as {
+            messages?: StationMessage[];
+            status?: "open" | "closed";
+          };
+          if (Array.isArray(payload.messages)) {
+            setMessages((current) => (
+              current.length === payload.messages!.length && current.at(-1)?.id === payload.messages!.at(-1)?.id
+                ? current
+                : payload.messages!
+            ));
+          }
+          if (payload.status) setStatus(payload.status);
+        }
+      } catch {
+        // Keep the current conversation visible and retry on the next interval.
+      } finally {
+        if (active) timer = setTimeout(syncConversation, 2_000);
+      }
+    }
+
+    timer = setTimeout(syncConversation, 2_000);
+    return () => {
+      active = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [thread.id]);
 
   function submitReply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -134,14 +245,19 @@ export function AdminStationConversation({
               ref={replyRef}
               value={reply}
               onChange={(event) => setReply(event.target.value)}
-              rows={3}
-              maxLength={4000}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  event.currentTarget.form?.requestSubmit();
+                }
+              }}
+              rows={1}
               placeholder={`回复 ${thread.displayName}`}
               required
             />
           </label>
-          <button type="submit" disabled={mutation.pending || !reply.trim()} title="发送回复" aria-label="发送回复">
-            <Send size={16} aria-hidden="true" />
+          <button type="submit" disabled={mutation.pending || !reply.trim()} aria-label="发送" title="发送">
+            <Send size={15} aria-hidden="true" /><span className="stationSendLabel">发送</span>
           </button>
         </form>
       ) : <p className="adminConversationClosed">这条留言已结束。</p>}
@@ -152,6 +268,8 @@ export function AdminStationConversation({
 export function AdminReportList({ reports: initialReports }: { reports: ContentReport[] }) {
   const mutation = useInlineMutation();
   const [reports, setReports] = useState(initialReports);
+
+  useEffect(() => setReports(initialReports), [initialReports]);
 
   function toggle(report: ContentReport) {
     const status = report.status === "open" ? "resolved" : "open";

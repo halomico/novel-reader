@@ -1,9 +1,11 @@
 import type { Novel } from "./books";
 import { getDb } from "./db";
+import { getNovelChapter, novelChapterContentVersion } from "./novel-library";
 
 export type ReadingProgress = {
   historyId: number;
   novelId: number;
+  chapterId: number | null;
   title: string;
   segmentIndex: number;
   segmentRatio: number;
@@ -23,6 +25,7 @@ export type ReadingProgressPage = {
 };
 
 export type ReadingProgressUpdate = {
+  chapterId?: number | null;
   segmentIndex: number;
   segmentRatio: number;
   progressPercent: number;
@@ -33,6 +36,7 @@ export type ReadingProgressUpdate = {
 type ReadingProgressRow = {
   id: number;
   novel_id: number;
+  chapter_id: number | null;
   title: string;
   segment_index: number;
   segment_ratio: number;
@@ -58,6 +62,7 @@ function toReadingProgress(row: ReadingProgressRow): ReadingProgress {
   return {
     historyId: row.id,
     novelId: row.novel_id,
+    chapterId: row.chapter_id || null,
     title: row.title,
     segmentIndex: Math.max(Math.floor(row.segment_index || 0), 0),
     segmentRatio: clamp(row.segment_ratio, 0, 1),
@@ -88,7 +93,11 @@ export function novelContentVersion(
   return book.content_hash || `${book.size_bytes}:${Math.floor(book.mtime_ms)}`;
 }
 
-export function recordReadingOpen(userId: number, book: Novel): void {
+export function recordReadingOpen(
+  userId: number,
+  book: Novel,
+  options: { chapterId?: number | null; contentVersion?: string } = {},
+): void {
   const db = getDb();
   const preferences = readingPreferences(userId);
   const existing = db.prepare(
@@ -100,7 +109,8 @@ export function recordReadingOpen(userId: number, book: Novel): void {
     completed: number;
     content_version: string;
   } | undefined;
-  const contentVersion = novelContentVersion(book);
+  const contentVersion = options.contentVersion || novelContentVersion(book);
+  const chapterId = options.chapterId || null;
   const resumed = Boolean(
     existing &&
     existing.completed === 0 &&
@@ -113,21 +123,19 @@ export function recordReadingOpen(userId: number, book: Novel): void {
     if (preferences.historyEnabled) {
       db.prepare(
         `INSERT INTO user_reading_history (
-           user_id, novel_id, title, content_version, recorded_in_history, visit_count,
+           user_id, novel_id, chapter_id, title, content_version, recorded_in_history, visit_count,
            last_read_at, updated_at
          )
-         VALUES (?, ?, ?, ?, 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+         VALUES (?, ?, ?, ?, ?, 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
          ON CONFLICT(user_id, novel_id) DO UPDATE SET
            title = excluded.title,
-           content_version = CASE
-             WHEN user_reading_history.progress_percent <= 0 THEN excluded.content_version
-             ELSE user_reading_history.content_version
-           END,
+           chapter_id = excluded.chapter_id,
+           content_version = excluded.content_version,
            recorded_in_history = 1,
            visit_count = user_reading_history.visit_count + 1,
            last_read_at = CURRENT_TIMESTAMP,
            updated_at = CURRENT_TIMESTAMP`,
-      ).run(userId, book.id, book.title, contentVersion);
+      ).run(userId, book.id, chapterId, book.title, contentVersion);
     }
 
     db.prepare(
@@ -160,7 +168,7 @@ export function recordReadingOpen(userId: number, book: Novel): void {
 export function getReadingProgress(userId: number, novelId: number): ReadingProgress | null {
   const row = getDb()
     .prepare(
-      `SELECT id, novel_id, title, segment_index, segment_ratio, progress_percent,
+      `SELECT id, novel_id, chapter_id, title, segment_index, segment_ratio, progress_percent,
               content_version, completed, visit_count, last_read_at
        FROM user_reading_history
        WHERE user_id = ? AND novel_id = ?`,
@@ -177,7 +185,11 @@ export function updateReadingProgress(
   const preferences = readingPreferences(userId);
   const db = getDb();
   const existing = getReadingProgress(userId, book.id);
-  const contentVersion = novelContentVersion(book);
+  const chapterId = Number.isInteger(update.chapterId) && Number(update.chapterId) > 0
+    ? Number(update.chapterId)
+    : null;
+  const chapter = chapterId ? getNovelChapter(book.id, chapterId) : null;
+  const contentVersion = chapter ? novelChapterContentVersion(chapter) : novelContentVersion(book);
   const versionChanged = Boolean(existing?.contentVersion && existing.contentVersion !== contentVersion);
   const segmentIndex = Math.max(Math.floor(update.segmentIndex || 0), 0);
   const segmentRatio = clamp(update.segmentRatio, 0, 1);
@@ -188,6 +200,7 @@ export function updateReadingProgress(
   const moved = !existing ||
     versionChanged ||
     existing.segmentIndex !== segmentIndex ||
+    existing.chapterId !== chapterId ||
     Math.abs(existing.segmentRatio - segmentRatio) >= 0.02 ||
     Math.abs(previousPercent - progressPercent) >= 0.5 ||
     completed !== previousCompleted;
@@ -201,13 +214,14 @@ export function updateReadingProgress(
   try {
     db.prepare(
       `INSERT INTO user_reading_history (
-         user_id, novel_id, title, segment_index, segment_ratio,
+         user_id, novel_id, chapter_id, title, segment_index, segment_ratio,
          progress_percent, content_version, completed, recorded_in_history, visit_count,
          last_read_at, updated_at
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
        ON CONFLICT(user_id, novel_id) DO UPDATE SET
          title = excluded.title,
+         chapter_id = excluded.chapter_id,
          segment_index = excluded.segment_index,
          segment_ratio = excluded.segment_ratio,
          progress_percent = excluded.progress_percent,
@@ -225,6 +239,7 @@ export function updateReadingProgress(
     ).run(
       userId,
       book.id,
+      chapterId,
       book.title,
       segmentIndex,
       segmentRatio,
@@ -282,7 +297,7 @@ export function listReadingProgressPage(
   const page = normalizePage(params.page || 1, totalPages);
   const rows = db
     .prepare(
-      `SELECT h.id, h.novel_id, n.title, h.segment_index, h.segment_ratio,
+      `SELECT h.id, h.novel_id, h.chapter_id, n.title, h.segment_index, h.segment_ratio,
               h.progress_percent, h.content_version, h.completed,
               h.visit_count, h.last_read_at
        FROM user_reading_history h

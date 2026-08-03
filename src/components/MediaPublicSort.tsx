@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Check, ListFilter, Search, Tags } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ListFilter, Tags } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { MediaKind, MediaSortBy, MediaSortOrder, VideoTag } from "@/lib/media";
 import { beginNavigationProgress } from "./NavigationProgress";
 import { uiText, withLocalePath, type AppLocale } from "@/lib/locale";
@@ -33,23 +33,19 @@ export function MediaPublicSort({
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const [tagQuery, setTagQuery] = useState("");
   const options: Array<{ value: MediaSortBy; label: string }> = kind === "file"
     ? [{ value: "name", label: uiText(locale, "名称") }, { value: "size", label: uiText(locale, "大小") }]
     : kind === "video"
       ? [
+          { value: "published", label: uiText(locale, "最新") },
+          { value: "updated", label: uiText(locale, "最近更新") },
           { value: "name", label: uiText(locale, "名称") },
           { value: "duration", label: uiText(locale, "时长") },
           { value: "plays", label: uiText(locale, "播放量") },
         ]
       : [{ value: "name", label: uiText(locale, "名称") }, { value: "duration", label: uiText(locale, "时长") }];
 
-  const filteredTags = useMemo(() => {
-    const terms = tagQuery.normalize("NFKC").toLocaleLowerCase().split(/\s+/u).filter(Boolean);
-    return tags.filter((item) => terms.every((term) => (
-      `${item.name} ${item.description}`.normalize("NFKC").toLocaleLowerCase().includes(term)
-    ))).slice(0, TAG_RESULT_LIMIT);
-  }, [tagQuery, tags]);
+  const quickTags = tags.slice(0, TAG_RESULT_LIMIT);
 
   useEffect(() => {
     if (!open) return;
@@ -68,7 +64,7 @@ export function MediaPublicSort({
   }, [open]);
 
   function navigate(nextSort: MediaSortBy, nextOrder: MediaSortOrder, nextTag = tag || "") {
-    const defaultSort: MediaSortBy = kind === "audio" && !folder ? "duration" : "name";
+    const defaultSort: MediaSortBy = kind === "video" ? "published" : kind === "audio" && !folder ? "duration" : "name";
     const params = new URLSearchParams({ kind });
     if (folder) params.set("folder", folder);
     if (query) params.set("q", query);
@@ -129,17 +125,11 @@ export function MediaPublicSort({
                   <Tags size={14} aria-hidden="true" />{uiText(locale, "全部标签")}
                 </button>
               </header>
-              {tags.length > 10 ? (
-                <label className="mediaBrowseTagSearch">
-                  <Search size={14} aria-hidden="true" />
-                  <input value={tagQuery} onChange={(event) => setTagQuery(event.target.value)} placeholder={uiText(locale, "搜索标签")} />
-                </label>
-              ) : null}
               <div className="mediaBrowseTagOptions">
                 <button className={!tag ? "isActive" : ""} type="button" onClick={() => navigate(sortBy, sortOrder, "")}>
                   {!tag ? <Check size={14} aria-hidden="true" /> : <span />}{uiText(locale, "不限标签")}
                 </button>
-                {filteredTags.map((item) => (
+                {quickTags.map((item) => (
                   <button className={tag === item.slug ? "isActive" : ""} type="button" onClick={() => navigate(sortBy, sortOrder, item.slug)} key={item.id}>
                     {tag === item.slug ? <Check size={14} aria-hidden="true" /> : <span />}
                     <span className="contentTag">#{item.name}</span><small>{item.videoCount}</small>

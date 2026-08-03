@@ -11,7 +11,6 @@ import { beginNavigationProgress } from "./NavigationProgress";
 type SearchMode = "title" | "content" | "current";
 type MessageTone = "success" | "warning" | "error";
 type SearchVisibility = "default" | "open" | "closed";
-type UiMode = "standard" | "minimal";
 type CurrentMatch = {
   segment: HTMLElement;
   start: number;
@@ -97,6 +96,7 @@ export function HeaderSearch({
   showCurrentSearch = false,
   showAdvancedSearch = false,
   noticeDisplaySeconds = 5,
+  library = "default",
 }: {
   query?: string;
   defaultMode?: SearchMode;
@@ -104,6 +104,7 @@ export function HeaderSearch({
   showCurrentSearch?: boolean;
   showAdvancedSearch?: boolean;
   noticeDisplaySeconds?: number;
+  library?: string;
 }) {
   const pathname = usePathname();
   const normalizedPathname = stripLocalePath(pathname);
@@ -115,7 +116,6 @@ export function HeaderSearch({
   const [visibility, setVisibility] = useState<SearchVisibility>(() => (
     query.trim() ? "open" : defaultExpanded ? "default" : "closed"
   ));
-  const [uiMode, setUiMode] = useState<UiMode>("standard");
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<MessageTone>("success");
   const [isMessageVisible, setIsMessageVisible] = useState(false);
@@ -134,10 +134,11 @@ export function HeaderSearch({
   if (advancedKeyword) {
     advancedSearchParams.set(mode === "content" ? "content" : "q", advancedKeyword);
   }
+  if (library && library !== "default") advancedSearchParams.set("library", library);
   const advancedSearchHref = `/tags/search${advancedSearchParams.size ? `?${advancedSearchParams.toString()}` : ""}`;
   const originNovelId = Number(/^\/books\/(\d+)/.exec(normalizedPathname)?.[1] || 0);
   const searchSource = mode === "title" ? "header_title" : mode === "content" ? "header_content" : "reader_current";
-  const isPinnedOpen = visibility === "open" || (visibility === "default" && uiMode === "standard");
+  const isPinnedOpen = visibility === "open" || visibility === "default";
   const formClassName = [
     "searchForm",
     mode === "content" ? "isContentSearch" : "",
@@ -152,17 +153,6 @@ export function HeaderSearch({
   useEffect(() => {
     setMode(defaultMode === "current" && !showCurrentSearch ? "title" : defaultMode);
   }, [defaultMode, showCurrentSearch]);
-
-  useEffect(() => {
-    function syncUiMode() {
-      setUiMode(document.documentElement.dataset.uiMode === "minimal" ? "minimal" : "standard");
-    }
-
-    syncUiMode();
-    const observer = new MutationObserver(syncUiMode);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-ui-mode"] });
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     setKeyword(query);
@@ -399,7 +389,7 @@ export function HeaderSearch({
           togglePinnedSearch(event.currentTarget.form);
         }}
       >
-        <Search size={18} aria-hidden="true" />
+        <Search size={20} aria-hidden="true" />
       </button>
       <input
         id={searchInputId}
@@ -418,6 +408,7 @@ export function HeaderSearch({
         onClick={() => setIsModeMenuOpen(true)}
       />
       <input name="source" type="hidden" value={searchSource} />
+      {library && library !== "default" ? <input name="library" type="hidden" value={library} /> : null}
       {originNovelId ? <input name="origin" type="hidden" value={originNovelId} /> : null}
       <button className="searchSubmit" type="submit" aria-label={`按${tr(activeOption.label)}${tr("搜索")}`} title={`按${tr(activeOption.label)}${tr("搜索")}`} disabled={isCurrentSearching}>
         <Search className="searchSubmitIcon" size={16} aria-hidden="true" />

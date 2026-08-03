@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import {
   canAccessAdvancedTagSearch,
-  canAccessNovelLibrary,
+  canConsumeNovelLibrary,
   getFrontendSearchConcurrencyLimit,
   shouldShowProgressBars,
 } from "@/lib/config";
@@ -21,6 +21,8 @@ import { hasUserPermission } from "@/lib/user-levels";
 import { LOCALE_COOKIE, normalizeLocale, TRADITIONAL_LOCALE, type AppLocale } from "@/lib/locale";
 import { localizeTexts, normalizeSearchText as normalizeLocaleSearchText } from "@/lib/locale-server";
 import type { ContentJobSnapshot } from "@/lib/content-jobs";
+import { listReadableNovelIds } from "@/lib/novel-access";
+import { listNovelIdsBySource, resolveNovelLibraryScope } from "@/lib/novel-library";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -40,7 +42,7 @@ async function getSearchAccess(request: NextRequest, rateLimit = false) {
   return {
     user,
     contentAccess,
-    allowed: canAccessNovelLibrary(Boolean(user)) && contentAccess.allowed,
+    allowed: canConsumeNovelLibrary(Boolean(user)) && contentAccess.allowed,
   };
 }
 
@@ -83,9 +85,9 @@ async function localizeJob(
 }
 
 export async function POST(request: NextRequest) {
-  let body: { q?: unknown; filters?: unknown } = {};
+  let body: { q?: unknown; library?: unknown; filters?: unknown } = {};
   try {
-    body = (await request.json()) as { q?: unknown; filters?: unknown };
+    body = (await request.json()) as { q?: unknown; library?: unknown; filters?: unknown };
   } catch {
     return jsonError("搜索请求格式有误", 400);
   }
@@ -103,8 +105,11 @@ export async function POST(request: NextRequest) {
       ? jsonError("搜索不可用", 404)
       : jsonError(contentAccess.message, contentAccess.status);
   }
+  const rawFilters = body.filters && typeof body.filters === "object"
+    ? body.filters as Record<string, unknown>
+    : null;
+  const libraryScope = resolveNovelLibraryScope(String(body.library || rawFilters?.sourceLibrary || ""));
   let candidateNovelIds: number[] | undefined;
-  let cacheScope = "";
   if (body.filters && typeof body.filters === "object") {
     const canUseAdvancedSearch = canAccessAdvancedTagSearch(false) ||
       (canAccessAdvancedTagSearch(Boolean(user)) && hasUserPermission(user, "advanced_search"));
@@ -127,11 +132,27 @@ export async function POST(request: NextRequest) {
       .replace(/\s+/gu, " ")
       .trim()
       .slice(0, 80);
-    if (includedIds.length || excludedIds.length || titleQuery) {
-      candidateNovelIds = listNovelIdsByTagFilters(includedIds, { excludeTagIds: excludedIds, q: titleQuery, audience });
-      cacheScope = `advanced:${crypto.createHash("sha256").update(candidateNovelIds.join(",")).digest("base64url").slice(0, 20)}`;
+    if (includedIds.length || excludedIds.length || titleQuery || libraryScope.kind === "source") {
+      candidateNovelIds = listNovelIdsByTagFilters(includedIds, {
+        excludeTagIds: excludedIds,
+        q: titleQuery,
+        audience,
+        sourceId: libraryScope.kind === "source" ? libraryScope.source.id : undefined,
+      });
     }
   }
+
+  const readableNovelIds = listReadableNovelIds(user);
+  const allowedIds = new Set(readableNovelIds);
+  const libraryIds = libraryScope.kind === "source"
+    ? new Set(listNovelIdsBySource(libraryScope.source.id))
+    : null;
+  candidateNovelIds = (candidateNovelIds || readableNovelIds)
+    .filter((id) => allowedIds.has(id) && (!libraryIds || libraryIds.has(id)));
+  const cacheScope = `access:${crypto.createHash("sha256")
+    .update(candidateNovelIds.join(","))
+    .digest("base64url")
+    .slice(0, 24)}`;
 
   const concurrencyLimit = getFrontendSearchConcurrencyLimit();
   if (!hasCachedContentSearchResults(validation.query, cacheScope) && countActiveContentJobs("search") >= concurrencyLimit) {

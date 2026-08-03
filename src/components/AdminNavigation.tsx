@@ -5,6 +5,7 @@ import {
   BookOpen,
   House,
   LibraryBig,
+  LogOut,
   Menu,
   ChevronLeft,
   ChevronRight,
@@ -69,7 +70,17 @@ function AdminNavLinks({ active, onNavigate }: { active: AdminNavKey; onNavigate
   );
 }
 
-export function AdminSidebarNavigation({ active, siteName }: { active: AdminNavKey; siteName: string }) {
+type AdminLogoutAction = () => void | Promise<void>;
+
+export function AdminSidebarNavigation({
+  active,
+  siteName,
+  logoutAction,
+}: {
+  active: AdminNavKey;
+  siteName: string;
+  logoutAction: AdminLogoutAction;
+}) {
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -104,20 +115,28 @@ export function AdminSidebarNavigation({ active, siteName }: { active: AdminNavK
         </Link>
       </div>
       <AdminNavLinks active={active} />
-      <button
-        className="adminSidebarToggle"
-        type="button"
-        aria-label={collapsed ? "展开后台菜单" : "收起后台菜单"}
-        title={collapsed ? "展开菜单" : "收起菜单"}
-        onClick={toggleCollapsed}
-      >
-        {collapsed ? <ChevronRight size={18} aria-hidden="true" /> : <ChevronLeft size={18} aria-hidden="true" />}
-      </button>
+      <div className="adminSidebarFooter">
+        <form action={logoutAction}>
+          <button className="adminSidebarLogout" type="submit" title="退出登录">
+            <LogOut size={18} aria-hidden="true" />
+            <span>退出登录</span>
+          </button>
+        </form>
+        <button
+          className="adminSidebarToggle"
+          type="button"
+          aria-label={collapsed ? "展开后台菜单" : "收起后台菜单"}
+          title={collapsed ? "展开菜单" : "收起菜单"}
+          onClick={toggleCollapsed}
+        >
+          {collapsed ? <ChevronRight size={18} aria-hidden="true" /> : <ChevronLeft size={18} aria-hidden="true" />}
+        </button>
+      </div>
     </aside>
   );
 }
 
-export function AdminMobileNavigation({ active }: { active: AdminNavKey }) {
+export function AdminMobileNavigation({ active, logoutAction }: { active: AdminNavKey; logoutAction: AdminLogoutAction }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -163,6 +182,12 @@ export function AdminMobileNavigation({ active }: { active: AdminNavKey }) {
       {open ? (
         <div className="adminMobileMenuPanel">
           <AdminNavLinks active={active} onNavigate={() => setOpen(false)} />
+          <form action={logoutAction}>
+            <button className="adminMobileLogout" type="submit">
+              <LogOut size={18} aria-hidden="true" />
+              <span>退出登录</span>
+            </button>
+          </form>
         </div>
       ) : null}
     </div>

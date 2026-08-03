@@ -26,6 +26,8 @@ import {
   updateMarketProductInlineAction,
 } from "@/app/admin/market/actions";
 import type { MarketAsset, MarketDeliveryItem, MarketDeliveryKind, MarketProduct } from "@/lib/market";
+import { decodeEntitlementDefinition } from "@/lib/entitlement-protocol";
+import { AdminEntitlementPicker } from "./AdminEntitlementPicker";
 import { AdminMarketCoverUploader, AdminMarketFilePicker } from "./AdminMarketTools";
 import { AdminMarketPriceSelector } from "./AdminMarketPriceSelector";
 import { InlineMutationNotice, mutationNoticePath, useInlineMutation } from "./useInlineMutation";
@@ -54,19 +56,6 @@ const DELIVERY_OPTIONS: Array<{
   { kind: "text", label: "说明", description: "购买后展示文字内容" },
   { kind: "entitlement", label: "权限", description: "解锁站内资源" },
 ];
-
-function entitlementFields(content: string): { resourceType: string; resourceId: string; rights: string } {
-  try {
-    const value = JSON.parse(content) as { resourceType?: string; resourceId?: string; rights?: string[] };
-    return {
-      resourceType: value.resourceType || "",
-      resourceId: value.resourceId || "",
-      rights: Array.isArray(value.rights) ? value.rights.join(", ") : "",
-    };
-  } catch {
-    return { resourceType: "", resourceId: "", rights: "" };
-  }
-}
 
 function dispatchProduct(product: MarketProduct) {
   window.dispatchEvent(new CustomEvent("admin-market-product-updated", { detail: product }));
@@ -203,9 +192,8 @@ export function AdminMarketProductForm({ product: initialProduct }: { product: M
             <label className="isWide"><span>商品名称</span><input name="title" defaultValue={product.title} maxLength={120} required /></label>
             <label><span>链接标识</span><input name="slug" defaultValue={product.slug} pattern="[a-z0-9][a-z0-9-]{1,78}[a-z0-9]" placeholder="留空自动生成" /></label>
             <label><span>排序</span><input name="sortOrder" type="number" defaultValue={product.sortOrder} /></label>
-            <label className="isFull"><span>商品简述（可选）</span><input name="summary" defaultValue={product.summary} maxLength={240} /></label>
             <label className="isFull">
-              <span>商品介绍（可选）</span>
+              <span>商品描述（可选）</span>
               <textarea name="description" defaultValue={product.description} rows={10} maxLength={20000} />
               <small>支持 Markdown</small>
             </label>
@@ -317,7 +305,7 @@ function DeliveryEditor({
       : "",
   );
   const entitlement = useMemo(
-    () => entitlementFields(delivery?.kind === "entitlement" ? delivery.content : ""),
+    () => decodeEntitlementDefinition(delivery?.kind === "entitlement" ? delivery.content : ""),
     [delivery],
   );
 
@@ -420,11 +408,7 @@ function DeliveryEditor({
             ) : <p className="adminDeliveryInlineHint isFull">保存后即可导入卡密库存。</p>
           ) : null}
           {kind === "entitlement" ? (
-            <>
-              <label><span>资源类型</span><input name="resourceType" defaultValue={entitlement.resourceType} required /></label>
-              <label><span>资源标识</span><input name="resourceId" defaultValue={entitlement.resourceId} required /></label>
-              <label className="isFull"><span>权限</span><input name="rights" defaultValue={entitlement.rights} placeholder="view, download" /></label>
-            </>
+            <AdminEntitlementPicker initial={entitlement} />
           ) : null}
         </div>
       ) : null}

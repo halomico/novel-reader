@@ -9,9 +9,11 @@ import { mutationResult, type MutationResult } from "@/lib/mutation-result";
 import { deleteContentReport, setContentReportStatus } from "@/lib/reports";
 import {
   addStationReply,
+  createAdminStationThread,
   deleteAnnouncement,
   deleteStationThread,
   listStationMessages,
+  findStationRecipientId,
   saveAnnouncement,
   setStationThreadStatus,
   StationInputError,
@@ -25,6 +27,23 @@ async function requireAdmin() {
   const session = await getAdminSession();
   if (!session) redirect("/admin/login");
   return session;
+}
+
+export async function createAdminStationThreadInlineAction(
+  usernameValue: string,
+  subjectValue: string,
+  bodyValue: string,
+): Promise<MutationResult<{ threadId: number }>> {
+  await requireAdmin();
+  const userId = findStationRecipientId(usernameValue);
+  if (!userId) return mutationResult(false, "用户不存在或不可用", "warning");
+  try {
+    const threadId = createAdminStationThread(userId, subjectValue, bodyValue);
+    revalidatePath("/messages");
+    return mutationResult(true, "消息已发送", "success", { threadId });
+  } catch (error) {
+    return mutationResult(false, stationError(error, "消息发送失败"), "warning");
+  }
 }
 
 function optionalDate(value: FormDataEntryValue | null): string | null {

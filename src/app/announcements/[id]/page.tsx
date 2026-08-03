@@ -3,7 +3,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { AnnouncementMarkdown } from "@/components/AnnouncementMarkdown";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import { SiteHeader } from "@/components/SiteHeader";
+import { canAccessHomeAnnouncementCard, canSeeHomePortalContentEntry } from "@/lib/config";
 import { getVisibleAnnouncement, markAnnouncementRead } from "@/lib/station";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { getCurrentUser } from "@/lib/user-auth";
@@ -17,6 +19,9 @@ type AnnouncementPageProps = { params: Promise<{ id: string }> };
 export async function generateMetadata({ params }: AnnouncementPageProps): Promise<Metadata> {
   const locale = await getRequestLocale();
   const user = await getCurrentUser();
+  if (!canAccessHomeAnnouncementCard(Boolean(user))) {
+    return { title: uiText(locale, "公告"), robots: NO_INDEX_ROBOTS };
+  }
   const announcement = getVisibleAnnouncement(Number((await params).id), { authenticated: Boolean(user) });
   if (!announcement) return { title: uiText(locale, "公告不存在"), robots: NO_INDEX_ROBOTS };
   const canonicalPath = `/announcements/${announcement.id}`;
@@ -36,6 +41,12 @@ export async function generateMetadata({ params }: AnnouncementPageProps): Promi
 export default async function AnnouncementPage({ params }: AnnouncementPageProps) {
   const locale = await getRequestLocale();
   const user = await getCurrentUser();
+  if (!canAccessHomeAnnouncementCard(Boolean(user))) {
+    if (!user && canSeeHomePortalContentEntry("announcement", false)) {
+      return <ContentEntryGatePage locale={locale} label={uiText(locale, "公告")} returnTo="/announcements" />;
+    }
+    notFound();
+  }
   const announcement = getVisibleAnnouncement(Number((await params).id), { authenticated: Boolean(user) });
   if (!announcement) notFound();
   if (user) markAnnouncementRead(user.id, announcement.id);

@@ -5,9 +5,12 @@ import {
   READER_HOTWORDS_STORAGE_KEY,
   READER_LINE_HEIGHT_STORAGE_KEY,
   READER_LINE_HEIGHTS,
+  READER_PAPER_STORAGE_KEY,
+  READER_THEME_OPTIONS,
+  LEGACY_READER_THEME_STORAGE_KEYS,
   READER_TAGS_STORAGE_KEY,
-  TOP_MENU_STORAGE_KEY,
   DEFAULT_READER_LINE_HEIGHT,
+  getReaderThemeSystemTheme,
   type ColorPalette,
   type ReaderLineHeight,
   type ReaderTagsMode,
@@ -27,12 +30,14 @@ export function ThemeScript({
   defaultReaderTagsMode?: ReaderTagsMode;
 }) {
   const paletteTokens = Object.fromEntries(COLOR_PALETTES.map((palette) => [palette.value, palette]));
+  const readerThemeSystemThemes = Object.fromEntries(
+    READER_THEME_OPTIONS.map((theme) => [theme.value, getReaderThemeSystemTheme(theme.value)]),
+  );
   const code = `
     (function () {
       try {
         var root = document.documentElement;
         var theme = localStorage.getItem("novel-theme") || ${JSON.stringify(defaultTheme)};
-        var uiMode = localStorage.getItem("novel-ui-mode") || "standard";
         var paletteName = localStorage.getItem(${JSON.stringify(PALETTE_STORAGE_KEY)}) || ${JSON.stringify(defaultPalette)};
         var palettes = ${JSON.stringify(paletteTokens)};
         var palette = palettes[paletteName] || palettes[${JSON.stringify(defaultPalette)}];
@@ -40,7 +45,8 @@ export function ThemeScript({
         var readerHotwords = localStorage.getItem(${JSON.stringify(READER_HOTWORDS_STORAGE_KEY)});
         var readerLineHeights = ${JSON.stringify(READER_LINE_HEIGHTS)};
         var readerLineHeight = Number(localStorage.getItem(${JSON.stringify(READER_LINE_HEIGHT_STORAGE_KEY)}) || ${defaultLineHeight});
-        var topMenu = localStorage.getItem(${JSON.stringify(TOP_MENU_STORAGE_KEY)});
+        var readerPaper = localStorage.getItem(${JSON.stringify(READER_PAPER_STORAGE_KEY)});
+        var readerThemeSystemThemes = ${JSON.stringify(readerThemeSystemThemes)};
         var adminSidebarCollapsed = localStorage.getItem(${JSON.stringify(ADMIN_SIDEBAR_STORAGE_KEY)}) === "true";
         var fontSize = Number(localStorage.getItem("novel-font-size") || ${JSON.stringify(defaultFontSize)});
         if (!Number.isFinite(fontSize) || fontSize < 8 || fontSize > 25) {
@@ -53,13 +59,19 @@ export function ThemeScript({
               })
             : ${defaultLineHeight};
         }
+        var validReaderPaper = Object.prototype.hasOwnProperty.call(readerThemeSystemThemes, readerPaper);
+        if (validReaderPaper) {
+          theme = readerThemeSystemThemes[readerPaper];
+          localStorage.setItem("novel-theme", theme);
+          root.dataset.readerTheme = readerPaper;
+        } else {
+          root.removeAttribute("data-reader-theme");
+        }
         if (theme === "light" || theme === "dark") {
           root.dataset.theme = theme;
         } else {
           root.removeAttribute("data-theme");
         }
-        uiMode = uiMode === "minimal" ? "minimal" : "standard";
-        root.dataset.uiMode = uiMode;
         root.dataset.palette = palette.value;
         root.dataset.readerTags = readerTags === "collapsed"
           ? "collapsed"
@@ -68,8 +80,7 @@ export function ThemeScript({
             : (readerTags === "expanded" || readerTags === "show"
               ? "expanded"
               : ${JSON.stringify(defaultReaderTagsMode)}));
-        root.dataset.readerHotwords = readerHotwords === "show" || readerHotwords === "hide" ? readerHotwords : (uiMode === "minimal" ? "hide" : "show");
-        root.dataset.topMenu = topMenu === "hide" ? "hide" : "show";
+        root.dataset.readerHotwords = readerHotwords === "show" || readerHotwords === "hide" ? readerHotwords : "show";
         root.dataset.adminSidebar = adminSidebarCollapsed ? "collapsed" : "expanded";
         root.style.setProperty("--reader-font-size", fontSize + "px");
         root.style.setProperty("--reader-line-height", String(readerLineHeight));
@@ -78,6 +89,11 @@ export function ThemeScript({
         root.style.setProperty("--palette-dark-accent", palette.darkAccent);
         root.style.setProperty("--palette-dark-strong", palette.darkStrong);
         localStorage.removeItem("novel-palette");
+        localStorage.removeItem("novel-ui-mode");
+        localStorage.removeItem("novel-reader-top-menu");
+        ${JSON.stringify(LEGACY_READER_THEME_STORAGE_KEYS)}.forEach(function(key) { localStorage.removeItem(key); });
+        root.removeAttribute("data-ui-mode");
+        root.removeAttribute("data-top-menu");
       } catch (error) {}
     })();
   `;

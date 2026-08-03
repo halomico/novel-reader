@@ -2,12 +2,12 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
+  canBrowseHomePortalContent,
+  canConsumeHomePortalContent,
+  canSeeHomePortalContentEntry,
   getMediaDir,
   isAudioLibraryEnabled,
   isFileLibraryEnabled,
-  isGuestAudioNavEnabled,
-  isGuestFileNavEnabled,
-  isGuestVideoNavEnabled,
   isVideoLibraryEnabled,
 } from "./config";
 import { getDb } from "./db";
@@ -33,7 +33,7 @@ import { normalizeMediaStoragePath, resolveMediaStoragePath } from "./media-stor
 
 export type MediaKind = "video" | "audio" | "file";
 export type FeedbackMediaKind = Extract<MediaKind, "video" | "audio">;
-export type MediaSortBy = "name" | "duration" | "size" | "updated" | "plays";
+export type MediaSortBy = "name" | "published" | "duration" | "size" | "updated" | "plays";
 export type MediaSortOrder = "asc" | "desc";
 
 export type MediaAsset = {
@@ -56,6 +56,10 @@ export type MediaAsset = {
   playCount: number;
   recommendCount: number;
   downloadCount: number;
+  publishedAt: string;
+  contentUpdatedAt: string;
+  newUntil: string | null;
+  playSodaPrice: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -117,6 +121,10 @@ type MediaRow = {
   play_count: number;
   recommend_count: number;
   download_count: number;
+  published_at: string | null;
+  content_updated_at: string | null;
+  new_until: string | null;
+  play_soda_price: number;
   created_at: string;
   updated_at: string;
 };
@@ -285,6 +293,10 @@ function toAsset(row: MediaRow): MediaAsset {
     playCount: row.play_count,
     recommendCount: row.recommend_count,
     downloadCount: row.download_count,
+    publishedAt: row.published_at || row.created_at,
+    contentUpdatedAt: row.content_updated_at || row.updated_at,
+    newUntil: row.new_until,
+    playSodaPrice: Math.max(Math.floor(row.play_soda_price || 0), 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -628,18 +640,31 @@ export function isMediaKindEnabled(kind: MediaKind): boolean {
 }
 
 export function isMediaKindPublic(kind: MediaKind): boolean {
-  if (!isMediaKindEnabled(kind)) return false;
-  if (kind === "video") return isGuestVideoNavEnabled();
-  if (kind === "audio") return isGuestAudioNavEnabled();
-  return isGuestFileNavEnabled();
+  return canBrowseHomePortalContent(kind, false);
 }
 
 export function isMediaKindAccessible(kind: MediaKind, authenticated: boolean): boolean {
-  return authenticated ? isMediaKindEnabled(kind) : isMediaKindPublic(kind);
+  return canBrowseHomePortalContent(kind, authenticated);
+}
+
+export function isMediaKindEntryVisible(kind: MediaKind, authenticated: boolean): boolean {
+  return canSeeHomePortalContentEntry(kind, authenticated);
+}
+
+export function isMediaKindConsumable(kind: MediaKind, authenticated: boolean): boolean {
+  return canConsumeHomePortalContent(kind, authenticated);
+}
+
+export function isMediaKindContentPublic(kind: MediaKind): boolean {
+  return canConsumeHomePortalContent(kind, false);
 }
 
 export function getAccessibleMediaKinds(authenticated: boolean): MediaKind[] {
   return MEDIA_KINDS.filter((kind) => isMediaKindAccessible(kind, authenticated));
+}
+
+export function getVisibleMediaEntryKinds(authenticated: boolean): MediaKind[] {
+  return MEDIA_KINDS.filter((kind) => isMediaKindEntryVisible(kind, authenticated));
 }
 
 export function normalizeMediaFile(params: { kind: MediaKind; fileName: string; mimeType: string }): {
@@ -1032,6 +1057,7 @@ async function performMediaLibrarySync(state: MediaLibrarySyncState, force = fal
        SET storage_node_id = ?, title = ?, file_name = ?, mime_type = ?, size_bytes = ?, mtime_ms = ?,
            duration_seconds = CASE WHEN size_bytes <> ? OR mtime_ms <> ? THEN NULL ELSE duration_seconds END,
            thumbnail_version = CASE WHEN size_bytes <> ? OR mtime_ms <> ? THEN 0 ELSE thumbnail_version END,
+           content_updated_at = CASE WHEN size_bytes <> ? OR mtime_ms <> ? THEN CURRENT_TIMESTAMP ELSE content_updated_at END,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
     );
@@ -1083,6 +1109,8 @@ async function performMediaLibrarySync(state: MediaLibrarySyncState, force = fal
           title,
           file.fileName,
           file.mimeType,
+          file.sizeBytes,
+          file.mtimeMs,
           file.sizeBytes,
           file.mtimeMs,
           file.sizeBytes,
@@ -1238,7 +1266,7 @@ function addFolderFilter(filters: string[], values: Array<string | number>, kind
 }
 
 export function normalizeMediaSortBy(value: string | undefined): MediaSortBy {
-  return value === "duration" || value === "size" || value === "updated" || value === "plays" ? value : "name";
+  return value === "published" || value === "duration" || value === "size" || value === "updated" || value === "plays" ? value : "name";
 }
 
 export function normalizeMediaSortOrder(value: string | undefined, sortBy: MediaSortBy): MediaSortOrder {
@@ -1263,6 +1291,9 @@ function mediaAssetOrderBy(sortBy: MediaSortBy, sortOrder: MediaSortOrder): stri
   }
   if (sortBy === "plays") {
     return `play_count ${direction}, title COLLATE NOCASE ASC, id ASC`;
+  }
+  if (sortBy === "published") {
+    return `published_at ${direction}, id ${direction}`;
   }
   return `updated_at ${direction}, id ${direction}`;
 }
@@ -1710,6 +1741,33 @@ export function incrementMediaPlayCount(id: number): boolean {
 
 export function incrementMediaDownloadCount(id: number): boolean {
   return getDb().prepare("UPDATE media_assets SET download_count = download_count + 1 WHERE id = ?").run(id).changes > 0;
+}
+
+function normalizedMediaDate(value: string | null | undefined, fallback: string): string {
+  const parsed = value ? new Date(value) : new Date(fallback);
+  if (!Number.isFinite(parsed.getTime())) {
+    throw new MediaFolderError("视频时间无效");
+  }
+  return parsed.toISOString().replace("T", " ").replace("Z", "");
+}
+
+export function updateVideoPublishingSettings(input: {
+  id: number;
+  playSodaPrice: number;
+  publishedAt: string;
+  newUntil?: string | null;
+}): MediaAsset | null {
+  const asset = getMediaAsset(input.id);
+  if (!asset || asset.kind !== "video") return null;
+  const playSodaPrice = Math.min(Math.max(Math.floor(Number(input.playSodaPrice) || 0), 0), 1_000_000);
+  const publishedAt = normalizedMediaDate(input.publishedAt, asset.publishedAt);
+  const newUntil = input.newUntil ? normalizedMediaDate(input.newUntil, input.newUntil) : null;
+  getDb().prepare(
+    `UPDATE media_assets
+     SET play_soda_price = ?, published_at = ?, new_until = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND kind = 'video'`,
+  ).run(playSodaPrice, publishedAt, newUntil, input.id);
+  return getMediaAsset(input.id);
 }
 
 export async function deleteMediaAssets(ids: number[]): Promise<{ deleted: number; fileDeleteFailures: number }> {

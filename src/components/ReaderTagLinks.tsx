@@ -10,7 +10,7 @@ type ReaderTag = {
   slug: string;
 };
 
-export function ReaderTagLinks({ tags }: { tags: ReaderTag[] }) {
+export function ReaderTagLinks({ tags, library = "default" }: { tags: ReaderTag[]; library?: string }) {
   const [expanded, setExpanded] = useState(false);
   const collapsible = tags.length > 8;
 
@@ -32,7 +32,7 @@ export function ReaderTagLinks({ tags }: { tags: ReaderTag[] }) {
       </button>
       <nav className="readerTagLinks" aria-label="文章标签">
         {tags.map((tag) => (
-          <TagTrackedLink slug={tag.slug} key={tag.id}>
+          <TagTrackedLink slug={tag.slug} library={library} key={tag.id}>
             {tag.name}
           </TagTrackedLink>
         ))}

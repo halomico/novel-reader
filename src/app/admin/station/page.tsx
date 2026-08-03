@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminStationNavigation } from "@/components/AdminStationNavigation";
-import { AdminStationConversation } from "@/components/AdminStationWorkspace";
+import { AdminStationComposer, AdminStationConversation } from "@/components/AdminStationWorkspace";
 import { getStationDisplayName } from "@/lib/config";
 import {
   getStationThread,
@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
 type StationAdminPageProps = {
-  searchParams: Promise<{ view?: string; thread?: string }>;
+  searchParams: Promise<{ view?: string; thread?: string; compose?: string }>;
 };
 
 export default async function AdminStationPage({ searchParams }: StationAdminPageProps) {
@@ -38,7 +38,10 @@ export default async function AdminStationPage({ searchParams }: StationAdminPag
     <AdminFrame active="station">
       <div className="adminWorkspace">
         <AdminStationNavigation active="inbox" />
-        <header className="adminWorkspaceHeader"><div><h1>站务消息</h1><p>处理用户留言与沟通记录。</p></div></header>
+        <header className="adminWorkspaceHeader">
+          <div><h1>站务消息</h1><p>处理用户留言与沟通记录。</p></div>
+          <AdminStationComposer initialUsername={params.compose || ""} />
+        </header>
         {selectedThread ? (
           <div className="adminInboxWorkspace">
             <nav className="adminStationThreadList" aria-label="站务留言">

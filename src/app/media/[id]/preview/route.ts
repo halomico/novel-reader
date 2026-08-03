@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkContentAccess } from "@/lib/content-access";
-import { getMediaAsset, isMediaKindAccessible } from "@/lib/media";
+import { getMediaAsset, isMediaKindConsumable } from "@/lib/media";
 import { getMediaTextPreview } from "@/lib/media-text-preview";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 
@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = getCurrentUserFromRequest(request);
   const asset = getMediaAsset(Number((await params).id));
-  if (!asset || asset.kind !== "file" || !isMediaKindAccessible("file", Boolean(user))) {
+  if (!asset || asset.kind !== "file" || !isMediaKindConsumable("file", Boolean(user))) {
     return new Response(null, { status: 404 });
   }
   const access = checkContentAccess(request.headers, {

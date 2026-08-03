@@ -352,7 +352,7 @@ export function AdminMediaManager({
           }
 
           setMessage(
-            `${kind === "video" ? "正在优化并保存" : "正在保存"} ${fileIndex + 1}/${uploadFiles.length} · ${file.name}`,
+            `${kind === "video" ? "正在处理并保存" : "正在保存"} ${fileIndex + 1}/${uploadFiles.length} · ${file.name}`,
           );
           const assetId = await finishUploadTask(uploadId);
           if (kind === "video" && uploadTagIds.length) {
@@ -718,6 +718,27 @@ export function AdminMediaManager({
                       <label className="adminInlineCheckbox"><input name="applyTags" type="checkbox" />统一标签</label>
                       <VideoTagPicker tags={videoTags} />
                     </div>
+                    <label className="adminMediaBatchApplyField">
+                      <span><input name="applyVideoPrice" type="checkbox" />统一播放价格</span>
+                      <input name="playSodaPrice" type="number" min="0" max="1000000" defaultValue="0" aria-label="3 小时播放所需苏打" />
+                    </label>
+                    <div className="adminFieldGrid">
+                      <label>
+                        <span>最新状态</span>
+                        <span className="adminSelectControl">
+                          <select name="latestAction" defaultValue="keep">
+                            <option value="keep">保持不变</option>
+                            <option value="mark">设为最新</option>
+                            <option value="clear">取消标记</option>
+                          </select>
+                          <ChevronDown size={14} aria-hidden="true" />
+                        </span>
+                      </label>
+                      <label>
+                        <span>标记天数</span>
+                        <input name="newDays" type="number" min="1" max="365" defaultValue="14" />
+                      </label>
+                    </div>
                   </>
                 ) : null}
                 <footer>
@@ -779,6 +800,31 @@ export function AdminMediaManager({
                 <span>标签</span>
                 <VideoTagPicker tags={videoTags} selectedIds={(visibleTagsByAsset[editingAsset.id] || []).map((tag) => tag.id)} />
               </div>
+            ) : null}
+            {editingAsset.kind === "video" ? (
+              <>
+                <label>
+                  <span>3 小时播放 / 苏打</span>
+                  <input name="playSodaPrice" type="number" min="0" max="1000000" defaultValue={editingAsset.playSodaPrice} />
+                </label>
+                <div className="adminFieldGrid">
+                  <label>
+                    <span>最新状态</span>
+                    <span className="adminSelectControl">
+                      <select name="latestAction" defaultValue="keep">
+                        <option value="keep">保持不变</option>
+                        <option value="mark">设为最新</option>
+                        <option value="clear">取消标记</option>
+                      </select>
+                      <ChevronDown size={14} aria-hidden="true" />
+                    </span>
+                  </label>
+                  <label>
+                    <span>标记天数</span>
+                    <input name="newDays" type="number" min="1" max="365" defaultValue="14" />
+                  </label>
+                </div>
+              </>
             ) : null}
             <label>
               <span>简介</span>

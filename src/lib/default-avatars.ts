@@ -10,6 +10,10 @@ export const DEFAULT_AVATAR_PATHS = [
   "/default-avatars/06.svg",
   "/default-avatars/07.svg",
   "/default-avatars/08.svg",
+  "/default-avatars/09.svg",
+  "/default-avatars/10.svg",
+  "/default-avatars/11.svg",
+  "/default-avatars/12.svg",
 ] as const;
 
 type RandomInt = (maxExclusive: number) => number;

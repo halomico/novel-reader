@@ -2,10 +2,19 @@ export const PALETTE_STORAGE_KEY = "novel-palette-v2";
 export const READER_TAGS_STORAGE_KEY = "novel-reader-tags";
 export const READER_HOTWORDS_STORAGE_KEY = "novel-reader-hotwords";
 export const READER_LINE_HEIGHT_STORAGE_KEY = "novel-reader-line-height";
-export const TOP_MENU_STORAGE_KEY = "novel-reader-top-menu";
+export const READER_PAPER_STORAGE_KEY = "novel-reader-paper-v2";
+export const LEGACY_READER_THEME_STORAGE_KEYS = ["novel-reader-theme", "novel-reader-light-theme"] as const;
 export const ADMIN_SIDEBAR_STORAGE_KEY = "novel-reader-admin-sidebar-collapsed";
 export const READER_LINE_HEIGHTS = [1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2] as const;
 export const DEFAULT_READER_LINE_HEIGHT = 1.7;
+export const READER_THEME_OPTIONS = [
+  { value: "gray", label: "灰白", swatch: "#f5f5f5", paper: "#f5f5f5", outer: "#ebebeb" },
+  { value: "warm", label: "暖白", swatch: "#f5f1e8", paper: "#f5f1e8", outer: "#ebe6da" },
+  { value: "sepia", label: "米黄", swatch: "#efe2c0", paper: "#efe2c0", outer: "#e3d0a1" },
+  { value: "green", label: "护眼", swatch: "#e0eee1", paper: "#e0eee1", outer: "#c9e0cb" },
+  { value: "blue", label: "浅蓝", swatch: "#dcebef", paper: "#dcebef", outer: "#cedde1" },
+  { value: "night", label: "夜间", swatch: "#111111", paper: "#111111", outer: "#0a0a0a" },
+] as const;
 
 export const COLOR_PALETTES = [
   { value: "default", label: "Default", lightAccent: "#9f3142", lightStrong: "#7d2433", darkAccent: "#b65d2d", darkStrong: "#d1743e" },
@@ -28,12 +37,23 @@ export const COLOR_PALETTES = [
   { value: "superhero", label: "Superhero", lightAccent: "#344f72", lightStrong: "#253b57", darkAccent: "#4b6480", darkStrong: "#718ca9" },
   { value: "ink", label: "Ink", lightAccent: "#35445a", lightStrong: "#263244", darkAccent: "#6c7c93", darkStrong: "#8796aa" },
   { value: "cyborg", label: "Cyborg", lightAccent: "#756300", lightStrong: "#554800", darkAccent: "#9a8412", darkStrong: "#b8a02b" },
+  { value: "cinnabar", label: "Cinnabar", lightAccent: "#e5353e", lightStrong: "#c62d35", darkAccent: "#f05c64", darkStrong: "#ff747a" },
 ] as const;
 
 export type ColorPalette = (typeof COLOR_PALETTES)[number]["value"];
 export type ColorPaletteOption = (typeof COLOR_PALETTES)[number];
 export type ReaderTagsMode = "expanded" | "collapsed" | "hidden";
 export type ReaderLineHeight = (typeof READER_LINE_HEIGHTS)[number];
+export type ReaderTheme = (typeof READER_THEME_OPTIONS)[number]["value"];
+export type SystemTheme = "light" | "dark";
+
+export function isReaderTheme(value: string | null | undefined): value is ReaderTheme {
+  return READER_THEME_OPTIONS.some((theme) => theme.value === value);
+}
+
+export function getReaderThemeSystemTheme(theme: ReaderTheme): SystemTheme {
+  return theme === "night" ? "dark" : "light";
+}
 
 export function normalizeReaderLineHeight(
   value: string | number | null | undefined,

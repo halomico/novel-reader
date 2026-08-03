@@ -2,17 +2,30 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { getCatalogFeatureSettings, getLibraryDir } from "./config";
 import { getDb } from "./db";
-import { sampleNovelIds } from "./novel-id-sampler";
+import { sampleNovelIds, sampleNovelIdsFromList } from "./novel-id-sampler";
 import { sampleRecommendationPoolNovelIds } from "./recommendation-pool";
 import { createNovelSegments, NovelSegment } from "./segments";
 import { parseSearchQuery, type ParsedSearchQuery, type SearchExpression } from "./search-query";
 import { decodeNovelBuffer } from "./text";
+import {
+  listNovelChapters,
+  readNovelChapterContent,
+  type NovelAccessMode,
+  type NovelStorageMode,
+} from "./novel-library";
 
 export type Novel = {
   id: number;
   title: string;
+  description: string;
   file_name: string;
   relative_path: string;
+  source_id: number | null;
+  storage_mode: NovelStorageMode;
+  chapter_count: number;
+  access_mode: NovelAccessMode;
+  soda_price: number;
+  preview_chapter_count: number;
   content_hash: string | null;
   size_bytes: number;
   mtime_ms: number;
@@ -38,6 +51,10 @@ export type NovelListResult = {
 const DEFAULT_PAGE_SIZE = 15;
 const MIN_PAGE_SIZE = 1;
 const MAX_PAGE_SIZE = 100;
+export const NOVEL_SELECT_COLUMNS = `id, title, description, file_name, relative_path, source_id, storage_mode,
+  chapter_count, access_mode, soda_price, preview_chapter_count, content_hash, size_bytes,
+  mtime_ms, word_count, visit_count, last_accessed_at, last_accessed_ip,
+  last_accessed_user_agent, created_at, updated_at`;
 const NOVEL_SEGMENT_CACHE_MAX_BYTES = 64 * 1024 * 1024;
 const NOVEL_SEGMENT_CACHE_MAX_ENTRY_BYTES = 16 * 1024 * 1024;
 const NOVEL_SEGMENT_CACHE_MAX_ENTRIES = 32;
@@ -144,7 +161,7 @@ export function listNovelsByIds(novelIds: number[]): Novel[] {
   const placeholders = ids.map(() => "?").join(", ");
   const rows = getDb()
     .prepare(
-      `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
+      `SELECT ${NOVEL_SELECT_COLUMNS}
        FROM novels
        WHERE id IN (${placeholders})`,
     )
@@ -156,9 +173,12 @@ export function listNovelsByIds(novelIds: number[]): Novel[] {
   });
 }
 
-function listRandomNovels(pageSize: number, seed: string): Novel[] {
+function listRandomNovels(pageSize: number, seed: string, sourceId?: number): Novel[] {
   const db = getDb();
-  return listNovelsByIds(sampleNovelIds(db, pageSize, seed));
+  if (!sourceId) return listNovelsByIds(sampleNovelIds(db, pageSize, seed));
+  const sourceIds = (db.prepare("SELECT id FROM novels WHERE source_id = ? ORDER BY id ASC").all(sourceId) as Array<{ id: number }>)
+    .map((row) => row.id);
+  return listNovelsByIds(sampleNovelIdsFromList(sourceIds, pageSize, seed));
 }
 
 export function planCatalogPage(promotedIds: readonly number[], pageSize: number, offset: number) {
@@ -198,7 +218,7 @@ function listCatalogNovels(pageSize: number, offset: number): Novel[] {
   const excludedSql = promotedIds.length ? `WHERE id NOT IN (${promotedIds.map(() => "?").join(", ")})` : "";
   const baseBooks = db
     .prepare(
-      `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
+      `SELECT ${NOVEL_SELECT_COLUMNS}
        FROM novels
        ${excludedSql}
        ORDER BY title COLLATE NOCASE ASC, id ASC
@@ -208,7 +228,7 @@ function listCatalogNovels(pageSize: number, offset: number): Novel[] {
   return [...promotedBooks, ...baseBooks];
 }
 
-export function listNovels(params: { page?: number; q?: string; pageSize?: number; randomSeed?: string }): NovelListResult {
+export function listNovels(params: { page?: number; q?: string; pageSize?: number; randomSeed?: string; sourceId?: number }): NovelListResult {
   const db = getDb();
   const pageSize = normalizePageSize(params.pageSize);
   const query = (params.q || "").trim();
@@ -228,25 +248,27 @@ export function listNovels(params: { page?: number; q?: string; pageSize?: numbe
     }
 
     const search = buildTitleSearchSql(validation.query);
+    const sourceClause = params.sourceId ? " AND source_id = ?" : "";
+    const sourceValues = params.sourceId ? [params.sourceId] : [];
     const totalBooks = db
       .prepare(
         `SELECT COUNT(*) AS count
          FROM novels
-         WHERE ${search.whereSql}`,
+         WHERE ${search.whereSql}${sourceClause}`,
       )
-      .get(...search.values) as { count: number };
+      .get(...search.values, ...sourceValues) as { count: number };
     const totalPages = Math.ceil(totalBooks.count / pageSize);
     const page = normalizePage(params.page || 1, totalPages);
     const offset = (page - 1) * pageSize;
     const books = db
       .prepare(
-        `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
+        `SELECT ${NOVEL_SELECT_COLUMNS}
          FROM novels
-         WHERE ${search.whereSql}
+         WHERE ${search.whereSql}${sourceClause}
          ORDER BY title COLLATE NOCASE ASC, id ASC
          LIMIT ? OFFSET ?`,
       )
-      .all(...search.values, pageSize, offset) as Novel[];
+      .all(...search.values, ...sourceValues, pageSize, offset) as Novel[];
 
     return {
       books,
@@ -258,13 +280,15 @@ export function listNovels(params: { page?: number; q?: string; pageSize?: numbe
     };
   }
 
+  const sourceFilter = params.sourceId ? " WHERE source_id = ?" : "";
+  const sourceValues = params.sourceId ? [params.sourceId] : [];
   const totalBooks = db
-    .prepare("SELECT COUNT(*) AS count FROM novels")
-    .get() as { count: number };
+    .prepare(`SELECT COUNT(*) AS count FROM novels${sourceFilter}`)
+    .get(...sourceValues) as { count: number };
   const randomSeed = (params.randomSeed || "").trim().slice(0, 64);
   if (randomSeed) {
     return {
-      books: listRandomNovels(pageSize, randomSeed),
+      books: listRandomNovels(pageSize, randomSeed, params.sourceId),
       page: 1,
       pageSize,
       totalBooks: totalBooks.count,
@@ -276,7 +300,15 @@ export function listNovels(params: { page?: number; q?: string; pageSize?: numbe
   const page = normalizePage(params.page || 1, totalPages);
   const offset = (page - 1) * pageSize;
 
-  const books = listCatalogNovels(pageSize, offset);
+  const books = params.sourceId
+    ? db.prepare(
+        `SELECT ${NOVEL_SELECT_COLUMNS}
+         FROM novels
+         WHERE source_id = ?
+         ORDER BY title COLLATE NOCASE ASC, id ASC
+         LIMIT ? OFFSET ?`,
+      ).all(params.sourceId, pageSize, offset) as Novel[]
+    : listCatalogNovels(pageSize, offset);
 
   return {
     books,
@@ -288,11 +320,29 @@ export function listNovels(params: { page?: number; q?: string; pageSize?: numbe
   };
 }
 
+export function listRecentlyUpdatedNovels(params: { page?: number; pageSize?: number } = {}): NovelListResult {
+  const db = getDb();
+  const pageSize = normalizePageSize(params.pageSize);
+  const totalBooks = db.prepare("SELECT COUNT(*) AS count FROM novels").get() as { count: number };
+  const cappedTotalBooks = Math.min(totalBooks.count, 1_000);
+  const totalPages = Math.max(1, Math.ceil(cappedTotalBooks / pageSize));
+  const page = normalizePage(params.page || 1, totalPages);
+  const offset = (page - 1) * pageSize;
+  const limit = Math.max(0, Math.min(pageSize, cappedTotalBooks - offset));
+  const books = db.prepare(
+    `SELECT ${NOVEL_SELECT_COLUMNS}
+     FROM novels
+     ORDER BY mtime_ms DESC, id DESC
+     LIMIT ? OFFSET ?`,
+  ).all(limit, offset) as Novel[];
+  return { books, page, pageSize, totalBooks: cappedTotalBooks, totalPages, query: "" };
+}
+
 export function getNovelById(id: number): Novel | null {
   const db = getDb();
   const book = db
     .prepare(
-      `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
+      `SELECT ${NOVEL_SELECT_COLUMNS}
        FROM novels
        WHERE id = ?`,
     )
@@ -301,7 +351,11 @@ export function getNovelById(id: number): Novel | null {
   return book || null;
 }
 
-export async function readNovelContent(book: Pick<Novel, "relative_path">): Promise<string> {
+export async function readNovelContent(book: Pick<Novel, "relative_path"> & Partial<Pick<Novel, "id" | "storage_mode">>): Promise<string> {
+  if (book.storage_mode === "chapters" && book.id) {
+    const chapters = listNovelChapters(book.id);
+    return (await Promise.all(chapters.map(readNovelChapterContent))).join("\n\n");
+  }
   const libraryDir = getLibraryDir();
   const filePath = path.resolve(libraryDir, book.relative_path);
   const libraryRoot = path.resolve(libraryDir);

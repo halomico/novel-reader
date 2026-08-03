@@ -19,7 +19,9 @@ import {
   markAnnouncementRead,
   markStationThreadRead,
   saveAnnouncement,
+  StationInputError,
 } from "./station";
+import { STATION_MESSAGE_MAX_LENGTH } from "./station-protocol";
 
 function withTempDatabase(t: TestContext) {
   const previousDatabasePath = process.env.DATABASE_PATH;
@@ -90,4 +92,16 @@ test("keeps station messages private and updates unread state", (t) => {
   assert.equal(getStationThread(threadId, { userId: userId + 1 }), null);
   assert.equal(deleteStationThread(threadId), true);
   assert.equal(getStationThread(threadId, { admin: true }), null);
+});
+
+test("rejects station messages longer than 500 characters without truncating them", (t) => {
+  withTempDatabase(t);
+  const userId = seedUser();
+  const allowed = "消".repeat(STATION_MESSAGE_MAX_LENGTH);
+  const threadId = createStationThread(userId, "长度检查", allowed);
+  assert.equal(listStationMessages(threadId)[0].body, allowed);
+  assert.throws(
+    () => addStationReply({ threadId, authorRole: "user", userId, body: `${allowed}息` }),
+    (error: unknown) => error instanceof StationInputError && error.message === "消息不能超过 500 字",
+  );
 });

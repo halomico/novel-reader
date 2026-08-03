@@ -1,4 +1,4 @@
-import { BookOpen, MessageCircle } from "lucide-react";
+import { BookOpen } from "lucide-react";
 import Link from "@/components/LocalizedLink";
 import {
   canAccessAdvancedTagSearch,
@@ -37,9 +37,11 @@ export async function SiteHeader({
   showCurrentSearch = false,
   showPrimaryNavigation = true,
   showTools = true,
+  showSearch = true,
   isHomePage = false,
   readerMode = false,
   authMode = false,
+  library = "default",
   currentUser,
   unreadMessages,
 }: {
@@ -49,16 +51,18 @@ export async function SiteHeader({
   showCurrentSearch?: boolean;
   showPrimaryNavigation?: boolean;
   showTools?: boolean;
+  showSearch?: boolean;
   isHomePage?: boolean;
   readerMode?: boolean;
   authMode?: boolean;
+  library?: string;
   currentUser?: UserProfile | null;
   unreadMessages?: number;
 }) {
   const locale = await getRequestLocale();
   const siteName = await localizeText(getSiteName(), locale);
-  const [homeLabel, novelsLabel, messageLabel] = await localizeTexts(
-    ["返回首页", "前往小说", "消息"] as const,
+  const [homeLabel, novelsLabel] = await localizeTexts(
+    ["返回首页", "前往小说"] as const,
     locale,
   );
   const brandHref = getSiteBrandHref();
@@ -83,6 +87,7 @@ export async function SiteHeader({
   const showAdvancedSearch = canAccessAdvancedTagSearch(false) ||
     (canAccessAdvancedTagSearch(Boolean(user)) && hasUserPermission(user, "advanced_search"));
   const showMarket = Boolean(user && isMarketEnabled() && hasUserPermission(user, "market_access"));
+  const canShowSearch = showSearch && showLibraryNav && !authMode;
 
   const headerClassName = [
     "siteHeader",
@@ -103,8 +108,8 @@ export async function SiteHeader({
         {readerMode ? <ReaderHeaderBehavior /> : null}
         {showPrimaryNav ? <HeaderPrimaryNav mediaKinds={mediaKinds} showLibrary={showLibraryNav} showTags={showTagNav} /> : null}
         {showTools ? (
-          <div className={showLibraryNav && !authMode ? "headerTools" : "headerTools hasNoSearch"}>
-            {showLibraryNav && !authMode ? (
+          <div className={canShowSearch ? "headerTools" : "headerTools hasNoSearch"}>
+            {canShowSearch ? (
               <HeaderSearch
                 query={query}
                 defaultMode={defaultSearchMode}
@@ -112,15 +117,11 @@ export async function SiteHeader({
                 showCurrentSearch={showCurrentSearch}
                 showAdvancedSearch={showAdvancedSearch}
                 noticeDisplaySeconds={noticeDisplaySeconds}
+                library={library}
               />
             ) : null}
             <div className="headerActions">
-              {user ? (
-                <Link className="iconLink headerMessageLink" href="/messages" aria-label={messageLabel} title={messageLabel}>
-                  <MessageCircle size={20} aria-hidden="true" />
-                  {unreadCount > 0 ? <span className="headerUnreadDot" aria-label={`${unreadCount} 条未读消息`} /> : null}
-                </Link>
-              ) : <ThemeToggle />}
+              {!readerMode ? <ThemeToggle /> : null}
               <HeaderUserMenu
                 user={user ? {
                   displayName: user.displayName,
@@ -130,9 +131,6 @@ export async function SiteHeader({
                 unreadMessages={unreadCount}
                 loginEnabled={loginEnabled}
                 registrationEnabled={registrationEnabled}
-                mediaKinds={mediaKinds}
-                showLibrary={showLibraryNav}
-                showTags={showTagNav}
                 showMarket={showMarket}
               />
             </div>

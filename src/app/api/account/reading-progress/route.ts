@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { getNovelById } from "@/lib/books";
+import { getNovelChapter } from "@/lib/novel-library";
+import { getNovelReadAccess } from "@/lib/novel-access";
 import {
   clearReadingProgress,
   deleteReadingProgress,
@@ -60,6 +62,19 @@ export async function PUT(request: Request) {
     typeof payload.completed !== "boolean"
   ) {
     return privateJson({ ok: false, message: "阅读进度无效" }, 400);
+  }
+  let chapterSortOrder: number | null = null;
+  if (payload.chapterId != null) {
+    const chapterId = Number(payload.chapterId);
+    const chapter = Number.isInteger(chapterId) && chapterId > 0 ? getNovelChapter(book.id, chapterId) : null;
+    if (!chapter) {
+      return privateJson({ ok: false, message: "章节不存在" }, 400);
+    }
+    payload.chapterId = chapterId;
+    chapterSortOrder = chapter.sortOrder;
+  }
+  if (!getNovelReadAccess(book, user, { chapterSortOrder }).allowed) {
+    return privateJson({ ok: false, message: "当前内容尚未解锁" }, 403);
   }
 
   const result = updateReadingProgress(user.id, book, payload);

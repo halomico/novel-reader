@@ -19,10 +19,13 @@ import {
   getUserAvatarMaxBytes,
 } from "@/lib/config";
 import { cancelContentJobs } from "@/lib/content-jobs";
+import { invalidateContentSearchResultCache } from "@/lib/content-search-cache";
+import { getContentSearchDb } from "@/lib/content-search-db";
+import { deleteContentSearchIndexNovel } from "@/lib/content-search-index";
 import {
-  HOME_PORTAL_CONTENT_CARD_KEYS,
   normalizeHomePortalOrder,
   type HomePortalAccessMode,
+  type HomePortalAccessModes,
 } from "@/lib/home-portal";
 import {
   createVideoCategory,
@@ -52,13 +55,29 @@ import {
   updateVideoCategory,
   updateVideoTag,
   updateMediaAsset,
+  updateVideoPublishingSettings,
 } from "@/lib/media";
 import { mutationResult, type MutationResult } from "@/lib/mutation-result";
+import {
+  grantUserEntitlement,
+  parseEntitlementDefinition,
+  revokeUserEntitlement,
+  updateUserEntitlement,
+} from "@/lib/entitlements";
 import { scheduleMissingMediaPreparation } from "@/lib/media-maintenance";
 import { clearMediaThumbnails } from "@/lib/media-thumbnail";
 import { clearRemoteMediaThumbnails } from "@/lib/media-node-client";
 import { isRemoteMediaStorage, listRemoteMediaNodes } from "@/lib/media-storage-config";
-import { deleteNovelIds, renameNovelFile, updateNovelFile } from "@/lib/novel-files";
+import {
+  createNovelSource,
+  deleteEmptyNovelSource,
+  deleteNovelChapterIds,
+  deleteNovelIds,
+  renameNovelFile,
+  updateNovelFile,
+  updateNovelSourceSettings,
+} from "@/lib/novel-files";
+import { updateNovelAccessPolicy, updateNovelChapterOverrides, updateNovelDescription } from "@/lib/novel-library";
 import { hashPassword } from "@/lib/password";
 import { replacePinnedNovels, togglePinnedNovel } from "@/lib/pinned-novels";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -109,10 +128,18 @@ function listReturnPath(formData: FormData, basePath: "/admin/books" | "/admin/u
 
 function novelEditorReturnPath(formData: FormData, bookId: number): string {
   const requested = String(formData.get("returnPath") || "");
-  if (requested === `/books/${bookId}` || requested.startsWith(`/books/${bookId}?`)) {
+  const bookPath = `/books/${bookId}`;
+  const isBookPage = requested === bookPath || requested.startsWith(`${bookPath}?`);
+  const isChapterPage = new RegExp(`^${bookPath}/chapters/[1-9]\\d*(?:\\?[^#\\\\\\r\\n]*)?$`).test(requested);
+  if (isBookPage || isChapterPage) {
     return /[\r\n#\\]/.test(requested) ? "/admin/books" : requested;
   }
   return listReturnPath(formData, "/admin/books");
+}
+
+function chapterManagerReturnPath(formData: FormData, bookId: number): string {
+  const requestedPage = Math.max(1, Math.floor(Number(formData.get("page") || 1)));
+  return `/admin/books/${bookId}/chapters?page=${requestedPage}`;
 }
 
 function mediaReturnPath(formData: FormData): string {
@@ -219,7 +246,7 @@ function mediaAccessModeField(formData: FormData, name: string): "off" | "user" 
 
 function homeCardAccessModeField(formData: FormData, name: string): HomePortalAccessMode {
   const value = formData.get(name);
-  return value === "member" || value === "preview" || value === "public" ? value : "off";
+  return value === "member" || value === "browse" || value === "public" ? value : "off";
 }
 
 function isUsernameConflict(error: unknown): boolean {
@@ -362,6 +389,51 @@ export async function deleteNovelsAction(formData: FormData) {
     );
   }
   adminNotice(`已删除 ${result.deleted} 本小说`, result.deleted ? "success" : "warning", returnPath);
+}
+
+export async function createNovelSourceAction(formData: FormData) {
+  await requireAdminRequest();
+  try {
+    createNovelSource({
+      folderName: String(formData.get("folderName") || ""),
+      name: String(formData.get("name") || ""),
+    });
+  } catch (error) {
+    adminNotice(error instanceof Error ? error.message : "小说来源创建失败", "warning", "/admin/books/sources");
+  }
+  revalidatePath("/admin/books");
+  revalidatePath("/admin/books/sources");
+  revalidatePath("/novels");
+  adminNotice("小说来源已创建", "success", "/admin/books/sources");
+}
+
+export async function saveNovelSourceAction(formData: FormData) {
+  await requireAdminRequest();
+  try {
+    updateNovelSourceSettings(Number(formData.get("sourceId") || 0), {
+      name: String(formData.get("name") || ""),
+      sortOrder: Number(formData.get("sortOrder") || 0),
+    });
+  } catch (error) {
+    adminNotice(error instanceof Error ? error.message : "小说来源保存失败", "warning", "/admin/books/sources");
+  }
+  revalidatePath("/admin/books");
+  revalidatePath("/admin/books/sources");
+  revalidatePath("/novels");
+  adminNotice("来源设置已保存", "success", "/admin/books/sources");
+}
+
+export async function deleteNovelSourceAction(formData: FormData) {
+  await requireAdminRequest();
+  try {
+    deleteEmptyNovelSource(Number(formData.get("sourceId") || 0));
+  } catch (error) {
+    adminNotice(error instanceof Error ? error.message : "小说来源删除失败", "warning", "/admin/books/sources");
+  }
+  revalidatePath("/admin/books");
+  revalidatePath("/admin/books/sources");
+  revalidatePath("/novels");
+  adminNotice("空来源已删除", "success", "/admin/books/sources");
 }
 
 export async function togglePinnedNovelAction(formData: FormData) {
@@ -520,6 +592,7 @@ export async function saveNovelEditorAction(formData: FormData) {
     } else {
       renameNovelFile(bookId, String(formData.get("title") || ""));
     }
+    updateNovelDescription(bookId, String(formData.get("description") || ""));
     setNovelTags(bookId, tagIds);
     setNovelHotwords(bookId, hotwords);
     setNovelRecommendationPool(
@@ -530,6 +603,12 @@ export async function saveNovelEditorAction(formData: FormData) {
       bookId,
       intField(formData, "recommendationCount", 0, 0, 2_000_000_000),
     );
+    const accessMode = formData.get("accessMode") === "soda" ? "soda" : "inherit";
+    updateNovelAccessPolicy(bookId, {
+      accessMode,
+      sodaPrice: intField(formData, "sodaPrice", 1, 0, 1_000_000),
+      previewChapterCount: intField(formData, "previewChapterCount", 0, 0, 100_000),
+    });
   } catch (error) {
     adminNotice(error instanceof Error ? error.message : "小说保存失败，请检查小说目录权限", "warning", editorPath);
   }
@@ -538,10 +617,48 @@ export async function saveNovelEditorAction(formData: FormData) {
   revalidatePath("/novels");
   revalidatePath("/search");
   revalidatePath(`/books/${bookId}`);
+  revalidatePath(`/books/${bookId}/chapters`);
   revalidatePath("/tags");
   revalidatePath("/admin/books");
   revalidatePath(successPath);
   adminNotice("小说已保存", "success", successPath);
+}
+
+export async function saveNovelChaptersAction(formData: FormData) {
+  await requireAdminRequest();
+  const bookId = Number(formData.get("bookId") || 0);
+  if (!Number.isInteger(bookId) || bookId < 1) adminNotice("小说不存在", "warning", "/admin/books");
+  const returnPath = chapterManagerReturnPath(formData, bookId);
+  const intent = formData.get("intent") === "delete" ? "delete" : "save";
+
+  try {
+    if (intent === "delete") {
+      const chapterIds = formData.getAll("selectedChapterIds").map(Number);
+      const deleted = deleteNovelChapterIds(bookId, chapterIds);
+      if (!deleted) adminNotice("请选择要删除的章节", "warning", returnPath);
+      revalidatePath(`/books/${bookId}`);
+      revalidatePath(`/books/${bookId}/chapters`);
+      revalidatePath(returnPath);
+      adminNotice(`已删除 ${deleted} 个章节`, "success", returnPath);
+    }
+
+    const chapterIds = formData.getAll("chapterRowIds").map(Number).filter((id) => Number.isInteger(id) && id > 0).slice(0, 200);
+    const updates = chapterIds.map((id) => ({
+      id,
+      title: String(formData.get(`chapterTitle:${id}`) || ""),
+      sortOrder: Math.max(0, Math.floor(Number(formData.get(`chapterSort:${id}`) || 1)) - 1),
+    }));
+    const saved = updateNovelChapterOverrides(bookId, updates);
+    if (!saved) adminNotice("当前页没有可保存的章节", "warning", returnPath);
+    deleteContentSearchIndexNovel(getContentSearchDb(), bookId);
+    invalidateContentSearchResultCache();
+    revalidatePath(`/books/${bookId}`);
+    revalidatePath(`/books/${bookId}/chapters`);
+    revalidatePath(returnPath);
+    adminNotice("章节已保存", "success", returnPath);
+  } catch (error) {
+    adminNotice(error instanceof Error ? error.message : "章节操作失败", "warning", returnPath);
+  }
 }
 
 export async function batchUpdateNovelsAction(formData: FormData) {
@@ -627,7 +744,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
   const announcementCardAccessMode = homeCardAccessModeField(formData, "announcementCardAccessMode");
   const advancedTagAccessMode = mediaAccessModeField(formData, "advancedTagAccessMode");
   const hotwordAccessMode = mediaAccessModeField(formData, "hotwordAccessMode");
-  const homeCardModes: Record<(typeof HOME_PORTAL_CONTENT_CARD_KEYS)[number], HomePortalAccessMode> = {
+  const homeCardModes: HomePortalAccessModes = {
     announcement: announcementCardAccessMode,
     novels: novelAccessMode,
     tags: tagAccessMode,
@@ -732,25 +849,13 @@ export async function saveAdminSettingsAction(formData: FormData) {
       .replace(/\s+/gu, " ")
       .trim()
       .slice(0, 20) || "站务",
-    announcementCardEnabled: announcementCardAccessMode !== "off",
-    guestAnnouncementCardEnabled: announcementCardAccessMode === "public",
     announcementCardTarget: formData.get("announcementCardTarget") === "latest" ? "latest" : "list",
     homePortalOrder: normalizeHomePortalOrder(formData.get("homePortalOrder")),
-    publicDisplayHomeCards: HOME_PORTAL_CONTENT_CARD_KEYS.filter((key) => homeCardModes[key] === "preview"),
+    homePortalAccessModes: homeCardModes,
     analyticsEnabled: formData.get("analyticsEnabled") === "on",
     analyticsRealtimeLimit: intField(formData, "analyticsRealtimeLimit", previous.analyticsRealtimeLimit || 300, 30, 10_000),
-    novelLibraryEnabled: novelAccessMode !== "off",
-    videoLibraryEnabled: videoAccessMode !== "off",
-    audioLibraryEnabled: audioAccessMode !== "off",
-    fileLibraryEnabled: fileAccessMode !== "off",
-    tagLibraryEnabled: tagAccessMode !== "off",
     advancedTagSearchEnabled: advancedTagAccessMode !== "off",
     hotwordLinksEnabled: hotwordAccessMode !== "off",
-    guestLibraryNavEnabled: novelAccessMode === "public",
-    guestVideoNavEnabled: videoAccessMode === "public",
-    guestAudioNavEnabled: audioAccessMode === "public",
-    guestFileNavEnabled: fileAccessMode === "public",
-    guestTagLibraryNavEnabled: tagAccessMode === "public",
     guestAdvancedTagSearchEnabled: advancedTagAccessMode === "public",
     guestHotwordLinksEnabled: hotwordAccessMode === "public",
     frontendSearchConcurrencyLimit: intField(
@@ -838,6 +943,16 @@ export async function updateAdminMediaAction(
     }
     if (asset.kind === "video") {
       setVideoTagsForAssets([id], formData.getAll("tagIds").map(Number));
+      const latestAction = String(formData.get("latestAction") || "keep");
+      const newDays = Math.min(Math.max(Math.floor(Number(formData.get("newDays")) || 14), 1), 365);
+      updateVideoPublishingSettings({
+        id,
+        playSodaPrice: Number(formData.get("playSodaPrice") || 0),
+        publishedAt: latestAction === "mark" ? new Date().toISOString() : asset.publishedAt,
+        newUntil: latestAction === "mark"
+          ? new Date(Date.now() + newDays * 86_400_000).toISOString()
+          : latestAction === "clear" ? null : asset.newUntil,
+      });
     }
     const nextAsset = getMediaAsset(id);
     if (!nextAsset) {
@@ -872,6 +987,9 @@ export async function batchUpdateAdminMediaAction(
   const applyArtist = formData.get("applyArtist") === "on";
   const applyDescription = formData.get("applyDescription") === "on";
   const applyTags = formData.get("applyTags") === "on";
+  const applyVideoPrice = formData.get("applyVideoPrice") === "on";
+  const latestAction = String(formData.get("latestAction") || "keep");
+  const newDays = Math.min(Math.max(Math.floor(Number(formData.get("newDays")) || 14), 1), 365);
   const artist = String(formData.get("artist") || "").trim();
   const description = String(formData.get("description") || "").trim();
   const targetFolder = String(formData.get("targetFolder") || "__keep__");
@@ -900,6 +1018,16 @@ export async function batchUpdateAdminMediaAction(
         asset.kind === "video" && categoryId !== "__keep__" ? categoryId : undefined,
       );
       if (asset.kind === "video" && applyTags) setVideoTagsForAssets([id], tagIds);
+      if (asset.kind === "video" && (applyVideoPrice || latestAction !== "keep")) {
+        updateVideoPublishingSettings({
+          id,
+          playSodaPrice: applyVideoPrice ? Number(formData.get("playSodaPrice") || 0) : asset.playSodaPrice,
+          publishedAt: latestAction === "mark" ? new Date().toISOString() : asset.publishedAt,
+          newUntil: latestAction === "mark"
+            ? new Date(Date.now() + newDays * 86_400_000).toISOString()
+            : latestAction === "clear" ? null : asset.newUntil,
+        });
+      }
       updated += 1;
       revalidatePath(`/media/${id}`);
     }
@@ -1327,6 +1455,67 @@ export async function updateAdminUserAction(
   return user
     ? mutationResult(true, "用户已更新", "success", { user })
     : mutationResult(false, "用户不存在", "warning");
+}
+
+function adminUserEntitlementPath(userId: number): string {
+  return `/admin/users/${userId}?view=rights`;
+}
+
+export async function grantAdminUserEntitlementAction(formData: FormData) {
+  const session = await requireAdminRequest();
+  const userId = Number(formData.get("userId"));
+  if (!Number.isInteger(userId) || userId < 1 || !getUserById(userId)) {
+    adminNotice("用户不存在", "warning", "/admin/users");
+  }
+  const durationDays = Math.min(Math.max(Math.floor(Number(formData.get("durationDays") || 0)), 0), 3650);
+  const definition = parseEntitlementDefinition({
+    targetType: formData.get("targetType"),
+    targetId: formData.get("targetId"),
+    rights: formData.getAll("rights").map(String),
+    durationSeconds: durationDays ? durationDays * 86_400 : null,
+  });
+  if (!definition) {
+    adminNotice("请选择资源和至少一项权限", "warning", adminUserEntitlementPath(userId));
+  }
+  grantUserEntitlement({ userId, definition, grantedBy: session.username });
+  revalidatePath("/account");
+  revalidatePath(`/admin/users/${userId}`);
+  adminNotice("权益已授予", "success", adminUserEntitlementPath(userId));
+}
+
+export async function updateAdminUserEntitlementAction(formData: FormData) {
+  const session = await requireAdminRequest();
+  const userId = Number(formData.get("userId"));
+  const entitlementId = Number(formData.get("entitlementId"));
+  const expiryMode = String(formData.get("expiryMode") || "keep");
+  const durationDays = /^\d+$/.test(expiryMode) ? Math.min(Math.max(Number(expiryMode), 1), 3650) : 0;
+  const expiresAt = expiryMode === "keep"
+    ? undefined
+    : expiryMode === "permanent"
+      ? null
+      : durationDays
+        ? new Date(Date.now() + durationDays * 86_400_000).toISOString()
+        : undefined;
+  const updated = updateUserEntitlement({
+    id: entitlementId,
+    userId,
+    rights: formData.getAll("rights").map(String),
+    expiresAt,
+    grantedBy: session.username,
+  });
+  revalidatePath("/account");
+  revalidatePath(`/admin/users/${userId}`);
+  adminNotice(updated ? "权益已更新" : "权益不存在或未选择权限", updated ? "success" : "warning", adminUserEntitlementPath(userId));
+}
+
+export async function revokeAdminUserEntitlementAction(formData: FormData) {
+  await requireAdminRequest();
+  const userId = Number(formData.get("userId"));
+  const entitlementId = Number(formData.get("entitlementId"));
+  const revoked = revokeUserEntitlement(entitlementId, userId);
+  revalidatePath("/account");
+  revalidatePath(`/admin/users/${userId}`);
+  adminNotice(revoked ? "权益已撤销" : "权益不存在", revoked ? "success" : "warning", adminUserEntitlementPath(userId));
 }
 
 export async function saveUserLevelsAction(formData: FormData) {

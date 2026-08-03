@@ -71,7 +71,9 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
                 </span>
                 <span className="marketProductCopy">
                   <strong>{product.title}</strong>
-                  {product.summary ? <small>{product.summary}</small> : null}
+                  {product.description ? (
+                    <small>{product.description.replace(/[#*_`>\[\]()~-]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 120)}</small>
+                  ) : null}
                 </span>
                 <span className="marketProductMeta">
                   <small className={product.stock === 0 ? "isEmpty" : ""}>

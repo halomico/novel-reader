@@ -10,10 +10,12 @@ test("uploads media in chunks, records it, and removes the stored file", async (
   const previousMediaDir = process.env.MEDIA_DIR;
   const previousStorageMode = process.env.MEDIA_STORAGE_MODE;
   const previousSettingsPath = process.env.ADMIN_SETTINGS_PATH;
+  const previousTranscodeProfile = process.env.VIDEO_TRANSCODE_PROFILE;
   process.env.DATABASE_PATH = path.join(tempDir, "novels.db");
   process.env.MEDIA_DIR = path.join(tempDir, "media");
   process.env.MEDIA_STORAGE_MODE = "local";
   process.env.ADMIN_SETTINGS_PATH = path.join(tempDir, "settings.json");
+  process.env.VIDEO_TRANSCODE_PROFILE = "source";
   let closeDatabase: (() => void) | null = null;
 
   try {
@@ -189,6 +191,8 @@ test("uploads media in chunks, records it, and removes the stored file", async (
     else process.env.MEDIA_STORAGE_MODE = previousStorageMode;
     if (previousSettingsPath === undefined) delete process.env.ADMIN_SETTINGS_PATH;
     else process.env.ADMIN_SETTINGS_PATH = previousSettingsPath;
+    if (previousTranscodeProfile === undefined) delete process.env.VIDEO_TRANSCODE_PROFILE;
+    else process.env.VIDEO_TRANSCODE_PROFILE = previousTranscodeProfile;
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });

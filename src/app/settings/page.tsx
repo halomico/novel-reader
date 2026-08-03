@@ -43,7 +43,7 @@ export default async function SettingsPage() {
         defaultPalette={defaultPalette}
         defaultTheme={settings.adminTheme}
         defaultReaderTagsMode={settings.readerDefaultTagsMode}
-        canConfigureReaderTags={authenticated || (settings.tagLibraryEnabled && settings.guestTagLibraryNavEnabled)}
+        canConfigureReaderTags={authenticated || settings.homePortalAccessModes.tags === "browse" || settings.homePortalAccessModes.tags === "public"}
         canConfigureReaderHotwords={authenticated || (settings.hotwordLinksEnabled && settings.guestHotwordLinksEnabled)}
         currentLocale={locale}
       />

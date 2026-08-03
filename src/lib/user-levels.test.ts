@@ -35,7 +35,7 @@ test("stores seven configurable frontend levels and enforces their permissions",
   getDb();
   assert.equal(listUserLevelDefinitions().length, 7);
   assert.deepEqual(getUserLevelDefinition(0).permissions, []);
-  assert.equal(getUserLevelDefinition(1).permissions.includes("novel_feedback"), true);
+  assert.equal(getUserLevelDefinition(1).permissions.includes("advanced_search"), false);
   assert.equal(getUserLevelForExperience(0), 1);
   assert.equal(getUserLevelForExperience(49), 1);
   assert.equal(getUserLevelForExperience(50), 2);
@@ -44,14 +44,15 @@ test("stores seven configurable frontend levels and enforces their permissions",
     level: 2,
     name: "进阶成员",
     sodaRequired: 75,
-    permissions: ["content_report"],
+    permissions: ["advanced_search", "content_report"],
   }), true);
   assert.equal(getUserLevelDefinition(2).name, "进阶成员");
   assert.equal(getUserLevelDefinition(2).sodaRequired, 75);
   assert.equal(getUserLevelForExperience(74), 1);
   assert.equal(getUserLevelForExperience(75), 2);
   assert.equal(hasUserPermission({ role: "user", trustLevel: 2 }, "content_report"), true);
-  assert.equal(hasUserPermission({ role: "user", trustLevel: 2 }, "novel_feedback"), false);
+  assert.equal(hasUserPermission({ role: "user", trustLevel: 2 }, "novel_feedback"), true);
+  assert.equal(hasUserPermission({ role: "user", trustLevel: 2 }, "advanced_search"), true);
   assert.equal(hasUserPermission({ role: "admin", trustLevel: 0 }, "novel_feedback"), true);
 
   const progress = getUserGrowthProgress(100);

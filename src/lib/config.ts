@@ -1,6 +1,13 @@
 ﻿import path from "node:path";
 import { cache } from "react";
-import type { HomePortalCardKey } from "./home-portal";
+import {
+  canBrowseHomePortal,
+  canConsumeHomePortal,
+  isHomePortalEntryVisible,
+  type HomePortalAccessMode,
+  type HomePortalCardKey,
+  type HomePortalContentCardKey,
+} from "./home-portal";
 import {
   readSiteSettings as readSiteSettingsFromDisk,
   type AudioPlaybackMode,
@@ -176,8 +183,7 @@ export function getStationDisplayName(): string {
 }
 
 export function canAccessHomeAnnouncementCard(authenticated: boolean): boolean {
-  const settings = readSiteSettings();
-  return settings.announcementCardEnabled && (authenticated || settings.guestAnnouncementCardEnabled);
+  return canBrowseHomePortal(getHomePortalAccessMode("announcement"), authenticated);
 }
 
 export function getAnnouncementCardTarget(): "list" | "latest" {
@@ -186,6 +192,22 @@ export function getAnnouncementCardTarget(): "list" | "latest" {
 
 export function getHomePortalOrder(): HomePortalCardKey[] {
   return readSiteSettings().homePortalOrder;
+}
+
+export function getHomePortalAccessMode(key: HomePortalContentCardKey): HomePortalAccessMode {
+  return readSiteSettings().homePortalAccessModes[key];
+}
+
+export function canBrowseHomePortalContent(key: HomePortalContentCardKey, authenticated: boolean): boolean {
+  return canBrowseHomePortal(getHomePortalAccessMode(key), authenticated);
+}
+
+export function canSeeHomePortalContentEntry(key: HomePortalContentCardKey, authenticated: boolean): boolean {
+  return isHomePortalEntryVisible(getHomePortalAccessMode(key), authenticated);
+}
+
+export function canConsumeHomePortalContent(key: HomePortalContentCardKey, authenticated: boolean): boolean {
+  return canConsumeHomePortal(getHomePortalAccessMode(key), authenticated);
 }
 
 export function isAnalyticsEnabled(): boolean {
@@ -197,44 +219,60 @@ export function getAnalyticsRealtimeLimit(): number {
 }
 
 export function isNovelLibraryEnabled(): boolean {
-  return readSiteSettings().novelLibraryEnabled;
+  return getHomePortalAccessMode("novels") !== "off";
 }
 
 export function canAccessNovelLibrary(authenticated: boolean): boolean {
-  const settings = readSiteSettings();
-  return settings.novelLibraryEnabled && (authenticated || settings.guestLibraryNavEnabled);
+  return canBrowseHomePortal(getHomePortalAccessMode("novels"), authenticated);
+}
+
+export function canConsumeNovelLibrary(authenticated: boolean): boolean {
+  return canConsumeHomePortal(getHomePortalAccessMode("novels"), authenticated);
 }
 
 export function isNovelLibraryPublic(): boolean {
-  const settings = readSiteSettings();
-  return settings.novelLibraryEnabled && settings.guestLibraryNavEnabled;
+  return canBrowseHomePortal(getHomePortalAccessMode("novels"), false);
+}
+
+export function isNovelContentPublic(): boolean {
+  return canConsumeHomePortal(getHomePortalAccessMode("novels"), false);
 }
 
 export function isVideoLibraryEnabled(): boolean {
-  return readSiteSettings().videoLibraryEnabled;
+  return getHomePortalAccessMode("video") !== "off";
 }
 
 export function isAudioLibraryEnabled(): boolean {
-  return readSiteSettings().audioLibraryEnabled;
+  return getHomePortalAccessMode("audio") !== "off";
 }
 
 export function isFileLibraryEnabled(): boolean {
-  return readSiteSettings().fileLibraryEnabled;
+  return getHomePortalAccessMode("file") !== "off";
 }
 
 export function isTagLibraryEnabled(): boolean {
-  return readSiteSettings().tagLibraryEnabled;
+  return getHomePortalAccessMode("tags") !== "off";
+}
+
+export function canAccessTagLibrary(authenticated: boolean): boolean {
+  return canBrowseHomePortal(getHomePortalAccessMode("tags"), authenticated);
+}
+
+export function isTagLibraryPublic(): boolean {
+  return canAccessTagLibrary(false);
 }
 
 export function isAdvancedTagSearchEnabled(): boolean {
   const settings = readSiteSettings();
-  return settings.tagLibraryEnabled && settings.advancedTagSearchEnabled;
+  return getHomePortalAccessMode("tags") !== "off" && settings.advancedTagSearchEnabled;
 }
 
 export function canAccessAdvancedTagSearch(authenticated: boolean): boolean {
   const settings = readSiteSettings();
-  return settings.novelLibraryEnabled && settings.tagLibraryEnabled && settings.advancedTagSearchEnabled &&
-    (authenticated || (settings.guestLibraryNavEnabled && settings.guestAdvancedTagSearchEnabled));
+  return canAccessNovelLibrary(authenticated) &&
+    canBrowseHomePortal(getHomePortalAccessMode("tags"), authenticated) &&
+    settings.advancedTagSearchEnabled &&
+    (authenticated || settings.guestAdvancedTagSearchEnabled);
 }
 
 export function isAdvancedTagSearchPublic(): boolean {
@@ -246,23 +284,23 @@ export function areHotwordLinksEnabled(): boolean {
 }
 
 export function isGuestLibraryNavEnabled(): boolean {
-  return readSiteSettings().guestLibraryNavEnabled;
+  return isHomePortalEntryVisible(getHomePortalAccessMode("novels"), false);
 }
 
 export function isGuestVideoNavEnabled(): boolean {
-  return readSiteSettings().guestVideoNavEnabled;
+  return isHomePortalEntryVisible(getHomePortalAccessMode("video"), false);
 }
 
 export function isGuestAudioNavEnabled(): boolean {
-  return readSiteSettings().guestAudioNavEnabled;
+  return isHomePortalEntryVisible(getHomePortalAccessMode("audio"), false);
 }
 
 export function isGuestFileNavEnabled(): boolean {
-  return readSiteSettings().guestFileNavEnabled;
+  return isHomePortalEntryVisible(getHomePortalAccessMode("file"), false);
 }
 
 export function isGuestTagLibraryNavEnabled(): boolean {
-  return readSiteSettings().guestTagLibraryNavEnabled;
+  return isHomePortalEntryVisible(getHomePortalAccessMode("tags"), false);
 }
 
 export function areGuestHotwordLinksEnabled(): boolean {

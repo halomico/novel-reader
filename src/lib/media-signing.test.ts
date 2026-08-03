@@ -56,6 +56,7 @@ test("signs media URLs and rejects tampering or expiry", () => {
       mtimeMs: 123_456,
       sizeBytes: 987_654,
       download: false,
+      estimatedKbps: 2_000,
       now: 1_000_000,
     });
     const parsed = new URL(signed);
@@ -66,6 +67,7 @@ test("signs media URLs and rejects tampering or expiry", () => {
       sizeBytes: 987_654,
       download: false,
       publiclyAccessible: false,
+      estimatedKbps: 2_000,
       mimeType: "video/mp4",
       fileName: "测试.mp4",
     });
@@ -88,6 +90,7 @@ test("keeps public media signatures stable within a cache bucket", () => {
       sizeBytes: 987_654,
       download: false,
       publiclyAccessible: true,
+      estimatedKbps: 1_500,
     };
     const signed = createSignedMediaUrl({ ...input, now: 1_000_000 });
     assert.equal(createSignedMediaUrl({ ...input, now: 1_100_000 }), signed);

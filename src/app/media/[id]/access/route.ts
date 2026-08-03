@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { recordAnalyticsEvent } from "@/lib/analytics";
 import { checkContentAccess } from "@/lib/content-access";
-import { getMediaAsset, isMediaKindAccessible } from "@/lib/media";
+import { getMediaAsset, isMediaKindConsumable } from "@/lib/media";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 import { recordMediaHistory } from "@/lib/users";
 
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = getCurrentUserFromRequest(request);
   const asset = getMediaAsset(Number((await params).id));
-  if (!asset || !isMediaKindAccessible(asset.kind, Boolean(user))) {
+  if (!asset || !isMediaKindConsumable(asset.kind, Boolean(user))) {
     return new Response(null, { status: 404 });
   }
   const access = checkContentAccess(request.headers, {

@@ -184,6 +184,10 @@ export function listFavoriteMedia(
     play_count: number;
     recommend_count: number;
     download_count: number;
+    published_at: string | null;
+    content_updated_at: string | null;
+    new_until: string | null;
+    play_soda_price: number;
     created_at: string;
     updated_at: string;
   }>;
@@ -207,6 +211,10 @@ export function listFavoriteMedia(
     playCount: row.play_count,
     recommendCount: row.recommend_count,
     downloadCount: row.download_count,
+    publishedAt: row.published_at || row.created_at,
+    contentUpdatedAt: row.content_updated_at || row.updated_at,
+    newUntil: row.new_until,
+    playSodaPrice: Math.max(Math.floor(row.play_soda_price || 0), 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));

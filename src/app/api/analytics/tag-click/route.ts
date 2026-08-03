@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { recordAnalyticsEvent } from "@/lib/analytics";
-import { isGuestTagLibraryNavEnabled, isTagLibraryEnabled } from "@/lib/config";
+import { canAccessTagLibrary, isTagLibraryEnabled } from "@/lib/config";
 import { getTagBySlug } from "@/lib/tags";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
   }
 
   const user = getCurrentUserFromRequest(request);
-  if (!isTagLibraryEnabled() || (!user && !isGuestTagLibraryNavEnabled())) {
+  if (!isTagLibraryEnabled() || !canAccessTagLibrary(Boolean(user))) {
     return new Response(null, { status: 404 });
   }
 

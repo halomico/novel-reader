@@ -11,6 +11,7 @@ import {
   EyeOff,
   GripVertical,
   ListChecks,
+  Layers3,
   Maximize2,
   Minimize2,
   Pencil,
@@ -40,7 +41,7 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[unitIndex]}`;
 }
 
-function sortHref(query: string, sort: AdminBookSortKey, dir: AdminBookSortDir, nextSort: AdminBookSortKey) {
+function sortHref(query: string, sort: AdminBookSortKey, dir: AdminBookSortDir, nextSort: AdminBookSortKey, sourceId = 0) {
   const params = new URLSearchParams();
   params.set("page", "1");
   if (query) {
@@ -48,6 +49,7 @@ function sortHref(query: string, sort: AdminBookSortKey, dir: AdminBookSortDir, 
   }
   params.set("sort", nextSort);
   params.set("dir", sort === nextSort && dir === "asc" ? "desc" : "asc");
+  if (sourceId) params.set("sourceId", String(sourceId));
   return `/admin/books?${params.toString()}`;
 }
 
@@ -57,18 +59,20 @@ function SortHeader({
   query,
   sort,
   dir,
+  sourceId,
 }: {
   label: string;
   value: AdminBookSortKey;
   query: string;
   sort: AdminBookSortKey;
   dir: AdminBookSortDir;
+  sourceId?: number;
 }) {
   const isActive = sort === value;
   const Icon = isActive ? (dir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
 
   return (
-    <Link className={isActive ? "adminSortLink isActive" : "adminSortLink"} href={sortHref(query, sort, dir, value)}>
+    <Link className={isActive ? "adminSortLink isActive" : "adminSortLink"} href={sortHref(query, sort, dir, value, sourceId)}>
       <span>{label}</span>
       <Icon size={13} aria-hidden="true" />
     </Link>
@@ -95,13 +99,13 @@ type BookTextMode = "full" | "truncate";
 
 const DEFAULT_BOOK_COLUMNS: BookColumn[] = [
   { key: "title", label: "书名", visible: true, sort: "title" },
-  { key: "file", label: "文件", visible: true, sort: "file_name" },
+  { key: "file", label: "文件", visible: false, sort: "file_name" },
   { key: "size", label: "大小", visible: true, sort: "size_bytes" },
   { key: "words", label: "字数", visible: true, sort: "word_count" },
   { key: "updated", label: "更新时间", visible: true, sort: "updated_at" },
   { key: "visits", label: "访问量", visible: true, sort: "visit_count" },
-  { key: "lastAccessed", label: "最后访问", visible: true, sort: "last_accessed_at" },
-  { key: "lastIp", label: "最后访问 IP", visible: true },
+  { key: "lastAccessed", label: "最后访问", visible: false, sort: "last_accessed_at" },
+  { key: "lastIp", label: "最后访问 IP", visible: false },
   { key: "lastUa", label: "最后访问 UA", visible: false },
 ];
 
@@ -179,6 +183,7 @@ export function AdminBookTable({
   dir,
   pinnedIds,
   returnPath,
+  sourceId = 0,
 }: {
   books: AdminNovel[];
   page: number;
@@ -189,6 +194,7 @@ export function AdminBookTable({
   dir: AdminBookSortDir;
   pinnedIds: number[];
   returnPath: string;
+  sourceId?: number;
 }) {
   const { selectedIds, toggleOne, togglePage, clearSelection } = usePersistentSelection("novel-reader-admin-book-selection");
   const [columns, setColumns] = useState<BookColumn[]>(DEFAULT_BOOK_COLUMNS);
@@ -300,7 +306,7 @@ export function AdminBookTable({
 
   function renderHeaderLabel(column: BookColumn) {
     if (column.sort) {
-      return <SortHeader label={column.label} value={column.sort} query={query} sort={sort} dir={dir} />;
+      return <SortHeader label={column.label} value={column.sort} query={query} sort={sort} dir={dir} sourceId={sourceId} />;
     }
     return (
       <span className="adminPlainHeader" title={column.label}>
@@ -342,6 +348,16 @@ export function AdminBookTable({
           >
             <Pencil size={15} aria-hidden="true" />
           </Link>
+          {book.storage_mode === "chapters" ? (
+            <Link
+              className="adminBookEditLink"
+              href={`/admin/books/${book.id}/chapters`}
+              aria-label={`管理 ${book.title} 的章节`}
+              title="管理章节"
+            >
+              <Layers3 size={15} aria-hidden="true" />
+            </Link>
+          ) : null}
           <button
             className={isPinned ? "adminBookPinButton isActive" : "adminBookPinButton"}
             type="button"

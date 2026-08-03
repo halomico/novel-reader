@@ -384,14 +384,18 @@ export function listTagsForNovels(
   return tagsByNovel;
 }
 
-function getTagCounts(): Map<number, number> {
+function getTagCounts(sourceId?: number): Map<number, number> {
+  const sourceFilter = sourceId ? " WHERE n.source_id = ?" : "";
+  const sourceValues = sourceId ? [sourceId] : [];
   const rows = getDb()
     .prepare(
-      `SELECT tag_id, COUNT(*) AS count
-       FROM novel_tags
-       GROUP BY tag_id`,
+      `SELECT nt.tag_id, COUNT(*) AS count
+       FROM novel_tags nt
+       INNER JOIN novels n ON n.id = nt.novel_id
+       ${sourceFilter}
+       GROUP BY nt.tag_id`,
     )
-    .all() as Array<{ tag_id: number; count: number }>;
+    .all(...sourceValues) as Array<{ tag_id: number; count: number }>;
   return new Map(rows.map((row) => [row.tag_id, row.count]));
 }
 
@@ -399,8 +403,9 @@ function withCounts(tags: Tag[], counts = getTagCounts()): TagWithCount[] {
   return tags.map((tag) => ({ ...tag, directCount: counts.get(tag.id) || 0 }));
 }
 
-export function listTagGroups(options: { audience?: TagAudience; includeHidden?: boolean } = {}): TagGroup[] {
-  const tags = withCounts(listTags(options));
+export function listTagGroups(options: { audience?: TagAudience; includeHidden?: boolean; sourceId?: number; omitEmpty?: boolean } = {}): TagGroup[] {
+  const sourceId = Number.isInteger(options.sourceId) && Number(options.sourceId) > 0 ? Number(options.sourceId) : undefined;
+  const tags = withCounts(listTags(options), getTagCounts(sourceId));
   const byParent = new Map<number, TagWithCount[]>();
   const roots: TagWithCount[] = [];
   for (const tag of tags) {
@@ -417,7 +422,11 @@ export function listTagGroups(options: { audience?: TagAudience; includeHidden?:
   if (orphaned.length) {
     groups.push({ group: null, tags: orphaned });
   }
-  return groups;
+  if (!options.omitEmpty) return groups;
+  return groups.flatMap((group) => {
+    const children = group.tags.filter((tag) => tag.directCount > 0);
+    return children.length || (group.group?.directCount || 0) > 0 ? [{ ...group, tags: children }] : [];
+  });
 }
 
 export function setNovelTags(novelId: number, tagIds: number[]): number {
@@ -502,34 +511,38 @@ function normalizePage(page: number, totalPages: number): number {
 
 export function listNovelsByTag(
   tagId: number,
-  params: { page?: number; pageSize?: number; audience?: TagAudience } = {},
+  params: { page?: number; pageSize?: number; audience?: TagAudience; sourceId?: number } = {},
 ): TaggedNovelListResult {
   const db = getDb();
   const audience = resolveAudience(params);
   const pageSize = Math.min(Math.max(Math.floor(params.pageSize || 15), 1), 100);
+  const sourceId = Number.isInteger(params.sourceId) && Number(params.sourceId) > 0 ? Number(params.sourceId) : 0;
+  const sourceFilter = sourceId ? " AND n.source_id = ?" : "";
+  const sourceValues = sourceId ? [sourceId] : [];
   const totalBooks = db
     .prepare(
       `SELECT COUNT(*) AS count
        FROM novels n
        INNER JOIN novel_tags nt ON nt.novel_id = n.id
        INNER JOIN tags t ON t.id = nt.tag_id
-       WHERE t.id = ? AND ${visibilityCondition("t", audience)}`,
+       WHERE t.id = ? AND ${visibilityCondition("t", audience)}${sourceFilter}`,
     )
-    .get(tagId) as { count: number };
+    .get(tagId, ...sourceValues) as { count: number };
   const totalPages = Math.max(1, Math.ceil(totalBooks.count / pageSize));
   const page = normalizePage(params.page || 1, totalPages);
   const books = db
     .prepare(
-      `SELECT n.id, n.title, n.file_name, n.relative_path, n.content_hash, n.size_bytes, n.mtime_ms, n.word_count, n.visit_count,
+      `SELECT n.id, n.title, n.file_name, n.relative_path, n.source_id, n.storage_mode, n.chapter_count,
+              n.access_mode, n.soda_price, n.preview_chapter_count, n.content_hash, n.size_bytes, n.mtime_ms, n.word_count, n.visit_count,
               n.last_accessed_at, n.last_accessed_ip, n.last_accessed_user_agent, n.created_at, n.updated_at
        FROM novels n
        INNER JOIN novel_tags nt ON nt.novel_id = n.id
        INNER JOIN tags t ON t.id = nt.tag_id
-       WHERE t.id = ? AND ${visibilityCondition("t", audience)}
+       WHERE t.id = ? AND ${visibilityCondition("t", audience)}${sourceFilter}
        ORDER BY n.title COLLATE NOCASE ASC, n.id ASC
        LIMIT ? OFFSET ?`,
     )
-    .all(tagId, pageSize, (page - 1) * pageSize) as Novel[];
+    .all(tagId, ...sourceValues, pageSize, (page - 1) * pageSize) as Novel[];
   return {
     books,
     page,
@@ -560,14 +573,15 @@ function resolveVisibleTagFilterIds(tagIds: number[], excludeTagIds: number[] = 
 
 export function listNovelsByTagIntersection(
   tagIds: number[],
-  params: { page?: number; pageSize?: number; q?: string; excludeTagIds?: number[]; audience?: TagAudience } = {},
+  params: { page?: number; pageSize?: number; q?: string; excludeTagIds?: number[]; audience?: TagAudience; sourceId?: number } = {},
 ): TagIntersectionListResult {
   const db = getDb();
   const audience = resolveAudience(params);
   const { validIds, validExcludedIds, hasInvalidIncluded } = resolveVisibleTagFilterIds(tagIds, params.excludeTagIds, audience);
   const query = (params.q || "").normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, 80);
+  const sourceId = Number.isInteger(params.sourceId) && Number(params.sourceId) > 0 ? Number(params.sourceId) : 0;
   const pageSize = Math.min(Math.max(Math.floor(params.pageSize || 15), 1), 100);
-  if (hasInvalidIncluded || (!validIds.length && !query)) {
+  if (hasInvalidIncluded || (!validIds.length && !query && !sourceId)) {
     return { books: [], page: 1, pageSize, totalBooks: 0, totalPages: 1, tagIds: validIds, excludedTagIds: validExcludedIds, query };
   }
 
@@ -575,6 +589,7 @@ export function listNovelsByTagIntersection(
   const includeJoin = validIds.length ? "INNER JOIN novel_tags nt ON nt.novel_id = n.id" : "";
   const includeFilter = validIds.length ? `nt.tag_id IN (${placeholders})` : "1 = 1";
   const titleFilter = query ? "AND instr(lower(n.title), lower(?)) > 0" : "";
+  const sourceFilter = sourceId ? "AND n.source_id = ?" : "";
   const excludedFilter = validExcludedIds.length
     ? `AND NOT EXISTS (
          SELECT 1 FROM novel_tags excluded
@@ -587,6 +602,7 @@ export function listNovelsByTagIntersection(
   const filterParams: Array<string | number> = [
     ...validIds,
     ...(query ? [query] : []),
+    ...(sourceId ? [sourceId] : []),
     ...validExcludedIds,
     ...(validIds.length ? [validIds.length] : []),
   ];
@@ -597,7 +613,7 @@ export function listNovelsByTagIntersection(
          SELECT n.id
          FROM novels n
          ${includeJoin}
-         WHERE ${includeFilter} ${titleFilter} ${excludedFilter}
+         WHERE ${includeFilter} ${titleFilter} ${sourceFilter} ${excludedFilter}
          ${includeGrouping}
        )`,
     )
@@ -606,11 +622,12 @@ export function listNovelsByTagIntersection(
   const page = normalizePage(params.page || 1, totalPages);
   const books = db
     .prepare(
-      `SELECT n.id, n.title, n.file_name, n.relative_path, n.content_hash, n.size_bytes, n.mtime_ms, n.word_count, n.visit_count,
+      `SELECT n.id, n.title, n.file_name, n.relative_path, n.source_id, n.storage_mode, n.chapter_count,
+              n.access_mode, n.soda_price, n.preview_chapter_count, n.content_hash, n.size_bytes, n.mtime_ms, n.word_count, n.visit_count,
               n.last_accessed_at, n.last_accessed_ip, n.last_accessed_user_agent, n.created_at, n.updated_at
        FROM novels n
        ${includeJoin}
-       WHERE ${includeFilter} ${titleFilter} ${excludedFilter}
+       WHERE ${includeFilter} ${titleFilter} ${sourceFilter} ${excludedFilter}
        ${includeGrouping}
        ORDER BY n.title COLLATE NOCASE ASC, n.id ASC
        LIMIT ? OFFSET ?`,
@@ -631,17 +648,19 @@ export function listNovelsByTagIntersection(
 
 export function listNovelIdsByTagFilters(
   tagIds: number[],
-  params: { q?: string; excludeTagIds?: number[]; audience?: TagAudience } = {},
+  params: { q?: string; excludeTagIds?: number[]; audience?: TagAudience; sourceId?: number } = {},
 ): number[] {
   const audience = resolveAudience(params);
   const { validIds, validExcludedIds, hasInvalidIncluded } = resolveVisibleTagFilterIds(tagIds, params.excludeTagIds, audience);
   const query = (params.q || "").normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, 80);
-  if (hasInvalidIncluded || (!validIds.length && !query && !validExcludedIds.length)) return [];
+  const sourceId = Number.isInteger(params.sourceId) && Number(params.sourceId) > 0 ? Number(params.sourceId) : 0;
+  if (hasInvalidIncluded || (!validIds.length && !query && !validExcludedIds.length && !sourceId)) return [];
 
   const includePlaceholders = validIds.map(() => "?").join(",");
   const includeJoin = validIds.length ? "INNER JOIN novel_tags nt ON nt.novel_id = n.id" : "";
   const includeFilter = validIds.length ? `nt.tag_id IN (${includePlaceholders})` : "1 = 1";
   const titleFilter = query ? "AND instr(lower(n.title), lower(?)) > 0" : "";
+  const sourceFilter = sourceId ? "AND n.source_id = ?" : "";
   const excludedFilter = validExcludedIds.length
     ? `AND NOT EXISTS (
          SELECT 1 FROM novel_tags excluded
@@ -654,6 +673,7 @@ export function listNovelIdsByTagFilters(
   const paramsList: Array<string | number> = [
     ...validIds,
     ...(query ? [query] : []),
+    ...(sourceId ? [sourceId] : []),
     ...validExcludedIds,
     ...(validIds.length ? [validIds.length] : []),
   ];
@@ -662,7 +682,7 @@ export function listNovelIdsByTagFilters(
       `SELECT n.id
        FROM novels n
        ${includeJoin}
-       WHERE ${includeFilter} ${titleFilter} ${excludedFilter}
+       WHERE ${includeFilter} ${titleFilter} ${sourceFilter} ${excludedFilter}
        ${includeGrouping}
        ORDER BY n.id ASC`,
     )

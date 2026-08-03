@@ -25,6 +25,7 @@ import { checkContentAccess } from "@/lib/content-access";
 import { hasUserPermission } from "@/lib/user-levels";
 import { getRequestLocale, localizeText, localizeTexts, normalizeSearchText } from "@/lib/locale-server";
 import { languageAlternates, uiText, withLocalePath } from "@/lib/locale";
+import { DEFAULT_NOVEL_LIBRARY_SLUG, listNovelSources, resolveNovelLibraryScope } from "@/lib/novel-library";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
@@ -47,6 +48,8 @@ type AdvancedTagSearchPageProps = {
     content?: string;
     page?: string;
     searchEvent?: string;
+    library?: string;
+    sourceLibrary?: string;
   }>;
 };
 
@@ -66,8 +69,16 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
   if (!access.allowed) notFound();
 
   const audience = user?.role === "admin" ? "admin" : user ? "member" : "public";
+  const novelSources = listNovelSources({ includeEmpty: true })
+    .filter((source) => source.slug === DEFAULT_NOVEL_LIBRARY_SLUG || source.novelCount > 0);
+  const libraryScope = resolveNovelLibraryScope(params.library || params.sourceLibrary);
+  const activeSource = libraryScope.kind === "source" ? libraryScope.source : null;
   const hiddenTagIds = user ? listEffectivelyHiddenTagIds(user.id) : new Set<number>();
-  const sourceGroups = listTagGroups({ audience });
+  const sourceGroups = listTagGroups({
+    audience,
+    sourceId: libraryScope.kind === "source" ? libraryScope.source.id : undefined,
+    omitEmpty: true,
+  });
   const sourceAdvancedGroups: AdvancedTagGroup[] = sourceGroups.flatMap((group) => {
     const tags = (group.tags.length ? group.tags : group.group ? [group.group] : [])
       .filter((tag) => !hiddenTagIds.has(tag.id));
@@ -100,13 +111,14 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
   const contentValidation = contentInput ? validateSearchKeyword(contentInput) : null;
   const pageValue = Number(params.page || 1);
   const page = Number.isFinite(pageValue) && pageValue > 0 ? Math.floor(pageValue) : 1;
-  const result = (selectedTags.length > 0 || Boolean(titleQuery)) && !contentInput
+  const result = (selectedTags.length > 0 || Boolean(titleQuery) || Boolean(activeSource)) && !contentInput
     ? listNovelsByTagIntersection(selectedTags.map((tag) => tag.id), {
         excludeTagIds: excludedTags.map((tag) => tag.id),
         page,
         pageSize: getCatalogPageSize(),
         q: titleQuery,
         audience,
+        sourceId: activeSource?.id,
       })
     : null;
   const tagsByNovel = result
@@ -117,6 +129,7 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
   if (excludedSlugs.length) returnParams.set("exclude", excludedSlugs.join(","));
   if (titleInput) returnParams.set("q", titleInput);
   if (contentInput) returnParams.set("content", contentInput);
+  if (libraryScope.slug !== DEFAULT_NOVEL_LIBRARY_SLUG) returnParams.set("library", libraryScope.slug);
   if (page > 1) returnParams.set("page", String(page));
   const returnHref = `/tags/search${returnParams.size ? `?${returnParams.toString()}` : ""}`;
 
@@ -136,7 +149,7 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
 
   return (
     <main className="appShell catalogShell advancedTagSearchPage">
-      <SiteHeader currentUser={user} />
+      <SiteHeader currentUser={user} library={libraryScope.slug} />
       <Breadcrumbs items={[{ label: homeLabel, href: "/" }, { label: tagsLabel, href: "/tags" }, { label: advancedLabel }]} />
       <header className="tagLibraryHeader advancedTagSearchHeader">
         <span className="tagLibraryIcon" aria-hidden="true"><ListFilter size={23} /></span>
@@ -151,6 +164,8 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
         initialExcluded={excludedSlugs}
         initialTitleQuery={titleInput}
         initialContentQuery={contentInput}
+        sources={novelSources}
+        initialSourceLibrary={libraryScope.slug}
         locale={locale}
       />
 
@@ -169,6 +184,7 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
           searchEventKey={searchEventKey}
           searchSource="advanced_tags"
           originNovelId={null}
+          library={libraryScope.slug}
           requestFilters={{ includeTags: selectedSlugs, excludeTags: excludedSlugs, titleQuery: titleInput }}
           resultReturnPath="/tags/search"
           resultReturnParams={Object.fromEntries(returnParams)}
@@ -188,7 +204,7 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
           totalPages={result.totalPages}
           query={titleInput}
           basePath="/tags/search"
-          extraParams={{ tags: selectedSlugs.join(",") || undefined, exclude: excludedSlugs.join(",") || undefined }}
+          extraParams={{ tags: selectedSlugs.join(",") || undefined, exclude: excludedSlugs.join(",") || undefined, library: libraryScope.slug === DEFAULT_NOVEL_LIBRARY_SLUG ? undefined : libraryScope.slug }}
           hash="advanced-search-results"
         />
       ) : null}

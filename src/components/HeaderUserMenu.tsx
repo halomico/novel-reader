@@ -16,9 +16,7 @@ import Link from "@/components/LocalizedLink";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { logoutUserAction } from "@/app/account/actions";
-import type { MediaKind } from "@/lib/media";
 import { localeFromPathname, uiText } from "@/lib/locale";
-import { HeaderPrimaryNav } from "./HeaderPrimaryNav";
 
 type HeaderUserMenuProps = {
   user:
@@ -30,9 +28,6 @@ type HeaderUserMenuProps = {
     | null;
   loginEnabled: boolean;
   registrationEnabled: boolean;
-  mediaKinds: MediaKind[];
-  showLibrary: boolean;
-  showTags: boolean;
   showMarket: boolean;
   unreadMessages: number;
 };
@@ -41,9 +36,6 @@ export function HeaderUserMenu({
   user,
   loginEnabled,
   registrationEnabled,
-  mediaKinds,
-  showLibrary,
-  showTags,
   showMarket,
   unreadMessages,
 }: HeaderUserMenuProps) {
@@ -51,7 +43,6 @@ export function HeaderUserMenu({
   const locale = localeFromPathname(usePathname());
   const tr = (text: string) => uiText(locale, text);
   const menuRef = useRef<HTMLDivElement>(null);
-  const hasNavigation = showLibrary || showTags || mediaKinds.length > 0;
 
   useEffect(() => {
     if (!open) return;
@@ -94,13 +85,13 @@ export function HeaderUserMenu({
         title={tr("导航菜单")}
         onClick={() => setOpen((value) => !value)}
       >
-        <Menu size={21} aria-hidden="true" />
+        <Menu size={20} aria-hidden="true" />
       </button>
       {open ? (
         <div className={user ? "userMenuPanel hasIdentity" : "userMenuPanel"}>
           {user ? (
             <>
-              <Link className="userMenuIdentity" href="/account" onClick={closeMenu}>
+              <Link className="userMenuIdentity" href="/account?view=growth" onClick={closeMenu}>
                 <span className="userMenuAvatar" aria-hidden="true">
                   {user.avatarPath ? <img src={user.avatarPath} alt="" /> : <UserRound size={18} />}
                 </span>
@@ -149,16 +140,6 @@ export function HeaderUserMenu({
             <Settings size={16} aria-hidden="true" />
             {tr("设置")}
           </Link>
-          {hasNavigation ? (
-            <HeaderPrimaryNav
-              className="userMenuPrimaryNav"
-              ariaLabel="菜单导航"
-              mediaKinds={mediaKinds}
-              showLibrary={showLibrary}
-              showTags={showTags}
-              onNavigate={closeMenu}
-            />
-          ) : null}
           {user ? (
             <form action={logoutUserAction}>
               <button type="submit">

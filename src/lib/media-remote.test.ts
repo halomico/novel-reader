@@ -31,6 +31,8 @@ test("uploads directly to the media node while the main app keeps only the index
     root: videoMediaRoot,
     signingSecret: videoSigningSecret,
     controlSecret: videoControlSecret,
+    maxVideoStreams: 10,
+    videoBandwidthMbps: 100,
   });
   server.listen(0, "127.0.0.1");
   videoServer.listen(0, "127.0.0.1");
@@ -98,6 +100,15 @@ test("uploads directly to the media node while the main app keeps only the index
     const uploads = await import("./media-upload-service");
     const { getDb } = await import("./db");
     database = getDb();
+
+    const metrics = await fetch(`${videoNodeOrigin}/control/metrics`, {
+      headers: { Authorization: `Bearer ${videoControlSecret}` },
+    });
+    assert.equal(metrics.status, 200);
+    assert.deepEqual((await metrics.json() as { limits: unknown }).limits, {
+      videoStreams: 10,
+      videoBandwidthMbps: 100,
+    });
 
     assert.equal(await client.createRemoteMediaFolder("file-node", "file", "归档"), "归档");
     const content = Buffer.from("remote-media-only");

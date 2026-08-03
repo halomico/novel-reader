@@ -4,6 +4,7 @@ import { getContentSearchDb } from "./content-search-db";
 import { findContentSearchCandidateNovelIds, type ContentSearchNovelRecord } from "./content-search-index";
 import { getGlobalSearchMaxResults, getLibraryDir } from "./config";
 import { getDb } from "./db";
+import { listNovelChapters, readNovelChapterContent } from "./novel-library";
 import { iterateNovelSegments } from "./segments";
 import {
   createSearchSnippet,
@@ -18,6 +19,7 @@ export type SearchValidation = SearchQueryValidation;
 
 export type SearchResult = {
   novelId: number;
+  chapterId?: number | null;
   title: string;
   segmentIndex: number;
   snippet: string;
@@ -44,7 +46,7 @@ export type SearchNovelContentOptions = {
   candidateNovelIds?: number[];
 };
 
-type SearchCandidate = Pick<Novel, "id" | "title" | "relative_path">;
+type SearchCandidate = Pick<Novel, "id" | "title" | "relative_path" | "storage_mode">;
 
 const SQLITE_ID_CHUNK_SIZE = 400;
 const SEARCH_PROGRESS_INTERVAL_MS = 300;
@@ -66,7 +68,7 @@ function normalizeRelativePath(value: string): string {
 
 function listSearchIndexRecords(db: DatabaseSync): ContentSearchNovelRecord[] {
   return db
-    .prepare("SELECT id, relative_path, content_hash, size_bytes, mtime_ms FROM novels ORDER BY id ASC")
+    .prepare("SELECT id, relative_path, storage_mode, content_hash, size_bytes, mtime_ms FROM novels ORDER BY id ASC")
     .all() as ContentSearchNovelRecord[];
 }
 
@@ -81,7 +83,7 @@ function listSearchCandidatesByIds(db: DatabaseSync, ids: number[]): SearchCandi
     const placeholders = chunk.map(() => "?").join(", ");
     candidates.push(
       ...(db
-        .prepare(`SELECT id, title, relative_path FROM novels WHERE id IN (${placeholders})`)
+        .prepare(`SELECT id, title, relative_path, storage_mode FROM novels WHERE id IN (${placeholders})`)
         .all(...chunk) as SearchCandidate[]),
     );
   }
@@ -89,7 +91,23 @@ function listSearchCandidatesByIds(db: DatabaseSync, ids: number[]): SearchCandi
 }
 
 function listAllSearchCandidates(db: DatabaseSync): SearchCandidate[] {
-  return db.prepare("SELECT id, title, relative_path FROM novels ORDER BY id ASC").all() as SearchCandidate[];
+  return db.prepare("SELECT id, title, relative_path, storage_mode FROM novels ORDER BY id ASC").all() as SearchCandidate[];
+}
+
+function listNovelIdsByCandidatePaths(db: DatabaseSync, paths: Set<string>): number[] {
+  const values = Array.from(paths);
+  const ids = new Set<number>();
+  for (let offset = 0; offset < values.length; offset += SQLITE_ID_CHUNK_SIZE) {
+    const chunk = values.slice(offset, offset + SQLITE_ID_CHUNK_SIZE);
+    const placeholders = chunk.map(() => "?").join(", ");
+    const rows = db.prepare(
+      `SELECT id AS novel_id FROM novels WHERE relative_path IN (${placeholders})
+       UNION
+       SELECT novel_id FROM novel_chapters WHERE relative_path IN (${placeholders})`,
+    ).all(...chunk, ...chunk) as Array<{ novel_id: number }>;
+    rows.forEach((row) => ids.add(row.novel_id));
+  }
+  return Array.from(ids);
 }
 
 export async function searchNovelContent(
@@ -131,7 +149,7 @@ export async function searchNovelContent(
     });
   }
 
-  function pushMatch(row: { novelId: number; title: string; segmentIndex: number; content: string; normalizedContent: string }): boolean {
+  function pushMatch(row: { novelId: number; chapterId: number | null; title: string; segmentIndex: number; content: string; normalizedContent: string }): boolean {
     if (matchedNovelIds.has(row.novelId) || !matchesParsedSearchQuery(row.content, query, row.normalizedContent)) {
       return false;
     }
@@ -139,6 +157,7 @@ export async function searchNovelContent(
     matchedNovelIds.add(row.novelId);
     results.push({
       novelId: row.novelId,
+      chapterId: row.chapterId,
       title: row.title,
       segmentIndex: row.segmentIndex,
       snippet: createSearchSnippet(row.content, query.highlightTerms),
@@ -206,9 +225,11 @@ export async function searchNovelContent(
   }
 
   if (nativeCandidatePaths) {
-    const candidateIds = novelRecords
-      .filter((novel) => nativeCandidatePaths!.has(normalizeRelativePath(novel.relative_path)))
-      .map((novel) => novel.id);
+    const allowedIds = new Set(novelRecords.map((novel) => novel.id));
+    const candidateIds = listNovelIdsByCandidatePaths(
+      db,
+      new Set(Array.from(nativeCandidatePaths, normalizeRelativePath)),
+    ).filter((id) => allowedIds.has(id));
     candidates = listSearchCandidatesByIds(db, candidateIds);
   } else if (fullTextPlan) {
     scanEngine = "fts5";
@@ -224,39 +245,39 @@ export async function searchNovelContent(
   emitProgress(true);
   for (const novel of candidates) {
     throwIfCancelled();
-    let content: string;
-    try {
-      content = await readNovelContent(novel);
-    } catch {
-      continue;
-    }
-    searchedBooks += 1;
-
     let reachedMaxResults = false;
-    for (const segment of iterateNovelSegments(content)) {
-      throwIfCancelled();
-      const normalizedContent = normalizeSearchText(segment.content);
-      if (!normalizedContent.includes(query.anchorTerm)) {
+    const documents = novel.storage_mode === "chapters"
+      ? listNovelChapters(novel.id).map((chapter) => ({
+          chapterId: chapter.id,
+          read: () => readNovelChapterContent(chapter),
+        }))
+      : [{ chapterId: null, read: () => readNovelContent(novel) }];
+    for (const document of documents) {
+      let content: string;
+      try {
+        content = await document.read();
+      } catch {
         continue;
       }
-
-      const beforeResultCount = results.length;
-      reachedMaxResults =
-        results.length < maxResults &&
-        pushMatch({
+      for (const segment of iterateNovelSegments(content)) {
+        throwIfCancelled();
+        const normalizedContent = normalizeSearchText(segment.content);
+        if (!normalizedContent.includes(query.anchorTerm)) continue;
+        const beforeResultCount = results.length;
+        reachedMaxResults = results.length < maxResults && pushMatch({
           novelId: novel.id,
+          chapterId: document.chapterId,
           title: novel.title,
           segmentIndex: segment.segmentIndex,
           content: segment.content,
           normalizedContent,
         });
-      if (results.length !== beforeResultCount) {
-        emitProgress(reachedMaxResults);
+        if (results.length !== beforeResultCount) emitProgress(reachedMaxResults);
+        if (reachedMaxResults) break;
       }
-      if (reachedMaxResults) {
-        break;
-      }
+      if (matchedNovelIds.has(novel.id) || reachedMaxResults) break;
     }
+    searchedBooks += 1;
 
     emitProgress();
     if (reachedMaxResults) {

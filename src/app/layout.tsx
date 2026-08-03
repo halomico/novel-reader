@@ -12,6 +12,7 @@ import { getSiteIconHref } from "@/lib/site-icon";
 import { readSiteSettings } from "@/lib/site-settings";
 import { resolveDefaultPalette } from "@/lib/ui-preferences";
 import "./globals.css";
+import "./ui-final.css";
 
 export const dynamic = "force-dynamic";
 

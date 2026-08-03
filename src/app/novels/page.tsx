@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { CatalogBookGrid } from "@/components/CatalogBookGrid";
+import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import { CatalogRandomButton } from "@/components/CatalogRandomButton";
 import { Pagination } from "@/components/Pagination";
+import { NovelSourcePicker } from "@/components/NovelSourcePicker";
 import { ResultCount } from "@/components/ResultCount";
 import { SearchEventUrlSync } from "@/components/SearchEventUrlSync";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -16,16 +18,23 @@ import {
 } from "@/lib/analytics";
 import { listNovels } from "@/lib/books";
 import {
+  DEFAULT_NOVEL_LIBRARY_SLUG,
+  listNovelSources,
+  resolveNovelLibraryScope,
+} from "@/lib/novel-library";
+import { novelLibraryPreferenceCookieName } from "@/lib/novel-library-scope";
+import {
   canAccessNovelLibrary,
   getCatalogPageSize,
   getSiteTitle,
-  isGuestTagLibraryNavEnabled,
+  isGuestLibraryNavEnabled,
   isNovelLibraryPublic,
   isRandomCatalogEnabled,
   isTagLibraryEnabled,
+  isTagLibraryPublic,
 } from "@/lib/config";
 import { canonicalPagePath, NO_INDEX_ROBOTS } from "@/lib/seo";
-import { languageAlternates, withLocalePath } from "@/lib/locale";
+import { languageAlternates, uiText, withLocalePath } from "@/lib/locale";
 import { getRequestLocale, localizeText, localizeTexts, normalizeSearchText } from "@/lib/locale-server";
 import { filterTagsByNovelForUser } from "@/lib/tag-preferences";
 import { listTagsForNovels, type Tag } from "@/lib/tags";
@@ -42,6 +51,8 @@ type NovelsPageProps = {
     source?: string;
     origin?: string;
     searchEvent?: string;
+    library?: string;
+    sourceLibrary?: string;
   }>;
 };
 
@@ -50,7 +61,8 @@ export async function generateMetadata({ searchParams }: NovelsPageProps): Promi
   const params = await searchParams;
   const pageValue = Number(params.page || 1);
   const page = Number.isInteger(pageValue) && pageValue > 1 ? pageValue : 1;
-  const isSearchOrRandom = Boolean(params.q?.trim() || params.random?.trim());
+  const requestedLibrary = params.library || params.sourceLibrary || "";
+  const isSearchOrRandom = Boolean(params.q?.trim() || params.random?.trim() || (requestedLibrary && requestedLibrary !== DEFAULT_NOVEL_LIBRARY_SLUG));
   const isPublic = isNovelLibraryPublic();
   const canonicalPath = isSearchOrRandom ? "/novels" : canonicalPagePath("/novels", page);
   const canonical = withLocalePath(canonicalPath, locale);
@@ -84,6 +96,14 @@ export default async function NovelsPage({ searchParams }: NovelsPageProps) {
   const user = await getCurrentUser();
   const authenticated = Boolean(user);
   if (!canAccessNovelLibrary(authenticated)) {
+    if (!user && isGuestLibraryNavEnabled()) {
+      const gateParams = new URLSearchParams();
+      if (params.q) gateParams.set("q", params.q);
+      if (params.page) gateParams.set("page", params.page);
+      if (params.library || params.sourceLibrary) gateParams.set("library", params.library || params.sourceLibrary || "");
+      const returnTo = `/novels${gateParams.size ? `?${gateParams.toString()}` : ""}`;
+      return <ContentEntryGatePage locale={locale} label={uiText(locale, "小说")} returnTo={returnTo} />;
+    }
     notFound();
   }
   const access = checkContentAccess(await headers(), {
@@ -97,8 +117,14 @@ export default async function NovelsPage({ searchParams }: NovelsPageProps) {
   const query = params.q || "";
   const normalizedQuery = query ? await normalizeSearchText(query) : "";
   const pageSize = getCatalogPageSize();
+  const requestedLibrary = params.library || params.sourceLibrary;
+  const rememberedLibrary = !requestedLibrary && user
+    ? (await cookies()).get(novelLibraryPreferenceCookieName(user.id))?.value
+    : undefined;
+  const libraryScope = resolveNovelLibraryScope(requestedLibrary || rememberedLibrary);
+  const activeSource = libraryScope.kind === "source" ? libraryScope.source : null;
   const randomSeed = query ? "" : params.random || "";
-  const sourceResult = listNovels({ page, q: normalizedQuery, pageSize, randomSeed });
+  const sourceResult = listNovels({ page, q: normalizedQuery, pageSize, randomSeed, sourceId: activeSource?.id });
   const result = { ...sourceResult, query: query.trim() };
   const searchSource = normalizeSearchQuerySource(params.source);
   const originNovelId = Number(params.origin || 0);
@@ -114,7 +140,7 @@ export default async function NovelsPage({ searchParams }: NovelsPageProps) {
   } else if (searchEventKey) {
     updateSearchQueryResults(searchEventKey, result.totalBooks, result.totalBooks);
   }
-  const showTags = isTagLibraryEnabled() && (authenticated || isGuestTagLibraryNavEnabled());
+  const showTags = isTagLibraryEnabled() && (authenticated || isTagLibraryPublic());
   const tagAudience = user?.role === "admin" ? "admin" : user ? "member" : "public";
   const sourceTagsByNovel = showTags
     ? listTagsForNovels(result.books.map((book) => book.id), { audience: tagAudience })
@@ -149,15 +175,21 @@ export default async function NovelsPage({ searchParams }: NovelsPageProps) {
   if (randomSeed) {
     returnParams.set("random", randomSeed);
   }
+  if (libraryScope.slug !== DEFAULT_NOVEL_LIBRARY_SLUG) returnParams.set("library", libraryScope.slug);
   const returnHref = `/novels?${returnParams.toString()}`;
+  const novelSources = listNovelSources({ includeEmpty: true })
+    .filter((source) => source.slug === DEFAULT_NOVEL_LIBRARY_SLUG || source.novelCount > 0);
 
   return (
     <main className="appShell catalogShell">
       <SearchEventUrlSync eventKey={searchEventKey} />
-      <SiteHeader query={result.query} defaultSearchExpanded currentUser={user} />
+      <SiteHeader query={result.query} defaultSearchExpanded currentUser={user} library={libraryScope.slug} />
       <section className="catalogToolbar">
         <Breadcrumbs items={[{ label: homeLabel, href: "/" }, { label: randomSeed ? randomLabel : novelsLabel }]} />
         <div className="catalogSummary">
+          {novelSources.length > 1 ? (
+            <NovelSourcePicker sources={novelSources} activeSlug={libraryScope.slug} rememberForUserId={user?.id} />
+          ) : null}
           {isRandomCatalogEnabled() && result.totalBooks > 1 ? <CatalogRandomButton /> : null}
           <ResultCount count={result.totalBooks} />
         </div>
@@ -182,11 +214,12 @@ export default async function NovelsPage({ searchParams }: NovelsPageProps) {
         totalPages={result.totalPages}
         query={result.query}
         basePath="/novels"
-        extraParams={result.query ? {
-          source: searchSource === "direct" ? undefined : searchSource,
-          origin: Number.isInteger(originNovelId) && originNovelId > 0 ? String(originNovelId) : undefined,
-          searchEvent: searchEventKey || undefined,
-        } : undefined}
+          extraParams={{
+            library: libraryScope.slug === DEFAULT_NOVEL_LIBRARY_SLUG ? undefined : libraryScope.slug,
+            source: searchSource === "direct" ? undefined : searchSource,
+            origin: Number.isInteger(originNovelId) && originNovelId > 0 ? String(originNovelId) : undefined,
+            searchEvent: searchEventKey || undefined,
+          }}
       />
     </main>
   );

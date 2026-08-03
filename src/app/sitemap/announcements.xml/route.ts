@@ -1,10 +1,14 @@
 import { absoluteSiteUrl } from "@/lib/seo";
+import { canAccessHomeAnnouncementCard } from "@/lib/config";
 import { listVisibleAnnouncements } from "@/lib/station";
 import { renderUrlSet, sitemapResponse } from "@/lib/sitemap";
 
 export const dynamic = "force-dynamic";
 
 export function GET() {
+  if (!canAccessHomeAnnouncementCard(false)) {
+    return new Response("Not found", { status: 404 });
+  }
   const announcements = listVisibleAnnouncements(false, 200);
   if (!announcements.length) {
     return new Response("Not found", { status: 404 });

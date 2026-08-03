@@ -3,7 +3,7 @@ import { Readable } from "node:stream";
 import type { NextRequest } from "next/server";
 import {
   getMediaAsset,
-  isMediaKindAccessible,
+  isMediaKindConsumable,
   mediaFilePath,
   normalizeMediaFolder,
   parseMediaByteRange,
@@ -33,7 +33,7 @@ function contentDisposition(asset: MediaAsset, download: boolean): string {
 export function mediaDeliveryUrl(
   asset: MediaAsset,
   download = false,
-  options: { publiclyAccessible?: boolean } = {},
+  options: { publiclyAccessible?: boolean; estimatedKbps?: number } = {},
 ): string {
   if (isRemoteMediaStorage()) {
     const node = resolveRemoteMediaNodeForAsset(asset.storageNodeId, asset.kind);
@@ -46,6 +46,7 @@ export function mediaDeliveryUrl(
       sizeBytes: asset.sizeBytes,
       download,
       publiclyAccessible: Boolean(options.publiclyAccessible),
+      estimatedKbps: options.estimatedKbps,
     });
   }
   const params = new URLSearchParams({ id: String(asset.id), v: String(Math.floor(asset.mtimeMs)) });
@@ -117,7 +118,7 @@ export function mediaDeliveryHeaders(
 }
 
 export function authorizeMediaDelivery(delivery: ResolvedMediaDelivery, authenticated: boolean): boolean {
-  return isMediaKindAccessible(delivery.asset.kind, authenticated);
+  return isMediaKindConsumable(delivery.asset.kind, authenticated);
 }
 
 export async function serveMediaDelivery(

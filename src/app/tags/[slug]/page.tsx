@@ -5,11 +5,18 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { CatalogBookGrid } from "@/components/CatalogBookGrid";
+import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import { Pagination } from "@/components/Pagination";
 import { ResultCount } from "@/components/ResultCount";
 import { SiteHeader } from "@/components/SiteHeader";
 import { TagVisibilityControl } from "@/components/TagVisibilityControl";
-import { getCatalogPageSize, isGuestTagLibraryNavEnabled, isTagLibraryEnabled } from "@/lib/config";
+import {
+  canAccessTagLibrary,
+  getCatalogPageSize,
+  isGuestTagLibraryNavEnabled,
+  isTagLibraryEnabled,
+  isTagLibraryPublic,
+} from "@/lib/config";
 import { getTagBySlug, listNovelsByTag, listTagsForNovels } from "@/lib/tags";
 import { canonicalPagePath, NO_INDEX_ROBOTS } from "@/lib/seo";
 import {
@@ -21,7 +28,7 @@ import { getCurrentUser } from "@/lib/user-auth";
 import { checkContentAccess } from "@/lib/content-access";
 import { setTagPreferenceAction } from "../actions";
 import { getRequestLocale, localizeText, localizeTexts } from "@/lib/locale-server";
-import { languageAlternates, uiText, withLocalePath, type AppLocale } from "@/lib/locale";
+import { languageAlternates, uiText, withLocalePath } from "@/lib/locale";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +44,9 @@ type TagPageProps = {
 export async function generateMetadata({ params, searchParams }: TagPageProps): Promise<Metadata> {
   const locale = await getRequestLocale();
   const user = await getCurrentUser();
+  if (!canAccessTagLibrary(Boolean(user))) {
+    return { title: uiText(locale, "标签"), robots: NO_INDEX_ROBOTS };
+  }
   const audience = user?.role === "admin" ? "admin" : user ? "member" : "public";
   const tag = getTagBySlug((await params).slug, { audience });
   if (!tag) {
@@ -46,7 +56,7 @@ export async function generateMetadata({ params, searchParams }: TagPageProps): 
   const page = Number.isInteger(pageValue) && pageValue > 1 ? pageValue : 1;
   const canonicalPath = canonicalPagePath(`/tags/${tag.slug}`, page);
   const canonical = withLocalePath(canonicalPath, locale);
-  const isPublic = tag.visibility === "public" && isTagLibraryEnabled() && isGuestTagLibraryNavEnabled();
+  const isPublic = tag.visibility === "public" && isTagLibraryEnabled() && isTagLibraryPublic();
   const displayName = await localizeText(tag.name, locale);
   const description = tag.description
     ? await localizeText(tag.description, locale)
@@ -64,26 +74,17 @@ export async function generateMetadata({ params, searchParams }: TagPageProps): 
   };
 }
 
-function TagsLocked({ locale }: { locale: AppLocale }) {
-  return (
-    <main className="appShell">
-      <SiteHeader currentUser={null} />
-      <Breadcrumbs items={[{ label: uiText(locale, "首页"), href: "/" }, { label: uiText(locale, "标签") }]} />
-      <section className="emptyState">
-        <h2>{uiText(locale, "登录后可查看标签")}</h2>
-      </section>
-    </main>
-  );
-}
-
 export default async function TagPage({ params, searchParams }: TagPageProps) {
   const locale = await getRequestLocale();
   if (!isTagLibraryEnabled()) {
     notFound();
   }
   const user = await getCurrentUser();
-  if (!user && !isGuestTagLibraryNavEnabled()) {
-    return <TagsLocked locale={locale} />;
+  if (!canAccessTagLibrary(Boolean(user))) {
+    if (!user && isGuestTagLibraryNavEnabled()) {
+      return <ContentEntryGatePage locale={locale} label={uiText(locale, "标签")} returnTo="/tags" />;
+    }
+    notFound();
   }
   const access = checkContentAccess(await headers(), {
     scope: "novel",
@@ -108,7 +109,8 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
     listTagsForNovels(result.books.map((book) => book.id), { audience }),
     user?.id,
   );
-  const returnHref = `/tags/${tag.slug}?page=${result.page}`;
+  const returnParams = new URLSearchParams({ page: String(result.page) });
+  const returnHref = `/tags/${tag.slug}?${returnParams}`;
   const effectiveHidden = user ? listEffectivelyHiddenTagIds(user.id) : new Set<number>();
   const explicitHidden = user ? listExplicitlyHiddenTagIds(user.id) : new Set<number>();
   const isExplicitlyHidden = explicitHidden.has(tag.id);
@@ -187,7 +189,12 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
         </section>
       )}
 
-      <Pagination page={result.page} totalPages={result.totalPages} query="" basePath={`/tags/${tag.slug}`} />
+      <Pagination
+        page={result.page}
+        totalPages={result.totalPages}
+        query=""
+        basePath={`/tags/${tag.slug}`}
+      />
     </main>
   );
 }

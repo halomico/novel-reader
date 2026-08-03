@@ -19,6 +19,7 @@ export function MediaFolderRow({
     <Link
       className="mediaResourceRow mediaFolderListRow"
       href={href}
+      onNavigate={() => window.scrollTo({ top: 0, left: 0, behavior: "auto" })}
       draggable={false}
       title={`${locale === "zh-Hant" ? "開啟" : "打开"} ${name}`}
       aria-label={`${locale === "zh-Hant" ? "開啟資料夾" : "打开文件夹"} ${name}`}

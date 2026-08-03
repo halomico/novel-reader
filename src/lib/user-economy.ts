@@ -11,6 +11,17 @@ export type SodaTransaction = {
   createdAt: string;
 };
 
+export type SodaTransactionPage = {
+  items: SodaTransaction[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+};
+
+export type CurrencyTransaction = SodaTransaction & { currency: "soda" | "cookie" };
+export type CurrencyTransactionPage = Omit<SodaTransactionPage, "items"> & { items: CurrencyTransaction[] };
+
 export type DailyCheckinLeaderboardEntry = {
   userId: number;
   displayName: string;
@@ -126,17 +137,27 @@ export function claimDailySoda(
   }
 }
 
-export function listSodaTransactions(userId: number, limit = 20): SodaTransaction[] {
-  const safeLimit = Math.min(Math.max(Math.floor(limit), 1), 100);
-  return (getDb()
+export function listSodaTransactionsPage(
+  userId: number,
+  requestedPage = 1,
+  requestedPageSize = 10,
+): SodaTransactionPage {
+  const db = getDb();
+  const pageSize = Math.min(Math.max(Math.floor(requestedPageSize || 10), 1), 100);
+  const total = db.prepare(
+    "SELECT COUNT(*) AS count FROM user_currency_transactions WHERE user_id = ? AND currency = 'soda'",
+  ).get(userId) as { count: number };
+  const totalPages = Math.max(1, Math.ceil(total.count / pageSize));
+  const page = Math.min(Math.max(Math.floor(requestedPage || 1), 1), totalPages);
+  const items = (db
     .prepare(
       `SELECT id, amount, balance_after, source, note, created_at
        FROM user_currency_transactions
        WHERE user_id = ? AND currency = 'soda'
        ORDER BY id DESC
-       LIMIT ?`,
+       LIMIT ? OFFSET ?`,
     )
-    .all(userId, safeLimit) as Array<{
+    .all(userId, pageSize, (page - 1) * pageSize) as Array<{
     id: number;
     amount: number;
     balance_after: number;
@@ -151,6 +172,48 @@ export function listSodaTransactions(userId: number, limit = 20): SodaTransactio
     note: row.note,
     createdAt: row.created_at,
   }));
+  return { items, page, pageSize, totalItems: total.count, totalPages };
+}
+
+export function listCurrencyTransactionsPage(
+  userId: number,
+  requestedPage = 1,
+  requestedPageSize = 10,
+): CurrencyTransactionPage {
+  const db = getDb();
+  const pageSize = Math.min(Math.max(Math.floor(requestedPageSize || 10), 1), 100);
+  const total = db.prepare("SELECT COUNT(*) AS count FROM user_currency_transactions WHERE user_id = ?")
+    .get(userId) as { count: number };
+  const totalPages = Math.max(1, Math.ceil(total.count / pageSize));
+  const page = Math.min(Math.max(Math.floor(requestedPage || 1), 1), totalPages);
+  const items = (db.prepare(
+    `SELECT id, currency, amount, balance_after, source, note, created_at
+     FROM user_currency_transactions
+     WHERE user_id = ?
+     ORDER BY id DESC
+     LIMIT ? OFFSET ?`,
+  ).all(userId, pageSize, (page - 1) * pageSize) as Array<{
+    id: number;
+    currency: "soda" | "cookie";
+    amount: number;
+    balance_after: number;
+    source: string;
+    note: string;
+    created_at: string;
+  }>).map((row) => ({
+    id: row.id,
+    currency: row.currency,
+    amount: row.amount,
+    balanceAfter: row.balance_after,
+    source: row.source,
+    note: row.note,
+    createdAt: row.created_at,
+  }));
+  return { items, page, pageSize, totalItems: total.count, totalPages };
+}
+
+export function listSodaTransactions(userId: number, limit = 20): SodaTransaction[] {
+  return listSodaTransactionsPage(userId, 1, limit).items;
 }
 
 export function updateUserGrowth(input: {

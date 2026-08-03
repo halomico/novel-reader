@@ -6,7 +6,7 @@ import {
   ChevronDown,
   ChevronUp,
   Clapperboard,
-  Dices,
+  Clock3,
   File,
   Headphones,
   Tags,
@@ -25,7 +25,7 @@ const CARD_DETAILS: Record<HomePortalCardKey, { label: string; icon: LucideIcon 
   video: { label: "视频", icon: Clapperboard },
   audio: { label: "音频", icon: Headphones },
   file: { label: "文件", icon: File },
-  random: { label: "随便看看", icon: Dices },
+  recent: { label: "最近更新", icon: Clock3 },
 };
 
 export function HomeCardOrderField({ initialOrder }: { initialOrder: HomePortalCardKey[] }) {

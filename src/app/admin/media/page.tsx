@@ -1,4 +1,4 @@
-import { ChevronDown, File, FolderCog, FolderPen, FolderPlus, RefreshCw, Save, Search, Trash2 } from "lucide-react";
+import { ChevronDown, File, FolderCog, FolderPen, FolderPlus, Gauge, RefreshCw, Save, Search, Server, Trash2, UploadCloud } from "lucide-react";
 import Form from "next/form";
 import Link from "next/link";
 import { AdminMediaManager } from "@/components/AdminMediaManager";
@@ -22,6 +22,9 @@ import {
   type MediaSortOrder,
 } from "@/lib/media";
 import { readSiteSettings } from "@/lib/site-settings";
+import { MEDIA_UPLOAD_CHUNK_BYTES } from "@/lib/media-node-protocol";
+import { getMediaStorageMode, listRemoteMediaNodes } from "@/lib/media-storage-config";
+import { getActiveVideoTranscodeProfile } from "@/lib/video-transcode";
 import {
   createAdminMediaFolderAction,
   deleteAdminMediaFolderAction,
@@ -155,6 +158,9 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
   const currentFolderName = result.folder.split("/").at(-1) || "";
   const settings = readSiteSettings();
   const tagsByAsset = kind === "video" ? listVideoTagsForAssets(result.assets.map((asset) => asset.id)) : {};
+  const mediaStorageMode = getMediaStorageMode();
+  const mediaNodeCount = mediaStorageMode === "remote" ? listRemoteMediaNodes().length : 1;
+  const videoTranscodeProfile = getActiveVideoTranscodeProfile();
 
   return (
     <AdminFrame active="media" notice={params.notice} tone={params.tone}>
@@ -198,6 +204,14 @@ export default async function AdminMediaPage({ searchParams }: AdminMediaPagePro
             </div>
           ) : null}
         </div>
+
+        {kind === "video" && view === "assets" ? (
+          <div className="adminMediaInfrastructure" aria-label="视频传输与处理配置">
+            <span><UploadCloud size={14} aria-hidden="true" />{MEDIA_UPLOAD_CHUNK_BYTES / 1024 / 1024} MiB 分片直传</span>
+            <span><Server size={14} aria-hidden="true" />{mediaNodeCount} 个媒体节点</span>
+            <span><Gauge size={14} aria-hidden="true" />{videoTranscodeProfile?.label || "保留原码率"}</span>
+          </div>
+        ) : null}
 
         {kind === "video" && view === "taxonomy" ? (
           <div className="adminMediaTaxonomyLayout">

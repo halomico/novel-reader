@@ -1,17 +1,21 @@
-import { Check, CupSoda, KeyRound, Save, Sparkles, UserRound } from "lucide-react";
+import { Check, CupSoda, History, KeyRound, Save, ShieldCheck, Sparkles, UserRound } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import Link from "@/components/LocalizedLink";
 import { AvatarUploadForm } from "@/components/AvatarUploadForm";
 import { CheckinLeaderboardDialog } from "@/components/CheckinLeaderboardDialog";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
 import { UserWorkspace, type UserWorkspaceKey } from "@/components/UserWorkspace";
+import { UserEntitlementList } from "@/components/UserEntitlementList";
+import { Pagination } from "@/components/Pagination";
+import { listUserEntitlementsPage } from "@/lib/entitlements";
 import { getNoticeDisplaySeconds, getUserAvatarMaxBytes } from "@/lib/config";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { getCurrentUser } from "@/lib/user-auth";
 import {
   getDailyCheckinState,
   listDailyCheckinLeaderboard,
-  listSodaTransactions,
+  listCurrencyTransactionsPage,
 } from "@/lib/user-economy";
 import { getUserGrowthProgress, USER_PERMISSION_DEFINITIONS } from "@/lib/user-levels";
 import {
@@ -33,11 +37,20 @@ type AccountPageProps = {
     notice?: string;
     tone?: "success" | "warning" | "error";
     checkin?: string;
+    rightsPage?: string;
+    sodaPage?: string;
+    recordPage?: string;
+    panel?: string;
   }>;
 };
 
 function resolveView(value: string | undefined): Extract<UserWorkspaceKey, "profile" | "growth"> {
-  return value === "growth" ? "growth" : "profile";
+  return value === "profile" ? "profile" : "growth";
+}
+
+function resolveGrowthPanel(value: string | undefined): "rights" | "record" | "" {
+  if (value === "rights") return "rights";
+  return value === "record" || value === "soda" ? "record" : "";
 }
 
 export default async function AccountPage({ searchParams }: AccountPageProps) {
@@ -50,11 +63,17 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
 
   const params = await searchParams;
   const view = resolveView(params.view);
+  const growthPanel = view === "growth" ? resolveGrowthPanel(params.panel) : "";
   const maxAvatarMb = (getUserAvatarMaxBytes() / 1024 / 1024).toFixed(1);
   const growth = getUserGrowthProgress(user.sodaExperience);
   const level = growth.current;
   const checkin = view === "growth" ? getDailyCheckinState(user.id) : null;
-  const transactions = view === "growth" ? listSodaTransactions(user.id, 12) : [];
+  const transactions = view === "growth"
+    ? listCurrencyTransactionsPage(user.id, Number(params.recordPage || params.sodaPage || 1), 10)
+    : null;
+  const entitlements = view === "growth"
+    ? listUserEntitlementsPage(user.id, { page: Number(params.rightsPage || 1), pageSize: 10 })
+    : null;
   const showCheckinDialog = view === "growth" && params.checkin === "1" && Boolean(checkin?.checkedIn);
   const checkinLeaderboard = showCheckinDialog ? listDailyCheckinLeaderboard() : null;
   const labels: Record<typeof view, string> = {
@@ -172,15 +191,6 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
             </footer>
           </section>
 
-          <div className="accountPermissionList" aria-label={tr("当前等级权限")}>
-            {USER_PERMISSION_DEFINITIONS.filter((permission) => level.permissions.includes(permission.key)).map((permission) => (
-              <span className="isEnabled" key={permission.key}>
-                <Check size={13} aria-hidden="true" />
-                {permissionLabels.get(permission.key) || permission.label}
-              </span>
-            ))}
-          </div>
-
           <form className="accountCheckin" action={claimDailySodaAction}>
             <div className="accountCheckinCopy">
               <strong>{tr(checkin.checkedIn ? "今日已签到" : "每日签到")}</strong>
@@ -206,14 +216,43 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
             </div>
           </form>
 
-          <section className="accountSodaHistory">
-            <h2>{tr("苏打记录")}</h2>
-            {transactions.length ? (
+          <nav className="accountGrowthTools" aria-label="成长明细">
+            <Link
+              className={growthPanel === "rights" ? "isActive" : ""}
+              href={growthPanel === "rights" ? "/account?view=growth" : "/account?view=growth&panel=rights"}
+              scroll={false}
+              aria-label="权益"
+            >
+              <ShieldCheck size={18} aria-hidden="true" /><span>{tr("权益")}</span>
+            </Link>
+            <Link
+              className={growthPanel === "record" ? "isActive" : ""}
+              href={growthPanel === "record" ? "/account?view=growth" : "/account?view=growth&panel=record"}
+              scroll={false}
+              aria-label="记录"
+            >
+              <History size={18} aria-hidden="true" /><span>{tr("记录")}</span>
+            </Link>
+          </nav>
+
+          {growthPanel === "rights" && entitlements ? (
+            <section className="accountGrowthDetail accountRightsDetail" id="growth-detail">
+              <div className="accountPermissionList" aria-label={tr("等级权益")}>
+                {USER_PERMISSION_DEFINITIONS.filter((permission) => level.permissions.includes(permission.key)).map((permission) => (
+                  <span className="isEnabled" key={permission.key}><Check size={13} aria-hidden="true" />{permissionLabels.get(permission.key) || permission.label}</span>
+                ))}
+              </div>
+              <UserEntitlementList data={entitlements} locale={locale} />
+            </section>
+          ) : null}
+
+          {growthPanel === "record" && transactions ? <section className="accountSodaHistory accountGrowthDetail" id="growth-detail">
+            {transactions.items.length ? (
               <div>
-                {transactions.map((item) => (
+                {transactions.items.map((item) => (
                   <article key={item.id}>
                     <span>
-                      <strong>{item.note || item.source}</strong>
+                      <strong>{item.note || item.source}<em>{item.currency === "cookie" ? tr("曲奇") : tr("苏打")}</em></strong>
                       <small>{new Date(item.createdAt).toLocaleString(locale === "zh-Hant" ? "zh-TW" : "zh-CN", { hour12: false })}</small>
                     </span>
                     <b className={item.amount > 0 ? "isPositive" : ""}>
@@ -223,7 +262,15 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
                 ))}
               </div>
             ) : <p className="messageEmpty">{tr("暂无记录")}</p>}
-          </section>
+            <Pagination
+              page={transactions.page}
+              totalPages={transactions.totalPages}
+              query=""
+              basePath="/account"
+              pageParam="recordPage"
+              extraParams={{ view: "growth", panel: "record" }}
+            />
+          </section> : null}
         </article>
       ) : null}
     </UserWorkspace>

@@ -7,6 +7,13 @@ type FormatLocalDateTimeOptions = {
   timeZone?: string;
 };
 
+type FormatCompactUpdateDateOptions = {
+  now?: number;
+  timeZone?: string;
+};
+
+const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1_000;
+
 function normalizeMilliseconds(value: string | undefined): number {
   if (!value) {
     return 0;
@@ -65,4 +72,26 @@ export function formatLocalDateTime(value: string | null | undefined, options: F
     hour12: false,
     timeZone: options.timeZone,
   }).format(date);
+}
+
+export function formatCompactUpdateDate(
+  timestamp: number,
+  options: FormatCompactUpdateDateOptions = {},
+): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: options.timeZone,
+  }).formatToParts(date);
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const includeYear = (options.now ?? Date.now()) - timestamp > ONE_YEAR_MS;
+  return includeYear
+    ? `${value.year}-${value.month}-${value.day}`
+    : `${value.month}-${value.day}`;
 }

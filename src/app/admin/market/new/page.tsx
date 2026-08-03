@@ -36,8 +36,7 @@ export default async function AdminMarketNewPage({ searchParams }: AdminMarketNe
             <div className="adminCommerceFieldGrid">
               <label className="isWide"><span>商品名称</span><input name="title" maxLength={120} required autoFocus /></label>
               <label><span>链接标识</span><input name="slug" pattern="[a-z0-9][a-z0-9-]{1,78}[a-z0-9]" placeholder="留空自动生成" /></label>
-              <label className="isFull"><span>商品简述（可选）</span><input name="summary" maxLength={240} /></label>
-              <label className="isFull"><span>商品介绍（可选）</span><textarea name="description" rows={8} maxLength={20000} /><small>支持 Markdown</small></label>
+              <label className="isFull"><span>商品描述（可选）</span><textarea name="description" rows={8} maxLength={20000} /><small>支持 Markdown</small></label>
             </div>
           </section>
           <section className="adminCommerceFormSection">

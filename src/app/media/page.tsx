@@ -1,10 +1,11 @@
-import { ChevronRight, Clapperboard, Disc3, File, Headphones, Search, X } from "lucide-react";
+import { ChevronRight, Clapperboard, File, Headphones, Search, X } from "lucide-react";
 import type { Metadata } from "next";
 import Form from "next/form";
 import Link from "@/components/LocalizedLink";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { MediaFolderRow } from "@/components/MediaFolderRow";
+import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import { MediaConnectionHint } from "@/components/MediaConnectionHint";
 import { MediaPublicSort } from "@/components/MediaPublicSort";
 import { MediaVideoCard } from "@/components/MediaVideoCard";
@@ -13,6 +14,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { getVideoThumbnailSettings } from "@/lib/config";
 import {
   getAccessibleMediaKinds,
+  getVisibleMediaEntryKinds,
   getVideoTagBySlug,
   isMediaKind,
   isMediaKindPublic,
@@ -108,7 +110,7 @@ function mediaHref(
   order?: MediaSortOrder,
   tag = "",
 ): string {
-  const defaultSort: MediaSortBy = kind === "audio" && !folder ? "duration" : "name";
+  const defaultSort: MediaSortBy = kind === "video" ? "published" : kind === "audio" && !folder ? "duration" : "name";
   const selectedSort = sort || defaultSort;
   const selectedOrder = order || (selectedSort === "name" ? "asc" : "desc");
   const params = new URLSearchParams({ kind });
@@ -131,14 +133,14 @@ function MediaResourceRow({
   locale: AppLocale;
 }) {
   const title = displayTitle(asset.title, asset.fileName);
-  const Icon = asset.kind === "audio" ? Disc3 : File;
+  const Icon = asset.kind === "audio" ? Headphones : File;
   const metadata = [
     asset.kind === "audio" ? asset.artist || uiText(locale, "未知作者") : asset.description || uiText(locale, "文件"),
     showFolder && asset.folder ? asset.folder : "",
   ].filter(Boolean).join(" · ");
 
   return (
-    <Link className="mediaResourceRow" href={`/media/${asset.id}`}>
+    <Link className={asset.kind === "audio" ? "mediaResourceRow isAudioRow" : "mediaResourceRow"} href={`/media/${asset.id}`}>
       <span className={`mediaAssetIcon is-${asset.kind}`} aria-hidden="true"><Icon size={21} /></span>
       <span className="mediaCardCopy">
         <strong title={title}>{title}</strong>
@@ -153,6 +155,8 @@ function MediaResourceRow({
 export default async function MediaPage({ searchParams }: MediaPageProps) {
   const locale = await getRequestLocale();
   const user = await getCurrentUser();
+  const params = await searchParams;
+  const requestedKind = isMediaKind(params.kind) ? params.kind : null;
   const headerStore = await headers();
   const accessibleKinds = getAccessibleMediaKinds(Boolean(user)).filter((candidate) => checkContentAccess(headerStore, {
     scope: candidate,
@@ -160,16 +164,23 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
     admin: user?.role === "admin",
     rateLimit: false,
   }).allowed);
-  if (!accessibleKinds.length) notFound();
-  const params = await searchParams;
-  const requestedKind = isMediaKind(params.kind) ? params.kind : null;
-  if (requestedKind && !accessibleKinds.includes(requestedKind)) notFound();
+  if (!accessibleKinds.length || (requestedKind && !accessibleKinds.includes(requestedKind))) {
+    const visibleEntryKinds = !user ? getVisibleMediaEntryKinds(false) : [];
+    const gatedKind = requestedKind && visibleEntryKinds.includes(requestedKind)
+      ? requestedKind
+      : !requestedKind ? visibleEntryKinds[0] : null;
+    if (gatedKind) {
+      const returnTo = `/media?${new URLSearchParams({ kind: gatedKind }).toString()}`;
+      return <ContentEntryGatePage locale={locale} label={uiText(locale, KIND_LABELS[gatedKind])} returnTo={returnTo} />;
+    }
+    notFound();
+  }
   const kind = requestedKind || accessibleKinds[0];
   const mediaPublicOrigin = getMediaPublicUrlForKind(kind);
   const requestedFolder = kind === "video" ? "" : normalizeMediaFolder(params.folder || "") || "";
-  const defaultSortBy: MediaSortBy = kind === "audio" && !requestedFolder ? "duration" : "name";
+  const defaultSortBy: MediaSortBy = kind === "video" ? "published" : kind === "audio" && !requestedFolder ? "duration" : "name";
   const sortBy: MediaSortBy = kind === "video"
-    ? params.sort === "duration" || params.sort === "plays" ? params.sort : "name"
+    ? params.sort === "name" || params.sort === "duration" || params.sort === "plays" || params.sort === "updated" ? params.sort : "published"
     : kind === "audio"
       ? params.sort === "duration" || params.sort === "name" ? params.sort : defaultSortBy
       : params.sort === "size" ? "size" : "name";
@@ -183,8 +194,11 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
     : undefined;
   const categoryParam = videoCategoryId ? String(videoCategoryId) : "";
   const activeVideoCategory = videoCategories.find((category) => category.id === videoCategoryId);
-  const videoTags = kind === "video" ? listVideoTags({ pageSize: 5_000 }).tags : [];
+  const quickVideoTags = kind === "video" ? listVideoTags({ pageSize: 40 }).tags : [];
   const activeVideoTag = kind === "video" ? getVideoTagBySlug(params.tag) : null;
+  const videoTags = activeVideoTag && !quickVideoTags.some((tag) => tag.id === activeVideoTag.id)
+    ? [activeVideoTag, ...quickVideoTags]
+    : quickVideoTags;
   const tagParam = activeVideoTag?.slug || "";
   const queryInput = (params.q || "").trim();
   const sourceResult = listMediaAssets({

@@ -1,243 +1,283 @@
-﻿import "dotenv/config";
+import "dotenv/config";
 
+import crypto from "node:crypto";
 import fs from "node:fs";
+import path from "node:path";
 import { getLibraryDir } from "../src/lib/config";
 import { getContentSearchDb } from "../src/lib/content-search-db";
+import { invalidateContentSearchResultCache } from "../src/lib/content-search-cache";
 import { deleteContentSearchIndexNovel } from "../src/lib/content-search-index";
 import { getDb } from "../src/lib/db";
-import { isNovelTextFile } from "../src/lib/filename";
-import { buildNovelRecordFromFile, deleteNovelByRelativePath, resolveLibraryFile, type NovelFileRecord } from "../src/lib/novel-files";
+import { isNovelTextFile, parseNovelTitle } from "../src/lib/filename";
+import { invalidateNovelIdCache } from "../src/lib/novel-id-sampler";
+import {
+  buildNovelRecordFromRelativeFile,
+  type NovelFileRecord,
+} from "../src/lib/novel-files";
+import { DEFAULT_NOVEL_SOURCE_DIRECTORY, upsertNovelSource } from "../src/lib/novel-library";
+
+type ScannedChapter = NovelFileRecord & { sortOrder: number };
+
+type ScannedBook = {
+  title: string;
+  fileName: string;
+  relativePath: string;
+  sourceId: number;
+  storageMode: "single" | "chapters";
+  contentHash: string;
+  sizeBytes: number;
+  mtimeMs: number;
+  wordCount: number;
+  chapters: ScannedChapter[];
+};
 
 type ScanStats = {
-  scanned: number;
+  books: number;
+  files: number;
   insertedOrUpdated: number;
-  deletedDuplicates: number;
   skipped: number;
   records: string[];
 };
 
-type PendingDuplicateFile = {
-  fileName: string;
-  keptFileName: string;
-  filePath: string;
-  sizeBytes: number;
-  mtimeMs: number;
-};
-
 const libraryDir = getLibraryDir();
 const db = getDb();
+const collator = new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" });
 
-if (!fs.existsSync(libraryDir)) {
-  fs.mkdirSync(libraryDir, { recursive: true });
+fs.mkdirSync(libraryDir, { recursive: true });
+
+function directTextFiles(directory: string, relativeDirectory: string): string[] {
+  return fs.readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && isNovelTextFile(entry.name))
+    .map((entry) => relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name)
+    .sort((left, right) => collator.compare(left, right));
 }
 
-const files = fs
-  .readdirSync(libraryDir, { withFileTypes: true })
-  .filter((entry) => entry.isFile() && isNovelTextFile(entry.name))
-  .map((entry) => entry.name)
-  .sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
-
-const stats: ScanStats = {
-  scanned: files.length,
-  insertedOrUpdated: 0,
-  deletedDuplicates: 0,
-  skipped: 0,
-  records: [],
-};
-
-const findDuplicateByTitleHash = db.prepare(`
-  SELECT id, title, file_name, relative_path, content_hash
-  FROM novels
-  WHERE title = ? AND content_hash = ? AND relative_path != ?
-  ORDER BY id ASC
-  LIMIT 1
-`);
-
-const upsertByPath = db.prepare(`
-  INSERT INTO novels (title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, updated_at)
-  VALUES (@title, @fileName, @relativePath, @contentHash, @sizeBytes, @mtimeMs, @wordCount, CURRENT_TIMESTAMP)
-  ON CONFLICT(relative_path) DO UPDATE SET
-    title = excluded.title,
-    file_name = excluded.file_name,
-    content_hash = excluded.content_hash,
-    size_bytes = excluded.size_bytes,
-    mtime_ms = excluded.mtime_ms,
-    word_count = excluded.word_count,
-    updated_at = CURRENT_TIMESTAMP
-  WHERE novels.title IS NOT excluded.title
-     OR novels.file_name IS NOT excluded.file_name
-     OR novels.content_hash IS NOT excluded.content_hash
-     OR novels.size_bytes IS NOT excluded.size_bytes
-     OR novels.mtime_ms IS NOT excluded.mtime_ms
-     OR novels.word_count IS NOT excluded.word_count
-`);
-
-const findExistingByPath = db.prepare(`
-  SELECT id, content_hash, size_bytes, mtime_ms
-  FROM novels
-  WHERE relative_path = ?
-  LIMIT 1
-`);
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-
-  const units = ["KB", "MB", "GB", "TB"];
-  let value = bytes / 1024;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-  return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[unitIndex]}`;
+function sourceDirectories(): Array<{ name: string; relativePath: string; fullPath: string }> {
+  return fs.readdirSync(libraryDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+    .map((entry) => ({
+      name: entry.name,
+      relativePath: entry.name,
+      fullPath: path.join(libraryDir, entry.name),
+    }))
+    .sort((left, right) => collator.compare(left.name, right.name));
 }
 
-function elapsedSeconds(startedAt: number): string {
-  return `${Math.round((Date.now() - startedAt) / 1000)}s`;
+function singleBook(record: NovelFileRecord, sourceId: number): ScannedBook {
+  return {
+    title: record.title,
+    fileName: record.fileName,
+    relativePath: record.relativePath,
+    sourceId,
+    storageMode: "single",
+    contentHash: record.contentHash,
+    sizeBytes: record.sizeBytes,
+    mtimeMs: record.mtimeMs,
+    wordCount: record.wordCount,
+    chapters: [],
+  };
 }
 
-function readPositiveInt(name: string, fallback: number, min: number): number {
-  const value = Number(process.env[name]);
-  if (!Number.isFinite(value)) {
-    return fallback;
+function chapterBook(
+  sourceId: number,
+  sourceRelativePath: string,
+  directoryName: string,
+  chapterPaths: string[],
+): ScannedBook | null {
+  const chapters = chapterPaths.flatMap((relativePath, index) => {
+    const record = buildNovelRecordFromRelativeFile(relativePath);
+    return "status" in record ? [] : [{ ...record, sortOrder: index }];
+  });
+  if (!chapters.length) return null;
+  const contentHash = crypto.createHash("sha256");
+  for (const chapter of chapters) {
+    contentHash.update(chapter.relativePath).update("\0").update(chapter.contentHash).update("\0");
   }
-  return Math.max(min, Math.floor(value));
+  return {
+    title: parseNovelTitle(`${directoryName}.txt`) || directoryName,
+    fileName: directoryName,
+    relativePath: sourceRelativePath ? `${sourceRelativePath}/${directoryName}` : directoryName,
+    sourceId,
+    storageMode: "chapters",
+    contentHash: contentHash.digest("hex"),
+    sizeBytes: chapters.reduce((total, chapter) => total + chapter.sizeBytes, 0),
+    mtimeMs: Math.max(...chapters.map((chapter) => chapter.mtimeMs)),
+    wordCount: chapters.reduce((total, chapter) => total + chapter.wordCount, 0),
+    chapters,
+  };
 }
 
-function clearExistingIndexIfChanged(record: NovelFileRecord) {
-  const existing = findExistingByPath.get(record.relativePath) as
-    | { id: number; content_hash: string | null; size_bytes: number; mtime_ms: number }
-    | undefined;
-  if (
-    existing &&
-    (existing.content_hash !== record.contentHash || existing.size_bytes !== record.sizeBytes || existing.mtime_ms !== record.mtimeMs)
-  ) {
-    deleteContentSearchIndexNovel(getContentSearchDb(), existing.id);
+function discoverBooks(stats: ScanStats): ScannedBook[] {
+  const books: ScannedBook[] = [];
+  const defaultSourceId = upsertNovelSource("", "默认来源");
+  for (const relativePath of directTextFiles(libraryDir, "")) {
+    stats.files += 1;
+    const record = buildNovelRecordFromRelativeFile(relativePath);
+    if ("status" in record) {
+      stats.skipped += 1;
+      stats.records.push(`${record.fileName}: ${record.reason}`);
+    } else {
+      books.push(singleBook(record, defaultSourceId));
+    }
   }
+
+  for (const source of sourceDirectories()) {
+    const isDefaultDirectory = source.relativePath.toLocaleLowerCase("en-US") === DEFAULT_NOVEL_SOURCE_DIRECTORY;
+    const sourceId = isDefaultDirectory
+      ? defaultSourceId
+      : upsertNovelSource(source.relativePath, source.name);
+    for (const relativePath of directTextFiles(source.fullPath, source.relativePath)) {
+      stats.files += 1;
+      const record = buildNovelRecordFromRelativeFile(relativePath);
+      if ("status" in record) {
+        stats.skipped += 1;
+        stats.records.push(`${record.fileName}: ${record.reason}`);
+      } else {
+        books.push(singleBook(record, sourceId));
+      }
+    }
+    const bookDirectories = fs.readdirSync(source.fullPath, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .sort((left, right) => collator.compare(left.name, right.name));
+    for (const bookDirectory of bookDirectories) {
+      const relativeDirectory = `${source.relativePath}/${bookDirectory.name}`;
+      const chapterPaths = directTextFiles(path.join(source.fullPath, bookDirectory.name), relativeDirectory);
+      stats.files += chapterPaths.length;
+      const book = chapterBook(sourceId, source.relativePath, bookDirectory.name, chapterPaths);
+      if (book) books.push(book);
+    }
+  }
+  return books;
+}
+
+const existingByPath = db.prepare(
+  `SELECT id, content_hash, size_bytes, mtime_ms, storage_mode
+   FROM novels WHERE relative_path = ?`,
+);
+const duplicateInSource = db.prepare(
+  `SELECT id, relative_path
+   FROM novels
+   WHERE source_id = ? AND title = ? AND content_hash = ? AND relative_path != ?
+   ORDER BY id ASC LIMIT 1`,
+);
+const upsertBook = db.prepare(
+  `INSERT INTO novels (
+     title, file_name, relative_path, source_id, storage_mode, chapter_count,
+     content_hash, size_bytes, mtime_ms, word_count, updated_at
+   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+   ON CONFLICT(relative_path) DO UPDATE SET
+     title = excluded.title,
+     file_name = excluded.file_name,
+     source_id = excluded.source_id,
+     storage_mode = excluded.storage_mode,
+     chapter_count = excluded.chapter_count,
+     content_hash = excluded.content_hash,
+     size_bytes = excluded.size_bytes,
+     mtime_ms = excluded.mtime_ms,
+     word_count = excluded.word_count,
+     updated_at = CURRENT_TIMESTAMP
+   RETURNING id`,
+);
+const upsertChapter = db.prepare(
+  `INSERT INTO novel_chapters (
+     novel_id, title, relative_path, sort_order, content_hash,
+     size_bytes, mtime_ms, word_count, updated_at
+   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+   ON CONFLICT(relative_path) DO UPDATE SET
+     novel_id = excluded.novel_id,
+     title = excluded.title,
+     sort_order = excluded.sort_order,
+     content_hash = excluded.content_hash,
+     size_bytes = excluded.size_bytes,
+     mtime_ms = excluded.mtime_ms,
+     word_count = excluded.word_count,
+     updated_at = CURRENT_TIMESTAMP`,
+);
+
+function syncChapters(novelId: number, chapters: ScannedChapter[]) {
+  if (!chapters.length) {
+    db.prepare("DELETE FROM novel_chapters WHERE novel_id = ?").run(novelId);
+    return;
+  }
+  db.prepare("UPDATE novel_chapters SET sort_order = sort_order + 1000000 WHERE novel_id = ?").run(novelId);
+  for (const chapter of chapters) {
+    upsertChapter.run(
+      novelId,
+      chapter.title,
+      chapter.relativePath,
+      chapter.sortOrder,
+      chapter.contentHash,
+      chapter.sizeBytes,
+      chapter.mtimeMs,
+      chapter.wordCount,
+    );
+  }
+  const placeholders = chapters.map(() => "?").join(", ");
+  db.prepare(
+    `DELETE FROM novel_chapters
+     WHERE novel_id = ? AND relative_path NOT IN (${placeholders})`,
+  ).run(novelId, ...chapters.map((chapter) => chapter.relativePath));
 }
 
 function scan() {
   const startedAt = Date.now();
-  const progressEvery = readPositiveInt("SCAN_PROGRESS_EVERY", 500, 100);
-  const batchSize = readPositiveInt("SCAN_BATCH_SIZE", 500, 100);
-  let totalBytes = 0;
-  let transactionOpen = false;
-  const pendingDuplicateFiles: PendingDuplicateFile[] = [];
-
-  function deleteCommittedDuplicateFiles() {
-    for (const pending of pendingDuplicateFiles) {
-      try {
-        if (!fs.existsSync(pending.filePath)) {
-          stats.deletedDuplicates += 1;
-          stats.records.push(`${pending.fileName}: 与 ${pending.keptFileName} 内容相同，重复文件已不存在`);
-          continue;
-        }
-        const currentStat = fs.statSync(pending.filePath);
-        if (currentStat.size !== pending.sizeBytes || Math.round(currentStat.mtimeMs) !== pending.mtimeMs) {
-          stats.skipped += 1;
-          stats.records.push(`${pending.fileName}: 扫描期间文件发生变化，已保留文件并跳过删除`);
-          continue;
-        }
-        fs.unlinkSync(pending.filePath);
-        stats.deletedDuplicates += 1;
-        stats.records.push(`${pending.fileName}: 与 ${pending.keptFileName} 内容完全相同，已删除重复文件`);
-      } catch (error) {
-        stats.skipped += 1;
-        stats.records.push(
-          `${pending.fileName}: 重复数据库记录已清理，但文件删除失败：${error instanceof Error ? error.message : "未知错误"}`,
-        );
-      }
-    }
-  }
-
-  function finishStep(index: number) {
-    if ((index + 1) % batchSize === 0) {
-      db.exec("COMMIT");
-      transactionOpen = false;
-      db.exec("BEGIN");
-      transactionOpen = true;
-    }
-
-    if ((index + 1) % progressEvery === 0) {
-      console.log(
-        `扫描进度: ${index + 1}/${stats.scanned}，已读 ${formatBytes(totalBytes)}，写入 ${stats.insertedOrUpdated}，删除重复 ${stats.deletedDuplicates}，跳过 ${stats.skipped}，耗时 ${elapsedSeconds(startedAt)}`,
-      );
-    }
-  }
-
-  console.log(`书库目录: ${libraryDir}`);
-  console.log(`发现 txt: ${stats.scanned}`);
-  console.log(`开始扫描；每 ${progressEvery} 本输出一次进度。`);
-
-  db.exec("BEGIN");
-  transactionOpen = true;
+  const stats: ScanStats = { books: 0, files: 0, insertedOrUpdated: 0, skipped: 0, records: [] };
+  const books = discoverBooks(stats);
+  stats.books = books.length;
+  db.exec("BEGIN IMMEDIATE");
   try {
-    for (const [index, fileName] of files.entries()) {
-      const record = buildNovelRecordFromFile(fileName);
-
-      if ("status" in record) {
+    for (const book of books) {
+      const duplicate = duplicateInSource.get(
+        book.sourceId,
+        book.title,
+        book.contentHash,
+        book.relativePath,
+      ) as { id: number; relative_path: string } | undefined;
+      if (duplicate && book.storageMode === "single") {
         stats.skipped += 1;
-        stats.records.push(`${record.fileName}: ${record.reason}`);
-        finishStep(index);
+        stats.records.push(`${book.relativePath}: 与 ${duplicate.relative_path} 内容相同，已跳过索引`);
         continue;
       }
-
-      totalBytes += record.sizeBytes;
-      const duplicate = findDuplicateByTitleHash.get(record.title, record.contentHash, record.relativePath) as
-        | { id: number; title: string; file_name: string; relative_path: string; content_hash: string | null }
-        | undefined;
-      if (duplicate) {
-        if (!fs.existsSync(resolveLibraryFile(duplicate.relative_path))) {
-          deleteNovelByRelativePath(db, duplicate.relative_path);
-          clearExistingIndexIfChanged(record);
-          const result = upsertByPath.run(record);
-          stats.insertedOrUpdated += Number(result.changes);
-          stats.records.push(`${duplicate.file_name}: 数据库记录指向的文件不存在，已清理旧记录`);
-          finishStep(index);
-          continue;
-        }
-
-        deleteNovelByRelativePath(db, record.relativePath);
-        pendingDuplicateFiles.push({
-          fileName: record.fileName,
-          keptFileName: duplicate.file_name,
-          filePath: resolveLibraryFile(record.relativePath),
-          sizeBytes: record.sizeBytes,
-          mtimeMs: record.mtimeMs,
-        });
-        finishStep(index);
-        continue;
-      }
-
-      clearExistingIndexIfChanged(record);
-      const result = upsertByPath.run(record);
-      stats.insertedOrUpdated += Number(result.changes);
-      finishStep(index);
+      const existing = existingByPath.get(book.relativePath) as {
+        id: number;
+        content_hash: string | null;
+        size_bytes: number;
+        mtime_ms: number;
+        storage_mode: string;
+      } | undefined;
+      const changed = !existing ||
+        existing.content_hash !== book.contentHash ||
+        existing.size_bytes !== book.sizeBytes ||
+        existing.mtime_ms !== book.mtimeMs ||
+        existing.storage_mode !== book.storageMode;
+      if (existing && changed) deleteContentSearchIndexNovel(getContentSearchDb(), existing.id);
+      const row = upsertBook.get(
+        book.title,
+        book.fileName,
+        book.relativePath,
+        book.sourceId,
+        book.storageMode,
+        book.chapters.length,
+        book.contentHash,
+        book.sizeBytes,
+        book.mtimeMs,
+        book.wordCount,
+      ) as { id: number };
+      syncChapters(row.id, book.chapters);
+      if (changed) stats.insertedOrUpdated += 1;
     }
     db.exec("COMMIT");
-    transactionOpen = false;
-    deleteCommittedDuplicateFiles();
-    console.log(`扫描完成，耗时 ${elapsedSeconds(startedAt)}，读取约 ${formatBytes(totalBytes)}`);
   } catch (error) {
-    if (transactionOpen) {
-      db.exec("ROLLBACK");
-    }
+    db.exec("ROLLBACK");
     throw error;
   }
+  if (stats.insertedOrUpdated) {
+    invalidateContentSearchResultCache();
+    invalidateNovelIdCache();
+  }
+  const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+  console.log(`扫描完成：${stats.books} 本，${stats.files} 个文件，更新 ${stats.insertedOrUpdated} 本，跳过 ${stats.skipped} 项，耗时 ${elapsed}s`);
+  for (const record of stats.records) console.log(`- ${record}`);
 }
 
 scan();
-
-console.log(`写入/更新: ${stats.insertedOrUpdated}`);
-console.log(`删除同名同内容重复文件: ${stats.deletedDuplicates}`);
-console.log(`跳过: ${stats.skipped}`);
-
-if (stats.records.length > 0) {
-  console.log("");
-  console.log("处理记录:");
-  for (const record of stats.records) {
-    console.log(`- ${record}`);
-  }
-}

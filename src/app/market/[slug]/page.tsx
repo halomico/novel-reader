@@ -71,7 +71,6 @@ export default async function MarketProductPage({ params, searchParams }: Market
           ) : null}
           <div>
             <h1>{product.title}</h1>
-            {product.summary ? <p>{product.summary}</p> : null}
           </div>
           <div className="marketProductPrice">
             {product.priceCookie != null ? <span><Cookie size={17} aria-hidden="true" />{product.priceCookie} 曲奇</span> : null}

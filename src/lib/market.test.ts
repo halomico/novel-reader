@@ -5,6 +5,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { getDb } from "./db";
+import { encodeEntitlementDefinition, hasNovelReadEntitlement } from "./entitlements";
 import {
   createMarketProduct,
   createRedemptionCodeBatch,
@@ -96,7 +97,6 @@ test("market purchase atomically charges currency and snapshots encrypted delive
     id: productId,
     slug: product.slug,
     title: product.title,
-    summary: product.summary,
     description: product.description,
     status: "published",
     minLevel: product.minLevel,
@@ -233,4 +233,67 @@ test("registration invitation usage is bounded and raw codes are never persisted
   assert.equal(consumeRegistrationInviteInCurrentTransaction(code), false);
   db.exec("ROLLBACK");
   assert.equal(listRegistrationInvites()[0].usedCount, 1);
+});
+
+test("market purchases grant typed library entitlements", (t) => {
+  withTempDatabase(t);
+  const db = getDb();
+  const userId = Number(db.prepare(
+    "INSERT INTO users (username, display_name, password_hash, trust_level, soda_balance) VALUES ('entitled', 'Entitled', 'hash', 2, 10)",
+  ).run().lastInsertRowid);
+  const sourceId = Number(db.prepare(
+    "INSERT INTO novel_sources (slug, name, relative_path) VALUES ('premium', 'Premium', 'premium')",
+  ).run().lastInsertRowid);
+  const novelId = Number(db.prepare(
+    `INSERT INTO novels (
+       title, file_name, relative_path, source_id, access_mode, soda_price, size_bytes, mtime_ms
+     ) VALUES ('Premium book', 'premium.txt', 'premium/premium.txt', ?, 'soda', 5, 10, 1)`,
+  ).run(sourceId).lastInsertRowid);
+  const productId = createMarketProduct({
+    slug: "premium-library",
+    title: "Premium library",
+    priceSoda: 4,
+  });
+  saveMarketDeliveryItem({
+    productId,
+    kind: "entitlement",
+    title: "Library access",
+    content: encodeEntitlementDefinition({
+      targetType: "novel_source",
+      targetId: String(sourceId),
+      rights: ["read"],
+      durationSeconds: 3600,
+    }),
+  });
+  const product = getMarketProductById(productId)!;
+  updateMarketProduct({
+    id: product.id,
+    slug: product.slug,
+    title: product.title,
+    description: product.description,
+    status: "published",
+    minLevel: product.minLevel,
+    priceCookie: product.priceCookie,
+    priceSoda: product.priceSoda,
+    purchaseLimitPerUser: product.purchaseLimitPerUser,
+    sortOrder: product.sortOrder,
+  });
+
+  const order = purchaseMarketProduct({ userId, productId, currency: "soda" });
+  assert.equal(order.status, "fulfilled");
+  assert.equal(hasNovelReadEntitlement(userId, novelId, sourceId), true);
+  const entitlement = db.prepare(
+    "SELECT resource_type, resource_id, rights, source_order_id, expires_at FROM user_entitlements WHERE user_id = ?",
+  ).get(userId) as {
+    resource_type: string;
+    resource_id: string;
+    rights: string;
+    source_order_id: number;
+    expires_at: string | null;
+  };
+  assert.equal(entitlement.resource_type, "novel_source");
+  assert.equal(entitlement.resource_id, String(sourceId));
+  assert.equal(JSON.parse(entitlement.rights).includes("read"), true);
+  assert.equal(entitlement.source_order_id, order.id);
+  assert.equal(Date.parse(entitlement.expires_at || "") > Date.now(), true);
 });

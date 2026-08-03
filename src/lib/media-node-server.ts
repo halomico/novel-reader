@@ -16,9 +16,20 @@ export type MediaNodeServerOptions = {
   root: string;
   signingSecret: string;
   controlSecret: string;
+  maxVideoStreams?: number;
+  videoBandwidthMbps?: number;
 };
 
 type ByteRange = { start: number; end: number };
+
+type MediaNodeRuntime = {
+  startedAt: number;
+  activeVideoStreams: number;
+  reservedVideoKbps: number;
+  bytesServed: number;
+  maxVideoStreams: number;
+  videoBandwidthKbps: number;
+};
 
 function safeEqual(left: string, right: string): boolean {
   try {
@@ -119,6 +130,7 @@ async function serveSignedMedia(
   url: URL,
   root: string,
   signingSecret: string,
+  runtime: MediaNodeRuntime,
 ) {
   const payload = verifySignedMediaUrl(url, Date.now(), signingSecret);
   if (!payload) {
@@ -191,12 +203,37 @@ async function serveSignedMedia(
     empty(response, 304, headers);
     return;
   }
+  const isVideoTransfer = request.method === "GET" && payload.mimeType.startsWith("video/");
+  const reservedKbps = isVideoTransfer ? Math.max(payload.estimatedKbps, 128) : 0;
+  if (isVideoTransfer && (
+    (runtime.maxVideoStreams > 0 && runtime.activeVideoStreams >= runtime.maxVideoStreams) ||
+    (runtime.videoBandwidthKbps > 0 && runtime.reservedVideoKbps + reservedKbps > runtime.videoBandwidthKbps)
+  )) {
+    empty(response, 503, { "Cache-Control": "no-store", "Retry-After": "15" });
+    return;
+  }
   response.writeHead(range ? 206 : 200, headers);
   if (request.method === "HEAD") {
     response.end();
     return;
   }
-  pipeline(fs.createReadStream(filePath, { start, end }), response, () => undefined);
+  if (isVideoTransfer) {
+    runtime.activeVideoStreams += 1;
+    runtime.reservedVideoKbps += reservedKbps;
+  }
+  let released = false;
+  const release = () => {
+    if (released || !isVideoTransfer) return;
+    released = true;
+    runtime.activeVideoStreams = Math.max(runtime.activeVideoStreams - 1, 0);
+    runtime.reservedVideoKbps = Math.max(runtime.reservedVideoKbps - reservedKbps, 0);
+  };
+  const stream = fs.createReadStream(filePath, { start, end });
+  stream.on("data", (chunk) => {
+    runtime.bytesServed += chunk.length;
+  });
+  response.once("close", release);
+  pipeline(stream, response, release);
 }
 
 async function serveSignedThumbnail(
@@ -315,6 +352,16 @@ export function createMediaNodeServer(options: MediaNodeServerOptions): http.Ser
     throw new Error("MEDIA_CONTROL_SECRET 至少需要 32 个字符");
   }
   const store = new MediaNodeStore(options.root);
+  const runtime: MediaNodeRuntime = {
+    startedAt: Date.now(),
+    activeVideoStreams: 0,
+    reservedVideoKbps: 0,
+    bytesServed: 0,
+    maxVideoStreams: Math.min(Math.max(Math.floor(options.maxVideoStreams || 0), 0), 100_000),
+    videoBandwidthKbps: Math.floor(
+      Math.min(Math.max(Number(options.videoBandwidthMbps) || 0, 0), 100_000) * 1_000,
+    ),
+  };
   return http.createServer(async (request, response) => {
     if (!request.url) {
       empty(response, 404);
@@ -371,6 +418,20 @@ export function createMediaNodeServer(options: MediaNodeServerOptions): http.Ser
         if (url.pathname === "/control/uploads" && request.method === "POST") {
           const body = await readJson<MediaNodeUploadRequest>(request);
           json(response, 201, { ok: true, ...store.startUpload(body) });
+          return;
+        }
+        if (url.pathname === "/control/metrics" && request.method === "GET") {
+          json(response, 200, {
+            ok: true,
+            activeVideoStreams: runtime.activeVideoStreams,
+            reservedVideoMbps: runtime.reservedVideoKbps / 1_000,
+            bytesServed: runtime.bytesServed,
+            uptimeSeconds: Math.floor((Date.now() - runtime.startedAt) / 1_000),
+            limits: {
+              videoStreams: runtime.maxVideoStreams,
+              videoBandwidthMbps: runtime.videoBandwidthKbps / 1_000,
+            },
+          });
           return;
         }
         const finishMatch = url.pathname.match(/^\/control\/uploads\/([a-f0-9]{32})\/finish$/);
@@ -481,7 +542,7 @@ export function createMediaNodeServer(options: MediaNodeServerOptions): http.Ser
         (request.method === "GET" || request.method === "HEAD") &&
         url.pathname.startsWith("/media-file/")
       ) {
-        await serveSignedMedia(request, response, url, store.root, options.signingSecret);
+        await serveSignedMedia(request, response, url, store.root, options.signingSecret, runtime);
         return;
       }
       empty(response, 404);

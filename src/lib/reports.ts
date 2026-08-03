@@ -1,5 +1,6 @@
 import { getDb } from "./db";
 import type { MediaKind } from "./media";
+import { queueReportTelegramNotification } from "./telegram-outbox";
 
 export type ContentReportCategory =
   | "title_error"
@@ -159,7 +160,13 @@ export function createContentReport(params: {
       )
       .run(userId, hasNovel ? novelId : null, hasMedia ? mediaId : null, params.category, details);
     db.exec("COMMIT");
-    return { ok: true, id: Number(result.lastInsertRowid) };
+    const id = Number(result.lastInsertRowid);
+    try {
+      queueReportTelegramNotification(id);
+    } catch (error) {
+      console.warn("[telegram] report notification could not be queued", error);
+    }
+    return { ok: true, id };
   } catch (error) {
     db.exec("ROLLBACK");
     throw error;

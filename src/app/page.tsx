@@ -1,22 +1,20 @@
 import type { Metadata } from "next";
-import { Bell, BookOpenText, ChevronRight, Clapperboard, File, Headphones, LockKeyhole, Tags, type LucideIcon } from "lucide-react";
+import { Bell, BookOpenText, ChevronRight, Clapperboard, Clock3, File, Headphones, Tags, type LucideIcon } from "lucide-react";
 import { redirect } from "next/navigation";
-import { CatalogRandomCard } from "@/components/CatalogRandomButton";
 import Link from "@/components/LocalizedLink";
 import { SiteHeader } from "@/components/SiteHeader";
 import {
   getAnnouncementCardTarget,
   getHomePortalOrder,
   getSiteTitle,
-  isRandomCatalogEnabled,
+  canAccessHomeAnnouncementCard,
 } from "@/lib/config";
 import {
   isHomePortalCardVisible,
-  resolveHomePortalAccessMode,
   type HomePortalAccessMode,
   type HomePortalCardKey,
-  type HomePortalContentCardKey,
 } from "@/lib/home-portal";
+import { formatHomeUpdateTime, getHomeOverview } from "@/lib/home-overview";
 import type { MediaKind } from "@/lib/media";
 import { languageAlternates, uiText, withLocalePath } from "@/lib/locale";
 import { getRequestLocale, localizeText } from "@/lib/locale-server";
@@ -37,7 +35,7 @@ type HomeProps = {
 type PortalCard = {
   href: string;
   label: string;
-  kind: Exclude<HomePortalCardKey, "random">;
+  kind: Exclude<HomePortalCardKey, "recent">;
   icon: LucideIcon;
   accessMode: HomePortalAccessMode;
 };
@@ -47,11 +45,6 @@ const MEDIA_CARDS: Record<MediaKind, Omit<PortalCard, "kind" | "accessMode">> = 
   audio: { href: "/media?kind=audio", label: "音频", icon: Headphones },
   file: { href: "/media?kind=file", label: "文件", icon: File },
 };
-
-function gatedCardHref(href: string, mode: HomePortalAccessMode, authenticated: boolean): string {
-  if (authenticated || mode !== "preview") return href;
-  return `/login?${new URLSearchParams({ returnTo: href }).toString()}`;
-}
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getRequestLocale();
@@ -85,49 +78,19 @@ export default async function Home({ searchParams }: HomeProps) {
   const user = await getCurrentUser();
   const authenticated = Boolean(user);
   const settings = readSiteSettings();
-  const publicDisplayCards = new Set<HomePortalContentCardKey>(settings.publicDisplayHomeCards);
-  const accessModes: Record<HomePortalContentCardKey, HomePortalAccessMode> = {
-    announcement: resolveHomePortalAccessMode(
-      settings.announcementCardEnabled,
-      settings.guestAnnouncementCardEnabled,
-      publicDisplayCards.has("announcement"),
-    ),
-    novels: resolveHomePortalAccessMode(
-      settings.novelLibraryEnabled,
-      settings.guestLibraryNavEnabled,
-      publicDisplayCards.has("novels"),
-    ),
-    tags: resolveHomePortalAccessMode(
-      settings.tagLibraryEnabled,
-      settings.guestTagLibraryNavEnabled,
-      publicDisplayCards.has("tags"),
-    ),
-    video: resolveHomePortalAccessMode(
-      settings.videoLibraryEnabled,
-      settings.guestVideoNavEnabled,
-      publicDisplayCards.has("video"),
-    ),
-    audio: resolveHomePortalAccessMode(
-      settings.audioLibraryEnabled,
-      settings.guestAudioNavEnabled,
-      publicDisplayCards.has("audio"),
-    ),
-    file: resolveHomePortalAccessMode(
-      settings.fileLibraryEnabled,
-      settings.guestFileNavEnabled,
-      publicDisplayCards.has("file"),
-    ),
-  };
+  const accessModes = settings.homePortalAccessModes;
   const announcementMode = accessModes.announcement;
-  const announcement = isHomePortalCardVisible(announcementMode, authenticated)
-    ? getHomeAnnouncement(authenticated || announcementMode === "preview")
+  const showAnnouncement = isHomePortalCardVisible(announcementMode, authenticated);
+  const canReadAnnouncement = canAccessHomeAnnouncementCard(authenticated);
+  const announcement = showAnnouncement && canReadAnnouncement
+    ? getHomeAnnouncement(authenticated)
     : null;
   const showNovels = isHomePortalCardVisible(accessModes.novels, authenticated);
-  const cards = new Map<Exclude<HomePortalCardKey, "random">, PortalCard>();
+  const cards = new Map<Exclude<HomePortalCardKey, "recent">, PortalCard>();
 
-  if (announcement) {
+  if (showAnnouncement) {
     cards.set("announcement", {
-      href: getAnnouncementCardTarget() === "latest" ? `/announcements/${announcement.id}` : "/announcements",
+      href: announcement && getAnnouncementCardTarget() === "latest" ? `/announcements/${announcement.id}` : "/announcements",
       label: "公告",
       kind: "announcement",
       icon: Bell,
@@ -158,37 +121,39 @@ export default async function Home({ searchParams }: HomeProps) {
     }
   }
   const homePortalOrder = getHomePortalOrder();
+  const overview = getHomeOverview(authenticated);
 
   return (
     <main className="appShell homePortalShell">
-      <SiteHeader showPrimaryNavigation={false} showTools={false} isHomePage currentUser={user} />
+      <SiteHeader isHomePage showPrimaryNavigation={false} showSearch={false} currentUser={user} />
       <section className="homePortalGrid" aria-label="内容导航">
         {homePortalOrder.map((key) => {
-          if (key === "random") {
-            return showNovels && isRandomCatalogEnabled()
-              ? <CatalogRandomCard loginRequired={!authenticated && accessModes.novels === "preview"} key={key} />
-              : null;
+          if (key === "recent") {
+            if (!showNovels) return null;
+            const recentOverview = overview.recent;
+            return (
+              <Link className="homePortalCard is-recent" href="/novels/recent" key={key}>
+                <span className="homePortalCardIcon" aria-hidden="true"><Clock3 size={30} /></span>
+                <span className="homePortalCardCopy"><strong>{uiText(locale, "最近更新")}</strong><small>最近更新：{formatHomeUpdateTime(recentOverview?.updatedAt || null)}</small></span>
+                <ChevronRight className="homePortalCardArrow" size={19} aria-hidden="true" />
+              </Link>
+            );
           }
           const card = cards.get(key);
           if (!card) return null;
           const Icon = card.icon;
           const label = uiText(locale, card.label);
-          const loginLabel = uiText(locale, "登录后可用");
           return (
             <Link
               className={`homePortalCard is-${card.kind}`}
-              href={gatedCardHref(card.href, card.accessMode, authenticated)}
-              title={!authenticated && card.accessMode === "preview" ? loginLabel : undefined}
-              aria-label={!authenticated && card.accessMode === "preview" ? `${label}，${loginLabel}` : undefined}
+              href={card.href}
               key={card.kind}
             >
               <span className="homePortalCardIcon" aria-hidden="true">
                 <Icon size={30} />
               </span>
-              <strong>{label}</strong>
-              {!authenticated && card.accessMode === "preview"
-                ? <LockKeyhole className="homePortalCardArrow" size={17} aria-hidden="true" />
-                : <ChevronRight className="homePortalCardArrow" size={19} aria-hidden="true" />}
+              <span className="homePortalCardCopy"><strong>{label}</strong><small>{overview[card.kind]?.count || 0} {card.kind === "announcement" ? "条" : card.kind === "novels" ? "本" : "个"}{label}　最近更新：{formatHomeUpdateTime(overview[card.kind]?.updatedAt || null)}</small></span>
+              <ChevronRight className="homePortalCardArrow" size={19} aria-hidden="true" />
             </Link>
           );
         })}

@@ -1,8 +1,9 @@
-import { Bell, ChevronRight, Mail, MessageSquareText, Plus, Send } from "lucide-react";
+import { Bell, ChevronRight, Link2, Mail, MessageSquareText, Plus, Send, Unlink } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "@/components/LocalizedLink";
 import { redirect } from "next/navigation";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
+import { UserStationConversation } from "@/components/UserStationConversation";
 import { UserWorkspace } from "@/components/UserWorkspace";
 import { getNoticeDisplaySeconds, getStationDisplayName } from "@/lib/config";
 import {
@@ -15,7 +16,9 @@ import {
 } from "@/lib/station";
 import { getCurrentUser } from "@/lib/user-auth";
 import { hasUserPermission } from "@/lib/user-levels";
-import { createStationThreadAction, replyStationThreadAction } from "./actions";
+import { getTelegramUserLink } from "@/lib/telegram-links";
+import { isTelegramUserLinkAvailable } from "@/lib/telegram-config";
+import { createStationThreadAction, unlinkTelegramAction } from "./actions";
 import { getRequestLocale, localizeText } from "@/lib/locale-server";
 import { uiText, withLocalePath } from "@/lib/locale";
 
@@ -53,6 +56,8 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
     ? getStationThread(selectedThreadId, { userId: user.id })
     : null;
   const messages = selectedThread ? listStationMessages(selectedThread.id) : [];
+  const telegramAvailable = isTelegramUserLinkAvailable();
+  const telegramLink = telegramAvailable ? getTelegramUserLink(user.id) : null;
   if (selectedThread) {
     markStationThreadRead(selectedThread.id, "user", user.id);
   }
@@ -86,6 +91,25 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
           </nav>
         </header>
 
+        {tab === "station" && telegramAvailable ? (
+          <div className="telegramLinkPanel">
+            <Send size={18} aria-hidden="true" />
+            <span>
+              <strong>Telegram</strong>
+              <small>{telegramLink ? (telegramLink.username ? `@${telegramLink.username}` : tr("已连接")) : tr("同步站务回复")}</small>
+            </span>
+            {telegramLink ? (
+              <form action={unlinkTelegramAction}>
+                <button type="submit" title={tr("断开")} aria-label={tr("断开")}><Unlink size={15} aria-hidden="true" /></button>
+              </form>
+            ) : (
+              <a href="/api/telegram/link" target="_blank" rel="noreferrer">
+                <Link2 size={15} aria-hidden="true" />{tr("连接")}
+              </a>
+            )}
+          </div>
+        ) : null}
+
         {tab === "announcements" ? (
           <div className="announcementList">
             {displayAnnouncements.length ? displayAnnouncements.map((announcement) => (
@@ -99,61 +123,75 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
               </Link>
             )) : <p className="messageEmpty">{tr("暂无公告")}</p>}
           </div>
-        ) : selectedThread ? (
-          <div className="stationConversation">
-            <header>
-              <Link href="/messages?tab=station">{tr("站务")}</Link>
-              <ChevronRight size={14} aria-hidden="true" />
-              <h2>{selectedThread.subject}</h2>
-              <span>{tr(selectedThread.status === "open" ? "处理中" : "已结束")}</span>
-            </header>
-            <div className="stationMessageList">
-              {messages.map((message) => (
-                <article className={message.authorRole === "admin" ? "isAdmin" : "isUser"} key={message.id}>
-                  <header>
-                    <strong>{message.authorRole === "admin" ? stationDisplayName : tr("我")}</strong>
-                    <time>{new Date(message.createdAt).toLocaleString(locale === "zh-Hant" ? "zh-TW" : "zh-CN", { hour12: false })}</time>
-                  </header>
-                  <p>{message.body}</p>
-                </article>
-              ))}
-            </div>
-            {selectedThread.status === "open" && canMessageStation ? (
-              <form className="stationReplyForm" action={replyStationThreadAction}>
-                <input name="threadId" type="hidden" value={selectedThread.id} />
-                <label>
-                  <span className="srOnly">{tr("回复")}</span>
-                  <textarea name="body" rows={3} maxLength={4000} placeholder={tr("回复")} required />
-                </label>
-                <button type="submit" title={tr("发送")} aria-label={tr("发送")}><Send size={16} aria-hidden="true" /></button>
-              </form>
-            ) : null}
-          </div>
         ) : (
-          <>
-            <div className="stationThreadList">
-              {threads.map((thread) => (
-                <Link href={`/messages?tab=station&thread=${thread.id}`} key={thread.id}>
-                  <span className={thread.unreadForUser ? "messageUnreadDot" : ""} />
-                  <span>
-                    <strong>{thread.subject}</strong>
-                    <small>{tr(thread.status === "open" ? "处理中" : "已结束")} · {new Date(thread.lastMessageAt).toLocaleDateString(locale === "zh-Hant" ? "zh-TW" : "zh-CN")}</small>
+          <section className={selectedThread ? "stationChatWorkspace hasSelection" : "stationChatWorkspace"}>
+            <aside className="stationChatSidebar">
+              <header>
+                <span><Mail size={16} aria-hidden="true" /><strong>{stationDisplayName}</strong></span>
+                {canMessageStation ? (
+                  <details className="stationNewThread isCompact">
+                    <summary aria-label={`${tr("联系")}${stationDisplayName}`} title={`${tr("联系")}${stationDisplayName}`}>
+                      <Plus size={17} aria-hidden="true" />
+                    </summary>
+                    <form action={createStationThreadAction}>
+                      <strong>{tr("新对话")}</strong>
+                      <label><span>{tr("主题")}</span><input name="subject" maxLength={80} required /></label>
+                      <label><span>{tr("内容")}</span><textarea name="body" rows={5} required /></label>
+                      <button type="submit"><Send size={15} aria-hidden="true" />{tr("发送")}</button>
+                    </form>
+                  </details>
+                ) : null}
+              </header>
+              <nav className="stationThreadList" aria-label={tr("站务对话")}>
+                {threads.map((thread) => (
+                  <Link className={selectedThread?.id === thread.id ? "isActive" : ""} href={`/messages?tab=station&thread=${thread.id}`} key={thread.id}>
+                    <span className="stationThreadAvatar">
+                      <MessageSquareText size={15} aria-hidden="true" />
+                      {thread.unreadForUser ? <i className="messageUnreadDot" /> : null}
+                    </span>
+                    <span>
+                      <strong>{thread.subject}</strong>
+                      <small>{tr(thread.status === "open" ? "处理中" : "已结束")} · {new Date(thread.lastMessageAt).toLocaleDateString(locale === "zh-Hant" ? "zh-TW" : "zh-CN")}</small>
+                    </span>
+                    <ChevronRight size={15} aria-hidden="true" />
+                  </Link>
+                ))}
+                {!threads.length ? <p className="messageEmpty">{tr("暂无对话")}</p> : null}
+              </nav>
+            </aside>
+            {selectedThread ? (
+              <div className="stationConversation">
+                <header>
+                  <Link className="stationChatBack" href="/messages?tab=station" aria-label={tr("返回站务列表")}><ChevronRight size={17} aria-hidden="true" /></Link>
+                  <span className="stationConversationAvatar"><Mail size={16} aria-hidden="true" /></span>
+                  <span className="stationConversationHeading">
+                    <h2>{selectedThread.subject}</h2>
+                    <small>{stationDisplayName}</small>
                   </span>
-                  <ChevronRight size={17} aria-hidden="true" />
-                </Link>
-              ))}
-            </div>
-            {canMessageStation ? (
-              <details className="stationNewThread">
-                <summary><Plus size={16} aria-hidden="true" />{tr("联系")}{stationDisplayName}</summary>
-                <form action={createStationThreadAction}>
-                  <label><span>{tr("主题")}</span><input name="subject" maxLength={80} required /></label>
-                  <label><span>{tr("内容")}</span><textarea name="body" rows={5} maxLength={4000} required /></label>
-                  <button type="submit"><MessageSquareText size={15} aria-hidden="true" />{tr("发送")}</button>
-                </form>
-              </details>
-            ) : null}
-          </>
+                  <span className={selectedThread.status === "open" ? "stationConversationStatus isOpen" : "stationConversationStatus"}>
+                    {tr(selectedThread.status === "open" ? "处理中" : "已结束")}
+                  </span>
+                </header>
+                <UserStationConversation
+                  threadId={selectedThread.id}
+                  initialMessages={messages}
+                  initialStatus={selectedThread.status}
+                  stationDisplayName={stationDisplayName}
+                  selfLabel={tr("我")}
+                  replyLabel={tr("回复")}
+                  placeholder={tr("输入消息…")}
+                  sendLabel={tr("发送")}
+                  closedLabel={tr("对话已结束")}
+                />
+              </div>
+            ) : (
+              <div className="stationChatEmpty">
+                <MessageSquareText size={24} aria-hidden="true" />
+                <strong>{threads.length ? tr("选择一条对话") : tr("暂无站务对话")}</strong>
+                <small>{canMessageStation ? tr("使用左上角加号发起新对话") : tr("当前等级暂不可发起站务对话")}</small>
+              </div>
+            )}
+          </section>
         )}
       </section>
     </UserWorkspace>

@@ -1,23 +1,26 @@
 "use client";
 
 import { ChevronRight, Dices, LockKeyhole } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { localeFromPathname, uiText, withLocalePath } from "@/lib/locale";
 import { beginNavigationProgress } from "./NavigationProgress";
 
-function randomCatalogHref() {
+function randomCatalogHref(library = "") {
   const seed = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-  return `/novels?random=${encodeURIComponent(seed)}`;
+  const params = new URLSearchParams({ random: seed });
+  if (library && library !== "default") params.set("library", library);
+  return `/novels?${params.toString()}`;
 }
 
 export function CatalogRandomButton() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const locale = localeFromPathname(usePathname());
   const label = uiText(locale, "随便看看");
 
   function openRandomSelection() {
     beginNavigationProgress();
-    router.push(withLocalePath(randomCatalogHref(), locale));
+    router.push(withLocalePath(randomCatalogHref(searchParams.get("library") || searchParams.get("sourceLibrary") || ""), locale));
   }
 
   return (

@@ -28,7 +28,7 @@ function withTempDatabase(t: TestContext) {
   });
 }
 
-test("video playback leases enforce concurrency, heartbeat, expiry, and release", (t) => {
+test("video playback leases enforce concurrency, stable clients, capacity, heartbeat, and expiry", (t) => {
   withTempDatabase(t);
   const db = getDb();
   const userId = Number(db
@@ -47,43 +47,104 @@ test("video playback leases enforce concurrency, heartbeat, expiry, and release"
     .run("video", "视频二", "two.mp4", "video/two.mp4", "video/mp4", 100, 1)
     .lastInsertRowid);
   const now = Date.now();
-  const first = createVideoPlaybackLease({ userId, mediaId: firstVideo, limit: 1, now });
+  const viewerKey = `user:${userId}`;
+  const first = createVideoPlaybackLease({
+    viewerKey,
+    userId,
+    clientId: "client_first_123456",
+    mediaId: firstVideo,
+    limit: 1,
+    now,
+  });
   assert.equal(first.ok, true);
   if (!first.ok) return;
   assert.equal(validateVideoPlaybackLease({
     id: first.lease.id,
     token: first.lease.token,
-    userId,
+    viewerKey,
     mediaId: firstVideo,
     now,
   }), true);
   assert.deepEqual(
-    createVideoPlaybackLease({ userId, mediaId: secondVideo, limit: 1, now }),
+    createVideoPlaybackLease({
+      viewerKey,
+      userId,
+      clientId: "client_second_123456",
+      mediaId: secondVideo,
+      limit: 1,
+      now,
+    }),
     { ok: false, reason: "limit_reached", limit: 1 },
   );
   assert.equal(refreshVideoPlaybackLease({
     id: first.lease.id,
     token: first.lease.token,
-    userId,
+    viewerKey,
     mediaId: firstVideo,
     now: now + 25_000,
   }), now + 115_000);
   assert.equal(releaseVideoPlaybackLease({
     id: first.lease.id,
     token: first.lease.token,
-    userId,
+    viewerKey,
     mediaId: firstVideo,
   }), true);
-  assert.equal(createVideoPlaybackLease({ userId, mediaId: secondVideo, limit: 1, now }).ok, true);
+  assert.equal(createVideoPlaybackLease({
+    viewerKey,
+    userId,
+    clientId: "client_second_123456",
+    mediaId: secondVideo,
+    limit: 1,
+    now,
+  }).ok, true);
 
-  const expiring = createVideoPlaybackLease({ userId, mediaId: firstVideo, limit: 2, now });
+  const expiring = createVideoPlaybackLease({
+    viewerKey,
+    userId,
+    clientId: "client_expiring_1234",
+    mediaId: firstVideo,
+    limit: 2,
+    now,
+  });
   assert.equal(expiring.ok, true);
   if (!expiring.ok) return;
   assert.equal(validateVideoPlaybackLease({
     id: expiring.lease.id,
     token: expiring.lease.token,
-    userId,
+    viewerKey,
     mediaId: firstVideo,
     now: now + 90_001,
   }), false);
+
+  const reused = createVideoPlaybackLease({
+    viewerKey,
+    userId,
+    clientId: "client_second_123456",
+    mediaId: firstVideo,
+    limit: 2,
+    now,
+  });
+  assert.equal(reused.ok, true);
+
+  const guest = createVideoPlaybackLease({
+    viewerKey: "guest:abcdefghijklmnopqrstuvwxyz123456",
+    clientId: "guest_client_123456",
+    mediaId: firstVideo,
+    limit: 1,
+    storageNodeId: "video-node",
+    reservedKbps: 2_000,
+    nodeMaxStreams: 1,
+    now: now + 100_000,
+  });
+  assert.equal(guest.ok, true);
+  assert.deepEqual(createVideoPlaybackLease({
+    viewerKey: "guest:zyxwvutsrqponmlkjihgfedcba654321",
+    clientId: "guest_client_654321",
+    mediaId: secondVideo,
+    limit: 1,
+    storageNodeId: "video-node",
+    reservedKbps: 2_000,
+    nodeMaxStreams: 1,
+    now: now + 100_000,
+  }), { ok: false, reason: "node_busy" });
 });

@@ -4,13 +4,13 @@ import { readNovelContent, type Novel } from "./books";
 import { getContentSearchDatabasePath } from "./config";
 import { normalizeSearchText } from "./search-query";
 
-export const CONTENT_SEARCH_INDEX_VERSION = 1;
+export const CONTENT_SEARCH_INDEX_VERSION = 2;
 export const CONTENT_SEARCH_MAX_SOURCE_RATIO = 5;
 const CONTENT_SEARCH_RATIO_MIN_SOURCE_BYTES = 10 * 1024 * 1024;
 
 export type ContentSearchNovelRecord = Pick<
   Novel,
-  "id" | "relative_path" | "content_hash" | "size_bytes" | "mtime_ms"
+  "id" | "relative_path" | "storage_mode" | "content_hash" | "size_bytes" | "mtime_ms"
 >;
 
 type ContentSearchStateRow = {
@@ -344,7 +344,7 @@ export function getContentSearchIndexSummary(
   }
 
   const novels = mainDb
-    .prepare("SELECT id, relative_path, content_hash, size_bytes, mtime_ms FROM novels ORDER BY id ASC")
+    .prepare("SELECT id, relative_path, storage_mode, content_hash, size_bytes, mtime_ms FROM novels ORDER BY id ASC")
     .all() as ContentSearchNovelRecord[];
   const states = new Map(listStates(searchDb).map((state) => [state.novelId, state]));
   const failures = new Map(listFailures(searchDb).map((failure) => [failure.novelId, failure]));
@@ -427,7 +427,7 @@ export async function buildContentSearchIndex(
   options: ContentSearchIndexBuildOptions = {},
 ): Promise<ContentSearchIndexResult> {
   const novels = mainDb
-    .prepare("SELECT id, relative_path, content_hash, size_bytes, mtime_ms FROM novels ORDER BY id ASC")
+    .prepare("SELECT id, relative_path, storage_mode, content_hash, size_bytes, mtime_ms FROM novels ORDER BY id ASC")
     .all() as ContentSearchNovelRecord[];
   const sourceBytes = novels.reduce((total, novel) => total + novel.size_bytes, 0);
   if (options.force) {

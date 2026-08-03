@@ -7,6 +7,11 @@ import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
 import { deleteStoredCover } from "@/lib/media-cover";
 import {
+  encodeEntitlementDefinition,
+  entitlementTargetExists,
+  parseEntitlementDefinition,
+} from "@/lib/entitlements";
+import {
   createMarketProduct,
   createRedemptionCodeBatch,
   deleteMarketDeliveryItem,
@@ -67,7 +72,6 @@ export async function createMarketProductAction(formData: FormData) {
     id = createMarketProduct({
       slug: String(formData.get("slug") || ""),
       title: String(formData.get("title") || ""),
-      summary: String(formData.get("summary") || ""),
       description: String(formData.get("description") || ""),
       minLevel: Number(formData.get("minLevel")),
       ...price,
@@ -97,7 +101,6 @@ export async function updateMarketProductInlineAction(
       id,
       slug: String(formData.get("slug") || ""),
       title: String(formData.get("title") || ""),
-      summary: String(formData.get("summary") || ""),
       description: String(formData.get("description") || ""),
       status: publish ? "published" : current.status,
       minLevel: Number(formData.get("minLevel")),
@@ -186,13 +189,20 @@ export async function saveMarketDeliveryItemInlineAction(
     const kindValue = String(formData.get("kind"));
     const kind: MarketDeliveryKind =
       kindValue === "secret" || kindValue === "file" || kindValue === "entitlement" ? kindValue : "text";
-    const content = kind === "entitlement"
-      ? JSON.stringify({
-          resourceType: String(formData.get("resourceType") || "").trim(),
-          resourceId: String(formData.get("resourceId") || "").trim(),
-          rights: String(formData.get("rights") || "").split(/[,\s]+/).map((item) => item.trim()).filter(Boolean),
-        })
-      : String(formData.get("content") || "");
+    let content = String(formData.get("content") || "");
+    if (kind === "entitlement") {
+      const durationDays = Math.min(Math.max(Math.floor(Number(formData.get("durationDays")) || 0), 0), 3650);
+      const definition = parseEntitlementDefinition({
+        targetType: String(formData.get("targetType") || ""),
+        targetId: String(formData.get("targetId") || ""),
+        rights: formData.getAll("rights").map(String),
+        durationSeconds: durationDays > 0 ? durationDays * 24 * 60 * 60 : null,
+      });
+      if (!definition || !entitlementTargetExists(definition)) {
+        throw new MarketError("请选择有效的站内资源与权限", "invalid");
+      }
+      content = encodeEntitlementDefinition(definition);
+    }
     saveMarketDeliveryItem({
       id: Number(formData.get("deliveryId")) || undefined,
       productId,

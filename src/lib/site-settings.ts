@@ -2,11 +2,13 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
+  DEFAULT_HOME_PORTAL_ACCESS_MODES,
   DEFAULT_HOME_PORTAL_ORDER,
+  normalizeHomePortalAccessModes,
   normalizeHomePortalOrder,
-  normalizePublicDisplayHomeCards,
+  resolveHomePortalAccessMode,
+  type HomePortalAccessModes,
   type HomePortalCardKey,
-  type HomePortalContentCardKey,
 } from "./home-portal";
 import {
   isColorPalette,
@@ -91,25 +93,13 @@ export type SiteSettings = {
   userDailyReportLimit: number;
   userAvatarMaxBytes: number;
   stationDisplayName: string;
-  announcementCardEnabled: boolean;
-  guestAnnouncementCardEnabled: boolean;
   announcementCardTarget: AnnouncementCardTarget;
   homePortalOrder: HomePortalCardKey[];
-  publicDisplayHomeCards: HomePortalContentCardKey[];
+  homePortalAccessModes: HomePortalAccessModes;
   analyticsEnabled: boolean;
   analyticsRealtimeLimit: number;
-  novelLibraryEnabled: boolean;
-  videoLibraryEnabled: boolean;
-  audioLibraryEnabled: boolean;
-  fileLibraryEnabled: boolean;
-  tagLibraryEnabled: boolean;
   advancedTagSearchEnabled: boolean;
   hotwordLinksEnabled: boolean;
-  guestLibraryNavEnabled: boolean;
-  guestVideoNavEnabled: boolean;
-  guestAudioNavEnabled: boolean;
-  guestFileNavEnabled: boolean;
-  guestTagLibraryNavEnabled: boolean;
   guestAdvancedTagSearchEnabled: boolean;
   guestHotwordLinksEnabled: boolean;
   videoThumbnailSinglePercent: number;
@@ -132,7 +122,7 @@ type SiteSettingsGlobal = typeof globalThis & {
   siteSettingsCache?: SiteSettingsCache;
 };
 
-const SITE_SETTINGS_CACHE_SCHEMA_VERSION = 9;
+const SITE_SETTINGS_CACHE_SCHEMA_VERSION = 10;
 
 const DEFAULT_SETTINGS_PREVIEW_TEXT =
   process.env.SETTINGS_PREVIEW_TEXT?.trim() ||
@@ -210,25 +200,13 @@ const DEFAULT_SETTINGS: SiteSettings = {
   userDailyReportLimit: 50,
   userAvatarMaxBytes: 0,
   stationDisplayName: "站务",
-  announcementCardEnabled: true,
-  guestAnnouncementCardEnabled: true,
   announcementCardTarget: "list",
   homePortalOrder: DEFAULT_HOME_PORTAL_ORDER,
-  publicDisplayHomeCards: [],
+  homePortalAccessModes: DEFAULT_HOME_PORTAL_ACCESS_MODES,
   analyticsEnabled: false,
   analyticsRealtimeLimit: 0,
-  novelLibraryEnabled: true,
-  videoLibraryEnabled: true,
-  audioLibraryEnabled: true,
-  fileLibraryEnabled: true,
-  tagLibraryEnabled: true,
   advancedTagSearchEnabled: false,
   hotwordLinksEnabled: true,
-  guestLibraryNavEnabled: false,
-  guestVideoNavEnabled: false,
-  guestAudioNavEnabled: false,
-  guestFileNavEnabled: false,
-  guestTagLibraryNavEnabled: false,
   guestAdvancedTagSearchEnabled: false,
   guestHotwordLinksEnabled: false,
   videoThumbnailSinglePercent: 33,
@@ -296,6 +274,23 @@ function cleanCatalogPromotionOrder(value: unknown): CatalogPromotionOrder {
 
 function cleanBool(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function legacyHomePortalAccessModes(value: Record<string, unknown>): HomePortalAccessModes {
+  const displayed = new Set(Array.isArray(value.publicDisplayHomeCards) ? value.publicDisplayHomeCards : []);
+  const mode = (key: string, enabledKey: string, guestKey: string) => resolveHomePortalAccessMode(
+    cleanBool(value[enabledKey], true),
+    cleanBool(value[guestKey], key === "announcement"),
+    displayed.has(key),
+  );
+  return {
+    announcement: mode("announcement", "announcementCardEnabled", "guestAnnouncementCardEnabled"),
+    novels: mode("novels", "novelLibraryEnabled", "guestLibraryNavEnabled"),
+    tags: mode("tags", "tagLibraryEnabled", "guestTagLibraryNavEnabled"),
+    video: mode("video", "videoLibraryEnabled", "guestVideoNavEnabled"),
+    audio: mode("audio", "audioLibraryEnabled", "guestAudioNavEnabled"),
+    file: mode("file", "fileLibraryEnabled", "guestFileNavEnabled"),
+  };
 }
 
 function cleanStringList(value: unknown, limit = 100): string[] {
@@ -489,28 +484,16 @@ function readSiteSettingsFromDisk(): SiteSettings {
       userDailyReportLimit: cleanInt(parsed.userDailyReportLimit, DEFAULT_SETTINGS.userDailyReportLimit, 1, 500),
       userAvatarMaxBytes: cleanInt(parsed.userAvatarMaxBytes, DEFAULT_SETTINGS.userAvatarMaxBytes, 0, 10 * 1024 ** 2),
       stationDisplayName: cleanText(parsed.stationDisplayName).slice(0, 20) || DEFAULT_SETTINGS.stationDisplayName,
-      announcementCardEnabled: cleanBool(parsed.announcementCardEnabled, DEFAULT_SETTINGS.announcementCardEnabled),
-      guestAnnouncementCardEnabled: cleanBool(
-        parsed.guestAnnouncementCardEnabled,
-        DEFAULT_SETTINGS.guestAnnouncementCardEnabled,
-      ),
       announcementCardTarget: parsed.announcementCardTarget === "latest" ? "latest" : "list",
       homePortalOrder: normalizeHomePortalOrder(parsed.homePortalOrder),
-      publicDisplayHomeCards: normalizePublicDisplayHomeCards(parsed.publicDisplayHomeCards),
+      homePortalAccessModes: normalizeHomePortalAccessModes(
+        parsed.homePortalAccessModes,
+        legacyHomePortalAccessModes(parsed as Record<string, unknown>),
+      ),
       analyticsEnabled: cleanBool(parsed.analyticsEnabled, DEFAULT_SETTINGS.analyticsEnabled),
       analyticsRealtimeLimit: cleanInt(parsed.analyticsRealtimeLimit, DEFAULT_SETTINGS.analyticsRealtimeLimit, 0, 10_000),
-      novelLibraryEnabled: cleanBool(parsed.novelLibraryEnabled, DEFAULT_SETTINGS.novelLibraryEnabled),
-      videoLibraryEnabled: cleanBool(parsed.videoLibraryEnabled, DEFAULT_SETTINGS.videoLibraryEnabled),
-      audioLibraryEnabled: cleanBool(parsed.audioLibraryEnabled, DEFAULT_SETTINGS.audioLibraryEnabled),
-      fileLibraryEnabled: cleanBool(parsed.fileLibraryEnabled, DEFAULT_SETTINGS.fileLibraryEnabled),
-      tagLibraryEnabled: cleanBool(parsed.tagLibraryEnabled, DEFAULT_SETTINGS.tagLibraryEnabled),
       advancedTagSearchEnabled: cleanBool(parsed.advancedTagSearchEnabled, DEFAULT_SETTINGS.advancedTagSearchEnabled),
       hotwordLinksEnabled: cleanBool(parsed.hotwordLinksEnabled, DEFAULT_SETTINGS.hotwordLinksEnabled),
-      guestLibraryNavEnabled: cleanBool(parsed.guestLibraryNavEnabled, DEFAULT_SETTINGS.guestLibraryNavEnabled),
-      guestVideoNavEnabled: cleanBool(parsed.guestVideoNavEnabled, DEFAULT_SETTINGS.guestVideoNavEnabled),
-      guestAudioNavEnabled: cleanBool(parsed.guestAudioNavEnabled, DEFAULT_SETTINGS.guestAudioNavEnabled),
-      guestFileNavEnabled: cleanBool(parsed.guestFileNavEnabled, DEFAULT_SETTINGS.guestFileNavEnabled),
-      guestTagLibraryNavEnabled: cleanBool(parsed.guestTagLibraryNavEnabled, DEFAULT_SETTINGS.guestTagLibraryNavEnabled),
       guestAdvancedTagSearchEnabled: cleanBool(parsed.guestAdvancedTagSearchEnabled, DEFAULT_SETTINGS.guestAdvancedTagSearchEnabled),
       guestHotwordLinksEnabled: cleanBool(parsed.guestHotwordLinksEnabled, DEFAULT_SETTINGS.guestHotwordLinksEnabled),
       videoThumbnailSinglePercent: cleanInt(parsed.videoThumbnailSinglePercent, DEFAULT_SETTINGS.videoThumbnailSinglePercent, 1, 99),

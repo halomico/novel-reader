@@ -441,8 +441,13 @@ export function recordNovelVisit(novelId: number, ip = "", userAgent = "") {
     .run(ip.slice(0, 64), userAgent.slice(0, 240), novelId);
 }
 
-export function recordReadingHistory(userId: number, book: Novel, _segmentIndex = 0) {
-  recordReadingOpen(userId, book);
+export function recordReadingHistory(
+  userId: number,
+  book: Novel,
+  _segmentIndex = 0,
+  options: { chapterId?: number | null; contentVersion?: string } = {},
+) {
+  recordReadingOpen(userId, book, options);
 }
 
 export function recordMediaHistory(userId: number, asset: Pick<MediaAsset, "id" | "kind" | "title">) {

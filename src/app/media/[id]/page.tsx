@@ -6,24 +6,28 @@ import { after } from "next/server";
 import { cache } from "react";
 import { MediaAudioPlayer, type AudioQueueTrack } from "@/components/MediaAudioPlayer";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { ContentAccessGate } from "@/components/ContentAccessGate";
+import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import Link from "@/components/LocalizedLink";
 import { MediaConnectionHint } from "@/components/MediaConnectionHint";
-import { MediaFavoriteButton } from "@/components/MediaFavoriteButton";
+import { MediaFeedbackRail } from "@/components/MediaFeedbackRail";
 import { MediaPlayer } from "@/components/MediaPlayer";
 import { MediaTextDocument } from "@/components/MediaTextDocument";
-import { MediaRecommendationButton } from "@/components/MediaRecommendationButton";
 import { MediaVideoCard } from "@/components/MediaVideoCard";
-import { ReportMediaButton } from "@/components/ReportMediaButton";
 import { SiteHeader } from "@/components/SiteHeader";
 import { recordAnalyticsEvent } from "@/lib/analytics";
 import { getAudioDefaultPlaybackMode, getRelatedVideoSettings, getVideoThumbnailSettings } from "@/lib/config";
 import { checkContentAccess, hasScopedContentAccessRules } from "@/lib/content-access";
 import { isMediaFavorite } from "@/lib/favorites";
+import { hasMediaAssetEntitlement } from "@/lib/entitlements";
+import { getVideoPlaybackAccess } from "@/lib/media-access";
 import { mediaCoverVersion } from "@/lib/media-cover-version";
 import {
   getMediaAsset,
   isFeedbackMediaKind,
   isMediaKindAccessible,
+  isMediaKindConsumable,
+  isMediaKindEntryVisible,
   isMediaKindPublic,
   listMediaFolderAssets,
   listRelatedVideoAssets,
@@ -85,6 +89,9 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   if (!asset) {
     return { title: uiText(locale, "资源不存在"), robots: NO_INDEX_ROBOTS };
   }
+  if (!isMediaKindPublic(asset.kind)) {
+    return { title: uiText(locale, KIND_LABELS[asset.kind]), robots: NO_INDEX_ROBOTS };
+  }
   const title = await localizeText(displayTitle(asset.title, asset.fileName), locale);
   const canonicalPath = `/media/${asset.id}`;
   const canonical = withLocalePath(canonicalPath, locale);
@@ -105,7 +112,14 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
   const locale = await getRequestLocale();
   const user = await getCurrentUser();
   const asset = getAssetById(Number((await params).id));
-  if (!asset || !isMediaKindAccessible(asset.kind, Boolean(user))) notFound();
+  if (!asset) notFound();
+  if (!isMediaKindAccessible(asset.kind, Boolean(user))) {
+    if (!user && isMediaKindEntryVisible(asset.kind, false)) {
+      return <ContentEntryGatePage locale={locale} label={uiText(locale, KIND_LABELS[asset.kind])} returnTo={`/media/${asset.id}`} />;
+    }
+    notFound();
+  }
+  const contentAccessible = isMediaKindConsumable(asset.kind, Boolean(user));
   const mediaPublicOrigin = getMediaPublicUrlForAsset(asset.storageNodeId, asset.kind);
 
   const headerStore = await headers();
@@ -133,7 +147,7 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
   const displayDescription = await localizeText(asset.description, locale);
   const displayFolder = await localizeText(asset.folder, locale);
   const listFolder = asset.kind === "video" ? "" : asset.folder;
-  const folderAudio = asset.kind === "audio" ? listMediaFolderAssets("audio", asset.folder, 2_000) : [];
+  const folderAudio = asset.kind === "audio" && contentAccessible ? listMediaFolderAssets("audio", asset.folder, 2_000) : [];
   if (asset.kind === "audio" && !folderAudio.some((item) => item.id === asset.id)) folderAudio.push(asset);
   const audioQueue: AudioQueueTrack[] = await Promise.all(folderAudio
     .sort((left, right) => left.title.localeCompare(right.title, "zh-CN", { numeric: true }))
@@ -168,8 +182,14 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
   const recommendation = user && feedbackMedia ? getMediaRecommendationState(user.id, asset.id) : null;
   const canRecommend = feedbackMedia && hasUserPermission(user, "novel_feedback");
   const canReport = Boolean(feedbackMedia && user?.role === "user" && hasUserPermission(user, "content_report"));
-  const canDownloadVideo = asset.kind === "video" && hasUserPermission(user, "video_download");
+  const canDownloadVideo = asset.kind === "video" && Boolean(
+    user && (
+      user.role === "admin" ||
+      hasMediaAssetEntitlement(user.id, asset, "download")
+    ),
+  );
   const textPreviewSupported = isMediaTextPreviewSupported(asset);
+  const videoPlaybackAccess = asset.kind === "video" ? getVideoPlaybackAccess(asset, user) : null;
 
   return (
     <>
@@ -219,7 +239,11 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
                 posterVersion={posterVersion}
                 posterUrl={posterUrl}
                 sourceVersion={asset.mtimeMs}
-                leaseRequired={Boolean(user)}
+                authenticated={Boolean(user)}
+                playSodaPrice={asset.playSodaPrice}
+                initialPlaybackAllowed={Boolean(videoPlaybackAccess?.allowed)}
+                initialAccessExpiresAt={videoPlaybackAccess?.expiresAt || null}
+                contentAccessible={contentAccessible}
               />
             </div>
             <section className="mediaVideoInfo" aria-label={uiText(locale, "标签与简介")}>
@@ -234,21 +258,21 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
                   </nav>
                 ) : <span />}
                 {user ? (
-                  <div className="readerFeedbackActions feedbackActionTrio mediaVideoActions" aria-label={uiText(locale, "视频操作")}>
-                    {canRecommend && recommendation ? (
-                      <MediaRecommendationButton
-                        mediaId={asset.id}
-                        initialRecommended={recommendation.recommended}
-                      />
-                    ) : null}
-                    <MediaFavoriteButton mediaId={asset.id} initialFavorite={favorite} />
-                    {canReport ? <ReportMediaButton mediaId={asset.id} title={title} kind="video" /> : null}
-                  </div>
+                  <MediaFeedbackRail
+                    mediaId={asset.id}
+                    title={title}
+                    initialFavorite={favorite}
+                    initialRecommended={Boolean(recommendation?.recommended)}
+                    canRecommend={canRecommend}
+                    canReport={canReport}
+                  />
                 ) : null}
               </div> : null}
               {displayDescription ? <p className="mediaDescription">{displayDescription}</p> : null}
             </section>
           </section>
+        ) : !contentAccessible ? (
+          <ContentAccessGate returnTo={`/media/${asset.id}`} />
         ) : asset.kind === "audio" ? (
           <MediaAudioPlayer
             initialId={asset.id}

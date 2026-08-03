@@ -28,8 +28,8 @@ const MODE_LABELS: Record<AudioPlaybackMode, string> = {
   "repeat-one": "单曲循环",
 };
 
-const QUEUE_ROW_HEIGHT = 36;
-const QUEUE_VIEWPORT_HEIGHT = 260;
+const QUEUE_ROW_HEIGHT = 52;
+const QUEUE_VIEWPORT_HEIGHT = 312;
 const QUEUE_OVERSCAN = 5;
 
 export function MediaAudioPlayer({
@@ -70,9 +70,10 @@ export function MediaAudioPlayer({
     const audio = audioRef.current;
     if (!audio || loadedTrackIdRef.current === activeTrack.id) return;
     loadedTrackIdRef.current = activeTrack.id;
+    const shouldAutoPlay = autoPlayRef.current;
+    autoPlayRef.current = false;
     audio.load();
-    if (autoPlayRef.current) {
-      autoPlayRef.current = false;
+    if (shouldAutoPlay) {
       void audio.play().catch(() => undefined);
     }
   }, [activeTrack.id]);
@@ -94,7 +95,7 @@ export function MediaAudioPlayer({
     window.localStorage.setItem("media-audio-playback-mode", nextMode);
   }
 
-  function chooseTrack(track: AudioQueueTrack, autoPlay = true) {
+  function chooseTrack(track: AudioQueueTrack, autoPlay = false) {
     if (track.id === activeTrack.id) return;
     autoPlayRef.current = autoPlay;
     setActiveTrack(track);
@@ -107,9 +108,9 @@ export function MediaAudioPlayer({
     void fetch(`${basePathPrefix}/${activeTrack.id}/play`, { method: "POST", keepalive: true }).catch(() => countedIdsRef.current.delete(activeTrack.id));
   }
 
-  function playAdjacent(offset: -1 | 1) {
+  function playAdjacent(offset: -1 | 1, autoPlay = false) {
     const track = tracks[activeIndex + offset];
-    if (track) chooseTrack(track);
+    if (track) chooseTrack(track, autoPlay);
   }
 
   function handleEnded() {
@@ -119,7 +120,7 @@ export function MediaAudioPlayer({
       void audio.play();
       return;
     }
-    if (mode === "next") playAdjacent(1);
+    if (mode === "next") playAdjacent(1, true);
   }
 
   return (
@@ -132,7 +133,16 @@ export function MediaAudioPlayer({
         </div>
       </div>
       <div className="mediaAudioPlayerPanel">
-        <audio ref={audioRef} className="mediaAudioPlayer" controls autoPlay preload="auto" onPlay={recordPlay} onEnded={handleEnded} aria-label={`${uiText(locale, "播放")} ${activeTrack.title}`}>
+        <audio
+          ref={audioRef}
+          className="mediaAudioPlayer"
+          controls
+          preload="metadata"
+          onPlay={recordPlay}
+          onPause={() => { autoPlayRef.current = false; }}
+          onEnded={handleEnded}
+          aria-label={`${uiText(locale, "播放")} ${activeTrack.title}`}
+        >
           <source src={`${basePathPrefix}/${activeTrack.id}/stream?v=${Math.floor(activeTrack.version)}`} />
           {uiText(locale, "当前浏览器无法播放这个音频。")}
         </audio>

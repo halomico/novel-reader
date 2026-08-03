@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
-import { Clock, KeyRound, Trash2, UserRound } from "lucide-react";
+import { Clock, KeyRound, MessageCircle, Trash2, UserRound } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LocalDateTime } from "@/components/LocalDateTime";
+import { AdminUserEntitlementPanel } from "@/components/AdminUserEntitlementPanel";
 import { Pagination } from "@/components/Pagination";
+import { listUserEntitlementsPage } from "@/lib/entitlements";
 import { getUserById, listBrowseHistoryPage, listUserLoginRecordPage } from "@/lib/users";
 import { clearAdminUserHistoryAction, deleteAdminUserHistoryAction } from "../../actions";
 import { AdminFrame } from "../../AdminFrame";
@@ -24,6 +26,10 @@ type AdminUserDetailPageProps = {
     returnPath?: string;
     loginPage?: string;
     historyPage?: string;
+    rightsPage?: string;
+    view?: string;
+    notice?: string;
+    tone?: "success" | "warning" | "error";
   }>;
 };
 
@@ -46,18 +52,28 @@ export default async function AdminUserDetailPage({ params, searchParams }: Admi
     notFound();
   }
 
-  const history = listBrowseHistoryPage(user.id, { page: Number(query.historyPage || 1), pageSize: 20 });
-  const loginRecords = listUserLoginRecordPage(user.id, { page: Number(query.loginPage || 1), pageSize: 20 });
+  const view = query.view === "rights" || query.view === "login" || query.view === "history" ? query.view : "overview";
+  const history = view === "history"
+    ? listBrowseHistoryPage(user.id, { page: Number(query.historyPage || 1), pageSize: 20 })
+    : null;
+  const loginRecords = view === "login"
+    ? listUserLoginRecordPage(user.id, { page: Number(query.loginPage || 1), pageSize: 20 })
+    : null;
+  const entitlements = view === "rights"
+    ? listUserEntitlementsPage(user.id, { page: Number(query.rightsPage || 1), pageSize: 20 })
+    : null;
   const returnPath = safeReturnPath(query.returnPath);
   const detailBasePath = `/admin/users/${user.id}`;
   const detailParams = new URLSearchParams();
   if (returnPath !== "/admin/users") detailParams.set("returnPath", returnPath);
-  if (loginRecords.page > 1) detailParams.set("loginPage", String(loginRecords.page));
-  if (history.page > 1) detailParams.set("historyPage", String(history.page));
+  if (view !== "overview") detailParams.set("view", view);
+  if (loginRecords && loginRecords.page > 1) detailParams.set("loginPage", String(loginRecords.page));
+  if (history && history.page > 1) detailParams.set("historyPage", String(history.page));
+  if (entitlements && entitlements.page > 1) detailParams.set("rightsPage", String(entitlements.page));
   const detailReturnPath = `${detailBasePath}${detailParams.size ? `?${detailParams.toString()}` : ""}`;
 
   return (
-    <AdminFrame active="users" breadcrumbs={[{ label: "用户管理", href: returnPath }, { label: user.displayName }]}>
+    <AdminFrame active="users" notice={query.notice} tone={query.tone} breadcrumbs={[{ label: "用户管理", href: returnPath }, { label: user.displayName }]}>
       <section className="adminHome adminUserDetailPage">
         <article className="adminPanel">
           <div className="adminPanelHeader">
@@ -65,7 +81,12 @@ export default async function AdminUserDetailPage({ params, searchParams }: Admi
               <h2>{user.displayName}</h2>
               <p>@{user.username}</p>
             </div>
-            <UserRound size={20} aria-hidden="true" />
+            <span className="adminPanelHeaderActions">
+              <Link className="adminTableIconButton" href={`/admin/station?compose=${encodeURIComponent(user.username)}`} title="发起站务对话" aria-label="发起站务对话">
+                <MessageCircle size={16} aria-hidden="true" />
+              </Link>
+              <UserRound size={20} aria-hidden="true" />
+            </span>
           </div>
           <div className="adminUserDetailGrid">
             <p>
@@ -103,7 +124,32 @@ export default async function AdminUserDetailPage({ params, searchParams }: Admi
           </div>
         </article>
 
-        <section className="adminLoginAudit">
+        <nav className="adminUserDetailTabs" aria-label="用户详情">
+          {[
+            ["overview", "概览"],
+            ["rights", "权益"],
+            ["login", "登录"],
+            ["history", "最近"],
+          ].map(([key, label]) => {
+            const params = new URLSearchParams();
+            if (key !== "overview") params.set("view", key);
+            if (returnPath !== "/admin/users") params.set("returnPath", returnPath);
+            return <Link className={view === key ? "isActive" : ""} href={`${detailBasePath}${params.size ? `?${params.toString()}` : ""}`} key={key}>{label}</Link>;
+          })}
+        </nav>
+
+        {view === "overview" ? (
+          <section className="adminUserOverviewNote">
+            <strong>账户结构</strong>
+            <p>等级控制平台能力，权益控制具体资源；登录与最近内容分别保留独立记录。</p>
+          </section>
+        ) : null}
+
+        {view === "rights" && entitlements ? (
+          <AdminUserEntitlementPanel userId={user.id} entitlements={entitlements} returnPath={returnPath === "/admin/users" ? undefined : returnPath} />
+        ) : null}
+
+        {view === "login" && loginRecords ? <section className="adminLoginAudit">
           <div className="adminPanelHeader">
             <div>
               <h2>登录记录</h2>
@@ -146,13 +192,13 @@ export default async function AdminUserDetailPage({ params, searchParams }: Admi
             basePath={detailBasePath}
             pageParam="loginPage"
             extraParams={{
-              historyPage: history.page > 1 ? String(history.page) : undefined,
+              view: "login",
               returnPath: returnPath === "/admin/users" ? undefined : returnPath,
             }}
           />
-        </section>
+        </section> : null}
 
-        <section className="adminLoginAudit">
+        {view === "history" && history ? <section className="adminLoginAudit">
           <div className="adminPanelHeader">
             <div>
               <h2>最近内容</h2>
@@ -221,11 +267,11 @@ export default async function AdminUserDetailPage({ params, searchParams }: Admi
             basePath={detailBasePath}
             pageParam="historyPage"
             extraParams={{
-              loginPage: loginRecords.page > 1 ? String(loginRecords.page) : undefined,
+              view: "history",
               returnPath: returnPath === "/admin/users" ? undefined : returnPath,
             }}
           />
-        </section>
+        </section> : null}
       </section>
     </AdminFrame>
   );

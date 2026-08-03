@@ -131,6 +131,10 @@ test("finds novels containing the intersection of selected visible tags", (t) =>
   const alphaId = seedNovel("Alpha Story");
   const betaId = seedNovel("Beta Story");
   const singleId = seedNovel("Single Story");
+  const archiveSourceId = Number(getDb().prepare(
+    "INSERT INTO novel_sources (slug, name, relative_path) VALUES (?, ?, ?)",
+  ).run("archive", "归档书库", "archive").lastInsertRowid);
+  getDb().prepare("UPDATE novels SET source_id = ? WHERE id = ?").run(archiveSourceId, betaId);
   const fantasy = createTag({ name: "奇幻", slug: "fantasy" });
   const adventure = createTag({ name: "冒险", slug: "adventure" });
   const academy = createTag({ name: "学院", slug: "academy" });
@@ -155,6 +159,8 @@ test("finds novels containing the intersection of selected visible tags", (t) =>
   const titleOnly = listNovelsByTagIntersection([], { q: " beta " });
   assert.deepEqual(titleOnly.books.map((book) => book.id), [betaId]);
   assert.deepEqual(listNovelIdsByTagFilters([], { q: "alpha" }), [alphaId]);
+  assert.deepEqual(listNovelsByTagIntersection([], { sourceId: archiveSourceId }).books.map((book) => book.id), [betaId]);
+  assert.deepEqual(listNovelIdsByTagFilters([fantasy.id], { sourceId: archiveSourceId }), [betaId]);
 
   const hiddenIntersection = listNovelsByTagIntersection([fantasy.id, hidden.id]);
   assert.equal(hiddenIntersection.totalBooks, 0);

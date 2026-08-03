@@ -68,12 +68,12 @@ test("applies public, signed-in, and disabled media access modes", (t) => {
 
   writeSiteSettings({
     ...readSiteSettings(),
-    videoLibraryEnabled: true,
-    audioLibraryEnabled: true,
-    fileLibraryEnabled: false,
-    guestVideoNavEnabled: true,
-    guestAudioNavEnabled: false,
-    guestFileNavEnabled: true,
+    homePortalAccessModes: {
+      ...readSiteSettings().homePortalAccessModes,
+      video: "public",
+      audio: "member",
+      file: "off",
+    },
   });
 
   assert.equal(isMediaKindAccessible("video", false), true);
@@ -106,6 +106,7 @@ test("normalizes media sorting and orders folders by name, item count, size, or 
   assert.equal(normalizeMediaSortBy("manual"), "name");
   assert.equal(normalizeMediaSortBy("name"), "name");
   assert.equal(normalizeMediaSortBy("duration"), "duration");
+  assert.equal(normalizeMediaSortBy("published"), "published");
   assert.equal(normalizeMediaSortBy("plays"), "plays");
   assert.equal(normalizeMediaSortBy("invalid"), "name");
   assert.equal(normalizeMediaSortOrder(undefined, "name"), "asc");

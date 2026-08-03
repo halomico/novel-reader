@@ -1,8 +1,12 @@
 import { Bell, ChevronRight } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "@/components/LocalizedLink";
+import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import { SiteHeader } from "@/components/SiteHeader";
+import { canAccessHomeAnnouncementCard, canSeeHomePortalContentEntry } from "@/lib/config";
+import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { listVisibleAnnouncements } from "@/lib/station";
 import { getCurrentUser } from "@/lib/user-auth";
 import { getRequestLocale, localizeText, localizeTexts } from "@/lib/locale-server";
@@ -18,12 +22,19 @@ export async function generateMetadata(): Promise<Metadata> {
       canonical: withLocalePath("/announcements", locale),
       languages: languageAlternates("/announcements"),
     },
+    robots: canAccessHomeAnnouncementCard(false) ? { index: true, follow: true } : NO_INDEX_ROBOTS,
   };
 }
 
 export default async function AnnouncementsPage() {
   const locale = await getRequestLocale();
   const user = await getCurrentUser();
+  if (!canAccessHomeAnnouncementCard(Boolean(user))) {
+    if (!user && canSeeHomePortalContentEntry("announcement", false)) {
+      return <ContentEntryGatePage locale={locale} label={uiText(locale, "公告")} returnTo="/announcements" />;
+    }
+    notFound();
+  }
   const announcements = listVisibleAnnouncements(Boolean(user));
   const displayAnnouncements = await Promise.all(announcements.map(async (announcement) => ({
     ...announcement,

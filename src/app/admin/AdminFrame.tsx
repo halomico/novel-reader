@@ -78,24 +78,19 @@ export async function AdminFrame({ active, notice = "", tone, breadcrumbs, child
 
   return (
     <main className="adminShell adminLayout">
-      <AdminSidebarNavigation active={active} siteName={siteName} />
+      <AdminSidebarNavigation active={active} siteName={siteName} logoutAction={logoutAdminAction} />
 
       <section className="adminMain">
-        <Breadcrumbs className="adminBreadcrumbs" items={breadcrumbItems} />
         <header className="adminTopbar">
           <div className="adminTitleBlock">
             <h1>{titleFor(active)}</h1>
           </div>
           <div className="adminTopActions">
             <ThemeToggle />
-            <form action={logoutAdminAction}>
-              <button className="iconLink" type="submit" aria-label="退出登录" title="退出登录">
-                <LogOut size={20} aria-hidden="true" />
-              </button>
-            </form>
-            <AdminMobileNavigation active={active} />
+            <AdminMobileNavigation active={active} logoutAction={logoutAdminAction} />
           </div>
         </header>
+        <Breadcrumbs className="adminBreadcrumbs" items={breadcrumbItems} />
         {notice ? (
           <DismissibleNotice
             message={notice}

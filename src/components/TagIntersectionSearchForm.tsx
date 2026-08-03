@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState, useTransition } from "react";
 import { beginNavigationProgress } from "./NavigationProgress";
 import { uiText, withLocalePath, type AppLocale } from "@/lib/locale";
+import { ALL_NOVEL_LIBRARIES_SLUG, DEFAULT_NOVEL_LIBRARY_SLUG } from "@/lib/novel-library-scope";
 
 export type AdvancedTagGroup = {
   label: string;
@@ -17,6 +18,13 @@ export type AdvancedTagGroup = {
   }>;
 };
 
+export type AdvancedNovelSource = {
+  id: number;
+  name: string;
+  slug: string;
+  novelCount: number;
+};
+
 const MAX_SELECTED_TAGS = 20;
 
 export function TagIntersectionSearchForm({
@@ -25,6 +33,8 @@ export function TagIntersectionSearchForm({
   initialExcluded,
   initialTitleQuery,
   initialContentQuery,
+  sources,
+  initialSourceLibrary,
   locale,
 }: {
   groups: AdvancedTagGroup[];
@@ -32,6 +42,8 @@ export function TagIntersectionSearchForm({
   initialExcluded: string[];
   initialTitleQuery: string;
   initialContentQuery: string;
+  sources: AdvancedNovelSource[];
+  initialSourceLibrary: string;
   locale: AppLocale;
 }) {
   const tr = (text: string) => uiText(locale, text);
@@ -41,6 +53,7 @@ export function TagIntersectionSearchForm({
   const [selectionMode, setSelectionMode] = useState<"include" | "exclude">("include");
   const [titleQuery, setTitleQuery] = useState(initialTitleQuery);
   const [contentQuery, setContentQuery] = useState(initialContentQuery);
+  const [sourceLibrary, setSourceLibrary] = useState(initialSourceLibrary);
   const [filter, setFilter] = useState("");
   const [message, setMessage] = useState("");
   const [pickerOpen, setPickerOpen] = useState(
@@ -108,8 +121,8 @@ export function TagIntersectionSearchForm({
     const excludedTags = orderedSlugs.filter((slug) => excluded.has(slug));
     const normalizedTitle = titleQuery.normalize("NFKC").replace(/\s+/gu, " ").trim();
     const normalizedContent = contentQuery.normalize("NFKC").replace(/\s+/gu, " ").trim();
-    if (!includedTags.length && !normalizedTitle && !normalizedContent) {
-      setMessage(tr("请选择标签或输入标题、正文关键词"));
+    if (!includedTags.length && !normalizedTitle && !normalizedContent && !sourceLibrary) {
+      setMessage(tr("请选择书库、标签或输入标题、正文关键词"));
       return;
     }
     const params = new URLSearchParams();
@@ -117,6 +130,7 @@ export function TagIntersectionSearchForm({
     if (excludedTags.length) params.set("exclude", excludedTags.join(","));
     if (normalizedTitle) params.set("q", normalizedTitle);
     if (normalizedContent) params.set("content", normalizedContent);
+    if (sourceLibrary && sourceLibrary !== DEFAULT_NOVEL_LIBRARY_SLUG) params.set("library", sourceLibrary);
     setPickerOpen(false);
     beginNavigationProgress();
     startTransition(() => router.push(withLocalePath(`/tags/search?${params.toString()}#advanced-search-results`, locale)));
@@ -125,6 +139,20 @@ export function TagIntersectionSearchForm({
   return (
     <form className="advancedTagSearchForm" onSubmit={submit}>
       <div className="advancedTagSearchToolbar">
+        <label className="advancedLibraryField">
+          <span>{tr("书库")}</span>
+          <span className="advancedLibrarySelect">
+            <select value={sourceLibrary} onChange={(event) => { setSourceLibrary(event.target.value); setMessage(""); }} aria-label={tr("选择书库")}>
+              {sources.map((source) => (
+                <option value={source.slug} key={source.id}>
+                  {source.slug === DEFAULT_NOVEL_LIBRARY_SLUG ? "默认" : source.name}（{source.novelCount}）
+                </option>
+              ))}
+              <option value={ALL_NOVEL_LIBRARIES_SLUG}>全部</option>
+            </select>
+            <ChevronDown size={15} aria-hidden="true" />
+          </span>
+        </label>
         <label>
           <span>{tr("标题关键词")}</span>
           <input value={titleQuery} onChange={(event) => { setTitleQuery(event.target.value); setMessage(""); }} maxLength={80} placeholder={tr("可选")} />

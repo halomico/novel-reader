@@ -5,6 +5,7 @@ import type { ReadingProgress } from "@/lib/reading-progress";
 
 type StoredProgress = {
   novelId: number;
+  chapterId: number | null;
   segmentIndex: number;
   segmentRatio: number;
   progressPercent: number;
@@ -70,6 +71,9 @@ function scrollToProgress(progress: Pick<StoredProgress, "segmentIndex" | "segme
 
 export function ReadingProgressTracker({
   novelId,
+  chapterId = null,
+  chapterIndex = 0,
+  totalChapters = 1,
   userId,
   contentVersion,
   totalSegments,
@@ -77,6 +81,9 @@ export function ReadingProgressTracker({
   resume,
 }: {
   novelId: number;
+  chapterId?: number | null;
+  chapterIndex?: number;
+  totalChapters?: number;
   userId: number;
   contentVersion: string;
   totalSegments: number;
@@ -88,6 +95,7 @@ export function ReadingProgressTracker({
     initialProgress
       ? {
           novelId,
+          chapterId: initialProgress.chapterId,
           segmentIndex: initialProgress.segmentIndex,
           segmentRatio: initialProgress.segmentRatio,
           progressPercent: initialProgress.progressPercent,
@@ -104,8 +112,8 @@ export function ReadingProgressTracker({
   useEffect(() => {
     const local = readStoredProgress(userId, novelId);
     const server = sentRef.current;
-    const validLocal = local?.contentVersion === contentVersion ? local : null;
-    const validServer = server?.contentVersion === contentVersion ? server : null;
+    const validLocal = local?.contentVersion === contentVersion && local.chapterId === chapterId ? local : null;
+    const validServer = server?.contentVersion === contentVersion && server.chapterId === chapterId ? server : null;
     const resumeProgress = validLocal && (!validServer || validLocal.savedAt > validServer.savedAt)
       ? validLocal
       : validServer;
@@ -134,18 +142,17 @@ export function ReadingProgressTracker({
       const segmentIndex = Math.max(Number(segment.dataset.segmentIndex || 0), 0);
       const rect = segment.getBoundingClientRect();
       const segmentRatio = rect.height > 0 ? clamp((probeY - rect.top) / rect.height, 0, 1) : 0;
-      const progressPercent = clamp(
-        ((segmentIndex + segmentRatio) / totalSegments) * 100,
-        0,
-        100,
-      );
+      const localProgress = (segmentIndex + segmentRatio) / totalSegments;
+      const progressPercent = clamp(((chapterIndex + localProgress) / totalChapters) * 100, 0, 100);
+      const lastChapter = chapterIndex >= totalChapters - 1;
       const next: StoredProgress = {
         novelId,
+        chapterId,
         segmentIndex,
         segmentRatio,
         progressPercent,
         contentVersion,
-        completed: documentBottomReached || progressPercent >= 98,
+        completed: (lastChapter && documentBottomReached) || progressPercent >= 98,
         savedAt: Date.now(),
       };
       currentRef.current = next;
@@ -209,7 +216,7 @@ export function ReadingProgressTracker({
       window.removeEventListener("pagehide", onPageHide);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [contentVersion, novelId, resume, totalSegments, userId]);
+  }, [chapterId, chapterIndex, contentVersion, novelId, resume, totalChapters, totalSegments, userId]);
 
   return null;
 }

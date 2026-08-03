@@ -11,6 +11,8 @@ export type RemoteMediaNodeConfig = MediaDeliveryConfig & {
   id: string;
   controlUrl: string;
   controlSecret: string;
+  maxVideoStreams: number;
+  videoBandwidthMbps: number;
 };
 
 export type RemoteMediaStorageRegistry = {
@@ -53,6 +55,11 @@ function mediaUrlTtlSeconds(env: NodeJS.ProcessEnv): number {
     : 21_600;
 }
 
+function nonNegativeNumber(value: unknown, maximum: number): number {
+  const numeric = Number(value || 0);
+  return Number.isFinite(numeric) ? Math.min(Math.max(numeric, 0), maximum) : 0;
+}
+
 function configError(message: string): never {
   throw new MediaStorageConfigurationError(message);
 }
@@ -71,6 +78,8 @@ function parseNode(
   const controlUrl = cleanOrigin(typeof source.controlUrl === "string" ? source.controlUrl : undefined);
   const signingSecret = typeof source.signingSecret === "string" ? source.signingSecret : "";
   const controlSecret = typeof source.controlSecret === "string" ? source.controlSecret : "";
+  const maxVideoStreams = Math.floor(nonNegativeNumber(source.maxVideoStreams, 100_000));
+  const videoBandwidthMbps = nonNegativeNumber(source.videoBandwidthMbps, 100_000);
   if (!MEDIA_NODE_ID_PATTERN.test(id)) {
     return configError("媒体节点 id 只能使用小写字母、数字、下划线和连字符，长度不超过 32");
   }
@@ -80,7 +89,16 @@ function parseNode(
   if (!controlUrl || controlSecret.length < 32) {
     return configError(`媒体节点 ${id} 需要合法的 controlUrl 和至少 32 字符的 controlSecret`);
   }
-  return { id, publicUrl, controlUrl, signingSecret, controlSecret, ttlSeconds };
+  return {
+    id,
+    publicUrl,
+    controlUrl,
+    signingSecret,
+    controlSecret,
+    ttlSeconds,
+    maxVideoStreams,
+    videoBandwidthMbps,
+  };
 }
 
 function legacyNode(env: NodeJS.ProcessEnv, ttlSeconds: number): RemoteMediaNodeConfig {
@@ -90,6 +108,8 @@ function legacyNode(env: NodeJS.ProcessEnv, ttlSeconds: number): RemoteMediaNode
     controlUrl: env.MEDIA_CONTROL_URL,
     signingSecret: env.MEDIA_SIGNING_SECRET,
     controlSecret: env.MEDIA_CONTROL_SECRET,
+    maxVideoStreams: env.MEDIA_NODE_MAX_VIDEO_STREAMS,
+    videoBandwidthMbps: env.MEDIA_NODE_VIDEO_BANDWIDTH_MBPS,
   }, ttlSeconds, 0);
 }
 
@@ -104,6 +124,8 @@ function registryCacheKey(env: NodeJS.ProcessEnv): string {
     env.MEDIA_SIGNING_SECRET,
     env.MEDIA_CONTROL_SECRET,
     env.MEDIA_URL_TTL_SECONDS,
+    env.MEDIA_NODE_MAX_VIDEO_STREAMS,
+    env.MEDIA_NODE_VIDEO_BANDWIDTH_MBPS,
   ].join("\u0000");
 }
 
@@ -277,7 +299,32 @@ export function remoteMediaRegistryFingerprint(
 ): string {
   const registry = getRemoteMediaStorageRegistry(env);
   return JSON.stringify({
-    nodes: registry.nodes.map((node) => [node.id, node.controlUrl]),
+    nodes: registry.nodes.map((node) => [
+      node.id,
+      node.controlUrl,
+      node.maxVideoStreams,
+      node.videoBandwidthMbps,
+    ]),
     routes: registry.routes,
   });
+}
+
+export function getMediaNodePlaybackCapacity(
+  storageNodeId: string | null | undefined,
+  kind: MediaStorageKind,
+  env: NodeJS.ProcessEnv = process.env,
+): { storageNodeId: string | null; maxVideoStreams: number; bandwidthKbps: number } {
+  if (getMediaStorageMode(env) === "remote") {
+    const node = resolveRemoteMediaNodeForAsset(storageNodeId, kind, env);
+    return {
+      storageNodeId: node.id,
+      maxVideoStreams: node.maxVideoStreams,
+      bandwidthKbps: Math.floor(node.videoBandwidthMbps * 1_000),
+    };
+  }
+  return {
+    storageNodeId: null,
+    maxVideoStreams: Math.floor(nonNegativeNumber(env.MEDIA_NODE_MAX_VIDEO_STREAMS, 100_000)),
+    bandwidthKbps: Math.floor(nonNegativeNumber(env.MEDIA_NODE_VIDEO_BANDWIDTH_MBPS, 100_000) * 1_000),
+  };
 }

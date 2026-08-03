@@ -90,6 +90,84 @@ function migrateNovelsContentHash(db: DatabaseSync) {
   db.exec("ALTER TABLE novels ADD COLUMN content_hash TEXT;");
 }
 
+function migrateNovelLibraryModel(db: DatabaseSync) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS novel_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slug TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      name TEXT NOT NULL,
+      relative_path TEXT NOT NULL UNIQUE,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  addColumnIfMissing(db, "novels", "description", "description TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, "novels", "source_id", "source_id INTEGER REFERENCES novel_sources(id) ON DELETE SET NULL");
+  addColumnIfMissing(
+    db,
+    "novels",
+    "storage_mode",
+    "storage_mode TEXT NOT NULL DEFAULT 'single' CHECK(storage_mode IN ('single', 'chapters'))",
+  );
+  addColumnIfMissing(db, "novels", "chapter_count", "chapter_count INTEGER NOT NULL DEFAULT 0 CHECK(chapter_count >= 0)");
+  addColumnIfMissing(
+    db,
+    "novels",
+    "access_mode",
+    "access_mode TEXT NOT NULL DEFAULT 'inherit' CHECK(access_mode IN ('inherit', 'soda'))",
+  );
+  addColumnIfMissing(db, "novels", "soda_price", "soda_price INTEGER NOT NULL DEFAULT 0 CHECK(soda_price >= 0)");
+  addColumnIfMissing(
+    db,
+    "novels",
+    "preview_chapter_count",
+    "preview_chapter_count INTEGER NOT NULL DEFAULT 0 CHECK(preview_chapter_count >= 0)",
+  );
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS novel_chapters (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      novel_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      title_override TEXT,
+      relative_path TEXT NOT NULL UNIQUE,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      sort_override INTEGER,
+      content_hash TEXT,
+      size_bytes INTEGER NOT NULL DEFAULT 0 CHECK(size_bytes >= 0),
+      mtime_ms INTEGER NOT NULL DEFAULT 0,
+      word_count INTEGER NOT NULL DEFAULT 0 CHECK(word_count >= 0),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(novel_id, sort_order),
+      FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_novel_sources_sort
+      ON novel_sources(sort_order, name, id);
+    CREATE INDEX IF NOT EXISTS idx_novels_source_title
+      ON novels(source_id, title COLLATE NOCASE, id);
+    CREATE INDEX IF NOT EXISTS idx_novel_chapters_novel_sort
+      ON novel_chapters(novel_id, sort_order, id);
+  `);
+  addColumnIfMissing(db, "novel_chapters", "title_override", "title_override TEXT");
+  addColumnIfMissing(db, "novel_chapters", "sort_override", "sort_override INTEGER");
+  const defaultSource = db.prepare(
+    `INSERT INTO novel_sources (slug, name, relative_path)
+     VALUES ('default', '默认来源', '')
+     ON CONFLICT(relative_path) DO UPDATE SET updated_at = novel_sources.updated_at
+     RETURNING id`,
+  ).get() as { id: number };
+  db.prepare("UPDATE novels SET source_id = ? WHERE source_id IS NULL").run(defaultSource.id);
+  db.exec(`
+    UPDATE novels
+    SET chapter_count = (
+      SELECT COUNT(*) FROM novel_chapters c WHERE c.novel_id = novels.id
+    )
+    WHERE storage_mode = 'chapters';
+  `);
+}
+
 function addColumnIfMissing(db: DatabaseSync, tableName: string, columnName: string, definition: string) {
   const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
   if (!columns.some((column) => column.name === columnName)) {
@@ -394,7 +472,6 @@ function migrateMarketplaceAndRegistration(db: DatabaseSync) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       slug TEXT NOT NULL COLLATE NOCASE UNIQUE,
       title TEXT NOT NULL,
-      summary TEXT NOT NULL DEFAULT '',
       description TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'published', 'archived')),
       min_level INTEGER NOT NULL DEFAULT 1 CHECK(min_level BETWEEN 1 AND 6),
@@ -506,7 +583,9 @@ function migrateMarketplaceAndRegistration(db: DatabaseSync) {
       resource_id TEXT NOT NULL,
       rights TEXT NOT NULL DEFAULT '[]',
       source_order_id INTEGER,
+      granted_by TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       expires_at TEXT,
       UNIQUE(user_id, resource_type, resource_id),
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -570,20 +649,35 @@ function migrateMarketplaceAndRegistration(db: DatabaseSync) {
 
     CREATE TABLE IF NOT EXISTS video_playback_sessions (
       id TEXT PRIMARY KEY,
-      user_id INTEGER NOT NULL,
+      viewer_key TEXT NOT NULL,
+      user_id INTEGER,
+      client_id TEXT NOT NULL,
       media_id INTEGER NOT NULL,
+      storage_node_id TEXT,
+      reserved_kbps INTEGER NOT NULL DEFAULT 0 CHECK(reserved_kbps >= 0),
       token_hash TEXT NOT NULL UNIQUE,
       expires_at INTEGER NOT NULL,
       last_seen_at INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(viewer_key, client_id),
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE CASCADE
     );
 
-    CREATE INDEX IF NOT EXISTS idx_video_playback_sessions_user_active
-      ON video_playback_sessions(user_id, expires_at, last_seen_at);
-    CREATE INDEX IF NOT EXISTS idx_video_playback_sessions_expiry
-      ON video_playback_sessions(expires_at);
+    CREATE TABLE IF NOT EXISTS media_playback_grants (
+      user_id INTEGER NOT NULL,
+      media_id INTEGER NOT NULL,
+      soda_spent INTEGER NOT NULL DEFAULT 0 CHECK(soda_spent >= 0),
+      granted_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(user_id, media_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_media_playback_grants_expiry
+      ON media_playback_grants(expires_at);
   `);
   addColumnIfMissing(
     db,
@@ -595,6 +689,15 @@ function migrateMarketplaceAndRegistration(db: DatabaseSync) {
   addColumnIfMissing(db, "market_products", "cover_storage_node_id", "cover_storage_node_id TEXT");
   addColumnIfMissing(db, "market_products", "deleted_at", "deleted_at TEXT");
   addColumnIfMissing(db, "market_orders", "admin_deleted_at", "admin_deleted_at TEXT");
+  const marketProductColumns = db.prepare("PRAGMA table_info(market_products)").all() as Array<{ name: string }>;
+  if (marketProductColumns.some((column) => column.name === "summary")) {
+    db.exec(`
+      UPDATE market_products
+      SET description = summary
+      WHERE trim(description) = '' AND trim(summary) <> '';
+    `);
+    dropColumnIfPresent(db, "market_products", "summary");
+  }
 
   const currencyMigrationKey = "currency_transactions_v1";
   if (!db.prepare("SELECT 1 AS found FROM app_metadata WHERE key = ?").get(currencyMigrationKey)) {
@@ -614,6 +717,59 @@ function migrateMarketplaceAndRegistration(db: DatabaseSync) {
       throw error;
     }
   }
+}
+
+function migrateVideoPlaybackSessions(db: DatabaseSync) {
+  const columns = db.prepare("PRAGMA table_info(video_playback_sessions)").all() as Array<{
+    name: string;
+    notnull: number;
+  }>;
+  const userId = columns.find((column) => column.name === "user_id");
+  const modern = columns.some((column) => column.name === "viewer_key") &&
+    columns.some((column) => column.name === "client_id") &&
+    columns.some((column) => column.name === "storage_node_id") &&
+    columns.some((column) => column.name === "reserved_kbps") &&
+    userId?.notnull === 0;
+  if (modern) {
+    db.exec(`
+      DROP INDEX IF EXISTS idx_video_playback_sessions_user_active;
+      CREATE INDEX IF NOT EXISTS idx_video_playback_sessions_viewer_active
+        ON video_playback_sessions(viewer_key, expires_at, last_seen_at);
+      CREATE INDEX IF NOT EXISTS idx_video_playback_sessions_node_active
+        ON video_playback_sessions(storage_node_id, expires_at, last_seen_at);
+      CREATE INDEX IF NOT EXISTS idx_video_playback_sessions_expiry
+        ON video_playback_sessions(expires_at);
+    `);
+    return;
+  }
+
+  // Playback leases live for only 90 seconds, so rebuilding is safer than
+  // carrying legacy user-only sessions into the guest-aware schema.
+  db.exec(`
+    DROP TABLE IF EXISTS video_playback_sessions;
+    CREATE TABLE video_playback_sessions (
+      id TEXT PRIMARY KEY,
+      viewer_key TEXT NOT NULL,
+      user_id INTEGER,
+      client_id TEXT NOT NULL,
+      media_id INTEGER NOT NULL,
+      storage_node_id TEXT,
+      reserved_kbps INTEGER NOT NULL DEFAULT 0 CHECK(reserved_kbps >= 0),
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at INTEGER NOT NULL,
+      last_seen_at INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(viewer_key, client_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE CASCADE
+    );
+    CREATE INDEX idx_video_playback_sessions_viewer_active
+      ON video_playback_sessions(viewer_key, expires_at, last_seen_at);
+    CREATE INDEX idx_video_playback_sessions_node_active
+      ON video_playback_sessions(storage_node_id, expires_at, last_seen_at);
+    CREATE INDEX idx_video_playback_sessions_expiry
+      ON video_playback_sessions(expires_at);
+  `);
 }
 
 function migrateNovelRecommendations(db: DatabaseSync) {
@@ -744,12 +900,12 @@ function migrateMediaRecommendations(db: DatabaseSync) {
 function seedUserLevels(db: DatabaseSync) {
   const defaults = [
     [0, "访客", 0, []],
-    [1, "初见", 0, ["content_report", "station_message", "novel_feedback"]],
-    [2, "熟客", 50, ["content_report", "station_message", "novel_feedback", "advanced_search", "market_access", "market_purchase", "video_download"]],
-    [3, "常驻", 200, ["content_report", "station_message", "novel_feedback", "advanced_search", "market_access", "market_purchase", "video_download"]],
-    [4, "活跃", 500, ["content_report", "station_message", "novel_feedback", "advanced_search", "market_access", "market_purchase", "video_download"]],
-    [5, "资深", 1200, ["content_report", "station_message", "novel_feedback", "advanced_search", "market_access", "market_purchase", "video_download"]],
-    [6, "核心", 2500, ["content_report", "station_message", "novel_feedback", "advanced_search", "market_access", "market_purchase", "video_download"]],
+    [1, "初见", 0, []],
+    [2, "熟客", 50, ["advanced_search", "market_access", "market_purchase"]],
+    [3, "常驻", 200, ["advanced_search", "market_access", "market_purchase"]],
+    [4, "活跃", 500, ["advanced_search", "market_access", "market_purchase"]],
+    [5, "资深", 1200, ["advanced_search", "market_access", "market_purchase"]],
+    [6, "核心", 2500, ["advanced_search", "market_access", "market_purchase"]],
   ] as const;
   const insert = db.prepare(
     "INSERT OR IGNORE INTO user_levels (level, name, soda_required, permissions) VALUES (?, ?, ?, ?)",
@@ -792,10 +948,45 @@ function seedUserLevels(db: DatabaseSync) {
       } catch {
         // Invalid legacy permissions are replaced by the explicit defaults below.
       }
-      permissions = [...new Set([...permissions, "market_access", "market_purchase", "video_download"])];
+      permissions = [...new Set([...permissions, "market_access", "market_purchase"])];
       update.run(JSON.stringify(permissions), row.level >= 5 ? 3 : 2, row.level);
     }
     db.prepare("INSERT INTO app_metadata (key, value) VALUES (?, '1')").run(marketDefaultsKey);
+  }
+
+  const capabilityCleanupKey = "user_level_capabilities_v3";
+  if (!db.prepare("SELECT 1 AS found FROM app_metadata WHERE key = ?").get(capabilityCleanupKey)) {
+    const baseline = new Set(["content_report", "station_message", "novel_feedback"]);
+    const rows = db.prepare("SELECT level, permissions FROM user_levels").all() as Array<{ level: number; permissions: string }>;
+    const update = db.prepare("UPDATE user_levels SET permissions = ?, updated_at = CURRENT_TIMESTAMP WHERE level = ?");
+    for (const row of rows) {
+      let permissions: string[] = [];
+      try {
+        const parsed = JSON.parse(row.permissions);
+        if (Array.isArray(parsed)) permissions = parsed.filter((item): item is string => typeof item === "string" && !baseline.has(item));
+      } catch {
+        permissions = [];
+      }
+      update.run(JSON.stringify([...new Set(permissions)]), row.level);
+    }
+    db.prepare("INSERT INTO app_metadata (key, value) VALUES (?, '1')").run(capabilityCleanupKey);
+  }
+
+  const downloadPermissionCleanupKey = "user_level_remove_video_download_v1";
+  if (!db.prepare("SELECT 1 AS found FROM app_metadata WHERE key = ?").get(downloadPermissionCleanupKey)) {
+    const rows = db.prepare("SELECT level, permissions FROM user_levels").all() as Array<{ level: number; permissions: string }>;
+    const update = db.prepare("UPDATE user_levels SET permissions = ?, updated_at = CURRENT_TIMESTAMP WHERE level = ?");
+    for (const row of rows) {
+      let permissions: string[] = [];
+      try {
+        const parsed = JSON.parse(row.permissions);
+        if (Array.isArray(parsed)) permissions = parsed.filter((item): item is string => typeof item === "string" && item !== "video_download");
+      } catch {
+        permissions = [];
+      }
+      update.run(JSON.stringify([...new Set(permissions)]), row.level);
+    }
+    db.prepare("INSERT INTO app_metadata (key, value) VALUES (?, '1')").run(downloadPermissionCleanupKey);
   }
 }
 
@@ -812,11 +1003,28 @@ function initialize(db: DatabaseSync) {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS novel_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slug TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      name TEXT NOT NULL,
+      relative_path TEXT NOT NULL UNIQUE,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS novels (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
       file_name TEXT NOT NULL,
       relative_path TEXT NOT NULL UNIQUE,
+      source_id INTEGER REFERENCES novel_sources(id) ON DELETE SET NULL,
+      storage_mode TEXT NOT NULL DEFAULT 'single' CHECK(storage_mode IN ('single', 'chapters')),
+      chapter_count INTEGER NOT NULL DEFAULT 0 CHECK(chapter_count >= 0),
+      access_mode TEXT NOT NULL DEFAULT 'inherit' CHECK(access_mode IN ('inherit', 'soda')),
+      soda_price INTEGER NOT NULL DEFAULT 0 CHECK(soda_price >= 0),
+      preview_chapter_count INTEGER NOT NULL DEFAULT 0 CHECK(preview_chapter_count >= 0),
       content_hash TEXT,
       size_bytes INTEGER NOT NULL,
       mtime_ms INTEGER NOT NULL,
@@ -831,6 +1039,24 @@ function initialize(db: DatabaseSync) {
     );
 
     CREATE INDEX IF NOT EXISTS idx_novels_title ON novels(title);
+
+    CREATE TABLE IF NOT EXISTS novel_chapters (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      novel_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      title_override TEXT,
+      relative_path TEXT NOT NULL UNIQUE,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      sort_override INTEGER,
+      content_hash TEXT,
+      size_bytes INTEGER NOT NULL DEFAULT 0 CHECK(size_bytes >= 0),
+      mtime_ms INTEGER NOT NULL DEFAULT 0,
+      word_count INTEGER NOT NULL DEFAULT 0 CHECK(word_count >= 0),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(novel_id, sort_order),
+      FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE
+    );
 
     CREATE TABLE IF NOT EXISTS tags (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -927,6 +1153,7 @@ function initialize(db: DatabaseSync) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
       novel_id INTEGER NOT NULL,
+      chapter_id INTEGER,
       title TEXT NOT NULL,
       segment_index INTEGER NOT NULL DEFAULT 0,
       segment_ratio REAL NOT NULL DEFAULT 0 CHECK(segment_ratio >= 0 AND segment_ratio <= 1),
@@ -940,7 +1167,8 @@ function initialize(db: DatabaseSync) {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(user_id, novel_id),
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE
+      FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE,
+      FOREIGN KEY(chapter_id) REFERENCES novel_chapters(id) ON DELETE SET NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_user_history_user_time
@@ -1219,6 +1447,62 @@ function initialize(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_station_messages_thread
       ON station_messages(thread_id, id);
 
+    CREATE TABLE IF NOT EXISTS telegram_user_links (
+      user_id INTEGER PRIMARY KEY,
+      chat_id TEXT NOT NULL UNIQUE,
+      telegram_username TEXT NOT NULL DEFAULT '',
+      linked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS telegram_link_tokens (
+      token_hash TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_telegram_link_tokens_expiry
+      ON telegram_link_tokens(expires_at);
+
+    CREATE TABLE IF NOT EXISTS telegram_outbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dedupe_key TEXT UNIQUE,
+      method TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'sent', 'failed')),
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at INTEGER NOT NULL,
+      last_error TEXT NOT NULL DEFAULT '',
+      sent_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_telegram_outbox_pending
+      ON telegram_outbox(status, next_attempt_at, id);
+
+    CREATE TABLE IF NOT EXISTS telegram_updates (
+      update_id INTEGER PRIMARY KEY,
+      processed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS telegram_message_links (
+      chat_id TEXT NOT NULL,
+      message_id INTEGER NOT NULL,
+      station_thread_id INTEGER NOT NULL,
+      station_message_id INTEGER,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(chat_id, message_id),
+      FOREIGN KEY(station_thread_id) REFERENCES station_threads(id) ON DELETE CASCADE,
+      FOREIGN KEY(station_message_id) REFERENCES station_messages(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_telegram_message_links_thread
+      ON telegram_message_links(station_thread_id, message_id);
+
     CREATE TABLE IF NOT EXISTS content_access_rules (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       target_type TEXT NOT NULL CHECK(target_type IN ('ip', 'cidr', 'country', 'crawler')),
@@ -1278,6 +1562,10 @@ function initialize(db: DatabaseSync) {
       play_count INTEGER NOT NULL DEFAULT 0,
       recommend_count INTEGER NOT NULL DEFAULT 0 CHECK(recommend_count >= 0),
       download_count INTEGER NOT NULL DEFAULT 0,
+      published_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      content_updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      new_until TEXT,
+      play_soda_price INTEGER NOT NULL DEFAULT 0 CHECK(play_soda_price >= 0),
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -1385,7 +1673,13 @@ function initialize(db: DatabaseSync) {
   `);
   migrateUserEconomy(db);
   migrateMarketplaceAndRegistration(db);
+  addColumnIfMissing(db, "user_entitlements", "granted_by", "granted_by TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, "user_entitlements", "updated_at", "updated_at TEXT NOT NULL DEFAULT ''");
+  db.exec("UPDATE user_entitlements SET updated_at = created_at WHERE updated_at = '';");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_user_entitlements_user_expiry ON user_entitlements(user_id, expires_at, id DESC);");
+  migrateVideoPlaybackSessions(db);
   migrateNovelRecommendations(db);
+  migrateNovelLibraryModel(db);
   seedUserLevels(db);
   migrateNovelsContentHash(db);
   addColumnIfMissing(db, "novels", "word_count", "word_count INTEGER NOT NULL DEFAULT 0");
@@ -1403,6 +1697,11 @@ function initialize(db: DatabaseSync) {
   addColumnIfMissing(db, "media_assets", "custom_cover_key", "custom_cover_key TEXT");
   addColumnIfMissing(db, "media_assets", "recommend_count", "recommend_count INTEGER NOT NULL DEFAULT 0 CHECK(recommend_count >= 0)");
   addColumnIfMissing(db, "media_assets", "category_id", "category_id INTEGER REFERENCES video_categories(id) ON DELETE SET NULL");
+  addColumnIfMissing(db, "media_assets", "published_at", "published_at TEXT");
+  addColumnIfMissing(db, "media_assets", "content_updated_at", "content_updated_at TEXT");
+  addColumnIfMissing(db, "media_assets", "new_until", "new_until TEXT");
+  addColumnIfMissing(db, "media_assets", "play_soda_price", "play_soda_price INTEGER NOT NULL DEFAULT 0 CHECK(play_soda_price >= 0)");
+  db.exec("UPDATE media_assets SET published_at = COALESCE(published_at, created_at), content_updated_at = COALESCE(content_updated_at, updated_at);");
   migrateMediaRecommendations(db);
   db.exec(`
     CREATE TRIGGER IF NOT EXISTS media_recommendations_insert_count
@@ -1440,6 +1739,12 @@ function initialize(db: DatabaseSync) {
     "users",
     "reading_progress_enabled",
     "reading_progress_enabled INTEGER NOT NULL DEFAULT 1 CHECK(reading_progress_enabled IN (0, 1))",
+  );
+  addColumnIfMissing(
+    db,
+    "user_reading_history",
+    "chapter_id",
+    "chapter_id INTEGER REFERENCES novel_chapters(id) ON DELETE SET NULL",
   );
   addColumnIfMissing(
     db,
@@ -1500,6 +1805,8 @@ function initialize(db: DatabaseSync) {
   db.exec("CREATE INDEX IF NOT EXISTS idx_analytics_events_media_time ON analytics_events(media_id, created_at);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_analytics_events_tag_time ON analytics_events(tag_id, created_at);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_media_assets_video_category ON media_assets(kind, category_id, updated_at DESC);");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_media_assets_kind_published ON media_assets(kind, published_at DESC, id DESC);");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_media_assets_kind_content_updated ON media_assets(kind, content_updated_at DESC, id DESC);");
   db.exec("DROP INDEX IF EXISTS idx_media_assets_video_author;");
   db.exec("CREATE INDEX IF NOT EXISTS idx_media_assets_storage_node ON media_assets(storage_node_id, stored_name);");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_search_query_events_event_key ON search_query_events(event_key) WHERE event_key IS NOT NULL;");

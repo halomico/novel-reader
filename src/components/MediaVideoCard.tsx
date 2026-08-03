@@ -29,6 +29,7 @@ export function MediaVideoCard({
 }) {
   const title = displayTitle(asset.title, asset.fileName);
   const watchHref = `/media/${asset.id}#watch`;
+  const isNew = Boolean(asset.newUntil && Date.parse(asset.newUntil) > Date.now());
   return (
     <article className="mediaVideoCard">
       <Link className="mediaVideoPreview" href={watchHref} aria-label={`播放 ${title}`}>
@@ -41,6 +42,7 @@ export function MediaVideoCard({
           priority={priority}
         />
         <span className="mediaVideoPlay" aria-hidden="true"><Play size={20} fill="currentColor" /></span>
+        {isNew ? <span className="mediaVideoNewBadge">新</span> : null}
         <span className="mediaVideoViews"><Eye size={12} aria-hidden="true" />{formatCompactCount(asset.playCount)}</span>
         <span className="mediaVideoMeta">{formatMediaDuration(asset.durationSeconds)}</span>
       </Link>

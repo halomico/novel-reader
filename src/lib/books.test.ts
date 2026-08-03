@@ -73,9 +73,16 @@ test("reuses segmented content until the novel file version changes", async () =
 
   const book: Novel = {
     id: 1,
+    description: "",
     title: "缓存测试",
     file_name: "缓存测试.txt",
     relative_path: "缓存测试.txt",
+    source_id: null,
+    storage_mode: "single",
+    chapter_count: 0,
+    access_mode: "inherit",
+    soda_price: 0,
+    preview_chapter_count: 0,
     content_hash: "version-1",
     size_bytes: 12,
     mtime_ms: 1,

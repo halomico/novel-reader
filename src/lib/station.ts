@@ -1,4 +1,9 @@
 import { getDb } from "./db";
+import {
+  queueAnnouncementTelegramNotification,
+  queueStationTelegramNotification,
+} from "./telegram-outbox";
+import { STATION_MESSAGE_MAX_LENGTH, stationMessageLength } from "./station-protocol";
 
 export type AnnouncementAudience = "public" | "member";
 export type AnnouncementImportance = "normal" | "important";
@@ -78,6 +83,22 @@ type StationMessageRow = {
 
 export class StationInputError extends Error {}
 
+function notifyStationMessage(threadId: number, messageId: number, role: "user" | "admin") {
+  try {
+    queueStationTelegramNotification(threadId, messageId, role);
+  } catch (error) {
+    console.warn("[telegram] station notification could not be queued", error);
+  }
+}
+
+function notifyAnnouncement(announcement: Announcement) {
+  try {
+    queueAnnouncementTelegramNotification(announcement);
+  } catch (error) {
+    console.warn("[telegram] announcement could not be queued", error);
+  }
+}
+
 function toAnnouncement(row: AnnouncementRow): Announcement {
   return {
     id: row.id,
@@ -131,6 +152,17 @@ function cleanBody(value: unknown): string {
   const body = String(value || "").trim().slice(0, 4_000);
   if (!body) {
     throw new StationInputError("内容不能为空");
+  }
+  return body;
+}
+
+function cleanStationMessageBody(value: unknown): string {
+  const body = String(value || "").trim();
+  if (!body) {
+    throw new StationInputError("内容不能为空");
+  }
+  if (stationMessageLength(body) > STATION_MESSAGE_MAX_LENGTH) {
+    throw new StationInputError(`消息不能超过 ${STATION_MESSAGE_MAX_LENGTH} 字`);
   }
   return body;
 }
@@ -230,14 +262,18 @@ export function saveAnnouncement(input: {
     if (!changed) {
       throw new StationInputError("公告不存在");
     }
-    return getVisibleAnnouncement(id, { admin: true })!;
+    const announcement = getVisibleAnnouncement(id, { admin: true })!;
+    if (announcement.status === "published") notifyAnnouncement(announcement);
+    return announcement;
   }
   const result = db.prepare(
     `INSERT INTO announcements
       (title, body, audience, importance, status, published_at, expires_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
   ).run(title, body, audience, importance, status, publishedAt, expiresAt);
-  return getVisibleAnnouncement(Number(result.lastInsertRowid), { admin: true })!;
+  const announcement = getVisibleAnnouncement(Number(result.lastInsertRowid), { admin: true })!;
+  if (announcement.status === "published") notifyAnnouncement(announcement);
+  return announcement;
 }
 
 export function deleteAnnouncement(id: number): boolean {
@@ -307,7 +343,7 @@ export function listStationMessages(threadId: number): StationMessage[] {
 
 export function createStationThread(userId: number, subjectValue: unknown, bodyValue: unknown): number {
   const subject = cleanTitle(subjectValue, "主题");
-  const body = cleanBody(bodyValue);
+  const body = cleanStationMessageBody(bodyValue);
   const db = getDb();
   const eligible = db.prepare("SELECT 1 AS found FROM users WHERE id = ? AND status = 'active'").get(userId);
   if (!eligible) {
@@ -327,11 +363,49 @@ export function createStationThread(userId: number, subjectValue: unknown, bodyV
        WHERE id = ?`,
     ).run(Number(message.lastInsertRowid), threadId);
     db.exec("COMMIT");
+    notifyStationMessage(threadId, Number(message.lastInsertRowid), "user");
     return threadId;
   } catch (error) {
     db.exec("ROLLBACK");
     throw error;
   }
+}
+
+export function createAdminStationThread(userId: number, subjectValue: unknown, bodyValue: unknown): number {
+  const subject = cleanTitle(subjectValue, "主题");
+  const body = cleanStationMessageBody(bodyValue);
+  const db = getDb();
+  const eligible = db.prepare("SELECT 1 AS found FROM users WHERE id = ? AND status = 'active'").get(userId);
+  if (!eligible) throw new StationInputError("用户不存在或不可用");
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const thread = db.prepare("INSERT INTO station_threads (user_id, subject) VALUES (?, ?)").run(userId, subject);
+    const threadId = Number(thread.lastInsertRowid);
+    const message = db.prepare(
+      "INSERT INTO station_messages (thread_id, author_role, author_user_id, body) VALUES (?, 'admin', NULL, ?)",
+    ).run(threadId, body);
+    const messageId = Number(message.lastInsertRowid);
+    db.prepare(
+      `UPDATE station_threads
+       SET user_last_read_message_id = 0, admin_last_read_message_id = ?,
+           last_message_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+    ).run(messageId, threadId);
+    db.exec("COMMIT");
+    notifyStationMessage(threadId, messageId, "admin");
+    return threadId;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+export function findStationRecipientId(usernameValue: unknown): number | null {
+  const username = String(usernameValue || "").normalize("NFKC").trim().toLowerCase();
+  if (!/^[a-z0-9_-]{3,32}$/.test(username)) return null;
+  const row = getDb().prepare("SELECT id FROM users WHERE username = ? AND status = 'active'")
+    .get(username) as { id: number } | undefined;
+  return row?.id || null;
 }
 
 export function addStationReply(input: {
@@ -340,7 +414,7 @@ export function addStationReply(input: {
   authorRole: "user" | "admin";
   userId?: number;
 }): boolean {
-  const body = cleanBody(input.body);
+  const body = cleanStationMessageBody(input.body);
   const thread = getStationThread(input.threadId, input.authorRole === "admin"
     ? { admin: true }
     : { userId: input.userId });
@@ -362,6 +436,7 @@ export function addStationReply(input: {
        WHERE id = ?`,
     ).run(Number(result.lastInsertRowid), input.threadId);
     db.exec("COMMIT");
+    notifyStationMessage(input.threadId, Number(result.lastInsertRowid), input.authorRole);
     return true;
   } catch (error) {
     db.exec("ROLLBACK");

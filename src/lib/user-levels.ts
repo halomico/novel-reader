@@ -1,16 +1,20 @@
 import { getDb } from "./db";
 
 export const USER_PERMISSION_DEFINITIONS = [
-  { key: "content_report", label: "内容举报" },
-  { key: "station_message", label: "站务留言" },
-  { key: "novel_feedback", label: "推荐" },
   { key: "advanced_search", label: "高级搜索" },
   { key: "market_access", label: "访问集市" },
   { key: "market_purchase", label: "购买商品" },
-  { key: "video_download", label: "下载视频" },
 ] as const;
 
-export type UserPermission = (typeof USER_PERMISSION_DEFINITIONS)[number]["key"];
+export const BASE_USER_PERMISSION_DEFINITIONS = [
+  { key: "content_report", label: "内容举报" },
+  { key: "station_message", label: "站务留言" },
+  { key: "novel_feedback", label: "推荐" },
+] as const;
+
+export type UserPermission =
+  | (typeof USER_PERMISSION_DEFINITIONS)[number]["key"]
+  | (typeof BASE_USER_PERMISSION_DEFINITIONS)[number]["key"];
 
 export type UserLevelDefinition = {
   level: number;
@@ -30,7 +34,8 @@ type UserLevelRow = {
   updated_at: string;
 };
 
-const PERMISSIONS = new Set<UserPermission>(USER_PERMISSION_DEFINITIONS.map((item) => item.key));
+const BASE_PERMISSIONS = new Set<UserPermission>(BASE_USER_PERMISSION_DEFINITIONS.map((item) => item.key));
+const CONFIGURABLE_PERMISSIONS = new Set<UserPermission>(USER_PERMISSION_DEFINITIONS.map((item) => item.key));
 
 function normalizeLevel(value: number): number {
   return Math.min(Math.max(Math.floor(Number(value) || 0), 0), 6);
@@ -42,7 +47,7 @@ function parsePermissions(value: string): UserPermission[] {
     if (!Array.isArray(parsed)) {
       return [];
     }
-    return parsed.filter((item): item is UserPermission => typeof item === "string" && PERMISSIONS.has(item as UserPermission));
+    return parsed.filter((item): item is UserPermission => typeof item === "string" && CONFIGURABLE_PERMISSIONS.has(item as UserPermission));
   } catch {
     return [];
   }
@@ -99,7 +104,7 @@ export function saveUserLevelDefinition(input: {
     return false;
   }
   const permissions = [...new Set(
-    input.permissions.filter((item): item is UserPermission => PERMISSIONS.has(item as UserPermission)),
+    input.permissions.filter((item): item is UserPermission => CONFIGURABLE_PERMISSIONS.has(item as UserPermission)),
   )];
   const sodaRequired = level < 2
     ? 0
@@ -189,6 +194,9 @@ export function hasUserPermission(
     return false;
   }
   if (user.role === "admin") {
+    return true;
+  }
+  if (BASE_PERMISSIONS.has(permission)) {
     return true;
   }
   return getUserLevelDefinition(user.trustLevel).permissions.includes(permission);

@@ -2,9 +2,15 @@
 
 import { Pencil, Pin, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import { deleteNovelsAction, togglePinnedNovelAction } from "@/app/admin/actions";
+import { stripLocalePath } from "@/lib/locale";
 
 export function AdminReaderActions({ bookId, title, isPinned }: { bookId: number; title: string; isPinned: boolean }) {
+  const pathname = stripLocalePath(usePathname());
+  const searchParams = useSearchParams();
+  const returnPath = `${pathname}${searchParams.size ? `?${searchParams.toString()}` : ""}`;
+
   return (
     <div className="adminReaderActions" aria-label="管理员小说操作">
       <form action={togglePinnedNovelAction}>
@@ -19,7 +25,7 @@ export function AdminReaderActions({ bookId, title, isPinned }: { bookId: number
         </button>
       </form>
       <Link
-        href={`/admin/books/${bookId}/edit?returnPath=${encodeURIComponent(`/books/${bookId}`)}`}
+        href={`/admin/books/${bookId}/edit?returnPath=${encodeURIComponent(returnPath)}`}
         aria-label={`编辑 ${title}`}
         title="编辑小说"
       >

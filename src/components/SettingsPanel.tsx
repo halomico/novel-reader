@@ -1,7 +1,6 @@
 "use client";
 
-import { ChevronDown, Dices, Minus, Monitor, Moon, Plus, Sun } from "lucide-react";
-import type { CSSProperties } from "react";
+import { ChevronDown, Dices, Monitor, Moon, Sun } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -22,26 +21,19 @@ import {
   PALETTE_STORAGE_KEY,
   READER_HOTWORDS_STORAGE_KEY,
   READER_LINE_HEIGHT_STORAGE_KEY,
-  READER_LINE_HEIGHTS,
   READER_TAGS_STORAGE_KEY,
-  TOP_MENU_STORAGE_KEY,
   type ColorPalette,
   type ReaderLineHeight,
   type ReaderTagsMode,
 } from "@/lib/ui-preferences";
+import { ReaderFontSizeStepper, ReaderLineHeightSlider } from "./ReaderTypographyControls";
 
 type ThemeChoice = "system" | "light" | "dark";
-type UiMode = "standard" | "minimal";
 
 const themes: Array<{ value: ThemeChoice; label: string; icon: LucideIcon }> = [
   { value: "system", label: "跟随系统", icon: Monitor },
   { value: "light", label: "浅色", icon: Sun },
   { value: "dark", label: "暗色", icon: Moon },
-];
-
-const uiModes: Array<{ value: UiMode; label: string }> = [
-  { value: "standard", label: "标准" },
-  { value: "minimal", label: "极简" },
 ];
 
 function readLocalSetting(key: string): string | null {
@@ -82,7 +74,6 @@ function applySettings(
   theme: ThemeChoice,
   fontSize: number,
   lineHeight: ReaderLineHeight,
-  uiMode: UiMode,
   palette: ColorPalette,
   readerTagsMode: ReaderTagsMode,
   showReaderHotwords: boolean,
@@ -95,7 +86,6 @@ function applySettings(
     root.dataset.theme = theme;
   }
 
-  root.dataset.uiMode = uiMode;
   root.dataset.readerTags = readerTagsMode;
   root.dataset.readerHotwords = showReaderHotwords ? "show" : "hide";
   root.style.setProperty("--reader-font-size", `${fontSize}px`);
@@ -105,7 +95,6 @@ function applySettings(
     writeLocalSetting("novel-theme", theme);
     writeLocalSetting("novel-font-size", String(fontSize));
     writeLocalSetting(READER_LINE_HEIGHT_STORAGE_KEY, String(lineHeight));
-    writeLocalSetting("novel-ui-mode", uiMode);
   }
 }
 
@@ -131,13 +120,11 @@ export function SettingsPanel({
   currentLocale: AppLocale;
 }) {
   const [theme, setTheme] = useState<ThemeChoice>(defaultTheme);
-  const [uiMode, setUiMode] = useState<UiMode>("standard");
   const [palette, setPalette] = useState<ColorPalette>(defaultPalette);
   const [fontSize, setFontSize] = useState(defaultFontSize);
   const [lineHeight, setLineHeight] = useState<ReaderLineHeight>(defaultLineHeight);
   const [readerTagsMode, setReaderTagsMode] = useState<ReaderTagsMode>(defaultReaderTagsMode);
   const [showReaderHotwords, setShowReaderHotwords] = useState(true);
-  const [showTopMenu, setShowTopMenu] = useState(true);
   const [hasHotwordPreference, setHasHotwordPreference] = useState(false);
   const [locale, setLocale] = useState<AppLocale>(currentLocale);
   const [preferencePending, setPreferencePending] = useState(false);
@@ -146,35 +133,33 @@ export function SettingsPanel({
 
   useEffect(() => {
     const savedTheme = readLocalSetting("novel-theme") as ThemeChoice | null;
-    const savedUiMode = readLocalSetting("novel-ui-mode") as UiMode | null;
     const savedPalette = readLocalSetting(PALETTE_STORAGE_KEY);
     const savedFontSize = Number(readLocalSetting("novel-font-size"));
     const nextLineHeight = normalizeReaderLineHeight(readLocalSetting(READER_LINE_HEIGHT_STORAGE_KEY), defaultLineHeight);
     const savedTags = readLocalSetting(READER_TAGS_STORAGE_KEY);
     const savedHotwords = readLocalSetting(READER_HOTWORDS_STORAGE_KEY);
-    const savedTopMenu = readLocalSetting(TOP_MENU_STORAGE_KEY);
     const nextTheme = savedTheme === "light" || savedTheme === "dark" || savedTheme === "system" ? savedTheme : defaultTheme;
-    const nextUiMode = savedUiMode === "minimal" || savedUiMode === "standard" ? savedUiMode : "standard";
     const nextPalette = isColorPalette(savedPalette) ? savedPalette : defaultPalette;
     const nextFontSize = Number.isFinite(savedFontSize) && savedFontSize >= 8 && savedFontSize <= 25 ? savedFontSize : defaultFontSize;
     const nextReaderTagsMode = normalizeReaderTagsMode(savedTags, defaultReaderTagsMode);
     const nextHasHotwordPreference = savedHotwords === "show" || savedHotwords === "hide";
-    const nextShowHotwords = nextHasHotwordPreference ? savedHotwords === "show" : nextUiMode !== "minimal";
+    const nextShowHotwords = nextHasHotwordPreference ? savedHotwords === "show" : true;
 
     setTheme(nextTheme);
-    setUiMode(nextUiMode);
     setPalette(nextPalette);
     setFontSize(nextFontSize);
     setLineHeight(nextLineHeight);
     setReaderTagsMode(nextReaderTagsMode);
     setShowReaderHotwords(nextShowHotwords);
-    setShowTopMenu(savedTopMenu !== "hide");
     setHasHotwordPreference(nextHasHotwordPreference);
     removeLocalSetting("novel-palette");
     removeLocalSetting("novel-page-size");
     document.cookie = "novel-page-size=; Path=/; Max-Age=0; SameSite=Lax";
-    applySettings(nextTheme, nextFontSize, nextLineHeight, nextUiMode, nextPalette, nextReaderTagsMode, nextShowHotwords, false);
-    document.documentElement.dataset.topMenu = savedTopMenu === "hide" ? "hide" : "show";
+    removeLocalSetting("novel-ui-mode");
+    removeLocalSetting("novel-reader-top-menu");
+    document.documentElement.removeAttribute("data-ui-mode");
+    document.documentElement.removeAttribute("data-top-menu");
+    applySettings(nextTheme, nextFontSize, nextLineHeight, nextPalette, nextReaderTagsMode, nextShowHotwords, false);
   }, [defaultFontSize, defaultLineHeight, defaultPalette, defaultReaderTagsMode, defaultTheme]);
 
   function changeTheme(value: ThemeChoice) {
@@ -185,15 +170,6 @@ export function SettingsPanel({
       document.documentElement.dataset.theme = value;
     }
     writeLocalSetting("novel-theme", value);
-  }
-
-  function changeUiMode(value: UiMode) {
-    const nextShowHotwords = hasHotwordPreference ? showReaderHotwords : value !== "minimal";
-    setUiMode(value);
-    setShowReaderHotwords(nextShowHotwords);
-    document.documentElement.dataset.uiMode = value;
-    document.documentElement.dataset.readerHotwords = nextShowHotwords ? "show" : "hide";
-    writeLocalSetting("novel-ui-mode", value);
   }
 
   function changeFontSize(value: number) {
@@ -234,12 +210,6 @@ export function SettingsPanel({
     setHasHotwordPreference(true);
     document.documentElement.dataset.readerHotwords = visible ? "show" : "hide";
     writeLocalSetting(READER_HOTWORDS_STORAGE_KEY, visible ? "show" : "hide");
-  }
-
-  function changeTopMenu(visible: boolean) {
-    setShowTopMenu(visible);
-    writeLocalSetting(TOP_MENU_STORAGE_KEY, visible ? "show" : "hide");
-    document.documentElement.dataset.topMenu = visible ? "show" : "hide";
   }
 
   async function changeLanguage(nextLocale: AppLocale) {
@@ -298,20 +268,6 @@ export function SettingsPanel({
 
             <div className="settingRow">
               <div className="settingRowTitle">
-                <span>{tr("界面")}</span>
-                <strong>{tr(uiMode === "minimal" ? "极简" : "标准")}</strong>
-              </div>
-              <div className="segmentedControl settingCompactSegments" role="group" aria-label="界面模式">
-                {uiModes.map((item) => (
-                  <button className={uiMode === item.value ? "isActive" : ""} key={item.value} type="button" onClick={() => changeUiMode(item.value)}>
-                    {tr(item.label)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="settingRow">
-              <div className="settingRowTitle">
                 <span>{tr("明暗")}</span>
                 <strong>{tr(themes.find((item) => item.value === theme)?.label || "")}</strong>
               </div>
@@ -364,43 +320,14 @@ export function SettingsPanel({
               <div className="settingRowTitle">
                 <span>{tr("字号")}</span>
               </div>
-              <div className="fontSizeStepper" role="group" aria-label="正文字号">
-                <button type="button" onClick={() => changeFontSize(fontSize - 1)} disabled={fontSize <= 8} aria-label="减小字号" title="减小字号">
-                  <Minus size={17} aria-hidden="true" />
-                </button>
-                <output aria-live="polite">{fontSize}</output>
-                <button type="button" onClick={() => changeFontSize(fontSize + 1)} disabled={fontSize >= 25} aria-label="增大字号" title="增大字号">
-                  <Plus size={17} aria-hidden="true" />
-                </button>
-              </div>
+              <ReaderFontSizeStepper value={fontSize} onChange={changeFontSize} />
             </div>
 
             <div className="settingRow">
               <div className="settingRowTitle">
                 <span>{tr("行距")}</span>
               </div>
-              <div
-                className="readerLineHeightControl"
-                style={{ "--reader-line-height-progress": `${(READER_LINE_HEIGHTS.indexOf(lineHeight) / (READER_LINE_HEIGHTS.length - 1)) * 100}%` } as CSSProperties}
-              >
-                <div className="readerLineHeightSlider">
-                  <span className="readerLineHeightTrack" aria-hidden="true" />
-                  <input
-                    aria-label="正文行距"
-                    aria-valuetext={`${lineHeight.toFixed(1)} 倍`}
-                    type="range"
-                    min="1"
-                    max={READER_LINE_HEIGHTS.length}
-                    step="1"
-                    value={READER_LINE_HEIGHTS.indexOf(lineHeight) + 1}
-                    onChange={(event) => changeLineHeight(READER_LINE_HEIGHTS[Number(event.target.value) - 1] || DEFAULT_READER_LINE_HEIGHT)}
-                  />
-                  <span className="readerLineHeightTicks" aria-hidden="true">
-                    {READER_LINE_HEIGHTS.map((value) => <i key={value} />)}
-                  </span>
-                </div>
-                <output aria-live="polite">{lineHeight.toFixed(1)}</output>
-              </div>
+              <ReaderLineHeightSlider value={lineHeight} onChange={changeLineHeight} />
             </div>
 
             <div className="settingRow">
@@ -437,11 +364,6 @@ export function SettingsPanel({
                     <span className="settingToggleTrack" aria-hidden="true"><span /></span>
                   </label>
                 ) : null}
-                <label className="settingToggle">
-                  <input type="checkbox" checked={showTopMenu} onChange={(event) => changeTopMenu(event.target.checked)} />
-                  <span>{tr("顶部导航")}</span>
-                  <span className="settingToggleTrack" aria-hidden="true"><span /></span>
-                </label>
               </div>
             </div>
           </div>

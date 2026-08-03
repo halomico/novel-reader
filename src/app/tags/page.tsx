@@ -3,11 +3,18 @@ import type { Metadata } from "next";
 import Link from "@/components/LocalizedLink";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import { SiteHeader } from "@/components/SiteHeader";
 import { TagLibrarySearch } from "@/components/TagLibrarySearch";
 import { TagTrackedLink } from "@/components/TagTrackedLink";
 import { TagVisibilityControl } from "@/components/TagVisibilityControl";
-import { canAccessAdvancedTagSearch, isGuestTagLibraryNavEnabled, isTagLibraryEnabled } from "@/lib/config";
+import {
+  canAccessAdvancedTagSearch,
+  canAccessTagLibrary,
+  isGuestTagLibraryNavEnabled,
+  isTagLibraryEnabled,
+  isTagLibraryPublic,
+} from "@/lib/config";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { listEffectivelyHiddenTagIds, listExplicitlyHiddenTagIds } from "@/lib/tag-preferences";
 import { listTagGroups } from "@/lib/tags";
@@ -15,13 +22,13 @@ import { getCurrentUser } from "@/lib/user-auth";
 import { hasUserPermission } from "@/lib/user-levels";
 import { setTagPreferenceAction } from "./actions";
 import { getRequestLocale, localizeText, localizeTexts } from "@/lib/locale-server";
-import { languageAlternates, uiText, withLocalePath, type AppLocale } from "@/lib/locale";
+import { languageAlternates, uiText, withLocalePath } from "@/lib/locale";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const locale = await getRequestLocale();
-  const isPublic = isTagLibraryEnabled() && isGuestTagLibraryNavEnabled();
+  const isPublic = isTagLibraryEnabled() && isTagLibraryPublic();
   const [title, description] = await localizeTexts(
     ["所有标签", "按标签浏览小说。"] as const,
     locale,
@@ -48,33 +55,27 @@ function tagSearchText(tag: ReturnType<typeof listTagGroups>[number]["tags"][num
   return [tag.name, ...tag.aliases, tag.description].filter(Boolean).join(" ");
 }
 
-function TagsLocked({ locale }: { locale: AppLocale }) {
-  return (
-    <main className="appShell">
-      <SiteHeader currentUser={null} />
-      <Breadcrumbs items={[{ label: uiText(locale, "首页"), href: "/" }, { label: uiText(locale, "标签") }]} />
-      <section className="emptyState">
-        <h2>{uiText(locale, "登录后可查看标签")}</h2>
-      </section>
-    </main>
-  );
-}
-
 export default async function TagsPage({ searchParams }: { searchParams: Promise<{ hidden?: string }> }) {
   const locale = await getRequestLocale();
   if (!isTagLibraryEnabled()) {
     notFound();
   }
   const user = await getCurrentUser();
-  if (!user && !isGuestTagLibraryNavEnabled()) {
-    return <TagsLocked locale={locale} />;
+  if (!canAccessTagLibrary(Boolean(user))) {
+    if (!user && isGuestTagLibraryNavEnabled()) {
+      return <ContentEntryGatePage locale={locale} label={uiText(locale, "标签")} returnTo="/tags" />;
+    }
+    notFound();
   }
   const audience = user?.role === "admin" ? "admin" : user ? "member" : "public";
   const params = await searchParams;
   const showHidden = Boolean(user && params.hidden === "1");
   const effectiveHidden = user ? listEffectivelyHiddenTagIds(user.id) : new Set<number>();
   const explicitHidden = user ? listExplicitlyHiddenTagIds(user.id) : new Set<number>();
-  const sourceGroups = listTagGroups({ audience }).flatMap((group) => {
+  const sourceGroups = listTagGroups({
+    audience,
+    omitEmpty: !showHidden,
+  }).flatMap((group) => {
     if (showHidden) {
       const groupIsHidden = Boolean(group.group && explicitHidden.has(group.group.id));
       const tags = group.tags.filter((tag) => explicitHidden.has(tag.id));

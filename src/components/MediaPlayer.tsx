@@ -1,6 +1,6 @@
 "use client";
 
-import { LoaderCircle, Play, RotateCcw } from "lucide-react";
+import { CupSoda, LoaderCircle, LogIn, Play, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type PlaybackLease = {
@@ -15,14 +15,24 @@ export function MediaPlayer({
   posterUrl,
   sourceVersion,
   basePath,
-  leaseRequired = false,
+  authenticated,
+  leaseRequired = true,
+  playSodaPrice = 0,
+  initialPlaybackAllowed = true,
+  initialAccessExpiresAt = null,
+  contentAccessible = true,
 }: {
   id: number;
   posterVersion: string;
   posterUrl?: string | null;
   sourceVersion: number;
   basePath?: string;
+  authenticated: boolean;
   leaseRequired?: boolean;
+  playSodaPrice?: number;
+  initialPlaybackAllowed?: boolean;
+  initialAccessExpiresAt?: number | null;
+  contentAccessible?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const countedRef = useRef(false);
@@ -32,7 +42,18 @@ export function MediaPlayer({
   const [sourceUrl, setSourceUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [playbackAllowed, setPlaybackAllowed] = useState(initialPlaybackAllowed);
+  const [accessExpiresAt, setAccessExpiresAt] = useState(initialAccessExpiresAt);
   const mediaBasePath = useMemo(() => basePath || `/media/${id}`, [basePath, id]);
+
+  const clientId = useCallback(() => {
+    const key = "novel-video-client-id";
+    const existing = window.sessionStorage.getItem(key);
+    if (existing) return existing;
+    const created = window.crypto.randomUUID().replace(/-/g, "");
+    window.sessionStorage.setItem(key, created);
+    return created;
+  }, []);
 
   const stopHeartbeat = useCallback(() => {
     if (heartbeatRef.current != null) {
@@ -59,7 +80,7 @@ export function MediaPlayer({
     const response = await fetch("/api/media-playback", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mediaId: id }),
+      body: JSON.stringify({ mediaId: id, clientId: clientId() }),
     });
     const body = await response.json() as {
       ok?: boolean;
@@ -72,14 +93,33 @@ export function MediaPlayer({
       throw new Error(body.message || "暂时无法开始播放");
     }
     return { sessionId: body.sessionId, token: body.token, expiresAt: body.expiresAt };
-  }, [id, leaseRequired]);
+  }, [clientId, id, leaseRequired]);
+
+  const ensurePlaybackAccess = useCallback(async () => {
+    if (!contentAccessible) throw new Error("登录后可以播放此视频");
+    if (playbackAllowed) {
+      if (!accessExpiresAt || accessExpiresAt > Date.now()) return;
+      setPlaybackAllowed(false);
+      throw new Error("播放授权已到期，请重新解锁");
+    }
+    if (!authenticated) throw new Error("登录后可用苏打解锁");
+    const response = await fetch(`/api/media/${id}/unlock`, { method: "POST" });
+    const body = await response.json() as {
+      ok?: boolean;
+      message?: string;
+      expiresAt?: number | null;
+    };
+    if (!response.ok || !body.ok) throw new Error(body.message || "暂时无法解锁视频");
+    setPlaybackAllowed(true);
+    setAccessExpiresAt(body.expiresAt || null);
+  }, [accessExpiresAt, authenticated, contentAccessible, id, playbackAllowed]);
 
   const startPlayback = useCallback(async () => {
     if (loading) return;
     setLoading(true);
     setError("");
     try {
-      releaseLease();
+      await ensurePlaybackAccess();
       const lease = await acquireLease();
       leaseRef.current = lease;
       const params = new URLSearchParams({ v: String(Math.floor(sourceVersion)) });
@@ -93,7 +133,7 @@ export function MediaPlayer({
       setError(reason instanceof Error ? reason.message : "暂时无法开始播放");
       setLoading(false);
     }
-  }, [acquireLease, loading, mediaBasePath, releaseLease, sourceVersion]);
+  }, [acquireLease, ensurePlaybackAccess, loading, mediaBasePath, sourceVersion]);
 
   useEffect(() => {
     if (!sourceUrl || !pendingPlayRef.current) return;
@@ -164,6 +204,8 @@ export function MediaPlayer({
   }
 
   const poster = posterUrl || `${mediaBasePath}/thumbnail?v=${encodeURIComponent(posterVersion)}`;
+  const needsLogin = !contentAccessible;
+  const needsUnlock = contentAccessible && !playbackAllowed && playSodaPrice > 0;
 
   return (
     <div className="mediaVideoPlayerShell">
@@ -189,9 +231,25 @@ export function MediaPlayer({
       </video>
       {!sourceUrl || error ? (
         <div className="mediaVideoStartLayer">
-          <button type="button" onClick={startPlayback} disabled={loading} aria-label={error ? "重新播放" : "播放视频"}>
+          <button
+            className={needsUnlock || needsLogin ? "isUnlockAction" : ""}
+            type="button"
+            onClick={() => {
+              if (needsLogin) {
+                window.location.assign(`/login?${new URLSearchParams({ returnTo: `/media/${id}` }).toString()}`);
+                return;
+              }
+              void startPlayback();
+            }}
+            disabled={loading}
+            aria-label={needsLogin ? "登录后播放" : needsUnlock ? `使用 ${playSodaPrice} 苏打解锁 3 小时` : error ? "重新播放" : "播放视频"}
+          >
             {loading ? <LoaderCircle className="isSpinning" size={23} aria-hidden="true" /> :
-              error ? <RotateCcw size={22} aria-hidden="true" /> : <Play size={24} fill="currentColor" aria-hidden="true" />}
+              needsLogin ? (
+                <><LogIn size={20} aria-hidden="true" /><span>登录后播放</span></>
+              ) : needsUnlock ? (
+                <><CupSoda size={20} aria-hidden="true" /><span>{playSodaPrice} 苏打 · 3 小时</span></>
+              ) : error ? <RotateCcw size={22} aria-hidden="true" /> : <Play size={24} fill="currentColor" aria-hidden="true" />}
           </button>
           {error ? <p role="alert">{error}</p> : null}
         </div>

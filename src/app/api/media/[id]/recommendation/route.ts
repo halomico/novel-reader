@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getMediaAsset, isFeedbackMediaKind, isMediaKindAccessible } from "@/lib/media";
+import { getMediaAsset, isFeedbackMediaKind, isMediaKindConsumable } from "@/lib/media";
 import { recommendMediaWithSoda } from "@/lib/recommendations";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 import { hasUserPermission } from "@/lib/user-levels";
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const mediaId = Number((await params).id);
   const asset = getMediaAsset(mediaId);
-  if (!asset || !isFeedbackMediaKind(asset.kind) || !isMediaKindAccessible(asset.kind, true)) {
+  if (!asset || !isFeedbackMediaKind(asset.kind) || !isMediaKindConsumable(asset.kind, true)) {
     return NextResponse.json({ ok: false, message: "媒体不存在" }, { status: 404 });
   }
   const result = recommendMediaWithSoda(user.id, mediaId);

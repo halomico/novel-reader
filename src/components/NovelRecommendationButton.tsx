@@ -6,9 +6,11 @@ import { useEffect, useState, useTransition } from "react";
 export function NovelRecommendationButton({
   novelId,
   initialRecommended,
+  showLabel = false,
 }: {
   novelId: number;
   initialRecommended: boolean;
+  showLabel?: boolean;
 }) {
   const [recommended, setRecommended] = useState(initialRecommended);
   const [message, setMessage] = useState("");
@@ -56,7 +58,8 @@ export function NovelRecommendationButton({
         disabled={pending || recommended}
         onClick={recommend}
       >
-        <CupSoda size={18} aria-hidden="true" />
+        <CupSoda size={18} fill={recommended ? "currentColor" : "none"} aria-hidden="true" />
+        {showLabel ? <span>推荐</span> : null}
       </button>
       {message ? <span className="readerActionToast" role="status">{message}</span> : null}
     </span>

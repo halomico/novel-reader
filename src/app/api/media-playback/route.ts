@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getMediaAsset, isMediaKindAccessible } from "@/lib/media";
+import { getVideoPlaybackAccess } from "@/lib/media-access";
+import { getMediaAsset, isMediaKindConsumable } from "@/lib/media";
+import { getMediaNodePlaybackCapacity } from "@/lib/media-storage-config";
+import { attachPlaybackViewerCookie, playbackViewerFromRequest } from "@/lib/playback-viewer";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 import {
   createVideoPlaybackLease,
+  estimateVideoBitrateKbps,
   getVideoConcurrencyLimit,
   refreshVideoPlaybackLease,
   releaseVideoPlaybackLease,
@@ -13,6 +17,7 @@ export const runtime = "nodejs";
 
 async function body(request: NextRequest): Promise<{
   mediaId: number;
+  clientId: string;
   sessionId: string;
   token: string;
 }> {
@@ -20,51 +25,77 @@ async function body(request: NextRequest): Promise<{
     const value = await request.json() as Record<string, unknown>;
     return {
       mediaId: Number(value.mediaId),
+      clientId: String(value.clientId || ""),
       sessionId: String(value.sessionId || ""),
       token: String(value.token || ""),
     };
   } catch {
-    return { mediaId: 0, sessionId: "", token: "" };
+    return { mediaId: 0, clientId: "", sessionId: "", token: "" };
   }
 }
 
 export async function POST(request: NextRequest) {
   const user = getCurrentUserFromRequest(request);
-  if (!user) return NextResponse.json({ ok: false, message: "请先登录" }, { status: 401 });
   const input = await body(request);
   const asset = getMediaAsset(input.mediaId);
-  if (!asset || asset.kind !== "video" || !isMediaKindAccessible("video", true)) {
+  if (!asset || asset.kind !== "video" || !isMediaKindConsumable("video", Boolean(user))) {
     return NextResponse.json({ ok: false, message: "视频不存在" }, { status: 404 });
   }
+  const access = getVideoPlaybackAccess(asset, user);
+  if (!access.allowed) {
+    return NextResponse.json(
+      { ok: false, message: access.reason === "login_required" ? "请先登录" : "请先解锁视频" },
+      { status: access.reason === "login_required" ? 401 : 402 },
+    );
+  }
+  const viewer = playbackViewerFromRequest(request, user?.id || null, true)!;
+  const capacity = getMediaNodePlaybackCapacity(asset.storageNodeId, asset.kind);
   const result = createVideoPlaybackLease({
-    userId: user.id,
+    viewerKey: viewer.viewerKey,
+    userId: user?.id || null,
+    clientId: input.clientId,
     mediaId: asset.id,
     limit: getVideoConcurrencyLimit(user),
+    storageNodeId: capacity.storageNodeId,
+    reservedKbps: estimateVideoBitrateKbps(asset),
+    nodeMaxStreams: capacity.maxVideoStreams,
+    nodeBandwidthKbps: capacity.bandwidthKbps,
   });
   if (!result.ok) {
     const message = result.reason === "limit_reached"
       ? `同时播放的视频已达到上限（${result.limit}）`
       : result.reason === "not_allowed"
         ? "当前等级暂不能播放视频"
+        : result.reason === "node_busy"
+          ? "当前播放人数较多，请稍后重试"
         : "视频不存在";
-    return NextResponse.json({ ok: false, message }, { status: result.reason === "limit_reached" ? 409 : 403 });
+    return NextResponse.json(
+      { ok: false, message },
+      {
+        status: result.reason === "limit_reached" ? 409 : result.reason === "node_busy" ? 503 : 403,
+        headers: result.reason === "node_busy" ? { "Retry-After": "15" } : undefined,
+      },
+    );
   }
-  return NextResponse.json({
+  const response = NextResponse.json({
     ok: true,
     sessionId: result.lease.id,
     token: result.lease.token,
     expiresAt: result.lease.expiresAt,
   });
+  attachPlaybackViewerCookie(response, viewer);
+  return response;
 }
 
 export async function PATCH(request: NextRequest) {
   const user = getCurrentUserFromRequest(request);
-  if (!user) return NextResponse.json({ ok: false }, { status: 401 });
+  const viewer = playbackViewerFromRequest(request, user?.id || null);
+  if (!viewer) return NextResponse.json({ ok: false }, { status: 401 });
   const input = await body(request);
   const expiresAt = refreshVideoPlaybackLease({
     id: input.sessionId,
     token: input.token,
-    userId: user.id,
+    viewerKey: viewer.viewerKey,
     mediaId: input.mediaId,
   });
   return expiresAt
@@ -74,12 +105,13 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   const user = getCurrentUserFromRequest(request);
-  if (!user) return NextResponse.json({ ok: true });
+  const viewer = playbackViewerFromRequest(request, user?.id || null);
+  if (!viewer) return NextResponse.json({ ok: true });
   const input = await body(request);
   releaseVideoPlaybackLease({
     id: input.sessionId,
     token: input.token,
-    userId: user.id,
+    viewerKey: viewer.viewerKey,
     mediaId: input.mediaId,
   });
   return NextResponse.json({ ok: true });

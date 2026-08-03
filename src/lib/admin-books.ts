@@ -1,7 +1,7 @@
 import { getConfiguredPaths } from "./config";
 import { getDb } from "./db";
 import { parseSearchQuery } from "./search-query";
-import { buildTitleSearchSql, type Novel } from "./books";
+import { buildTitleSearchSql, NOVEL_SELECT_COLUMNS, type Novel } from "./books";
 
 export type AdminBookSortKey = "title" | "file_name" | "size_bytes" | "word_count" | "updated_at" | "visit_count" | "last_accessed_at";
 export type AdminBookSortDir = "asc" | "desc";
@@ -38,8 +38,15 @@ function toPlainNovel(book: AdminNovel): AdminNovel {
   return {
     id: book.id,
     title: book.title,
+    description: book.description,
     file_name: book.file_name,
     relative_path: book.relative_path,
+    source_id: book.source_id,
+    storage_mode: book.storage_mode,
+    chapter_count: book.chapter_count,
+    access_mode: book.access_mode,
+    soda_price: book.soda_price,
+    preview_chapter_count: book.preview_chapter_count,
     content_hash: book.content_hash,
     size_bytes: book.size_bytes,
     mtime_ms: book.mtime_ms,
@@ -80,12 +87,15 @@ function normalizeDir(value: string | undefined): AdminBookSortDir {
   return value === "asc" ? "asc" : "desc";
 }
 
-export function listAdminBooks(params: { page?: number; q?: string; pageSize?: number; sort?: string; dir?: string }): AdminBookListResult {
+export function listAdminBooks(params: { page?: number; q?: string; pageSize?: number; sort?: string; dir?: string; sourceId?: number }): AdminBookListResult {
   const db = getDb();
   const pageSize = Math.min(Math.max(Math.floor(params.pageSize || 20), 1), 200);
   const query = (params.q || "").trim();
   const sort = normalizeSort(params.sort);
   const dir = normalizeDir(params.dir);
+  const sourceId = Number.isInteger(params.sourceId) && Number(params.sourceId) > 0 ? Number(params.sourceId) : null;
+  const sourceClause = sourceId ? " AND source_id = ?" : "";
+  const sourceValues = sourceId ? [sourceId] : [];
   const orderBy = `${sortColumns[sort]} ${dir.toUpperCase()}, id ${dir === "asc" ? "ASC" : "DESC"}`;
 
   if (query) {
@@ -109,21 +119,21 @@ export function listAdminBooks(params: { page?: number; q?: string; pageSize?: n
       .prepare(
         `SELECT COUNT(*) AS count
          FROM novels
-         WHERE ${search.whereSql}`,
+         WHERE ${search.whereSql}${sourceClause}`,
       )
-      .get(...search.values) as { count: number };
+      .get(...search.values, ...sourceValues) as { count: number };
     const totalPages = Math.max(1, Math.ceil(totalBooks.count / pageSize));
     const page = normalizePage(params.page || 1, totalPages);
     const offset = (page - 1) * pageSize;
     const books = db
       .prepare(
-        `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, recommend_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
+        `SELECT ${NOVEL_SELECT_COLUMNS}, recommend_count
          FROM novels
-         WHERE ${search.whereSql}
+         WHERE ${search.whereSql}${sourceClause}
          ORDER BY ${orderBy}
          LIMIT ? OFFSET ?`,
       )
-      .all(...search.values, pageSize, offset) as AdminNovel[];
+      .all(...search.values, ...sourceValues, pageSize, offset) as AdminNovel[];
 
     return {
       books: books.map(toPlainNovel),
@@ -137,18 +147,20 @@ export function listAdminBooks(params: { page?: number; q?: string; pageSize?: n
     };
   }
 
-  const totalBooks = db.prepare("SELECT COUNT(*) AS count FROM novels").get() as { count: number };
+  const totalBooks = db.prepare(`SELECT COUNT(*) AS count FROM novels${sourceId ? " WHERE source_id = ?" : ""}`)
+    .get(...sourceValues) as { count: number };
   const totalPages = Math.max(1, Math.ceil(totalBooks.count / pageSize));
   const page = normalizePage(params.page || 1, totalPages);
   const offset = (page - 1) * pageSize;
   const books = db
     .prepare(
-      `SELECT id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, visit_count, recommend_count, last_accessed_at, last_accessed_ip, last_accessed_user_agent, created_at, updated_at
+      `SELECT ${NOVEL_SELECT_COLUMNS}, recommend_count
        FROM novels
+       ${sourceId ? "WHERE source_id = ?" : ""}
        ORDER BY ${orderBy}
        LIMIT ? OFFSET ?`,
     )
-    .all(pageSize, offset) as AdminNovel[];
+    .all(...sourceValues, pageSize, offset) as AdminNovel[];
 
   return {
     books: books.map(toPlainNovel),

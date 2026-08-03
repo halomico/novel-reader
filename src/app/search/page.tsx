@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { ContentSearchClient } from "@/components/ContentSearchClient";
+import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { SiteHeader } from "@/components/SiteHeader";
 import {
@@ -9,13 +10,14 @@ import {
   recordSearchQuery,
   resolveSearchQueryEventKey,
 } from "@/lib/analytics";
-import { canAccessNovelLibrary, getSearchResultsPageSize, shouldShowProgressBars } from "@/lib/config";
+import { canAccessNovelLibrary, getSearchResultsPageSize, isGuestLibraryNavEnabled, shouldShowProgressBars } from "@/lib/config";
 import { validateSearchKeyword } from "@/lib/search";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { getCurrentUser } from "@/lib/user-auth";
 import { checkContentAccess } from "@/lib/content-access";
 import { getRequestLocale, localizeTexts } from "@/lib/locale-server";
 import { languageAlternates, uiText, withLocalePath } from "@/lib/locale";
+import { DEFAULT_NOVEL_LIBRARY_SLUG, resolveNovelLibraryScope } from "@/lib/novel-library";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
@@ -37,13 +39,22 @@ type SearchPageProps = {
     source?: string;
     origin?: string;
     searchEvent?: string;
+    library?: string;
+    sourceLibrary?: string;
   }>;
 };
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const locale = await getRequestLocale();
   const user = await getCurrentUser();
+  const params = await searchParams;
   if (!canAccessNovelLibrary(Boolean(user))) {
+    if (!user && isGuestLibraryNavEnabled()) {
+      const gateParams = new URLSearchParams();
+      if (params.q) gateParams.set("q", params.q);
+      if (params.library || params.sourceLibrary) gateParams.set("library", params.library || params.sourceLibrary || "");
+      return <ContentEntryGatePage locale={locale} label={uiText(locale, "全文搜索")} returnTo={`/search${gateParams.size ? `?${gateParams.toString()}` : ""}`} />;
+    }
     notFound();
   }
   const access = checkContentAccess(await headers(), {
@@ -53,8 +64,8 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     rateLimit: false,
   });
   if (!access.allowed) notFound();
-  const params = await searchParams;
   const originalQuery = params.q || "";
+  const libraryScope = resolveNovelLibraryScope(params.library || params.sourceLibrary);
   const validation = validateSearchKeyword(originalQuery);
   const pageSize = getSearchResultsPageSize();
   const hasExplicitPage = Boolean(params.page);
@@ -77,7 +88,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   return (
     <main className="appShell">
-      <SiteHeader query={originalQuery} defaultSearchMode="content" currentUser={user} />
+      <SiteHeader query={originalQuery} defaultSearchMode="content" currentUser={user} library={libraryScope.slug} />
       <Breadcrumbs items={[{ label: homeLabel, href: "/" }, { label: searchLabel }]} />
       {validation.ok ? (
         <ContentSearchClient
@@ -90,6 +101,8 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           searchEventKey={searchEventKey}
           searchSource={source}
           originNovelId={Number.isInteger(originNovelId) && originNovelId > 0 ? originNovelId : null}
+          library={libraryScope.slug}
+          resultReturnParams={libraryScope.slug === DEFAULT_NOVEL_LIBRARY_SLUG ? {} : { library: libraryScope.slug }}
         />
       ) : (
         <section className="searchHero">

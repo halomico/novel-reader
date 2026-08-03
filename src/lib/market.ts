@@ -1,5 +1,9 @@
 import crypto from "node:crypto";
 import { getDb } from "./db";
+import {
+  decodeEntitlementDefinition,
+  grantUserEntitlement,
+} from "./entitlements";
 import type { UserCurrency } from "./user-wallet";
 
 export type MarketProductStatus = "draft" | "published" | "archived";
@@ -9,7 +13,6 @@ export type MarketProduct = {
   id: number;
   slug: string;
   title: string;
-  summary: string;
   description: string;
   status: MarketProductStatus;
   minLevel: number;
@@ -76,7 +79,6 @@ type ProductRow = {
   id: number;
   slug: string;
   title: string;
-  summary: string;
   description: string;
   status: MarketProductStatus;
   min_level: number;
@@ -177,7 +179,6 @@ function toProduct(row: ProductRow): MarketProduct {
     id: row.id,
     slug: row.slug,
     title: row.title,
-    summary: row.summary,
     description: row.description,
     status: row.status,
     minLevel: row.min_level,
@@ -236,7 +237,7 @@ function deliveryAsset(row: DeliveryRow | OrderDeliveryRow): MarketAsset | null 
 
 function productSelect(): string {
   return `
-    SELECT p.id, p.slug, p.title, p.summary, p.description, p.status, p.min_level,
+    SELECT p.id, p.slug, p.title, p.description, p.status, p.min_level,
            p.price_cookie, p.price_soda, p.purchase_limit_per_user, p.sort_order,
            p.cover_key, p.cover_storage_node_id,
            CASE
@@ -396,7 +397,6 @@ export function getMarketProductBySlug(slug: string): MarketProduct | null {
 export function createMarketProduct(input: {
   slug: string;
   title: string;
-  summary?: string;
   description?: string;
   minLevel?: number;
   priceCookie?: number | null;
@@ -413,15 +413,14 @@ export function createMarketProduct(input: {
   const info = getDb()
     .prepare(
       `INSERT INTO market_products (
-         slug, title, summary, description, min_level, price_cookie, price_soda,
+         slug, title, description, min_level, price_cookie, price_soda,
          purchase_limit_per_user, sort_order
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       slug,
       title,
-      cleanText(input.summary || "", 240),
       (input.description || "").trim().slice(0, 20_000),
       Math.min(Math.max(Math.floor(input.minLevel || 1), 1), 6),
       input.priceCookie == null ? null : Math.max(Math.floor(input.priceCookie), 0),
@@ -436,7 +435,6 @@ export function updateMarketProduct(input: {
   id: number;
   slug: string;
   title: string;
-  summary?: string;
   description?: string;
   status: MarketProductStatus;
   minLevel: number;
@@ -457,7 +455,7 @@ export function updateMarketProduct(input: {
   return getDb()
     .prepare(
       `UPDATE market_products
-       SET slug = ?, title = ?, summary = ?, description = ?, status = ?, min_level = ?,
+       SET slug = ?, title = ?, description = ?, status = ?, min_level = ?,
            price_cookie = ?, price_soda = ?, purchase_limit_per_user = ?, sort_order = ?,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ? AND deleted_at IS NULL`,
@@ -465,7 +463,6 @@ export function updateMarketProduct(input: {
     .run(
       slug,
       title,
-      cleanText(input.summary || "", 240),
       (input.description || "").trim().slice(0, 20_000),
       input.status,
       Math.min(Math.max(Math.floor(input.minLevel || 1), 1), 6),
@@ -874,30 +871,16 @@ function createOrderInTransaction(input: {
       delivery.sort_order,
     );
     if (delivery.kind === "entitlement") {
-      try {
-        const entitlement = JSON.parse(delivery.content) as {
-          resourceType?: unknown;
-          resourceId?: unknown;
-          rights?: unknown;
-        };
-        const resourceType = cleanText(String(entitlement.resourceType || ""), 60);
-        const resourceId = cleanText(String(entitlement.resourceId || ""), 120);
-        const rights = Array.isArray(entitlement.rights)
-          ? entitlement.rights.filter((item): item is string => typeof item === "string").slice(0, 50)
-          : [];
-        if (resourceType && resourceId) {
-          db.prepare(
-            `INSERT INTO user_entitlements (
-               user_id, resource_type, resource_id, rights, source_order_id
-             )
-             VALUES (?, ?, ?, ?, ?)
-             ON CONFLICT(user_id, resource_type, resource_id)
-             DO UPDATE SET rights = excluded.rights, source_order_id = excluded.source_order_id`,
-          ).run(input.userId, resourceType, resourceId, JSON.stringify(rights), orderId);
-        }
-      } catch {
+      const entitlement = decodeEntitlementDefinition(delivery.content);
+      if (!entitlement) {
         throw new MarketError("商品权益配置无效", "configuration");
       }
+      grantUserEntitlement({
+        userId: input.userId,
+        definition: entitlement,
+        sourceOrderId: orderId,
+        db,
+      });
     }
   }
   db.prepare(

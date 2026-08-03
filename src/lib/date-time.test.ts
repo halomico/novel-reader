@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatLocalDateTime, parseAppDateTime, toDateTimeAttribute } from "./date-time";
+import { formatCompactUpdateDate, formatLocalDateTime, parseAppDateTime, toDateTimeAttribute } from "./date-time";
 
 test("parses SQLite timestamps as UTC", () => {
   assert.equal(parseAppDateTime("2026-07-08 10:00:00")?.toISOString(), "2026-07-08T10:00:00.000Z");
@@ -17,4 +17,12 @@ test("keeps ISO timestamps as absolute instants", () => {
 test("formats SQLite UTC timestamps into a requested local timezone", () => {
   assert.equal(formatLocalDateTime("2026-07-08 10:00:00", { timeZone: "UTC" }), "2026/7/8 10:00:00");
   assert.equal(formatLocalDateTime("2026-07-08 10:00:00", { timeZone: "Asia/Shanghai" }), "2026/7/8 18:00:00");
+});
+
+test("uses a compact month-day date within one year and adds the year only when older", () => {
+  const now = Date.UTC(2026, 7, 4, 12);
+
+  assert.equal(formatCompactUpdateDate(Date.UTC(2026, 7, 4, 10), { now, timeZone: "UTC" }), "08-04");
+  assert.equal(formatCompactUpdateDate(now - 365 * 24 * 60 * 60 * 1_000, { now, timeZone: "UTC" }), "08-04");
+  assert.equal(formatCompactUpdateDate(Date.UTC(2025, 7, 3, 12), { now, timeZone: "UTC" }), "2025-08-03");
 });

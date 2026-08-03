@@ -16,6 +16,11 @@ import {
 import { generateVideoThumbnailFile, optimizeMediaFileFastStart, probeMediaDurationFile } from "./media-processing";
 import { isIgnoredMediaStorageEntry } from "./media-scan-filter";
 import { normalizeMediaStoragePath, resolveMediaStoragePath } from "./media-storage-path";
+import {
+  getActiveVideoTranscodeProfile,
+  transcodeVideoToProfile,
+  videoTranscodeOutputStoredName,
+} from "./video-transcode";
 
 type UploadSession = MediaNodeUploadRequest & {
   id: string;
@@ -415,7 +420,11 @@ export class MediaNodeStore {
     if (fs.existsSync(sourcePath) && fs.statSync(sourcePath).size !== session.sizeBytes) {
       throw new MediaNodeStoreError("文件尚未上传完成", 409);
     }
-    const finalStoredName = session.finalStoredName || this.availableStoredName(session.storedName);
+    const transcodeProfile = session.kind === "video" ? getActiveVideoTranscodeProfile() : null;
+    const requestedStoredName = transcodeProfile
+      ? videoTranscodeOutputStoredName(session.storedName, transcodeProfile)
+      : session.storedName;
+    const finalStoredName = session.finalStoredName || this.availableStoredName(requestedStoredName);
     if (!session.finalStoredName) {
       session.finalStoredName = finalStoredName;
       writeJsonAtomic(this.sessionPath(uploadId), session);
@@ -423,7 +432,16 @@ export class MediaNodeStore {
     const finalPath = this.mediaPath(finalStoredName);
     fs.mkdirSync(path.dirname(finalPath), { recursive: true });
     if (fs.existsSync(sourcePath)) {
-      if (session.kind === "video") {
+      if (transcodeProfile) {
+        try {
+          await transcodeVideoToProfile(sourcePath, finalPath, transcodeProfile);
+        } catch (error) {
+          throw new MediaNodeStoreError(
+            error instanceof Error ? `视频转码失败：${error.message}` : "视频转码失败",
+            422,
+          );
+        }
+      } else if (session.kind === "video") {
         try {
           await optimizeMediaFileFastStart(sourcePath, path.posix.extname(finalStoredName));
         } catch (error) {
@@ -433,7 +451,7 @@ export class MediaNodeStore {
           );
         }
       }
-      fs.renameSync(sourcePath, finalPath);
+      if (!transcodeProfile) fs.renameSync(sourcePath, finalPath);
     } else if (!fs.existsSync(finalPath)) {
       throw new MediaNodeStoreError("上传文件不存在", 404);
     }
@@ -448,7 +466,7 @@ export class MediaNodeStore {
       description: session.description,
       fileName,
       storedName: finalStoredName,
-      mimeType: session.mimeType,
+      mimeType: transcodeProfile?.mimeType || session.mimeType,
       sizeBytes: stat.size,
       mtimeMs: Math.floor(stat.mtimeMs),
       durationSeconds: null,

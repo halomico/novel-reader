@@ -13,6 +13,7 @@ export type SignedMediaPayload = {
   mimeType: string;
   fileName: string;
   publiclyAccessible: boolean;
+  estimatedKbps: number;
 };
 
 const MEDIA_PATH_PREFIX = "/media-file/";
@@ -56,7 +57,7 @@ function decodeValue(value: string, maxBytes: number): string | null {
 
 function payloadText(payload: SignedMediaPayload): string {
   return [
-    "v3",
+    "v4",
     payload.storedName,
     String(payload.expiresAt),
     String(payload.mtimeMs),
@@ -65,6 +66,7 @@ function payloadText(payload: SignedMediaPayload): string {
     payload.mimeType,
     payload.fileName,
     payload.publiclyAccessible ? "1" : "0",
+    String(payload.estimatedKbps),
   ].join("\n");
 }
 
@@ -85,6 +87,7 @@ export function createSignedMediaUrl(input: {
   sizeBytes: number;
   download: boolean;
   publiclyAccessible?: boolean;
+  estimatedKbps?: number;
   now?: number;
 }): string {
   const config = input.storageNodeId
@@ -104,6 +107,7 @@ export function createSignedMediaUrl(input: {
     mimeType: input.mimeType,
     fileName: input.fileName,
     publiclyAccessible,
+    estimatedKbps: Math.min(Math.max(Math.ceil(Number(input.estimatedKbps) || 0), 0), 100_000),
   };
   const params = new URLSearchParams({
     exp: String(payload.expiresAt),
@@ -113,6 +117,7 @@ export function createSignedMediaUrl(input: {
     mt: encodeValue(payload.mimeType),
     fn: encodeValue(payload.fileName),
     public: payload.publiclyAccessible ? "1" : "0",
+    br: String(payload.estimatedKbps),
     sig: signature(payload, config.signingSecret),
   });
   return `${config.publicUrl}${MEDIA_PATH_PREFIX}${encodedStoredName(payload.storedName)}?${params.toString()}`;
@@ -139,6 +144,7 @@ export function verifySignedMediaUrl(url: URL, now = Date.now(), secret = signin
   const mimeType = decodeValue(url.searchParams.get("mt") || "", 160);
   const fileName = decodeValue(url.searchParams.get("fn") || "", 512);
   const suppliedSignature = url.searchParams.get("sig") || "";
+  const estimatedKbps = Number(url.searchParams.get("br") || 0);
   if (
     !Number.isInteger(expiresAt) ||
     expiresAt <= Math.floor(now / 1_000) ||
@@ -150,6 +156,9 @@ export function verifySignedMediaUrl(url: URL, now = Date.now(), secret = signin
     !mimeType ||
     !/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/i.test(mimeType) ||
     !fileName ||
+    !Number.isInteger(estimatedKbps) ||
+    estimatedKbps < 0 ||
+    estimatedKbps > 100_000 ||
     suppliedSignature.length !== 43
   ) {
     return null;
@@ -163,6 +172,7 @@ export function verifySignedMediaUrl(url: URL, now = Date.now(), secret = signin
     mimeType,
     fileName,
     publiclyAccessible: url.searchParams.get("public") === "1",
+    estimatedKbps,
   };
   const expected = signature(payload, secret);
   try {

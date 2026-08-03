@@ -127,7 +127,7 @@ function applyDocumentCachePolicy(
   pathname = stripLocalePath(request.nextUrl.pathname),
 ): NextResponse {
   const hasUserSession = request.cookies.has(USER_SESSION_COOKIE);
-  const isNovelPage = /^\/books\/[1-9]\d*$/.test(pathname);
+  const isNovelPage = /^\/books\/[1-9]\d*(?:\/chapters\/[1-9]\d*)?$/.test(pathname);
   const cacheable = isPublicPageCacheCandidate({
     method: request.method,
     pathname,

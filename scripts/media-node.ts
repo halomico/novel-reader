@@ -11,6 +11,8 @@ const server = createMediaNodeServer({
   root: mediaRoot(),
   signingSecret,
   controlSecret,
+  maxVideoStreams: Number(process.env.MEDIA_NODE_MAX_VIDEO_STREAMS || 0),
+  videoBandwidthMbps: Number(process.env.MEDIA_NODE_VIDEO_BANDWIDTH_MBPS || 0),
 });
 
 const configuredPort = Number(process.env.MEDIA_NODE_PORT || 3100);

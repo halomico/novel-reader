@@ -1,9 +1,11 @@
-import { BookOpenText, PencilLine, Save, Sparkles } from "lucide-react";
+import { BookOpenText, Layers3, PencilLine, Save, Sparkles } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminNovelContentEditor } from "@/components/AdminNovelContentEditor";
+import { AdminNovelAccessFields } from "@/components/AdminNovelAccessFields";
 import { getNovelById } from "@/lib/books";
+import { getNovelSourceById, listNovelChaptersPage } from "@/lib/novel-library";
 import { isNovelInRecommendationPool } from "@/lib/recommendation-pool";
 import { getNovelRecommendationCount } from "@/lib/recommendations";
 import { listHotwordsForNovel, listTagGroups, listTagsForNovel, type TagGroup, type TagWithCount } from "@/lib/tags";
@@ -43,7 +45,9 @@ function safeReturnPath(value: string | undefined, bookId: number): string {
   if (value === "/admin/books" || value.startsWith("/admin/books?")) {
     return value;
   }
-  return value === `/books/${bookId}` || value.startsWith(`/books/${bookId}?`) ? value : "/admin/books";
+  return value === `/books/${bookId}` || value.startsWith(`/books/${bookId}?`) || value.startsWith(`/books/${bookId}/chapters/`)
+    ? value
+    : "/admin/books";
 }
 
 export default async function AdminBookEditPage({ params, searchParams }: AdminBookEditPageProps) {
@@ -64,6 +68,8 @@ export default async function AdminBookEditPage({ params, searchParams }: AdminB
   const hotwords = listHotwordsForNovel(book.id);
   const recommendationCount = getNovelRecommendationCount(book.id);
   const inRecommendationPool = isNovelInRecommendationPool(book.id);
+  const source = book.source_id ? getNovelSourceById(book.source_id) : null;
+  const chapterPreview = book.storage_mode === "chapters" ? listNovelChaptersPage(book.id, 1, 20) : null;
   const returnPath = safeReturnPath(query.returnPath, book.id);
 
   return (
@@ -77,7 +83,7 @@ export default async function AdminBookEditPage({ params, searchParams }: AdminB
         <div className="adminPanelHeader adminBookEditorHeader">
           <div>
             <h2>编辑小说</h2>
-            <p>{book.file_name}</p>
+            <p>{source?.name || "默认来源"} · {book.storage_mode === "chapters" ? `${book.chapter_count} 章` : book.file_name}</p>
           </div>
           <Link className="adminEditorReadLink" href={`/books/${book.id}`}>
             <BookOpenText size={16} aria-hidden="true" />
@@ -106,6 +112,16 @@ export default async function AdminBookEditPage({ params, searchParams }: AdminB
                   defaultValue={recommendationCount}
                 />
               </label>
+              <label className="adminBookDescriptionField">
+                <span>书籍简介</span>
+                <textarea
+                  name="description"
+                  rows={4}
+                  maxLength={2000}
+                  defaultValue={book.description}
+                  placeholder="可选，将显示在阅读页的书详情中"
+                />
+              </label>
             </div>
             <label className="adminBookPoolToggle settingToggle">
               <input
@@ -119,6 +135,17 @@ export default async function AdminBookEditPage({ params, searchParams }: AdminB
               </span>
               <span className="settingToggleTrack" aria-hidden="true"><span /></span>
             </label>
+          </section>
+
+          <section className="adminBookEditorSection">
+            <h3>阅读权限</h3>
+            <AdminNovelAccessFields
+              accessMode={book.access_mode}
+              sodaPrice={book.soda_price}
+              previewChapterCount={book.preview_chapter_count}
+              storageMode={book.storage_mode}
+              chapterCount={book.chapter_count}
+            />
           </section>
 
           <section className="adminBookEditorSection adminBookTagChooser">
@@ -166,7 +193,19 @@ export default async function AdminBookEditPage({ params, searchParams }: AdminB
             </label>
           </section>
 
-          <AdminNovelContentEditor bookId={book.id} />
+          {chapterPreview ? (
+            <section className="adminBookEditorSection adminNovelChapterSummary">
+              <header>
+                <h3><Layers3 size={16} aria-hidden="true" />章节</h3>
+                <Link href={`/admin/books/${book.id}/chapters`}>管理章节</Link>
+              </header>
+              <div>
+                {chapterPreview.chapters.map((chapter) => <span key={chapter.id}>{chapter.title}</span>)}
+              </div>
+            </section>
+          ) : (
+            <AdminNovelContentEditor bookId={book.id} />
+          )}
 
           <div className="adminEditorActions">
             <button type="submit">

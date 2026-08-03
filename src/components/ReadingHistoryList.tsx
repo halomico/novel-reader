@@ -188,7 +188,12 @@ export function ReadingHistoryList({
                     <span aria-hidden="true"><Check size={13} /></span>
                   </label>
                 ) : null}
-                <Link className="readingHistoryMain" href={`/books/${item.novelId}?resume=1`}>
+                <Link
+                  className="readingHistoryMain"
+                  href={item.chapterId
+                    ? `/books/${item.novelId}/chapters/${item.chapterId}?resume=1`
+                    : `/books/${item.novelId}?resume=1`}
+                >
                   <span className="readingHistoryCopy">
                     <strong>{item.title}</strong>
                     <small>

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { BookOpen, ChevronRight, Clapperboard, File, Globe2, Headphones, ListFilter, Megaphone, Search, Tags, Trash2, Upload } from "lucide-react";
 import { AdminPaletteField } from "@/components/AdminPaletteField";
 import { AdminSelect } from "@/components/AdminSelect";
+import { AdminSwitchRow } from "@/components/AdminSwitchRow";
 import { HomeCardOrderField } from "@/components/HomeCardOrderField";
 import { SiteIconFilePicker } from "@/components/SiteIconFilePicker";
 import { getAdminBookStats } from "@/lib/admin-books";
@@ -25,10 +26,6 @@ import {
 } from "@/lib/config";
 import { readSiteSettings } from "@/lib/site-settings";
 import { getSiteIconHref } from "@/lib/site-icon";
-import {
-  resolveHomePortalAccessMode,
-  type HomePortalContentCardKey,
-} from "@/lib/home-portal";
 import { countRecommendationPoolNovels } from "@/lib/recommendation-pool";
 import { isEmailVerificationConfigured } from "@/lib/email-verification";
 import { normalizeReaderLineHeight, READER_LINE_HEIGHTS } from "@/lib/ui-preferences";
@@ -58,15 +55,6 @@ type AdminSettingsPageProps = {
 function mediaAccessMode(enabled: boolean, guestEnabled: boolean): "off" | "user" | "public" {
   if (!enabled) return "off";
   return guestEnabled ? "public" : "user";
-}
-
-function homeCardAccessMode(
-  key: HomePortalContentCardKey,
-  enabled: boolean,
-  guestEnabled: boolean,
-  publicDisplayCards: readonly HomePortalContentCardKey[],
-) {
-  return resolveHomePortalAccessMode(enabled, guestEnabled, publicDisplayCards.includes(key));
 }
 
 export default async function AdminSettingsPage({ searchParams }: AdminSettingsPageProps) {
@@ -192,13 +180,12 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               </AdminSelect>
             </label>
             <AdminPaletteField defaultValue={settings.defaultPalette} />
-            <label className="adminSwitchLabel">
-              <span>
-                <strong>定时随机切换默认配色</strong>
-                <small>只影响没有保存个人配色的浏览器，周期内所有页面保持一致。</small>
-              </span>
-              <input name="defaultPaletteRandomEnabled" type="checkbox" defaultChecked={settings.defaultPaletteRandomEnabled} />
-            </label>
+            <AdminSwitchRow
+              name="defaultPaletteRandomEnabled"
+              title="定时随机切换默认配色"
+              description="只影响没有保存个人配色的浏览器，周期内所有页面保持一致。"
+              defaultChecked={settings.defaultPaletteRandomEnabled}
+            />
             <label className="adminCompactField isNarrow">
               <span>配色切换周期 / 分钟</span>
               <input
@@ -231,13 +218,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               <span>登录限速 / 分钟</span>
               <input name="adminLoginRateLimitPerMinute" type="number" min="1" max="120" defaultValue={loginRateLimit} />
             </label>
-            <label className="adminSwitchLabel">
-              <span>
-                <strong>启用登录限速</strong>
-                <small>建议保持开启，保护后台密码入口。</small>
-              </span>
-              <input name="adminLoginRateLimitEnabled" type="checkbox" defaultChecked={settings.adminLoginRateLimitEnabled} />
-            </label>
+            <AdminSwitchRow name="adminLoginRateLimitEnabled" title="启用登录限速" description="建议保持开启，保护后台密码入口。" defaultChecked={settings.adminLoginRateLimitEnabled} />
             <label>
               <span>后台访问白名单</span>
               <textarea
@@ -247,13 +228,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 placeholder="每行一个 IP 或 CIDR"
               />
             </label>
-            <label className="adminSwitchLabel">
-              <span>
-                <strong>启用后台访问白名单</strong>
-                <small>仅限制后台入口；保存时会确认当前 IP 已包含在规则中。</small>
-              </span>
-              <input name="adminIpAllowlistEnabled" type="checkbox" defaultChecked={settings.adminIpAllowlistEnabled} />
-            </label>
+            <AdminSwitchRow name="adminIpAllowlistEnabled" title="启用后台访问白名单" description="仅限制后台入口；保存时会确认当前 IP 已包含在规则中。" defaultChecked={settings.adminIpAllowlistEnabled} />
           </details>
 
           <details className="adminSettingsSection adminSettingsDisclosure">
@@ -286,26 +261,9 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 </AdminSelect>
               </label>
             </div>
-            <label className="adminSwitchLabel">
-              <span>
-                <strong>显示随便看看</strong>
-              </span>
-              <input name="randomCatalogEnabled" type="checkbox" defaultChecked={settings.randomCatalogEnabled} />
-            </label>
-            <label className="adminSwitchLabel">
-              <span>
-                <strong>启用手动置顶</strong>
-                <small>关闭后保留置顶列表，但前台暂不提升这些小说的排序。</small>
-              </span>
-              <input name="manualPinnedNovelsEnabled" type="checkbox" defaultChecked={settings.manualPinnedNovelsEnabled} />
-            </label>
-            <label className="adminSwitchLabel">
-              <span>
-                <strong>启用随机推荐</strong>
-                <small>每个周期从精选推荐池等权抽取，当前 {recommendationPoolCount} 本。</small>
-              </span>
-              <input name="randomRecommendationsEnabled" type="checkbox" defaultChecked={settings.randomRecommendationsEnabled} />
-            </label>
+            <AdminSwitchRow name="randomCatalogEnabled" title="显示随便看看" defaultChecked={settings.randomCatalogEnabled} />
+            <AdminSwitchRow name="manualPinnedNovelsEnabled" title="启用手动置顶" description="关闭后保留置顶列表，但前台暂不提升这些小说的排序。" defaultChecked={settings.manualPinnedNovelsEnabled} />
+            <AdminSwitchRow name="randomRecommendationsEnabled" title="启用随机推荐" description={`每个周期从精选推荐池等权抽取，当前 ${recommendationPoolCount} 本。`} defaultChecked={settings.randomRecommendationsEnabled} />
             <label className="adminCompactField">
               <span>置顶显示顺序</span>
               <AdminSelect name="catalogPromotionOrder" defaultValue={settings.catalogPromotionOrder}>
@@ -353,13 +311,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 <input name="userDailyReportLimit" type="number" min="1" max="500" defaultValue={userDailyReportLimit} />
               </label>
             </div>
-            <label className="adminSwitchLabel">
-              <span>
-                <strong>开放前台登录</strong>
-                <small>关闭后未登录用户不能登录；已登录用户仍可退出。</small>
-              </span>
-              <input name="userLoginEnabled" type="checkbox" defaultChecked={settings.userLoginEnabled} />
-            </label>
+            <AdminSwitchRow name="userLoginEnabled" title="开放前台登录" description="关闭后未登录用户不能登录；已登录用户仍可退出。" defaultChecked={settings.userLoginEnabled} />
             <label className="adminCompactField">
               <span>注册方式</span>
               <AdminSelect name="userRegistrationMode" defaultValue={settings.userRegistrationMode}>
@@ -368,20 +320,15 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 <option value="open">开放注册</option>
               </AdminSelect>
             </label>
-            <label className="adminSwitchLabel">
-              <span>
-                <strong>注册后验证邮箱</strong>
-                <small>{mailConfigured ? "邮件服务已就绪，验证通过后账号可登录。" : "SMTP 或 SITE_URL 尚未配置，开启后注册会暂停并提示管理员。"}</small>
-              </span>
-              <input name="emailVerificationRequired" type="checkbox" defaultChecked={settings.emailVerificationRequired} />
-            </label>
-            <label className="adminSwitchLabel">
-              <span>
-                <strong>启用集市</strong>
-                <small>入口仍受用户等级权限控制。</small>
-              </span>
-              <input name="marketEnabled" type="checkbox" defaultChecked={settings.marketEnabled} />
-            </label>
+            <AdminSwitchRow
+              name="emailVerificationRequired"
+              title="注册后验证邮箱"
+              description={mailConfigured ? "验证通过后账号可登录。" : "请先配置 SMTP 与 SITE_URL。"}
+              status={mailConfigured ? "已就绪" : "未配置"}
+              defaultChecked={settings.emailVerificationRequired}
+              disabled={!mailConfigured}
+            />
+            <AdminSwitchRow name="marketEnabled" title="启用集市" description="入口仍受用户等级权限控制。" defaultChecked={settings.marketEnabled} />
             <label className="adminCompactField isNarrow">
               <span>每曲奇兑换苏打</span>
               <input
@@ -392,70 +339,64 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 defaultValue={settings.cookieToSodaRate}
               />
             </label>
-            <label className="adminSwitchLabel">
-              <span>
-                <strong>启用访问数据统计</strong>
-                <small>统计小说与资源访问，用于分析内容、IP、来源和客户端。</small>
-              </span>
-              <input name="analyticsEnabled" type="checkbox" defaultChecked={settings.analyticsEnabled} />
-            </label>
+            <AdminSwitchRow name="analyticsEnabled" title="启用访问数据统计" description="统计小说与资源访问，用于分析内容、IP、来源和客户端。" defaultChecked={settings.analyticsEnabled} />
             <div className="adminAccessSettings">
               <h4>前台资源访问</h4>
               <div className="adminAccessModeGrid">
                 <label className="adminAccessModeRow">
                   <span><BookOpen size={16} aria-hidden="true" /><strong>小说</strong></span>
-                  <AdminSelect name="novelAccessMode" defaultValue={homeCardAccessMode("novels", settings.novelLibraryEnabled, settings.guestLibraryNavEnabled, settings.publicDisplayHomeCards)}>
-                    <option value="public">公开访问</option>
-                    <option value="preview">公开展示</option>
-                    <option value="member">登录可见</option>
+                  <AdminSelect name="novelAccessMode" defaultValue={settings.homePortalAccessModes.novels}>
+                    <option value="public">公开可用</option>
+                    <option value="browse">公开展示</option>
+                    <option value="member">登录可用</option>
                     <option value="off">关闭</option>
                   </AdminSelect>
                 </label>
                 <label className="adminAccessModeRow">
                   <span><Clapperboard size={16} aria-hidden="true" /><strong>视频</strong></span>
-                  <AdminSelect name="videoAccessMode" defaultValue={homeCardAccessMode("video", settings.videoLibraryEnabled, settings.guestVideoNavEnabled, settings.publicDisplayHomeCards)}>
-                    <option value="public">公开访问</option>
-                    <option value="preview">公开展示</option>
-                    <option value="member">登录可见</option>
+                  <AdminSelect name="videoAccessMode" defaultValue={settings.homePortalAccessModes.video}>
+                    <option value="public">公开可用</option>
+                    <option value="browse">公开展示</option>
+                    <option value="member">登录可用</option>
                     <option value="off">关闭</option>
                   </AdminSelect>
                 </label>
                 <label className="adminAccessModeRow">
                   <span><Headphones size={16} aria-hidden="true" /><strong>音频</strong></span>
-                  <AdminSelect name="audioAccessMode" defaultValue={homeCardAccessMode("audio", settings.audioLibraryEnabled, settings.guestAudioNavEnabled, settings.publicDisplayHomeCards)}>
-                    <option value="public">公开访问</option>
-                    <option value="preview">公开展示</option>
-                    <option value="member">登录可见</option>
+                  <AdminSelect name="audioAccessMode" defaultValue={settings.homePortalAccessModes.audio}>
+                    <option value="public">公开可用</option>
+                    <option value="browse">公开展示</option>
+                    <option value="member">登录可用</option>
                     <option value="off">关闭</option>
                   </AdminSelect>
                 </label>
                 <label className="adminAccessModeRow">
                   <span><File size={16} aria-hidden="true" /><strong>文件</strong></span>
-                  <AdminSelect name="fileAccessMode" defaultValue={homeCardAccessMode("file", settings.fileLibraryEnabled, settings.guestFileNavEnabled, settings.publicDisplayHomeCards)}>
-                    <option value="public">公开访问</option>
-                    <option value="preview">公开展示</option>
-                    <option value="member">登录可见</option>
+                  <AdminSelect name="fileAccessMode" defaultValue={settings.homePortalAccessModes.file}>
+                    <option value="public">公开可用</option>
+                    <option value="browse">公开展示</option>
+                    <option value="member">登录可用</option>
                     <option value="off">关闭</option>
                   </AdminSelect>
                 </label>
                 <label className="adminAccessModeRow">
                   <span><Tags size={16} aria-hidden="true" /><strong>标签</strong></span>
-                  <AdminSelect name="tagAccessMode" defaultValue={homeCardAccessMode("tags", settings.tagLibraryEnabled, settings.guestTagLibraryNavEnabled, settings.publicDisplayHomeCards)}>
-                    <option value="public">公开访问</option>
-                    <option value="preview">公开展示</option>
-                    <option value="member">登录可见</option>
+                  <AdminSelect name="tagAccessMode" defaultValue={settings.homePortalAccessModes.tags}>
+                    <option value="public">公开可用</option>
+                    <option value="browse">公开展示</option>
+                    <option value="member">登录可用</option>
                     <option value="off">关闭</option>
                   </AdminSelect>
                 </label>
                 <label className="adminAccessModeRow">
-                  <span><Megaphone size={16} aria-hidden="true" /><strong>公告卡片</strong></span>
+                  <span><Megaphone size={16} aria-hidden="true" /><strong>公告</strong></span>
                   <AdminSelect
                     name="announcementCardAccessMode"
-                    defaultValue={homeCardAccessMode("announcement", settings.announcementCardEnabled, settings.guestAnnouncementCardEnabled, settings.publicDisplayHomeCards)}
+                    defaultValue={settings.homePortalAccessModes.announcement}
                   >
-                    <option value="public">公开访问</option>
-                    <option value="preview">公开展示</option>
-                    <option value="member">登录可见</option>
+                    <option value="public">公开可用</option>
+                    <option value="browse">公开展示</option>
+                    <option value="member">登录可用</option>
                     <option value="off">关闭</option>
                   </AdminSelect>
                 </label>
@@ -483,7 +424,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                   </AdminSelect>
                 </label>
               </div>
-              <p className="adminFieldHint">公开展示仅让访客看到首页入口，内容仍需登录；登录可见会同时隐藏访客入口。</p>
+              <p className="adminFieldHint">公开展示只显示首页卡片和顶部入口，点入后提示登录；公开可用允许访客直接浏览和使用内容。</p>
               <HomeCardOrderField initialOrder={settings.homePortalOrder} />
             </div>
             <div className="adminFieldGrid">
@@ -496,13 +437,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
 
           <details className="adminSettingsSection adminSettingsDisclosure">
             <summary>索引策略</summary>
-            <label className="adminSwitchLabel">
-              <span>
-                <strong>显示搜索进度条</strong>
-                <small>前台全文搜索和后台全文索引构建会显示处理进度。</small>
-              </span>
-              <input name="showProgressBars" type="checkbox" defaultChecked={settings.showProgressBars} />
-            </label>
+            <AdminSwitchRow name="showProgressBars" title="显示搜索进度条" description="前台全文搜索和后台全文索引构建会显示处理进度。" defaultChecked={settings.showProgressBars} />
             <div className="adminFieldGrid">
               <label>
                 <span>前台全文最多显示 / 条</span>

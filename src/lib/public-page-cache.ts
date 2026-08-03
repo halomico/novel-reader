@@ -38,7 +38,10 @@ function isCacheablePublicPath(
   if (pathname === "/novels" || /^\/tags\/[^/]+$/.test(pathname)) {
     return hasOnlyPositivePage(searchParams);
   }
-  if (allowPublicNovelPages && /^\/books\/[1-9]\d*$/.test(pathname)) {
+  if (
+    allowPublicNovelPages &&
+    (/^\/books\/[1-9]\d*$/.test(pathname) || /^\/books\/[1-9]\d*\/chapters\/[1-9]\d*$/.test(pathname))
+  ) {
     return hasSafeReaderReturnPath(searchParams);
   }
   return pathname === "/tags" && searchParams.size === 0;

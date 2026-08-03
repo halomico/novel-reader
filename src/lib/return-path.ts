@@ -1,4 +1,4 @@
-export function normalizeUserReturnPath(value: unknown, fallback = "/account"): string {
+export function normalizeUserReturnPath(value: unknown, fallback = "/account?view=growth"): string {
   const path = String(value || "").trim().slice(0, 500);
   if (
     !path.startsWith("/") ||

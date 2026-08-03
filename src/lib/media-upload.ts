@@ -22,6 +22,11 @@ import {
   type MediaKind,
 } from "./media";
 import { optimizeMediaFileFastStart } from "./media-processing";
+import {
+  getActiveVideoTranscodeProfile,
+  transcodeVideoToProfile,
+  videoTranscodeOutputStoredName,
+} from "./video-transcode";
 
 export { MEDIA_UPLOAD_CHUNK_BYTES, MEDIA_UPLOAD_MAX_BYTES };
 
@@ -316,14 +321,27 @@ async function finishMediaUploadUnlocked(uploadId: string): Promise<MediaAsset> 
   const requestedStoredName = session.storedName.replace(/\\/g, "/").startsWith(`${session.kind}/`)
     ? session.storedName
     : mediaStoredName(session.kind, "", session.storedName);
+  const transcodeProfile = session.kind === "video" ? getActiveVideoTranscodeProfile() : null;
+  const outputStoredName = transcodeProfile
+    ? videoTranscodeOutputStoredName(requestedStoredName, transcodeProfile)
+    : requestedStoredName;
   const storedName = availableMediaStoredName(
     session.kind,
-    mediaFolderFromStoredName(requestedStoredName, session.kind),
-    path.basename(requestedStoredName),
+    mediaFolderFromStoredName(outputStoredName, session.kind),
+    path.basename(outputStoredName),
   );
   const finalPath = mediaFilePath(storedName);
   fs.mkdirSync(path.dirname(finalPath), { recursive: true });
-  if (session.kind === "video") {
+  if (transcodeProfile) {
+    try {
+      await transcodeVideoToProfile(sourcePath, finalPath, transcodeProfile);
+    } catch (error) {
+      throw new MediaUploadError(
+        error instanceof Error ? `视频转码失败：${error.message}` : "视频转码失败",
+        422,
+      );
+    }
+  } else if (session.kind === "video") {
     try {
       await optimizeMediaFileFastStart(sourcePath, path.extname(storedName));
     } catch (error) {
@@ -333,7 +351,7 @@ async function finishMediaUploadUnlocked(uploadId: string): Promise<MediaAsset> 
       );
     }
   }
-  fs.renameSync(sourcePath, finalPath);
+  if (!transcodeProfile) fs.renameSync(sourcePath, finalPath);
   const finalStat = fs.statSync(finalPath);
   let asset: MediaAsset;
   try {
@@ -345,7 +363,7 @@ async function finishMediaUploadUnlocked(uploadId: string): Promise<MediaAsset> 
       description: session.description,
       fileName: path.basename(storedName),
       storedName,
-      mimeType: session.mimeType,
+      mimeType: transcodeProfile?.mimeType || session.mimeType,
       sizeBytes: finalStat.size,
       mtimeMs: Math.floor(finalStat.mtimeMs),
       durationSeconds: null,

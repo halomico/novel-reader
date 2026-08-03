@@ -1,4 +1,4 @@
-import { isGuestTagLibraryNavEnabled, isNovelLibraryPublic, isTagLibraryEnabled } from "@/lib/config";
+import { canAccessHomeAnnouncementCard, isNovelLibraryPublic, isTagLibraryEnabled, isTagLibraryPublic } from "@/lib/config";
 import { getDb } from "@/lib/db";
 import { isMediaKindPublic, type MediaKind } from "@/lib/media";
 import { absoluteSiteUrl } from "@/lib/seo";
@@ -15,7 +15,7 @@ export function GET() {
     (_, index) => absoluteSiteUrl(`/sitemap/books/${index + 1}.xml`),
   );
 
-  if (isTagLibraryEnabled() && isGuestTagLibraryNavEnabled()) {
+  if (isTagLibraryEnabled() && isTagLibraryPublic()) {
     urls.push(absoluteSiteUrl("/sitemap/tags.xml"));
   }
   if ((["video", "audio", "file"] as MediaKind[]).some(isMediaKindPublic)) {
@@ -28,7 +28,7 @@ export function GET() {
        AND published_at IS NOT NULL AND published_at <= CURRENT_TIMESTAMP
        AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)`,
   ).get() as { count: number }).count;
-  if (publicAnnouncementCount > 0) {
+  if (canAccessHomeAnnouncementCard(false) && publicAnnouncementCount > 0) {
     urls.push(absoluteSiteUrl("/sitemap/announcements.xml"));
   }
 

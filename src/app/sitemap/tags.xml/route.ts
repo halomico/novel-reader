@@ -1,4 +1,4 @@
-import { isGuestTagLibraryNavEnabled, isTagLibraryEnabled } from "@/lib/config";
+import { isTagLibraryEnabled, isTagLibraryPublic } from "@/lib/config";
 import { absoluteSiteUrl } from "@/lib/seo";
 import { renderUrlSet, sitemapResponse } from "@/lib/sitemap";
 import { listTags } from "@/lib/tags";
@@ -6,7 +6,7 @@ import { listTags } from "@/lib/tags";
 export const dynamic = "force-dynamic";
 
 export function GET() {
-  if (!isTagLibraryEnabled() || !isGuestTagLibraryNavEnabled()) {
+  if (!isTagLibraryEnabled() || !isTagLibraryPublic()) {
     return new Response("Not found", { status: 404 });
   }
   return sitemapResponse(renderUrlSet([

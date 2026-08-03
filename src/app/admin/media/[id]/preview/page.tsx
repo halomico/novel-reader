@@ -84,6 +84,8 @@ export default async function AdminMediaPreviewPage({ params }: { params: Promis
                 posterVersion={posterVersion}
                 sourceVersion={asset.mtimeMs}
                 basePath={`/admin/media/${asset.id}`}
+                authenticated
+                leaseRequired={false}
               />
             </div>
             <AdminMediaCoverManager

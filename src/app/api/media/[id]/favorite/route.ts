@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { toggleMediaFavorite } from "@/lib/favorites";
-import { getMediaAsset, isFeedbackMediaKind, isMediaKindAccessible } from "@/lib/media";
+import { getMediaAsset, isFeedbackMediaKind, isMediaKindConsumable } from "@/lib/media";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
   const mediaId = Number((await params).id);
   const asset = getMediaAsset(mediaId);
-  if (!asset || !isFeedbackMediaKind(asset.kind) || !isMediaKindAccessible(asset.kind, true)) {
+  if (!asset || !isFeedbackMediaKind(asset.kind) || !isMediaKindConsumable(asset.kind, true)) {
     return NextResponse.json({ ok: false, message: "媒体不存在" }, { status: 404 });
   }
   const result = toggleMediaFavorite(user.id, mediaId);
