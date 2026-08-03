@@ -26,6 +26,7 @@ import {
   type ReaderLineHeight,
   type ReaderTagsMode,
 } from "@/lib/ui-preferences";
+import { clearReaderPaperPreference } from "@/lib/reader-theme-client";
 import { ReaderFontSizeStepper, ReaderLineHeightSlider } from "./ReaderTypographyControls";
 
 type ThemeChoice = "system" | "light" | "dark";
@@ -164,6 +165,7 @@ export function SettingsPanel({
 
   function changeTheme(value: ThemeChoice) {
     setTheme(value);
+    clearReaderPaperPreference();
     if (value === "system") {
       document.documentElement.removeAttribute("data-theme");
     } else {

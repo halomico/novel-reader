@@ -45,7 +45,7 @@ type AccountPageProps = {
 };
 
 function resolveView(value: string | undefined): Extract<UserWorkspaceKey, "profile" | "growth"> {
-  return value === "profile" ? "profile" : "growth";
+  return value === "growth" ? "growth" : "profile";
 }
 
 function resolveGrowthPanel(value: string | undefined): "rights" | "record" | "" {

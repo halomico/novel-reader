@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { clearReaderPaperPreference } from "./reader-theme-client";
 import {
   COLOR_PALETTES,
   DEFAULT_READER_LINE_HEIGHT,
@@ -79,6 +80,22 @@ test("keeps the six measured reader paper themes in one shared preference model"
   assert.equal(isReaderTheme("night"), true);
   assert.equal(isReaderTheme("warm"), true);
   assert.equal(isReaderTheme("system"), false);
+});
+
+test("clears the selected reader paper when the system appearance changes", () => {
+  const removedKeys: string[] = [];
+  const removedAttributes: string[] = [];
+  const shellAttributes: string[] = [];
+
+  clearReaderPaperPreference({
+    storage: { removeItem: (key) => removedKeys.push(key) },
+    root: { removeAttribute: (name) => removedAttributes.push(name) },
+    shells: [{ removeAttribute: (name) => shellAttributes.push(name) }],
+  });
+
+  assert.deepEqual(removedKeys, ["novel-reader-paper-v2"]);
+  assert.deepEqual(removedAttributes, ["data-reader-theme"]);
+  assert.deepEqual(shellAttributes, ["data-reader-theme"]);
 });
 
 test("maps reader papers to the matching global light or dark appearance", () => {

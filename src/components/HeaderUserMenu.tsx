@@ -91,7 +91,7 @@ export function HeaderUserMenu({
         <div className={user ? "userMenuPanel hasIdentity" : "userMenuPanel"}>
           {user ? (
             <>
-              <Link className="userMenuIdentity" href="/account?view=growth" onClick={closeMenu}>
+              <Link className="userMenuIdentity" href="/account" onClick={closeMenu}>
                 <span className="userMenuAvatar" aria-hidden="true">
                   {user.avatarPath ? <img src={user.avatarPath} alt="" /> : <UserRound size={18} />}
                 </span>

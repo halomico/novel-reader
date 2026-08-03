@@ -180,7 +180,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
   const requestedFolder = kind === "video" ? "" : normalizeMediaFolder(params.folder || "") || "";
   const defaultSortBy: MediaSortBy = kind === "video" ? "published" : kind === "audio" && !requestedFolder ? "duration" : "name";
   const sortBy: MediaSortBy = kind === "video"
-    ? params.sort === "name" || params.sort === "duration" || params.sort === "plays" || params.sort === "updated" ? params.sort : "published"
+    ? params.sort === "name" || params.sort === "duration" || params.sort === "plays" ? params.sort : "published"
     : kind === "audio"
       ? params.sort === "duration" || params.sort === "name" ? params.sort : defaultSortBy
       : params.sort === "size" ? "size" : "name";

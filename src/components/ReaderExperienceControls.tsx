@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "@/components/LocalizedLink";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import {
   DEFAULT_READER_LINE_HEIGHT,
   getReaderThemeSystemTheme,
@@ -25,6 +25,7 @@ import {
   type ReaderLineHeight,
   type ReaderTheme,
 } from "@/lib/ui-preferences";
+import { clearReaderPaperPreference } from "@/lib/reader-theme-client";
 import { formatNovelWordCount } from "./CatalogBookGrid";
 import { NovelFavoriteButton } from "./NovelFavoriteButton";
 import { NovelRecommendationButton } from "./NovelRecommendationButton";
@@ -94,11 +95,6 @@ export function ReaderExperienceControls({
   const [width, setWidth] = useState<ReaderWidth>(800);
   const [fontSize, setFontSize] = useState(18);
   const [lineHeight, setLineHeight] = useState<ReaderLineHeight>(DEFAULT_READER_LINE_HEIGHT);
-  const [scrollProgress, setScrollProgress] = useState(0);
-  const [scrollVisible, setScrollVisible] = useState(false);
-  const quickScrollRef = useRef<HTMLDivElement>(null);
-  const quickScrollDraggingRef = useRef(false);
-  const quickScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -140,40 +136,16 @@ export function ReaderExperienceControls({
 
     const syncGlobalTheme = () => {
       setGlobalTheme(currentGlobalTheme());
+      const nextReaderTheme = localStorage.getItem(READER_PAPER_STORAGE_KEY);
+      setReaderTheme(isReaderTheme(nextReaderTheme) ? nextReaderTheme : null);
     };
     const themeObserver = new MutationObserver(syncGlobalTheme);
     const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
-    themeObserver.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+    themeObserver.observe(root, { attributes: true, attributeFilter: ["data-theme", "data-reader-theme"] });
     systemTheme.addEventListener("change", syncGlobalTheme);
     return () => {
       themeObserver.disconnect();
       systemTheme.removeEventListener("change", syncGlobalTheme);
-    };
-  }, []);
-
-  useEffect(() => {
-    let frame = 0;
-    const update = () => {
-      frame = 0;
-      const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-      setScrollProgress(maxScroll > 0 ? Math.min(1, Math.max(0, window.scrollY / maxScroll)) : 0);
-    };
-    const showTemporarily = () => {
-      setScrollVisible(true);
-      if (quickScrollTimerRef.current) clearTimeout(quickScrollTimerRef.current);
-      quickScrollTimerRef.current = setTimeout(() => {
-        if (!quickScrollDraggingRef.current) setScrollVisible(false);
-      }, 1_000);
-      if (!frame) frame = window.requestAnimationFrame(update);
-    };
-    update();
-    window.addEventListener("scroll", showTemporarily, { passive: true });
-    window.addEventListener("resize", showTemporarily);
-    return () => {
-      window.removeEventListener("scroll", showTemporarily);
-      window.removeEventListener("resize", showTemporarily);
-      if (frame) window.cancelAnimationFrame(frame);
-      if (quickScrollTimerRef.current) clearTimeout(quickScrollTimerRef.current);
     };
   }, []);
 
@@ -194,11 +166,9 @@ export function ReaderExperienceControls({
     const nextTheme = currentGlobalTheme() === "dark" ? "light" : "dark";
     setReaderTheme(null);
     setGlobalTheme(nextTheme);
-    localStorage.removeItem(READER_PAPER_STORAGE_KEY);
+    clearReaderPaperPreference();
     localStorage.setItem("novel-theme", nextTheme);
     document.documentElement.dataset.theme = nextTheme;
-    document.documentElement.removeAttribute("data-reader-theme");
-    getReaderShell()?.removeAttribute("data-reader-theme");
   }
 
   function changeReaderTheme(nextTheme: ReaderTheme) {
@@ -247,16 +217,6 @@ export function ReaderExperienceControls({
     window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   }
 
-  function scrollFromPointer(clientY: number) {
-    const track = quickScrollRef.current;
-    if (!track) return;
-    const rect = track.getBoundingClientRect();
-    const ratio = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
-    const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-    window.scrollTo({ top: ratio * maxScroll, behavior: "auto" });
-    setScrollProgress(ratio);
-  }
-
   const panelTitle = panel === "directory" ? "章节目录" : panel === "info" ? "书详情" : "设置";
   const readerIsDark = readerTheme ? readerTheme === "night" : globalTheme === "dark";
 
@@ -293,45 +253,6 @@ export function ReaderExperienceControls({
           <ArrowUp size={20} aria-hidden="true" /><span>回顶</span>
         </button>
       </aside>
-      <div
-        className={`readerQuickScroll${scrollVisible ? " isVisible" : ""}`}
-        ref={quickScrollRef}
-        role="scrollbar"
-        aria-label="快速滚动正文"
-        aria-orientation="vertical"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(scrollProgress * 100)}
-        tabIndex={0}
-        style={{ "--reader-scroll-top": `calc(${scrollProgress * 100}% - ${scrollProgress * 48}px)` } as CSSProperties}
-        onPointerDown={(event) => {
-          quickScrollDraggingRef.current = true;
-          setScrollVisible(true);
-          event.currentTarget.setPointerCapture(event.pointerId);
-          scrollFromPointer(event.clientY);
-        }}
-        onPointerMove={(event) => {
-          if (quickScrollDraggingRef.current) scrollFromPointer(event.clientY);
-        }}
-        onPointerUp={(event) => {
-          quickScrollDraggingRef.current = false;
-          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-            event.currentTarget.releasePointerCapture(event.pointerId);
-          }
-        }}
-        onPointerCancel={() => { quickScrollDraggingRef.current = false; }}
-        onKeyDown={(event) => {
-          if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
-          event.preventDefault();
-          const next = event.key === "Home" ? 0 : event.key === "End" ? 1 : Math.min(1, Math.max(0, scrollProgress + (event.key === "ArrowDown" ? 0.05 : -0.05)));
-          const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-          window.scrollTo({ top: next * maxScroll, behavior: "auto" });
-          setScrollProgress(next);
-        }}
-      >
-        <span />
-      </div>
-
       {panel ? (
         <div className="readerPanelBackdrop" onMouseDown={(event) => event.target === event.currentTarget && setPanel(null)}>
           <section className={`readerSidePanel is-${panel}`} role="dialog" aria-modal="true" aria-label={panelTitle}>

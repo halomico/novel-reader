@@ -38,7 +38,6 @@ export function MediaPublicSort({
     : kind === "video"
       ? [
           { value: "published", label: uiText(locale, "最新") },
-          { value: "updated", label: uiText(locale, "最近更新") },
           { value: "name", label: uiText(locale, "名称") },
           { value: "duration", label: uiText(locale, "时长") },
           { value: "plays", label: uiText(locale, "播放量") },

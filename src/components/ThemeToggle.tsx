@@ -1,8 +1,10 @@
 "use client";
 
 import { Moon, Sun } from "lucide-react";
+import { clearReaderPaperPreference } from "@/lib/reader-theme-client";
 
 function applyTheme(theme: "light" | "dark") {
+  clearReaderPaperPreference();
   document.documentElement.dataset.theme = theme;
   try {
     localStorage.setItem("novel-theme", theme);

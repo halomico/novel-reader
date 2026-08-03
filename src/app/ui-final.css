@@ -643,10 +643,6 @@
   box-shadow: 0 1px 3px rgb(0 0 0 / 14%);
 }
 
-.readerQuickScroll {
-  display: none;
-}
-
 .advancedTagSearchToolbar {
   grid-template-columns: minmax(150px, .7fr) minmax(180px, 1fr) minmax(220px, 1.35fr) auto;
   align-items: end;
@@ -1055,35 +1051,6 @@ nav.accountGrowthTools > a + a {
     display: block;
   }
 
-  .readerQuickScroll {
-    position: fixed;
-    z-index: 54;
-    top: 76px;
-    right: 0;
-    bottom: 124px;
-    display: block;
-    width: 18px;
-    touch-action: none;
-    opacity: 0;
-    transition: opacity 150ms ease;
-  }
-
-  .readerQuickScroll.isVisible,
-  .readerQuickScroll:focus-visible {
-    opacity: 1;
-  }
-
-  .readerQuickScroll > span {
-    position: absolute;
-    top: var(--reader-scroll-top);
-    right: 3px;
-    width: 5px;
-    height: 48px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--reader-text) 44%, transparent);
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--reader-paper) 46%, transparent);
-  }
-
   .readerSidePanel,
   .readerSidePanel.is-directory,
   .readerSidePanel.is-info {
@@ -1134,6 +1101,27 @@ nav.accountGrowthTools > a + a {
 
   .advancedTagSearchToolbar {
     grid-template-columns: 1fr;
+  }
+
+  .mediaAudioStage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mediaAudioNowPlaying {
+    grid-template-columns: 72px minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .mediaAudioDetailCover {
+    width: 72px;
+  }
+
+  .mediaAudioControls {
+    gap: 8px;
+  }
+
+  .mediaAudioPlaybackControls {
+    gap: 6px;
   }
 
   .mediaDetail.is-video {
