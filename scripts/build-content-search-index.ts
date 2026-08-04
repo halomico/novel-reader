@@ -1,8 +1,9 @@
 import "dotenv/config";
 
-import { getContentSearchDb } from "../src/lib/content-search-db";
-import { buildContentSearchIndex } from "../src/lib/content-search-index";
+import { buildContentSearchSourceIndex } from "../src/lib/content-search-sources";
 import { getDb } from "../src/lib/db";
+import { getNovelSourceBySlug, listNovelSources } from "../src/lib/novel-library";
+import { isNovelSourceFullTextSearchEnabled } from "../src/lib/novel-search-policy";
 
 function formatBytes(value: number): string {
   if (value < 1024) {
@@ -28,36 +29,50 @@ async function main() {
 Options:
   --force        discard existing rows before rebuilding
   --no-optimize  skip the final FTS optimize step
+  --source=SLUG  build one full-text-enabled library
   -h, --help     show this help`);
     return;
   }
 
   const force = process.argv.includes("--force");
   const optimize = !process.argv.includes("--no-optimize");
+  const requestedSlug = process.argv.find((value) => value.startsWith("--source="))?.slice("--source=".length).trim();
+  const requestedSource = requestedSlug ? getNovelSourceBySlug(requestedSlug) : null;
+  if (requestedSlug && !requestedSource) throw new Error("小说书库不存在");
+  if (requestedSource && !isNovelSourceFullTextSearchEnabled(requestedSource.slug)) {
+    throw new Error("轻量书库不创建全文索引");
+  }
+  const sources = requestedSource
+    ? [requestedSource]
+    : listNovelSources({ includeEmpty: true }).filter((source) => isNovelSourceFullTextSearchEnabled(source.slug));
   const startedAt = Date.now();
-  let lastPrint = 0;
-
-  const result = await buildContentSearchIndex(
-    getDb(),
-    getContentSearchDb(),
-    (progress) => {
-      const now = Date.now();
-      if (now - lastPrint < 1000 && progress.processedBooks !== progress.totalBooks) {
-        return;
-      }
-      lastPrint = now;
-      const percent = progress.totalBooks ? Math.floor((progress.processedBooks / progress.totalBooks) * 100) : 100;
-      console.log(
-        `${percent}% (${progress.processedBooks}/${progress.totalBooks}) indexed=${progress.indexedBooks} reused=${progress.reusedBooks} failed=${progress.failedBooks}`,
-      );
-    },
-    { force, optimize },
-  );
+  let totalSourceBytes = 0;
+  let totalDatabaseBytes = 0;
+  for (const source of sources) {
+    let lastPrint = 0;
+    console.log(`[${source.name}] source-${source.id}.db`);
+    const result = await buildContentSearchSourceIndex(
+      getDb(),
+      source.id,
+      (progress) => {
+        const now = Date.now();
+        if (now - lastPrint < 1000 && progress.processedBooks !== progress.totalBooks) return;
+        lastPrint = now;
+        const percent = progress.totalBooks ? Math.floor((progress.processedBooks / progress.totalBooks) * 100) : 100;
+        console.log(
+          `${percent}% (${progress.processedBooks}/${progress.totalBooks}) indexed=${progress.indexedBooks} reused=${progress.reusedBooks} failed=${progress.failedBooks}`,
+        );
+      },
+      { force, optimize },
+    );
+    totalSourceBytes += result.sourceBytes;
+    totalDatabaseBytes += result.databaseBytes;
+  }
 
   const seconds = Math.round((Date.now() - startedAt) / 1000);
-  const ratio = result.sourceBytes ? result.databaseBytes / result.sourceBytes : 0;
+  const ratio = totalSourceBytes ? totalDatabaseBytes / totalSourceBytes : 0;
   console.log(
-    `finished in ${seconds}s; source=${formatBytes(result.sourceBytes)} index=${formatBytes(result.databaseBytes)} ratio=${ratio.toFixed(2)}x`,
+    `finished in ${seconds}s; source=${formatBytes(totalSourceBytes)} index=${formatBytes(totalDatabaseBytes)} ratio=${ratio.toFixed(2)}x`,
   );
 }
 

@@ -21,7 +21,7 @@ import type { MediaAsset, MediaFolder, MediaKind, MediaSortBy, MediaSortOrder, V
 const KIND_LABELS: Record<MediaKind, string> = { video: "视频", audio: "音频", file: "文件" };
 const KIND_ICONS = { video: Clapperboard, audio: Headphones, file: File };
 const ACCEPT_TYPES: Record<MediaKind, string> = {
-  video: ".mp4,.m4v,.mov,.ogv,.webm,video/*",
+  video: ".mp4,.m4v,.mov,.ts,.mts,.m2ts,.ogv,.webm,video/*",
   audio: ".aac,.flac,.m4a,.mp3,.oga,.ogg,.wav,.webm,audio/*",
   file: "*/*",
 };
@@ -720,7 +720,7 @@ export function AdminMediaManager({
                     </div>
                     <label className="adminMediaBatchApplyField">
                       <span><input name="applyVideoPrice" type="checkbox" />统一播放价格</span>
-                      <input name="playSodaPrice" type="number" min="0" max="1000000" defaultValue="0" aria-label="3 小时播放所需苏打" />
+                      <input name="playSodaPrice" type="number" min="0" max="1000000" defaultValue="0" aria-label="24 小时播放所需苏打" />
                     </label>
                     <div className="adminFieldGrid">
                       <label>
@@ -804,7 +804,7 @@ export function AdminMediaManager({
             {editingAsset.kind === "video" ? (
               <>
                 <label>
-                  <span>3 小时播放 / 苏打</span>
+                  <span>24 小时播放 / 苏打</span>
                   <input name="playSodaPrice" type="number" min="0" max="1000000" defaultValue={editingAsset.playSodaPrice} />
                 </label>
                 <div className="adminFieldGrid">

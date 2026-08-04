@@ -228,7 +228,12 @@ export function prepareMediaUpload(
   if (!Number.isInteger(params.sizeBytes) || params.sizeBytes <= 0 || params.sizeBytes > MEDIA_UPLOAD_MAX_BYTES) {
     throw new MediaUploadError("文件不能为空，且单个文件不能超过 5 GB");
   }
-  const normalizedFile = normalizeMediaFile({ kind: params.kind, fileName: params.fileName, mimeType: params.mimeType });
+  const normalizedFile = normalizeMediaFile({
+    kind: params.kind,
+    fileName: params.fileName,
+    mimeType: params.mimeType,
+    allowVideoConversionSources: params.kind === "video" && Boolean(getActiveVideoTranscodeProfile()),
+  });
   if (!normalizedFile) {
     throw new MediaUploadError(params.kind === "file" ? "文件名无效" : "请选择浏览器可播放的常见媒体格式");
   }
@@ -334,10 +339,15 @@ async function finishMediaUploadUnlocked(uploadId: string): Promise<MediaAsset> 
   fs.mkdirSync(path.dirname(finalPath), { recursive: true });
   if (transcodeProfile) {
     try {
-      await transcodeVideoToProfile(sourcePath, finalPath, transcodeProfile);
+      await transcodeVideoToProfile(
+        sourcePath,
+        finalPath,
+        transcodeProfile,
+        path.extname(requestedStoredName),
+      );
     } catch (error) {
       throw new MediaUploadError(
-        error instanceof Error ? `视频转码失败：${error.message}` : "视频转码失败",
+        error instanceof Error ? `视频兼容处理失败：${error.message}` : "视频兼容处理失败",
         422,
       );
     }

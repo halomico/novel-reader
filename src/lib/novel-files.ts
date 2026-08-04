@@ -5,9 +5,8 @@ import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import iconv from "iconv-lite";
 import { getLibraryDir } from "./config";
-import { getContentSearchDb } from "./content-search-db";
 import { invalidateContentSearchResultCache } from "./content-search-cache";
-import { deleteContentSearchIndexNovel } from "./content-search-index";
+import { invalidateNovelContentSearchIndex } from "./content-search-maintenance";
 import { getDb } from "./db";
 import { isNovelTextFile, parseNovelTitle } from "./filename";
 import { invalidateNovelIdCache } from "./novel-id-sampler";
@@ -263,7 +262,7 @@ export function updateNovelFile(id: number, title: string, content: string) {
 
     fs.writeFileSync(nextPath, nextBuffer);
     const fileStat = fs.statSync(nextPath);
-    deleteContentSearchIndexNovel(getContentSearchDb(), id);
+    invalidateNovelContentSearchIndex(id, db);
     db.prepare(
       `UPDATE novels
        SET title = ?, file_name = ?, relative_path = ?, content_hash = ?, size_bytes = ?, mtime_ms = ?, word_count = ?, updated_at = CURRENT_TIMESTAMP
@@ -339,7 +338,7 @@ export function renameNovelFile(id: number, title: string): boolean {
       moved = true;
     }
 
-    deleteContentSearchIndexNovel(getContentSearchDb(), id);
+    invalidateNovelContentSearchIndex(id, db);
     if (novel.storage_mode === "chapters") {
       db.exec("BEGIN");
       try {
@@ -481,7 +480,7 @@ export function upsertNovelRecord(db: DatabaseSync, record: NovelFileRecord): nu
     existing &&
     (existing.content_hash !== record.contentHash || existing.size_bytes !== record.sizeBytes || existing.mtime_ms !== record.mtimeMs)
   ) {
-    deleteContentSearchIndexNovel(getContentSearchDb(), existing.id);
+    invalidateNovelContentSearchIndex(existing.id, db);
   }
 
   const result = db.prepare(
@@ -529,7 +528,7 @@ export function deleteNovelByRelativePath(db: DatabaseSync, relativePath: string
     return false;
   }
 
-  deleteContentSearchIndexNovel(getContentSearchDb(), row.id);
+  invalidateNovelContentSearchIndex(row.id, db);
   db.prepare("DELETE FROM novels WHERE id = ?").run(row.id);
   invalidateContentSearchResultCache();
   invalidateNovelIdCache();
@@ -548,7 +547,7 @@ export function deleteNovelById(db: DatabaseSync, id: number): DeletedNovel | nu
   const filePath = resolveLibraryFile(novel.relative_path);
   db.exec("BEGIN");
   try {
-    deleteContentSearchIndexNovel(getContentSearchDb(), id);
+    invalidateNovelContentSearchIndex(id, db);
     db.prepare("DELETE FROM novels WHERE id = ?").run(id);
     db.exec("COMMIT");
   } catch (error) {
@@ -928,7 +927,7 @@ export async function appendUploadedNovelChapters(novelId: number, files: File[]
     throw error;
   }
 
-  deleteContentSearchIndexNovel(getContentSearchDb(), novelId);
+  invalidateNovelContentSearchIndex(novelId, db);
   invalidateContentSearchResultCache();
   return written.length;
 }
@@ -976,7 +975,7 @@ export function deleteNovelChapterIds(novelId: number, chapterIds: number[]): nu
   }
 
   for (const file of moved) fs.rmSync(file.temporary, { force: true });
-  deleteContentSearchIndexNovel(getContentSearchDb(), novelId);
+  invalidateNovelContentSearchIndex(novelId, db);
   invalidateContentSearchResultCache();
   return chapters.length;
 }

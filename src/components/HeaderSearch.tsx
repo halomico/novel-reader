@@ -97,6 +97,8 @@ export function HeaderSearch({
   showAdvancedSearch = false,
   noticeDisplaySeconds = 5,
   library = "default",
+  contentSearchEnabled = true,
+  currentSearchBookId,
 }: {
   query?: string;
   defaultMode?: SearchMode;
@@ -105,6 +107,8 @@ export function HeaderSearch({
   showAdvancedSearch?: boolean;
   noticeDisplaySeconds?: number;
   library?: string;
+  contentSearchEnabled?: boolean;
+  currentSearchBookId?: number;
 }) {
   const pathname = usePathname();
   const normalizedPathname = stripLocalePath(pathname);
@@ -126,7 +130,18 @@ export function HeaderSearch({
   const activeSegmentRef = useRef<HTMLElement | null>(null);
   const currentSearchRequestRef = useRef(0);
   const searchInputId = useId();
-  const visibleOptions = showCurrentSearch ? options : options.filter((option) => option.value !== "current");
+  const visibleOptions = options
+    .filter((option) => showCurrentSearch || option.value !== "current")
+    .filter((option) => contentSearchEnabled || option.value !== "content")
+    .map((option) => option.value === "current" && currentSearchBookId
+      ? {
+          ...option,
+          label: "本书",
+          action: `/books/${currentSearchBookId}/search`,
+          placeholder: "搜索本书全部章节",
+          ariaLabel: "搜索本书全部章节",
+        }
+      : option);
   const activeOption = visibleOptions.find((option) => option.value === mode) || visibleOptions[0];
   const showAdvancedOption = showAdvancedSearch && normalizedPathname === "/novels";
   const advancedSearchParams = new URLSearchParams();
@@ -151,8 +166,10 @@ export function HeaderSearch({
     .join(" ");
 
   useEffect(() => {
-    setMode(defaultMode === "current" && !showCurrentSearch ? "title" : defaultMode);
-  }, [defaultMode, showCurrentSearch]);
+    const currentAvailable = showCurrentSearch && defaultMode === "current";
+    const contentAvailable = contentSearchEnabled && defaultMode === "content";
+    setMode(currentAvailable || contentAvailable || defaultMode === "title" ? defaultMode : "title");
+  }, [contentSearchEnabled, defaultMode, showCurrentSearch]);
 
   useEffect(() => {
     setKeyword(query);
@@ -332,7 +349,7 @@ export function HeaderSearch({
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    if (mode === "current") {
+    if (mode === "current" && !currentSearchBookId) {
       void searchCurrentBook(event);
       return;
     }

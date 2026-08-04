@@ -9,9 +9,7 @@ import { AdminFrame } from "./AdminFrame";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminBookStats } from "@/lib/admin-books";
 import { listAdminLoginRecordPage } from "@/lib/admin-login-records";
-import { getContentSearchDb } from "@/lib/content-search-db";
-import { getContentSearchIndexSummary } from "@/lib/content-search-index";
-import { getDb } from "@/lib/db";
+import { getContentSearchCombinedSummary } from "@/lib/content-search-sources";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -46,7 +44,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   const headerStore = await headers();
   const access = getAdminAccessState(headerStore);
   const stats = getAdminBookStats();
-  const indexStats = getContentSearchIndexSummary(getDb(), getContentSearchDb());
+  const indexStats = getContentSearchCombinedSummary();
   const loginRecords = listAdminLoginRecordPage(Number(params.loginPage || "1"));
 
   return (

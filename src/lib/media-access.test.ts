@@ -24,7 +24,7 @@ function withTempDatabase(t: TestContext) {
   });
 }
 
-test("video soda grants last three hours and repeated unlocks are idempotent", (t) => {
+test("video soda grants last 24 hours and repeated unlocks are idempotent", (t) => {
   withTempDatabase(t);
   const db = getDb();
   const userId = Number(db.prepare(

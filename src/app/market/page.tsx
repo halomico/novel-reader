@@ -1,4 +1,4 @@
-import { Cookie, CupSoda, PackageOpen, ReceiptText } from "lucide-react";
+import { Cookie, CupSoda, ReceiptText, ShoppingBag } from "lucide-react";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "@/components/LocalizedLink";
@@ -45,7 +45,6 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
         <header className="marketPageHeader">
           <div>
             <h1>集市</h1>
-            <p>兑换后立即交付，订单内容只对当前账号可见。</p>
           </div>
           <div className="marketBalances" aria-label="账户余额">
             <span><Cookie size={16} aria-hidden="true" /><strong>{user.cookieBalance}</strong> 曲奇</span>
@@ -67,21 +66,22 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
                 <span className="marketProductVisual">
                   {coverUrl ? (
                     <Image src={coverUrl} alt="" width={192} height={108} unoptimized />
-                  ) : <PackageOpen size={21} aria-hidden="true" />}
+                  ) : <ShoppingBag size={30} strokeWidth={1.6} aria-hidden="true" />}
                 </span>
                 <span className="marketProductCopy">
                   <strong>{product.title}</strong>
-                  {product.description ? (
-                    <small>{product.description.replace(/[#*_`>\[\]()~-]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 120)}</small>
-                  ) : null}
                 </span>
                 <span className="marketProductMeta">
-                  <small className={product.stock === 0 ? "isEmpty" : ""}>
-                    {product.stock == null ? "库存充足" : product.stock > 0 ? `库存 ${product.stock}` : "暂时缺货"}
-                  </small>
-                  {locked ? <small>Lv.{product.minLevel}</small> : null}
-                  {product.priceCookie != null ? <b><Cookie size={14} aria-hidden="true" />{product.priceCookie}</b> : null}
-                  {product.priceSoda != null ? <b><CupSoda size={14} aria-hidden="true" />{product.priceSoda}</b> : null}
+                  <span className="marketProductPrices">
+                    {product.priceCookie != null ? <b aria-label={`${product.priceCookie} 曲奇`} title={`${product.priceCookie} 曲奇`}><Cookie size={14} aria-hidden="true" />{product.priceCookie}</b> : null}
+                    {product.priceSoda != null ? <b aria-label={`${product.priceSoda} 苏打`} title={`${product.priceSoda} 苏打`}><CupSoda size={14} aria-hidden="true" />{product.priceSoda}</b> : null}
+                  </span>
+                  <span className="marketProductAvailability">
+                    <small className={product.stock === 0 ? "marketProductStock isEmpty" : "marketProductStock"}>
+                      {product.stock == null ? "库存充足" : product.stock > 0 ? `库存 ${product.stock}` : "暂时缺货"}
+                    </small>
+                    {locked ? <small className="marketProductLevel">Lv.{product.minLevel}</small> : null}
+                  </span>
                 </span>
               </Link>
             );

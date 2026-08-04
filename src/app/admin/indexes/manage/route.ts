@@ -3,8 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
 import { countActiveContentJobs } from "@/lib/content-jobs";
-import { getContentSearchDb } from "@/lib/content-search-db";
-import { clearContentSearchIndex } from "@/lib/content-search-index";
+import { invalidateContentSearchResultCache } from "@/lib/content-search-cache";
+import { deleteContentSearchDatabase } from "@/lib/content-search-db";
+import { deleteLegacyContentSearchDatabase, listContentSearchSourceSummaries } from "@/lib/content-search-sources";
+import { getNovelSourceById } from "@/lib/novel-library";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -33,24 +35,39 @@ export async function POST(request: NextRequest) {
     return auth.response;
   }
 
-  let body: { action?: unknown } = {};
+  let body: { action?: unknown; sourceId?: unknown } = {};
   try {
-    body = (await request.json()) as { action?: unknown };
+    body = (await request.json()) as { action?: unknown; sourceId?: unknown };
   } catch {
     return jsonError("索引管理请求格式有误", 400);
   }
-  if (body.action !== "clear") {
+  if (body.action !== "clear" && body.action !== "deleteLegacy") {
     return jsonError("不支持的索引管理操作", 400);
   }
   if (countActiveContentJobs("index") > 0) {
     return jsonError("索引任务运行期间不能清空索引", 409);
   }
 
-  const db = getContentSearchDb();
-  clearContentSearchIndex(db);
-  db.exec("PRAGMA wal_checkpoint(TRUNCATE);");
-  db.exec("VACUUM;");
+  if (body.action === "deleteLegacy") {
+    const incomplete = listContentSearchSourceSummaries().filter(
+      (source) => source.mode === "full" && source.state !== "ready",
+    );
+    if (incomplete.length) {
+      return jsonError("所有普通书库索引就绪后才能删除旧版共享索引", 409);
+    }
+    deleteLegacyContentSearchDatabase();
+    invalidateContentSearchResultCache();
+    revalidatePath("/admin/indexes");
+    revalidatePath("/admin");
+    return NextResponse.json({ ok: true, message: "旧版共享索引已删除，磁盘空间已释放" });
+  }
+
+  const sourceId = Number(body.sourceId || 0);
+  const source = Number.isInteger(sourceId) && sourceId > 0 ? getNovelSourceById(sourceId) : null;
+  if (!source) return jsonError("小说书库不存在", 404);
+  deleteContentSearchDatabase(source.id);
+  invalidateContentSearchResultCache();
   revalidatePath("/admin/indexes");
   revalidatePath("/admin");
-  return NextResponse.json({ ok: true, message: "全文索引已清空" });
+  return NextResponse.json({ ok: true, message: `${source.name}的全文索引已删除` });
 }

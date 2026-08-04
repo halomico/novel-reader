@@ -54,6 +54,7 @@ test("atomically replaces an existing settings file", () => {
     assert.equal(defaults.adminTheme, "system");
     assert.equal(defaults.adminIpAllowlistEnabled, false);
     assert.deepEqual(defaults.adminAllowedNetworks, []);
+    assert.deepEqual(defaults.novelSourceSearchModes, {});
     writeSiteSettings({ ...defaults, siteName: "第一次" });
     writeSiteSettings({ ...readSiteSettings(), siteName: "第二次" });
     assert.equal(readSiteSettings().siteName, "第二次");
@@ -84,6 +85,31 @@ test("normalizes the configured user default palette", () => {
     } else {
       process.env.ADMIN_SETTINGS_PATH = previousPath;
     }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("normalizes per-source search modes without persisting default entries", () => {
+  const previousPath = process.env.ADMIN_SETTINGS_PATH;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-source-search-mode-"));
+  process.env.ADMIN_SETTINGS_PATH = path.join(tempDir, "admin-settings.json");
+
+  try {
+    fs.writeFileSync(
+      process.env.ADMIN_SETTINGS_PATH,
+      JSON.stringify({
+        novelSourceSearchModes: {
+          " Large-Library ": "book",
+          default: "full",
+          invalid: "other",
+        },
+      }),
+      "utf8",
+    );
+    assert.deepEqual(readSiteSettings().novelSourceSearchModes, { "large-library": "book" });
+  } finally {
+    if (previousPath === undefined) delete process.env.ADMIN_SETTINGS_PATH;
+    else process.env.ADMIN_SETTINGS_PATH = previousPath;
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });

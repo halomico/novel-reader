@@ -3,11 +3,14 @@ import {
   getCachedContentSearchResults,
   getContentSearchCacheVersion,
   hasCachedContentSearchResults as hasCachedSearchResults,
+  invalidateContentSearchResultCache,
   setCachedContentSearchResults,
 } from "./content-search-cache";
-import { getContentSearchDb } from "./content-search-db";
-import { buildContentSearchIndex, ContentSearchIndexCancelledError } from "./content-search-index";
+import { ContentSearchIndexCancelledError } from "./content-search-index";
+import { buildContentSearchSourceIndex } from "./content-search-sources";
 import { getDb } from "./db";
+import { getNovelSourceById, listNovelSources } from "./novel-library";
+import { isNovelSourceFullTextSearchEnabled } from "./novel-search-policy";
 import { ContentSearchCancelledError, searchNovelContent, type SearchResult } from "./search";
 import type { ParsedSearchQuery } from "./search-query";
 
@@ -28,6 +31,8 @@ export type ContentJobSnapshot = {
   indexedBooks: number;
   reusedBooks: number;
   failedBooks: number;
+  sourceId: number | null;
+  sourceName?: string;
   results?: SearchResult[];
   error?: string;
   cancelRequested?: boolean;
@@ -114,7 +119,7 @@ function scheduleJobExpiry(id: string) {
   getJobTimers().set(id, timeout);
 }
 
-function createJob(kind: JobKind, message: string): ContentJob {
+function createJob(kind: JobKind, message: string, sourceId: number | null = null, sourceName?: string): ContentJob {
   cleanupJobs();
   const jobs = getJobs();
   if (jobs.size >= JOB_MAX_ENTRIES) {
@@ -140,6 +145,8 @@ function createJob(kind: JobKind, message: string): ContentJob {
     indexedBooks: 0,
     reusedBooks: 0,
     failedBooks: 0,
+    sourceId,
+    sourceName,
   };
   jobs.set(job.id, job);
   scheduleJobExpiry(job.id);
@@ -239,14 +246,7 @@ export function startContentSearchJob(query: ParsedSearchQuery, options: Content
             resultCount: current.resultCount,
             results: current.results,
             progress: progress(current.searchedBooks, current.totalBooks),
-            message:
-              current.scanPhase === "prefilter"
-                ? "正在快速筛选小说正文"
-                : current.scanEngine === "fts5"
-                  ? "正在从全文索引筛选"
-                  : current.scanEngine === "ripgrep"
-                    ? "正在核对候选正文"
-                    : "正在扫描小说正文",
+            message: current.searchedBooks > 0 ? "正在核对索引命中的正文" : "正在从全文索引筛选",
           });
         },
         { isCancelled: () => Boolean(job.cancelRequested), candidateNovelIds: options.candidateNovelIds },
@@ -274,48 +274,82 @@ export function startContentSearchJob(query: ParsedSearchQuery, options: Content
   return getContentJob(job.id) || job;
 }
 
-export function startContentIndexJob(options: { force?: boolean } = {}): ContentJobSnapshot {
-  const job = createJob("index", options.force ? "正在准备完整重建" : "正在准备增量构建");
+export function startContentIndexJob(options: { force?: boolean; sourceId?: number } = {}): ContentJobSnapshot {
+  const requestedSource = options.sourceId ? getNovelSourceById(options.sourceId) : null;
+  if (options.sourceId && !requestedSource) throw new Error("小说书库不存在");
+  if (requestedSource && !isNovelSourceFullTextSearchEnabled(requestedSource.slug)) {
+    throw new Error("轻量书库不创建全文索引");
+  }
+  const sources = requestedSource
+    ? [requestedSource]
+    : listNovelSources({ includeEmpty: true }).filter((source) => isNovelSourceFullTextSearchEnabled(source.slug));
+  const job = createJob(
+    "index",
+    options.force ? "正在准备完整重建" : "正在准备增量构建",
+    requestedSource?.id || null,
+    requestedSource?.name,
+  );
 
   scheduleJob(async () => {
     try {
-      updateJob(job, { status: "running", message: options.force ? "正在完整重建全文索引" : "正在增量构建全文索引" });
-      const result = await buildContentSearchIndex(
-        getDb(),
-        getContentSearchDb(),
-        (current) => {
-          updateJob(job, {
-            totalBooks: current.totalBooks,
-            scannedBooks: current.processedBooks,
-            indexedBooks: current.indexedBooks,
-            reusedBooks: current.reusedBooks,
-            failedBooks: current.failedBooks,
-            progress: progress(current.processedBooks, current.totalBooks),
-            message: options.force ? "正在完整重建全文索引" : "正在增量构建全文索引",
-          });
-        },
-        { force: options.force, isCancelled: () => Boolean(job.cancelRequested) },
-      );
+      const totalBooks = sources.reduce((total, source) => total + source.novelCount, 0);
+      let scannedBooks = 0;
+      let indexedBooks = 0;
+      let reusedBooks = 0;
+      let failedBooks = 0;
+      updateJob(job, { status: "running", totalBooks, message: options.force ? "正在完整重建全文索引" : "正在增量构建全文索引" });
+      for (const source of sources) {
+        const before = { scannedBooks, indexedBooks, reusedBooks, failedBooks };
+        const result = await buildContentSearchSourceIndex(
+          getDb(),
+          source.id,
+          (current) => {
+            updateJob(job, {
+              totalBooks,
+              scannedBooks: before.scannedBooks + current.processedBooks,
+              indexedBooks: before.indexedBooks + current.indexedBooks,
+              reusedBooks: before.reusedBooks + current.reusedBooks,
+              failedBooks: before.failedBooks + current.failedBooks,
+              progress: progress(before.scannedBooks + current.processedBooks, totalBooks),
+              message: `${source.name}：${options.force ? "正在完整重建" : "正在增量构建"}`,
+            });
+          },
+          {
+            force: options.force,
+            isCancelled: () => Boolean(job.cancelRequested),
+          },
+        );
+        scannedBooks += result.processedBooks;
+        indexedBooks += result.indexedBooks;
+        reusedBooks += result.reusedBooks;
+        failedBooks += result.failedBooks;
+      }
 
       updateJob(job, {
         status: "done",
         progress: 100,
-        totalBooks: result.totalBooks,
-        scannedBooks: result.processedBooks,
-        indexedBooks: result.indexedBooks,
-        reusedBooks: result.reusedBooks,
-        failedBooks: result.failedBooks,
-        message: result.failedBooks
-          ? `索引构建完成，更新 ${result.indexedBooks} 本，复用 ${result.reusedBooks} 本，失败 ${result.failedBooks} 本`
-          : `索引构建完成，更新 ${result.indexedBooks} 本，复用 ${result.reusedBooks} 本`,
+        totalBooks,
+        scannedBooks,
+        indexedBooks,
+        reusedBooks,
+        failedBooks,
+        message: failedBooks
+          ? `索引构建完成，更新 ${indexedBooks} 本，复用 ${reusedBooks} 本，失败 ${failedBooks} 本`
+          : `索引构建完成，更新 ${indexedBooks} 本，复用 ${reusedBooks} 本`,
       });
+      invalidateContentSearchResultCache();
     } catch (error) {
       const cancelled = error instanceof ContentSearchIndexCancelledError || job.cancelRequested;
+      invalidateContentSearchResultCache();
       updateJob(job, {
         status: cancelled ? "cancelled" : "error",
         progress: 100,
         error: cancelled ? undefined : error instanceof Error ? error.message : "全文索引构建失败",
-        message: cancelled ? "索引任务已取消，已完成的批次仍可继续使用" : "全文索引构建失败",
+        message: cancelled
+          ? options.force
+            ? "索引任务已取消，原有分片保持不变"
+            : "索引任务已取消，已完成的增量批次仍可使用"
+          : "全文索引构建失败",
       });
     }
   });

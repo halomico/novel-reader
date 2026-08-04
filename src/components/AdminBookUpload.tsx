@@ -1,7 +1,6 @@
 "use client";
 
-import { FolderCog, Upload } from "lucide-react";
-import Link from "next/link";
+import { Upload } from "lucide-react";
 import { ChangeEvent, FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { NovelSource } from "@/lib/novel-library";
@@ -150,9 +149,6 @@ export function AdminBookUpload({
             {sources.map((source) => <option value={source.id} key={source.id}>{source.name}</option>)}
           </AdminSelect>
         </label>
-        <Link className="adminNovelSourceManageLink" href="/admin/books/sources" title="管理书库" aria-label="管理书库">
-          <FolderCog size={15} aria-hidden="true" />
-        </Link>
       </div>
       <button className="adminMediaUploadButton" type="submit" disabled={
         !files.length || !sourceId || isUploading || (mode === "chapters" && !novelTitle.trim())

@@ -18,10 +18,10 @@ import {
   isAdminLoginRateLimitEnabled,
   getUserAvatarMaxBytes,
 } from "@/lib/config";
-import { cancelContentJobs } from "@/lib/content-jobs";
+import { cancelContentJobs, countActiveContentJobs } from "@/lib/content-jobs";
 import { invalidateContentSearchResultCache } from "@/lib/content-search-cache";
-import { getContentSearchDb } from "@/lib/content-search-db";
-import { deleteContentSearchIndexNovel } from "@/lib/content-search-index";
+import { deleteContentSearchDatabase } from "@/lib/content-search-db";
+import { invalidateNovelContentSearchIndex } from "@/lib/content-search-maintenance";
 import {
   normalizeHomePortalOrder,
   type HomePortalAccessMode,
@@ -77,7 +77,8 @@ import {
   updateNovelFile,
   updateNovelSourceSettings,
 } from "@/lib/novel-files";
-import { updateNovelAccessPolicy, updateNovelChapterOverrides, updateNovelDescription } from "@/lib/novel-library";
+import { getNovelSourceById, updateNovelAccessPolicy, updateNovelChapterOverrides, updateNovelDescription } from "@/lib/novel-library";
+import { getNovelSourceSearchMode, removeNovelSourceSearchMode, setNovelSourceSearchMode } from "@/lib/novel-search-policy";
 import { hashPassword } from "@/lib/password";
 import { replacePinnedNovels, togglePinnedNovel } from "@/lib/pinned-novels";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -410,23 +411,41 @@ export async function createNovelSourceAction(formData: FormData) {
 export async function saveNovelSourceAction(formData: FormData) {
   await requireAdminRequest();
   try {
-    updateNovelSourceSettings(Number(formData.get("sourceId") || 0), {
+    const sourceId = Number(formData.get("sourceId") || 0);
+    const source = getNovelSourceById(sourceId);
+    if (!source) throw new Error("小说来源不存在");
+    const nextSearchMode = formData.get("searchMode") === "book" ? "book" : "full";
+    if (nextSearchMode === "book" && getNovelSourceSearchMode(source.slug) !== "book" && countActiveContentJobs("index") > 0) {
+      throw new Error("索引任务运行期间不能切换为轻量书库");
+    }
+    updateNovelSourceSettings(sourceId, {
       name: String(formData.get("name") || ""),
       sortOrder: Number(formData.get("sortOrder") || 0),
     });
+    setNovelSourceSearchMode(source.slug, nextSearchMode);
+    if (nextSearchMode === "book") deleteContentSearchDatabase(source.id);
+    invalidateContentSearchResultCache();
   } catch (error) {
     adminNotice(error instanceof Error ? error.message : "小说来源保存失败", "warning", "/admin/books/sources");
   }
   revalidatePath("/admin/books");
   revalidatePath("/admin/books/sources");
+  revalidatePath("/admin/indexes");
   revalidatePath("/novels");
+  revalidatePath("/search");
   adminNotice("来源设置已保存", "success", "/admin/books/sources");
 }
 
 export async function deleteNovelSourceAction(formData: FormData) {
   await requireAdminRequest();
   try {
-    deleteEmptyNovelSource(Number(formData.get("sourceId") || 0));
+    const sourceId = Number(formData.get("sourceId") || 0);
+    const source = getNovelSourceById(sourceId);
+    deleteEmptyNovelSource(sourceId);
+    if (source) {
+      removeNovelSourceSearchMode(source.slug);
+      deleteContentSearchDatabase(source.id);
+    }
   } catch (error) {
     adminNotice(error instanceof Error ? error.message : "小说来源删除失败", "warning", "/admin/books/sources");
   }
@@ -650,7 +669,7 @@ export async function saveNovelChaptersAction(formData: FormData) {
     }));
     const saved = updateNovelChapterOverrides(bookId, updates);
     if (!saved) adminNotice("当前页没有可保存的章节", "warning", returnPath);
-    deleteContentSearchIndexNovel(getContentSearchDb(), bookId);
+    invalidateNovelContentSearchIndex(bookId);
     invalidateContentSearchResultCache();
     revalidatePath(`/books/${bookId}`);
     revalidatePath(`/books/${bookId}/chapters`);

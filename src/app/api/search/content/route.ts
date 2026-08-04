@@ -23,6 +23,7 @@ import { localizeTexts, normalizeSearchText as normalizeLocaleSearchText } from 
 import type { ContentJobSnapshot } from "@/lib/content-jobs";
 import { listReadableNovelIds } from "@/lib/novel-access";
 import { listNovelIdsBySource, resolveNovelLibraryScope } from "@/lib/novel-library";
+import { isNovelSourceFullTextSearchEnabled, listFullTextSearchNovelIds } from "@/lib/novel-search-policy";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -109,6 +110,9 @@ export async function POST(request: NextRequest) {
     ? body.filters as Record<string, unknown>
     : null;
   const libraryScope = resolveNovelLibraryScope(String(body.library || rawFilters?.sourceLibrary || ""));
+  if (libraryScope.kind === "source" && !isNovelSourceFullTextSearchEnabled(libraryScope.source.slug)) {
+    return jsonError("该书库未加入全站正文索引，请进入具体书籍后使用“本书”搜索", 400);
+  }
   let candidateNovelIds: number[] | undefined;
   if (body.filters && typeof body.filters === "object") {
     const canUseAdvancedSearch = canAccessAdvancedTagSearch(false) ||
@@ -144,11 +148,12 @@ export async function POST(request: NextRequest) {
 
   const readableNovelIds = listReadableNovelIds(user);
   const allowedIds = new Set(readableNovelIds);
+  const fullTextIds = new Set(listFullTextSearchNovelIds());
   const libraryIds = libraryScope.kind === "source"
     ? new Set(listNovelIdsBySource(libraryScope.source.id))
     : null;
   candidateNovelIds = (candidateNovelIds || readableNovelIds)
-    .filter((id) => allowedIds.has(id) && (!libraryIds || libraryIds.has(id)));
+    .filter((id) => allowedIds.has(id) && fullTextIds.has(id) && (!libraryIds || libraryIds.has(id)));
   const cacheScope = `access:${crypto.createHash("sha256")
     .update(candidateNovelIds.join(","))
     .digest("base64url")

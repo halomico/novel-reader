@@ -90,6 +90,17 @@ test("normalizes supported native media files", () => {
     mimeType: "video/mp4",
   });
   assert.equal(normalizeMediaFile({ kind: "audio", fileName: "demo.exe", mimeType: "application/octet-stream" }), null);
+  assert.equal(normalizeMediaFile({ kind: "video", fileName: "capture.M2TS", mimeType: "" }), null);
+  assert.deepEqual(normalizeMediaFile({
+    kind: "video",
+    fileName: "capture.M2TS",
+    mimeType: "",
+    allowVideoConversionSources: true,
+  }), {
+    fileName: "capture.M2TS",
+    extension: ".m2ts",
+    mimeType: "video/mp2t",
+  });
   assert.equal(normalizeMediaFile({ kind: "file", fileName: "", mimeType: "" }), null);
 });
 

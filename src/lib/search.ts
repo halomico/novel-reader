@@ -1,8 +1,8 @@
 import type { DatabaseSync } from "node:sqlite";
 import { readNovelContent, type Novel } from "./books";
-import { getContentSearchDb } from "./content-search-db";
+import { getExistingContentSearchDb, getLegacyContentSearchDb } from "./content-search-db";
 import { findContentSearchCandidateNovelIds, type ContentSearchNovelRecord } from "./content-search-index";
-import { getGlobalSearchMaxResults, getLibraryDir } from "./config";
+import { getGlobalSearchMaxResults } from "./config";
 import { getDb } from "./db";
 import { listNovelChapters, readNovelChapterContent } from "./novel-library";
 import { iterateNovelSegments } from "./segments";
@@ -35,8 +35,8 @@ export type SearchNovelContentProgress = {
   searchedBooks: number;
   resultCount: number;
   indexedTerm?: string;
-  scanEngine?: "fts5" | "ripgrep" | "node";
-  scanPhase?: "prefilter" | "verify";
+  scanEngine?: "fts5";
+  scanPhase?: "verify";
   cacheSegmentCount: number;
   results?: SearchResult[];
 };
@@ -44,6 +44,11 @@ export type SearchNovelContentProgress = {
 export type SearchNovelContentOptions = {
   isCancelled?: () => boolean;
   candidateNovelIds?: number[];
+};
+
+export type SearchNovelBookContentOptions = {
+  maxResults?: number;
+  isCancelled?: () => boolean;
 };
 
 type SearchCandidate = Pick<Novel, "id" | "title" | "relative_path" | "storage_mode">;
@@ -62,13 +67,51 @@ export function validateSearchKeyword(value: string | undefined): SearchValidati
   return parseSearchQuery(value);
 }
 
-function normalizeRelativePath(value: string): string {
-  return value.replace(/\\/g, "/").replace(/^(?:\.\/)+/, "");
+export async function searchNovelBookContent(
+  novel: SearchCandidate,
+  query: ParsedSearchQuery,
+  options: SearchNovelBookContentOptions = {},
+): Promise<SearchResult[]> {
+  const maxResults = Math.min(Math.max(Math.floor(options.maxResults || getGlobalSearchMaxResults()), 1), 1_000);
+  const results: SearchResult[] = [];
+  const documents = novel.storage_mode === "chapters"
+    ? listNovelChapters(novel.id).map((chapter) => ({
+        chapterId: chapter.id,
+        title: chapter.title,
+        read: () => readNovelChapterContent(chapter),
+      }))
+    : [{ chapterId: null, title: novel.title, read: () => readNovelContent(novel as Novel) }];
+
+  for (const document of documents) {
+    if (options.isCancelled?.()) throw new ContentSearchCancelledError();
+    let content: string;
+    try {
+      content = await document.read();
+    } catch {
+      continue;
+    }
+    for (const segment of iterateNovelSegments(content)) {
+      if (options.isCancelled?.()) throw new ContentSearchCancelledError();
+      const normalizedContent = normalizeSearchText(segment.content);
+      if (!normalizedContent.includes(query.anchorTerm) || !matchesParsedSearchQuery(segment.content, query, normalizedContent)) {
+        continue;
+      }
+      results.push({
+        novelId: novel.id,
+        chapterId: document.chapterId,
+        title: document.title,
+        segmentIndex: segment.segmentIndex,
+        snippet: createSearchSnippet(segment.content, query.highlightTerms),
+      });
+      if (results.length >= maxResults) return results;
+    }
+  }
+  return results;
 }
 
 function listSearchIndexRecords(db: DatabaseSync): ContentSearchNovelRecord[] {
   return db
-    .prepare("SELECT id, relative_path, storage_mode, content_hash, size_bytes, mtime_ms FROM novels ORDER BY id ASC")
+    .prepare("SELECT id, relative_path, source_id, storage_mode, content_hash, size_bytes, mtime_ms FROM novels ORDER BY id ASC")
     .all() as ContentSearchNovelRecord[];
 }
 
@@ -90,26 +133,6 @@ function listSearchCandidatesByIds(db: DatabaseSync, ids: number[]): SearchCandi
   return candidates.sort((left, right) => left.id - right.id);
 }
 
-function listAllSearchCandidates(db: DatabaseSync): SearchCandidate[] {
-  return db.prepare("SELECT id, title, relative_path, storage_mode FROM novels ORDER BY id ASC").all() as SearchCandidate[];
-}
-
-function listNovelIdsByCandidatePaths(db: DatabaseSync, paths: Set<string>): number[] {
-  const values = Array.from(paths);
-  const ids = new Set<number>();
-  for (let offset = 0; offset < values.length; offset += SQLITE_ID_CHUNK_SIZE) {
-    const chunk = values.slice(offset, offset + SQLITE_ID_CHUNK_SIZE);
-    const placeholders = chunk.map(() => "?").join(", ");
-    const rows = db.prepare(
-      `SELECT id AS novel_id FROM novels WHERE relative_path IN (${placeholders})
-       UNION
-       SELECT novel_id FROM novel_chapters WHERE relative_path IN (${placeholders})`,
-    ).all(...chunk, ...chunk) as Array<{ novel_id: number }>;
-    rows.forEach((row) => ids.add(row.novel_id));
-  }
-  return Array.from(ids);
-}
-
 export async function searchNovelContent(
   query: ParsedSearchQuery,
   onProgress?: (progress: SearchNovelContentProgress) => void,
@@ -121,7 +144,7 @@ export async function searchNovelContent(
   const matchedNovelIds = new Set<number>();
   let searchedBooks = 0;
   let candidates: SearchCandidate[] = [];
-  let scanEngine: SearchNovelContentProgress["scanEngine"] = "node";
+  const scanEngine: SearchNovelContentProgress["scanEngine"] = "fts5";
   let indexLabel: string | undefined;
   let lastProgressAt = 0;
 
@@ -174,7 +197,7 @@ export async function searchNovelContent(
       totalBooks: 0,
       searchedBooks: 0,
       resultCount: 0,
-      scanEngine: "node",
+      scanEngine: "fts5",
       scanPhase: "verify",
       cacheSegmentCount: 0,
       results: [],
@@ -185,62 +208,28 @@ export async function searchNovelContent(
     .filter((term) => !term.phrase && Array.from(term.normalized).length >= 2)
     .map((term) => term.normalized);
 
-  let fullTextPlan: ReturnType<typeof findContentSearchCandidateNovelIds> = null;
-  try {
-    fullTextPlan = findContentSearchCandidateNovelIds(getContentSearchDb(), novelRecords, requiredIndexTerms);
-  } catch {
-    fullTextPlan = null;
+  const recordsBySource = new Map<number, ContentSearchNovelRecord[]>();
+  for (const novel of novelRecords) {
+    if (!Number.isInteger(novel.source_id) || Number(novel.source_id) < 1) continue;
+    const sourceId = Number(novel.source_id);
+    const current = recordsBySource.get(sourceId) || [];
+    current.push(novel);
+    recordsBySource.set(sourceId, current);
   }
-
-  const fallbackNovelCount = fullTextPlan?.uncoveredNovelCount ?? novelRecords.length;
-  const nativeRescanThreshold = Math.max(500, Math.floor(novelRecords.length * 0.1));
-  const shouldTryNativeScanner = !fullTextPlan || fallbackNovelCount > nativeRescanThreshold;
-  let nativeCandidatePaths: Set<string> | null = null;
-
-  if (shouldTryNativeScanner) {
-    onProgress?.({
-      totalBooks: novelRecords.length,
-      searchedBooks: 0,
-      resultCount: 0,
-      indexedTerm: fullTextPlan?.terms.join(" + "),
-      scanEngine: "ripgrep",
-      scanPhase: "prefilter",
-      cacheSegmentCount: 0,
-      results: [],
-    });
+  const candidateIds = new Set<number>();
+  for (const [sourceId, sourceRecords] of recordsBySource) {
     try {
-      const { scanContentCandidatePaths } = await import("./content-search-scanner.node");
-      const scanResult = await scanContentCandidatePaths(getLibraryDir(), query.anchorTerm, options);
-      throwIfCancelled();
-      if (scanResult) {
-        nativeCandidatePaths = scanResult.relativePaths;
-        scanEngine = scanResult.engine;
-      }
-    } catch (error) {
-      throwIfCancelled();
-      if (error instanceof ContentSearchCancelledError) {
-        throw error;
-      }
+      const searchDb = getExistingContentSearchDb(sourceId) || getLegacyContentSearchDb();
+      if (!searchDb) continue;
+      const plan = findContentSearchCandidateNovelIds(searchDb, sourceRecords, requiredIndexTerms);
+      if (!plan) continue;
+      indexLabel ||= plan.terms.join(" + ");
+      plan.candidateIds.forEach((novelId) => candidateIds.add(novelId));
+    } catch {
+      // A failed shard is isolated; other ready libraries remain searchable.
     }
   }
-
-  if (nativeCandidatePaths) {
-    const allowedIds = new Set(novelRecords.map((novel) => novel.id));
-    const candidateIds = listNovelIdsByCandidatePaths(
-      db,
-      new Set(Array.from(nativeCandidatePaths, normalizeRelativePath)),
-    ).filter((id) => allowedIds.has(id));
-    candidates = listSearchCandidatesByIds(db, candidateIds);
-  } else if (fullTextPlan) {
-    scanEngine = "fts5";
-    indexLabel = fullTextPlan.terms.join(" + ");
-    candidates = listSearchCandidatesByIds(db, fullTextPlan.candidateIds);
-  } else {
-    scanEngine = "node";
-    candidates = allowedNovelIds
-      ? listSearchCandidatesByIds(db, novelRecords.map((novel) => novel.id))
-      : listAllSearchCandidates(db);
-  }
+  candidates = listSearchCandidatesByIds(db, Array.from(candidateIds));
 
   emitProgress(true);
   for (const novel of candidates) {

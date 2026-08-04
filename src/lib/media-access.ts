@@ -2,7 +2,7 @@ import { getDb } from "./db";
 import { hasMediaAssetEntitlement } from "./entitlements";
 import type { MediaAsset } from "./media";
 
-export const VIDEO_SODA_UNLOCK_MS = 3 * 60 * 60 * 1_000;
+export const VIDEO_SODA_UNLOCK_MS = 24 * 60 * 60 * 1_000;
 
 export type VideoPlaybackAccess = {
   allowed: boolean;
@@ -121,7 +121,7 @@ export function unlockVideoWithSoda(input: {
     db.prepare(
       `INSERT INTO user_currency_transactions (
          user_id, currency, amount, balance_after, source, reference_key, note
-       ) VALUES (?, 'soda', ?, ?, 'video_unlock', ?, '视频 3 小时播放授权')`,
+       ) VALUES (?, 'soda', ?, ?, 'video_unlock', ?, '视频 24 小时播放授权')`,
     ).run(
       input.userId,
       -price,

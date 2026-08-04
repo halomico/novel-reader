@@ -7,6 +7,7 @@ import {
   saveNovelSourceAction,
 } from "@/app/admin/actions";
 import { getNovelSourceStoragePath, listNovelSources } from "@/lib/novel-library";
+import { getNovelSourceSearchMode } from "@/lib/novel-search-policy";
 import { AdminFrame } from "../../AdminFrame";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +32,7 @@ export default async function NovelSourcesPage({ searchParams }: NovelSourcesPag
         <header className="adminPanelHeader adminNovelSourceHeader">
           <div>
             <h2>来源管理</h2>
-            <p>来源对应书库中的一级文件夹；显示名称可独立修改，文件夹路径保持稳定。</p>
+            <p>来源对应书库中的一级文件夹；可按书库决定是否加入全站正文索引，轻量书库仍可在具体书籍内搜索。</p>
           </div>
           <Link className="adminEditorReadLink" href="/admin/books">
             <BookOpenText size={15} aria-hidden="true" />返回小说
@@ -54,6 +55,7 @@ export default async function NovelSourcesPage({ searchParams }: NovelSourcesPag
         <section className="adminNovelSourceList" aria-label="小说来源列表">
           {sources.map((source) => {
             const isDefault = source.slug === "default";
+            const searchMode = getNovelSourceSearchMode(source.slug);
             return (
               <form className="adminNovelSourceItem" action={saveNovelSourceAction} key={source.id}>
                 <input name="sourceId" type="hidden" value={source.id} />
@@ -62,6 +64,7 @@ export default async function NovelSourcesPage({ searchParams }: NovelSourcesPag
                   <span>
                     <strong>{getNovelSourceStoragePath(source)}</strong>
                     <small>{isDefault ? "默认来源 · 兼容根目录旧文件" : "一级来源目录"}</small>
+                    <span className={`adminNovelSourceMode is-${searchMode}`}>{searchMode === "book" ? "轻量书库" : "普通书库"}</span>
                   </span>
                 </div>
                 <div className="adminNovelSourceStats" aria-label="来源内容统计">
@@ -72,6 +75,13 @@ export default async function NovelSourcesPage({ searchParams }: NovelSourcesPag
                 <label className="adminNovelSourceNameField">
                   <span>显示名称</span>
                   <input name="name" defaultValue={source.name} maxLength={120} required />
+                </label>
+                <label className="adminNovelSourceSearchField">
+                  <span>正文搜索</span>
+                  <select name="searchMode" defaultValue={searchMode}>
+                    <option value="full">全站正文搜索</option>
+                    <option value="book">仅本书搜索</option>
+                  </select>
                 </label>
                 <label className="adminNovelSourceOrderField">
                   <span>顺序</span>

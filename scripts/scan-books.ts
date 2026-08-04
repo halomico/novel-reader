@@ -4,9 +4,8 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { getLibraryDir } from "../src/lib/config";
-import { getContentSearchDb } from "../src/lib/content-search-db";
 import { invalidateContentSearchResultCache } from "../src/lib/content-search-cache";
-import { deleteContentSearchIndexNovel } from "../src/lib/content-search-index";
+import { invalidateNovelContentSearchIndex } from "../src/lib/content-search-maintenance";
 import { getDb } from "../src/lib/db";
 import { isNovelTextFile, parseNovelTitle } from "../src/lib/filename";
 import { invalidateNovelIdCache } from "../src/lib/novel-id-sampler";
@@ -250,7 +249,7 @@ function scan() {
         existing.size_bytes !== book.sizeBytes ||
         existing.mtime_ms !== book.mtimeMs ||
         existing.storage_mode !== book.storageMode;
-      if (existing && changed) deleteContentSearchIndexNovel(getContentSearchDb(), existing.id);
+      if (existing && changed) invalidateNovelContentSearchIndex(existing.id, db);
       const row = upsertBook.get(
         book.title,
         book.fileName,

@@ -18,6 +18,7 @@ import { checkContentAccess } from "@/lib/content-access";
 import { getRequestLocale, localizeTexts } from "@/lib/locale-server";
 import { languageAlternates, uiText, withLocalePath } from "@/lib/locale";
 import { DEFAULT_NOVEL_LIBRARY_SLUG, resolveNovelLibraryScope } from "@/lib/novel-library";
+import { isNovelSourceFullTextSearchEnabled } from "@/lib/novel-search-policy";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
@@ -66,6 +67,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   if (!access.allowed) notFound();
   const originalQuery = params.q || "";
   const libraryScope = resolveNovelLibraryScope(params.library || params.sourceLibrary);
+  const fullTextSearchEnabled = libraryScope.kind === "all" || isNovelSourceFullTextSearchEnabled(libraryScope.source.slug);
   const validation = validateSearchKeyword(originalQuery);
   const pageSize = getSearchResultsPageSize();
   const hasExplicitPage = Boolean(params.page);
@@ -90,7 +92,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     <main className="appShell">
       <SiteHeader query={originalQuery} defaultSearchMode="content" currentUser={user} library={libraryScope.slug} />
       <Breadcrumbs items={[{ label: homeLabel, href: "/" }, { label: searchLabel }]} />
-      {validation.ok ? (
+      {!fullTextSearchEnabled ? (
+        <section className="searchHero">
+          <p className="searchMessage">{uiText(locale, "该书库未加入全站正文索引，请进入具体书籍后使用“本书”搜索。")}</p>
+        </section>
+      ) : validation.ok ? (
         <ContentSearchClient
           keyword={originalQuery}
           initialPage={page}

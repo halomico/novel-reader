@@ -27,6 +27,7 @@ export type SiteIconMimeType = "" | "image/png" | "image/jpeg" | "image/webp" | 
 export type RelatedVideoMode = "next" | "random";
 export type AudioPlaybackMode = "stop" | "next" | "repeat-one";
 export type UserRegistrationMode = "closed" | "invite" | "open";
+export type NovelSourceSearchMode = "full" | "book";
 
 export type IpRateLimitRule = {
   id: string;
@@ -83,6 +84,7 @@ export type SiteSettings = {
   showProgressBars: boolean;
   frontendSearchConcurrencyLimit: number;
   globalSearchMaxResults: number;
+  novelSourceSearchModes: Record<string, NovelSourceSearchMode>;
   userLoginEnabled: boolean;
   userRegistrationEnabled: boolean;
   userRegistrationMode: UserRegistrationMode;
@@ -122,7 +124,7 @@ type SiteSettingsGlobal = typeof globalThis & {
   siteSettingsCache?: SiteSettingsCache;
 };
 
-const SITE_SETTINGS_CACHE_SCHEMA_VERSION = 10;
+const SITE_SETTINGS_CACHE_SCHEMA_VERSION = 11;
 
 const DEFAULT_SETTINGS_PREVIEW_TEXT =
   process.env.SETTINGS_PREVIEW_TEXT?.trim() ||
@@ -190,6 +192,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   showProgressBars: true,
   frontendSearchConcurrencyLimit: 0,
   globalSearchMaxResults: 0,
+  novelSourceSearchModes: {},
   userLoginEnabled: true,
   userRegistrationEnabled: true,
   userRegistrationMode: "open",
@@ -274,6 +277,21 @@ function cleanCatalogPromotionOrder(value: unknown): CatalogPromotionOrder {
 
 function cleanBool(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
+}
+
+export function normalizeNovelSourceSearchModes(value: unknown): Record<string, NovelSourceSearchMode> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const modes: Record<string, NovelSourceSearchMode> = {};
+  for (const [rawSlug, rawMode] of Object.entries(value).slice(0, 200)) {
+    const slug = rawSlug.normalize("NFKC").trim().toLocaleLowerCase("en-US").slice(0, 64);
+    if (slug && rawMode === "book") {
+      modes[slug] = "book";
+    }
+  }
+  return modes;
 }
 
 function legacyHomePortalAccessModes(value: Record<string, unknown>): HomePortalAccessModes {
@@ -463,6 +481,7 @@ function readSiteSettingsFromDisk(): SiteSettings {
       showProgressBars: cleanBool(parsed.showProgressBars, DEFAULT_SETTINGS.showProgressBars),
       frontendSearchConcurrencyLimit: cleanInt(parsed.frontendSearchConcurrencyLimit, DEFAULT_SETTINGS.frontendSearchConcurrencyLimit, 0, 100),
       globalSearchMaxResults: cleanInt(parsed.globalSearchMaxResults, DEFAULT_SETTINGS.globalSearchMaxResults, 0, 1000),
+      novelSourceSearchModes: normalizeNovelSourceSearchModes(parsed.novelSourceSearchModes),
       userLoginEnabled: cleanBool(parsed.userLoginEnabled, DEFAULT_SETTINGS.userLoginEnabled),
       userRegistrationEnabled: cleanBool(parsed.userRegistrationEnabled, DEFAULT_SETTINGS.userRegistrationEnabled),
       userRegistrationMode: cleanUserRegistrationMode(

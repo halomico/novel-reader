@@ -242,13 +242,13 @@ export function MediaPlayer({
               void startPlayback();
             }}
             disabled={loading}
-            aria-label={needsLogin ? "登录后播放" : needsUnlock ? `使用 ${playSodaPrice} 苏打解锁 3 小时` : error ? "重新播放" : "播放视频"}
+            aria-label={needsLogin ? "登录后播放" : needsUnlock ? `使用 ${playSodaPrice} 苏打解锁 24 小时` : error ? "重新播放" : "播放视频"}
           >
             {loading ? <LoaderCircle className="isSpinning" size={23} aria-hidden="true" /> :
               needsLogin ? (
                 <><LogIn size={20} aria-hidden="true" /><span>登录后播放</span></>
               ) : needsUnlock ? (
-                <><CupSoda size={20} aria-hidden="true" /><span>{playSodaPrice} 苏打 · 3 小时</span></>
+                <><CupSoda size={20} aria-hidden="true" /><span>{playSodaPrice} 苏打 · 24 小时</span></>
               ) : error ? <RotateCcw size={22} aria-hidden="true" /> : <Play size={24} fill="currentColor" aria-hidden="true" />}
           </button>
           {error ? <p role="alert">{error}</p> : null}

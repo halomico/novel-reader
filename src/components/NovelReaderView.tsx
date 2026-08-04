@@ -21,7 +21,7 @@ import {
 import { isNovelFavorite } from "@/lib/favorites";
 import type { AppLocale } from "@/lib/locale";
 import { localizeNovelSegments, localizeText, localizeTexts } from "@/lib/locale-server";
-import type { NovelReadAccess } from "@/lib/novel-access";
+import { getNovelReadAccess, type NovelReadAccess } from "@/lib/novel-access";
 import {
   novelChapterContentVersion,
   getNovelSourceById,
@@ -223,10 +223,20 @@ export async function NovelReaderView({
     title: await localizeText(item.title, locale),
     wordCount: item.wordCount,
   })));
+  const currentSearchBookId = book.storage_mode === "chapters" && getNovelReadAccess(book, user).allowed
+    ? book.id
+    : undefined;
 
   return (
     <main className="readerShell">
-      <SiteHeader defaultSearchMode="current" showCurrentSearch readerMode currentUser={user} library={library} />
+      <SiteHeader
+        defaultSearchMode="current"
+        showCurrentSearch
+        readerMode
+        currentUser={user}
+        library={library}
+        currentSearchBookId={currentSearchBookId}
+      />
       <ReaderExperienceControls
         bookId={book.id}
         title={displayTitle}

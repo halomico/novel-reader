@@ -198,6 +198,9 @@ const MEDIA_MIME_TYPES: Record<string, string> = {
   ".mp4": "video/mp4",
   ".m4v": "video/x-m4v",
   ".mov": "video/quicktime",
+  ".ts": "video/mp2t",
+  ".mts": "video/mp2t",
+  ".m2ts": "video/mp2t",
   ".ogv": "video/ogg",
   ".webm": "video/webm",
   ".aac": "audio/aac",
@@ -667,7 +670,12 @@ export function getVisibleMediaEntryKinds(authenticated: boolean): MediaKind[] {
   return MEDIA_KINDS.filter((kind) => isMediaKindEntryVisible(kind, authenticated));
 }
 
-export function normalizeMediaFile(params: { kind: MediaKind; fileName: string; mimeType: string }): {
+export function normalizeMediaFile(params: {
+  kind: MediaKind;
+  fileName: string;
+  mimeType: string;
+  allowVideoConversionSources?: boolean;
+}): {
   fileName: string;
   extension: string;
   mimeType: string;
@@ -677,7 +685,9 @@ export function normalizeMediaFile(params: { kind: MediaKind; fileName: string; 
     return null;
   }
   const extension = path.extname(fileName).toLowerCase().slice(0, 16);
-  if (params.kind !== "file" && !KIND_EXTENSIONS[params.kind].has(extension)) {
+  const conversionSource = params.kind === "video" && params.allowVideoConversionSources &&
+    [".ts", ".mts", ".m2ts"].includes(extension);
+  if (params.kind !== "file" && !KIND_EXTENSIONS[params.kind].has(extension) && !conversionSource) {
     return null;
   }
   const suppliedMime = params.mimeType.trim().toLowerCase();

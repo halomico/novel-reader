@@ -5,7 +5,14 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import type { Novel } from "./books";
-import { initializeContentSearchDb } from "./content-search-db";
+import {
+  closeAllContentSearchDbs,
+  deleteContentSearchDatabase,
+  getContentSearchDatabasePathForSource,
+  getContentSearchDb,
+  getLegacyContentSearchDb,
+  initializeContentSearchDb,
+} from "./content-search-db";
 import {
   buildContentSearchIndex,
   clearContentSearchIndex,
@@ -16,6 +23,7 @@ import {
   getContentSearchIndexSummary,
 } from "./content-search-index";
 import { normalizeSearchText } from "./search-query";
+import { buildContentSearchSourceIndex } from "./content-search-sources";
 
 function novel(id: number, overrides: Partial<Novel> = {}): Novel {
   return {
@@ -58,7 +66,7 @@ function insertIndexedNovel(db: DatabaseSync, item: Novel, content: string) {
   ).run(item.id, item.content_hash, item.size_bytes, item.mtime_ms, CONTENT_SEARCH_INDEX_VERSION);
 }
 
-test("uses trigram and bigram FTS rows while including uncovered novels", () => {
+test("uses only current trigram and bigram FTS rows", () => {
   const db = new DatabaseSync(":memory:");
   initializeContentSearchDb(db);
   const first = novel(1);
@@ -88,13 +96,118 @@ test("uses trigram and bigram FTS rows while including uncovered novels", () => 
     coveredNovelCount: 2,
     uncoveredNovelCount: 0,
   });
-  assert.deepEqual(findContentSearchCandidateNovelIds(db, [first, second, uncovered], "不存在")?.candidateIds, [3]);
+  assert.deepEqual(findContentSearchCandidateNovelIds(db, [first, second, uncovered], "不存在")?.candidateIds, []);
 
   deleteContentSearchIndexNovel(db, first.id);
   assert.equal((db.prepare("SELECT COUNT(*) AS count FROM content_search_state").get() as { count: number }).count, 1);
   clearContentSearchIndex(db);
   assert.equal((db.prepare("SELECT COUNT(*) AS count FROM content_search_state").get() as { count: number }).count, 0);
   db.close();
+});
+
+test("stores and deletes each library index independently", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "novel-content-search-shards-"));
+  const previousDirectory = process.env.CONTENT_SEARCH_INDEX_DIR;
+  process.env.CONTENT_SEARCH_INDEX_DIR = path.join(root, "indexes");
+  try {
+    const first = getContentSearchDb(1);
+    const second = getContentSearchDb(2);
+    insertIndexedNovel(first, novel(1, { source_id: 1 }), "第一书库银河核心");
+    insertIndexedNovel(second, novel(2, { source_id: 2 }), "第二书库海底火山");
+    assert.notEqual(getContentSearchDatabasePathForSource(1), getContentSearchDatabasePathForSource(2));
+    assert.equal((first.prepare("SELECT COUNT(*) AS count FROM content_search_state").get() as { count: number }).count, 1);
+    assert.equal((second.prepare("SELECT COUNT(*) AS count FROM content_search_state").get() as { count: number }).count, 1);
+
+    deleteContentSearchDatabase(1);
+    assert.equal(await fs.stat(getContentSearchDatabasePathForSource(2)).then(() => true), true);
+    assert.equal((second.prepare("SELECT COUNT(*) AS count FROM content_search_state").get() as { count: number }).count, 1);
+    await assert.rejects(fs.stat(getContentSearchDatabasePathForSource(1)));
+  } finally {
+    closeAllContentSearchDbs();
+    if (previousDirectory === undefined) delete process.env.CONTENT_SEARCH_INDEX_DIR;
+    else process.env.CONTENT_SEARCH_INDEX_DIR = previousDirectory;
+    await fs.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  }
+});
+
+test("opens the legacy shared index read-only during rolling migration", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "novel-content-search-legacy-"));
+  const previousLegacyPath = process.env.CONTENT_SEARCH_DB_PATH;
+  process.env.CONTENT_SEARCH_DB_PATH = path.join(root, "content-search.db");
+  const writer = new DatabaseSync(process.env.CONTENT_SEARCH_DB_PATH);
+  initializeContentSearchDb(writer);
+  insertIndexedNovel(writer, novel(1), "旧版索引仍有银河核心");
+  writer.close();
+  try {
+    const legacy = getLegacyContentSearchDb();
+    assert.ok(legacy);
+    assert.deepEqual(findContentSearchCandidateNovelIds(legacy!, [novel(1)], "银河核心")?.candidateIds, [1]);
+    assert.throws(() => legacy!.prepare("DELETE FROM content_search_state").run(), /readonly|read-only/i);
+  } finally {
+    closeAllContentSearchDbs();
+    if (previousLegacyPath === undefined) delete process.env.CONTENT_SEARCH_DB_PATH;
+    else process.env.CONTENT_SEARCH_DB_PATH = previousLegacyPath;
+    await fs.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  }
+});
+
+test("publishes complete shard rebuilds atomically and keeps the previous shard on cancellation", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "novel-content-search-shadow-"));
+  const libraryDir = path.join(root, "library");
+  const previousDirectory = process.env.CONTENT_SEARCH_INDEX_DIR;
+  const previousLibrary = process.env.NOVEL_LIBRARY_DIR;
+  process.env.CONTENT_SEARCH_INDEX_DIR = path.join(root, "indexes");
+  process.env.NOVEL_LIBRARY_DIR = libraryDir;
+  await fs.mkdir(libraryDir, { recursive: true });
+  const mainDb = new DatabaseSync(path.join(root, "main.db"));
+  mainDb.exec(`
+    CREATE TABLE novels (
+      id INTEGER PRIMARY KEY,
+      title TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      relative_path TEXT NOT NULL,
+      source_id INTEGER,
+      storage_mode TEXT NOT NULL DEFAULT 'single',
+      content_hash TEXT,
+      size_bytes INTEGER NOT NULL,
+      mtime_ms INTEGER NOT NULL,
+      word_count INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  try {
+    await fs.writeFile(path.join(libraryDir, "1.txt"), "旧索引包含银河核心", "utf8");
+    const stat = await fs.stat(path.join(libraryDir, "1.txt"));
+    mainDb.prepare(
+      "INSERT INTO novels (id, title, file_name, relative_path, source_id, content_hash, size_bytes, mtime_ms, word_count) VALUES (1, '第一本', '1.txt', '1.txt', 1, 'old', ?, ?, 9)",
+    ).run(stat.size, stat.mtimeMs);
+    await buildContentSearchSourceIndex(mainDb, 1, undefined, { force: true, optimize: false });
+    const published = getContentSearchDb(1);
+    const records = mainDb.prepare("SELECT * FROM novels").all() as Novel[];
+    assert.deepEqual(findContentSearchCandidateNovelIds(published, records, "银河核心")?.candidateIds, [1]);
+
+    await fs.writeFile(path.join(libraryDir, "1.txt"), "新正文只包含海底火山", "utf8");
+    const updatedStat = await fs.stat(path.join(libraryDir, "1.txt"));
+    mainDb.prepare("UPDATE novels SET content_hash = 'new', size_bytes = ?, mtime_ms = ? WHERE id = 1")
+      .run(updatedStat.size, updatedStat.mtimeMs);
+    await assert.rejects(
+      buildContentSearchSourceIndex(mainDb, 1, undefined, { force: true, optimize: false, isCancelled: () => true }),
+      /取消/,
+    );
+    const stillPublished = getContentSearchDb(1);
+    const oldRecord = [{ ...records[0] }];
+    assert.deepEqual(findContentSearchCandidateNovelIds(stillPublished, oldRecord, "银河核心")?.candidateIds, [1]);
+    assert.equal((await fs.readdir(path.join(root, "indexes"))).some((name) => name.includes(".building-")), false);
+  } finally {
+    closeAllContentSearchDbs();
+    mainDb.close();
+    if (previousDirectory === undefined) delete process.env.CONTENT_SEARCH_INDEX_DIR;
+    else process.env.CONTENT_SEARCH_INDEX_DIR = previousDirectory;
+    if (previousLibrary === undefined) delete process.env.NOVEL_LIBRARY_DIR;
+    else process.env.NOVEL_LIBRARY_DIR = previousLibrary;
+    await fs.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  }
 });
 
 test("builds and incrementally refreshes an independent content search database", async () => {
@@ -116,6 +229,7 @@ test("builds and incrementally refreshes an independent content search database"
       title TEXT NOT NULL,
       file_name TEXT NOT NULL,
       relative_path TEXT NOT NULL,
+      source_id INTEGER,
       storage_mode TEXT NOT NULL DEFAULT 'single',
       content_hash TEXT,
       size_bytes INTEGER NOT NULL,
@@ -137,8 +251,8 @@ test("builds and incrementally refreshes an independent content search database"
     const stat = await fs.stat(filePath);
     mainDb.prepare(
       `INSERT INTO novels
-         (id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+         (id, title, file_name, relative_path, source_id, content_hash, size_bytes, mtime_ms, word_count, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
        ON CONFLICT(id) DO UPDATE SET
          content_hash = excluded.content_hash,
          size_bytes = excluded.size_bytes,
@@ -171,8 +285,8 @@ test("builds and incrementally refreshes an independent content search database"
 
     mainDb.prepare(
       `INSERT INTO novels
-         (id, title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, created_at, updated_at)
-       VALUES (3, 'Missing', 'missing.txt', 'missing.txt', 'hash-missing', 10, 1, 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+         (id, title, file_name, relative_path, source_id, content_hash, size_bytes, mtime_ms, word_count, created_at, updated_at)
+       VALUES (3, 'Missing', 'missing.txt', 'missing.txt', 1, 'hash-missing', 10, 1, 10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
     ).run();
     const failedBuild = await buildContentSearchIndex(mainDb, searchDb, undefined, { optimize: false });
     assert.equal(failedBuild.failedBooks, 1);
@@ -181,12 +295,25 @@ test("builds and incrementally refreshes an independent content search database"
     assert.equal(summary.indexedBooks, 2);
     assert.equal(summary.pendingBooks, 1);
     assert.equal(summary.failedBooks, 1);
+    const sourceSummary = getContentSearchIndexSummary(mainDb, searchDb, { sourceId: 1 });
+    assert.equal(sourceSummary.totalBooks, 3);
+    assert.equal(sourceSummary.indexedBooks, 2);
 
     mainDb.prepare("UPDATE novels SET content_hash = 'hash-stale' WHERE id = 2").run();
     const staleSummary = getContentSearchIndexSummary(mainDb, searchDb);
     assert.equal(staleSummary.indexedBooks, 1);
     assert.equal(staleSummary.pendingBooks, 2);
     assert.equal(staleSummary.staleBooks, 1);
+
+    const scopedBuild = await buildContentSearchIndex(mainDb, searchDb, undefined, {
+      optimize: false,
+      novelIds: [1],
+    });
+    assert.equal(scopedBuild.totalBooks, 1);
+    assert.equal((searchDb.prepare("SELECT COUNT(*) AS count FROM content_search_state WHERE novel_id = 2").get() as { count: number }).count, 0);
+    const scopedSummary = getContentSearchIndexSummary(mainDb, searchDb, { novelIds: [1] });
+    assert.equal(scopedSummary.totalBooks, 1);
+    assert.equal(scopedSummary.pendingBooks, 0);
   } finally {
     mainDb.close();
     searchDb.close();

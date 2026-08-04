@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import type { DatabaseSync } from "node:sqlite";
 import { readNovelContent, type Novel } from "./books";
-import { getContentSearchDatabasePath } from "./config";
 import { normalizeSearchText } from "./search-query";
 
 export const CONTENT_SEARCH_INDEX_VERSION = 2;
@@ -10,7 +9,7 @@ const CONTENT_SEARCH_RATIO_MIN_SOURCE_BYTES = 10 * 1024 * 1024;
 
 export type ContentSearchNovelRecord = Pick<
   Novel,
-  "id" | "relative_path" | "storage_mode" | "content_hash" | "size_bytes" | "mtime_ms"
+  "id" | "relative_path" | "source_id" | "storage_mode" | "content_hash" | "size_bytes" | "mtime_ms"
 >;
 
 type ContentSearchStateRow = {
@@ -68,6 +67,8 @@ export type ContentSearchIndexBuildOptions = {
   force?: boolean;
   optimize?: boolean;
   isCancelled?: () => boolean;
+  novelIds?: readonly number[];
+  sourceId?: number;
 };
 
 type PreparedNovelIndex = {
@@ -83,8 +84,10 @@ export class ContentSearchIndexCancelledError extends Error {
   }
 }
 
-function relatedDatabasePaths(): string[] {
-  const databasePath = getContentSearchDatabasePath();
+function relatedDatabasePaths(db: DatabaseSync): string[] {
+  const databasePath = (db.prepare("PRAGMA database_list").all() as Array<{ name: string; file: string }>)
+    .find((item) => item.name === "main")?.file || "";
+  if (!databasePath || databasePath === ":memory:") return [];
   return [databasePath, `${databasePath}-wal`, `${databasePath}-shm`];
 }
 
@@ -96,8 +99,8 @@ function fileSize(filePath: string): number {
   }
 }
 
-export function getContentSearchDiskUsageBytes(): number {
-  return relatedDatabasePaths().reduce((total, filePath) => total + fileSize(filePath), 0);
+export function getContentSearchDiskUsageBytes(db: DatabaseSync): number {
+  return relatedDatabasePaths(db).reduce((total, filePath) => total + fileSize(filePath), 0);
 }
 
 function codePointToken(char: string): string {
@@ -205,12 +208,9 @@ export function findContentSearchCandidateNovelIds(
 
   const states = new Map(listStates(db).map((state) => [state.novelId, state]));
   const coveredIds = new Set<number>();
-  const candidateIds = new Set<number>();
   for (const novel of novels) {
     if (recordMatchesNovel(states.get(novel.id), novel)) {
       coveredIds.add(novel.id);
-    } else {
-      candidateIds.add(novel.id);
     }
   }
 
@@ -235,16 +235,12 @@ export function findContentSearchCandidateNovelIds(
       }
     }
 
-    for (const novelId of matchedIds || []) {
-      if (coveredIds.has(novelId)) {
-        candidateIds.add(novelId);
-      }
-    }
+    const candidateIds = Array.from(matchedIds || []).filter((novelId) => coveredIds.has(novelId));
 
     return {
       engine: engines.size > 1 ? "fts5-hybrid" : engines.has("bigram") ? "fts5-bigram" : "fts5-trigram",
       terms,
-      candidateIds: Array.from(candidateIds).sort((left, right) => left - right),
+      candidateIds: candidateIds.sort((left, right) => left - right),
       coveredNovelCount: coveredIds.size,
       uncoveredNovelCount: novels.length - coveredIds.size,
     };
@@ -256,10 +252,11 @@ export function findContentSearchCandidateNovelIds(
 export function getContentSearchIndexSummary(
   mainDb: DatabaseSync,
   searchDb: DatabaseSync,
+  options: { novelIds?: readonly number[]; sourceId?: number } = {},
 ): ContentSearchIndexSummary {
   const mainDatabase = (mainDb.prepare("PRAGMA database_list").all() as Array<{ name: string; file: string }>)
     .find((item) => item.name === "main");
-  if (mainDatabase?.file) {
+  if (mainDatabase?.file && options.novelIds === undefined) {
     try {
       const alias = "catalog_summary";
       const attached = (searchDb.prepare("PRAGMA database_list").all() as Array<{ name: string; file: string }>)
@@ -311,12 +308,14 @@ export function getContentSearchIndexSummary(
            ) AS last_indexed_at
          FROM ${alias}.novels n
          LEFT JOIN content_search_state s ON s.novel_id = n.id
-         LEFT JOIN content_search_failures f ON f.novel_id = n.id`,
+         LEFT JOIN content_search_failures f ON f.novel_id = n.id
+         ${options.sourceId ? "WHERE n.source_id = ?" : ""}`,
       ).get(
         CONTENT_SEARCH_INDEX_VERSION,
         CONTENT_SEARCH_INDEX_VERSION,
         CONTENT_SEARCH_INDEX_VERSION,
         CONTENT_SEARCH_INDEX_VERSION,
+        ...(options.sourceId ? [options.sourceId] : []),
       ) as {
         total_books: number;
         source_bytes: number;
@@ -325,7 +324,7 @@ export function getContentSearchIndexSummary(
         failed_books: number;
         last_indexed_at: string | null;
       };
-      const databaseBytes = getContentSearchDiskUsageBytes();
+      const databaseBytes = getContentSearchDiskUsageBytes(searchDb);
       return {
         totalBooks: row.total_books,
         indexedBooks: row.indexed_books,
@@ -343,9 +342,14 @@ export function getContentSearchIndexSummary(
     }
   }
 
-  const novels = mainDb
-    .prepare("SELECT id, relative_path, storage_mode, content_hash, size_bytes, mtime_ms FROM novels ORDER BY id ASC")
-    .all() as ContentSearchNovelRecord[];
+  const allowedNovelIds = options.novelIds === undefined
+    ? null
+    : new Set(options.novelIds.filter((id) => Number.isInteger(id) && id > 0));
+  const novels = (mainDb
+    .prepare(`SELECT id, relative_path, source_id, storage_mode, content_hash, size_bytes, mtime_ms
+              FROM novels${options.sourceId ? " WHERE source_id = ?" : ""} ORDER BY id ASC`)
+    .all(...(options.sourceId ? [options.sourceId] : [])) as ContentSearchNovelRecord[])
+    .filter((novel) => !allowedNovelIds || allowedNovelIds.has(novel.id));
   const states = new Map(listStates(searchDb).map((state) => [state.novelId, state]));
   const failures = new Map(listFailures(searchDb).map((failure) => [failure.novelId, failure]));
   let indexedBooks = 0;
@@ -369,7 +373,7 @@ export function getContentSearchIndexSummary(
   }
 
   const sourceBytes = novels.reduce((total, novel) => total + novel.size_bytes, 0);
-  const databaseBytes = getContentSearchDiskUsageBytes();
+  const databaseBytes = getContentSearchDiskUsageBytes(searchDb);
   return {
     totalBooks: novels.length,
     indexedBooks,
@@ -426,9 +430,14 @@ export async function buildContentSearchIndex(
   onProgress?: (progress: ContentSearchIndexProgress) => void,
   options: ContentSearchIndexBuildOptions = {},
 ): Promise<ContentSearchIndexResult> {
-  const novels = mainDb
-    .prepare("SELECT id, relative_path, storage_mode, content_hash, size_bytes, mtime_ms FROM novels ORDER BY id ASC")
-    .all() as ContentSearchNovelRecord[];
+  const allowedNovelIds = options.novelIds === undefined
+    ? null
+    : new Set(options.novelIds.filter((id) => Number.isInteger(id) && id > 0));
+  const novels = (mainDb
+    .prepare(`SELECT id, relative_path, source_id, storage_mode, content_hash, size_bytes, mtime_ms
+              FROM novels${options.sourceId ? " WHERE source_id = ?" : ""} ORDER BY id ASC`)
+    .all(...(options.sourceId ? [options.sourceId] : [])) as ContentSearchNovelRecord[])
+    .filter((novel) => !allowedNovelIds || allowedNovelIds.has(novel.id));
   const sourceBytes = novels.reduce((total, novel) => total + novel.size_bytes, 0);
   if (options.force) {
     clearContentSearchIndex(searchDb);
@@ -572,7 +581,11 @@ export async function buildContentSearchIndex(
   } else {
     searchDb.exec("PRAGMA wal_checkpoint(TRUNCATE);");
   }
-  const databaseBytes = getContentSearchDiskUsageBytes();
+  if (options.force) {
+    throwIfCancelled();
+    searchDb.exec("VACUUM;");
+  }
+  const databaseBytes = getContentSearchDiskUsageBytes(searchDb);
   if (
     sourceBytes >= CONTENT_SEARCH_RATIO_MIN_SOURCE_BYTES &&
     databaseBytes > sourceBytes * CONTENT_SEARCH_MAX_SOURCE_RATIO

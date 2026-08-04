@@ -9,16 +9,16 @@ export function ContentAccessGate({
 }: {
   returnTo: string;
   title?: string;
-  description?: string;
+  description?: string | null;
   label?: string;
 }) {
   const params = new URLSearchParams({ returnTo });
   return (
-    <section className="contentAccessGate" aria-label={label}>
+    <section className={description ? "contentAccessGate" : "contentAccessGate isCompact"} aria-label={label}>
       <span className="contentAccessGateIcon" aria-hidden="true"><LogIn size={20} /></span>
       <div>
         <strong>{title}</strong>
-        <p>{description}</p>
+        {description ? <p>{description}</p> : null}
       </div>
       <Link href={`/login?${params.toString()}`}>
         <LogIn size={15} aria-hidden="true" />

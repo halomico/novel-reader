@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   getActiveVideoTranscodeProfile,
+  selectVideoProcessingMode,
   selectVideoBitrateKbps,
+  videoProcessingArguments,
   videoTranscodeArguments,
   videoTranscodeOutputStoredName,
   VIDEO_TRANSCODE_PROFILES,
@@ -11,7 +13,7 @@ import {
 test("selects the configured single video transcode profile", () => {
   assert.equal(getActiveVideoTranscodeProfile({ VIDEO_TRANSCODE_PROFILE: "source" }), null);
   const profile = getActiveVideoTranscodeProfile({ VIDEO_TRANSCODE_PROFILE: "standard-h264" });
-  assert.equal(profile?.label, "单文件 · 随分辨率");
+  assert.equal(profile?.label, "智能兼容 · 无损优先");
   assert.equal(videoTranscodeOutputStoredName("video/演示/source.webm", profile!), "video/演示/source.mp4");
   assert.throws(() => getActiveVideoTranscodeProfile({ VIDEO_TRANSCODE_PROFILE: "unknown" }), /不受支持/);
 });
@@ -30,4 +32,47 @@ test("builds one H.264/AAC output without resizing the source", () => {
   assert.equal(args[args.indexOf("-maxrate") + 1], "3080k");
   assert.equal(args.includes("-vf"), false);
   assert.equal(args.includes("-s"), false);
+});
+
+test("copies compatible streams and transcodes only incompatible codecs", () => {
+  const compatible = {
+    width: 1920,
+    height: 1080,
+    videoCodec: "h264",
+    pixelFormat: "yuv420p",
+    audioCodec: "aac",
+  };
+  assert.equal(selectVideoProcessingMode(compatible, { sourceExtension: ".mp4", fastStart: true }), "passthrough");
+  assert.equal(selectVideoProcessingMode(compatible, { sourceExtension: ".mp4", fastStart: false }), "remux");
+  assert.equal(selectVideoProcessingMode(compatible, { sourceExtension: ".mov", fastStart: true }), "remux");
+  assert.equal(selectVideoProcessingMode(compatible, { sourceExtension: ".ts", fastStart: false }), "remux");
+  assert.equal(selectVideoProcessingMode({ ...compatible, audioCodec: "ac3" }, { sourceExtension: ".mov", fastStart: false }), "audio-transcode");
+  assert.equal(selectVideoProcessingMode({ ...compatible, videoCodec: "hevc" }, { sourceExtension: ".mp4", fastStart: true }), "transcode");
+  assert.equal(selectVideoProcessingMode({ ...compatible, videoCodec: "av1" }, { sourceExtension: ".webm", fastStart: false }), "transcode");
+  assert.equal(selectVideoProcessingMode({ ...compatible, pixelFormat: "yuv420p10le" }, { sourceExtension: ".mp4", fastStart: true }), "transcode");
+
+  const remuxArgs = videoProcessingArguments("input.mov", "output.mp4", VIDEO_TRANSCODE_PROFILES[0], compatible, "remux");
+  assert.deepEqual(remuxArgs.slice(remuxArgs.indexOf("-c"), remuxArgs.indexOf("-c") + 2), ["-c", "copy"]);
+  assert.equal(remuxArgs.includes("libx264"), false);
+
+  const audioArgs = videoProcessingArguments(
+    "input.mov",
+    "output.mp4",
+    VIDEO_TRANSCODE_PROFILES[0],
+    { ...compatible, audioCodec: "ac3" },
+    "audio-transcode",
+  );
+  assert.equal(audioArgs[audioArgs.indexOf("-c:v") + 1], "copy");
+  assert.equal(audioArgs[audioArgs.indexOf("-c:a") + 1], "aac");
+
+  const transcodeArgs = videoProcessingArguments(
+    "input.webm",
+    "output.mp4",
+    VIDEO_TRANSCODE_PROFILES[0],
+    { ...compatible, videoCodec: "av1" },
+    "transcode",
+  );
+  assert.equal(transcodeArgs[transcodeArgs.indexOf("-c:v") + 1], "libx264");
+  assert.equal(transcodeArgs[transcodeArgs.indexOf("-c:a") + 1], "copy");
+  assert.deepEqual(transcodeArgs.slice(-5), ["-movflags", "+faststart", "-avoid_negative_ts", "make_zero", "output.mp4"]);
 });

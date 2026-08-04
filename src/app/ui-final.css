@@ -189,6 +189,11 @@
   width: min(1000px, calc(100vw - 180px));
 }
 
+:root[data-reader-viewport="true"],
+:root[data-reader-viewport="true"] body {
+  background-color: var(--reader-viewport-bg);
+}
+
 :root .readerShell[data-reader-theme="gray"],
 :root[data-reader-theme="gray"] .readerShell:not([data-reader-theme]) {
   --reader-bg: #ebebeb;
@@ -461,6 +466,63 @@
 .readerSidePanel > header button {
   border-radius: 50%;
   background: color-mix(in srgb, var(--reader-muted) 16%, transparent);
+}
+
+.readerBookInfo {
+  display: grid;
+  gap: 0;
+  overflow-y: auto;
+  padding: 4px 28px 30px;
+}
+
+.readerBookInfo h2 {
+  color: var(--reader-text);
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.readerBookInfo .readerBookChapterTitle {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.readerBookInfo .readerBookDescription {
+  margin-top: 15px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.readerBookInfo dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 18px 0 6px;
+}
+
+.readerBookInfo dl > div {
+  display: grid;
+  justify-content: initial;
+  gap: 4px;
+  border: 1px solid var(--reader-border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  background: color-mix(in srgb, var(--reader-border) 24%, transparent);
+}
+
+.readerBookInfo dt {
+  font-size: 11px;
+}
+
+.readerBookInfo dd {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.readerBookInfo > a {
+  width: fit-content;
+  margin-top: 12px;
 }
 
 .readerSettingsPanel {
@@ -1068,29 +1130,43 @@ nav.accountGrowthTools > a + a {
   }
 
   .readerSidePanel > header strong {
-    font-size: 20px;
+    font-size: 17px;
   }
 
   .readerSettingsPanel {
-    gap: 18px;
+    gap: 12px;
     overflow-y: auto;
     padding: 4px 20px 30px;
   }
 
   .readerSettingRow {
-    grid-template-columns: 1fr;
-    gap: 8px;
+    min-height: 44px;
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 10px;
+    border-bottom: 1px solid color-mix(in srgb, var(--reader-border) 72%, transparent);
+    padding-bottom: 12px;
+  }
+
+  .readerSettingRow > span {
+    color: var(--reader-text);
+    font-size: 12px;
+    font-weight: 600;
   }
 
   .readerSettingRow.isThemes > div {
-    justify-content: flex-start;
-    gap: 10px;
+    justify-content: flex-end;
+    gap: 6px;
   }
 
   .readerSettingRow.isThemes button {
-    width: 34px;
-    height: 34px;
-    flex-basis: 34px;
+    width: 28px;
+    height: 28px;
+    flex-basis: 28px;
+  }
+
+  .readerSettingRow.isFontSize > .fontSizeStepper,
+  .readerSettingRow.isLineHeight > .readerLineHeightControl {
+    justify-self: end;
   }
 
   .readerSettingRow.isWidth {
@@ -1098,6 +1174,19 @@ nav.accountGrowthTools > a + a {
   }
 
   .readerSettingRow.isLineHeight > .readerLineHeightControl { width: min(220px, 100%); }
+
+  .readerBookInfo {
+    padding: 2px 20px 28px;
+  }
+
+  .readerBookInfo h2 {
+    font-size: 18px;
+  }
+
+  .readerBookInfo .readerBookDescription {
+    font-size: 12.5px;
+    line-height: 1.68;
+  }
 
   .advancedTagSearchToolbar {
     grid-template-columns: 1fr;

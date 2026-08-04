@@ -19,7 +19,7 @@ export function ContentEntryGatePage({
       <ContentAccessGate
         returnTo={returnTo}
         title={uiText(locale, `登录后查看${label}`)}
-        description={uiText(locale, `${label}已开放入口，登录后即可继续。`)}
+        description={null}
         label={uiText(locale, "登录")}
       />
     </main>

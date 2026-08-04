@@ -32,11 +32,11 @@ test("uses the full-text index for mixed encodings and safely includes changed b
     const { searchNovelContent } = await import("./search");
     const db = getDb();
     mainDb = db;
-    searchDb = getContentSearchDb();
+    searchDb = getContentSearchDb(1);
     const insert = db.prepare(
       `INSERT INTO novels
-        (title, file_name, relative_path, content_hash, size_bytes, mtime_ms, word_count, updated_at)
-       VALUES (?, ?, ?, NULL, ?, 1, ?, '2026-07-15 00:00:00')`,
+        (title, file_name, relative_path, source_id, content_hash, size_bytes, mtime_ms, word_count, updated_at)
+       VALUES (?, ?, ?, 1, NULL, ?, 1, ?, '2026-07-15 00:00:00')`,
     );
 
     for (const file of files) {
@@ -84,14 +84,16 @@ test("uses the full-text index for mixed encodings and safely includes changed b
       upsertNovelRecord(db, changedRecord);
     }
     const changedResult = await searchNovelContent(matching.query);
-    assert.deepEqual(
-      changedResult.results.map((result) => result.novelId).sort((left, right) => left - right),
-      [1, 2],
-    );
+    assert.deepEqual(changedResult.results.map((result) => result.novelId), [1]);
 
     const incremental = await buildContentSearchIndex(db, searchDb, undefined, { optimize: false });
     assert.equal(incremental.indexedBooks, 1);
     assert.equal(incremental.reusedBooks, 2);
+    const refreshedResult = await searchNovelContent(matching.query);
+    assert.deepEqual(
+      refreshedResult.results.map((result) => result.novelId).sort((left, right) => left - right),
+      [1, 2],
+    );
 
     const missing = parseSearchQuery("海底火山");
     assert.equal(missing.ok, true);
@@ -102,21 +104,101 @@ test("uses the full-text index for mixed encodings and safely includes changed b
     assert.deepEqual(missingResult.results, []);
     assert.equal(missingResult.searchedBooks, 0);
 
-    searchDb.exec("DROP TABLE content_trigram_fts; DROP TABLE content_bigram_fts;");
-    const previousRipgrepPath = process.env.RIPGREP_PATH;
-    process.env.RIPGREP_PATH = path.join(root, "missing-ripgrep");
-    try {
-      const fallbackScopedResult = await searchNovelContent(matching.query, undefined, { candidateNovelIds: [2] });
-      assert.deepEqual(fallbackScopedResult.results.map((result) => result.novelId), [2]);
-    } finally {
-      if (previousRipgrepPath === undefined) delete process.env.RIPGREP_PATH;
-      else process.env.RIPGREP_PATH = previousRipgrepPath;
+    await fs.mkdir(path.join(libraryDir, "series"), { recursive: true });
+    await fs.writeFile(path.join(libraryDir, "series", "01.txt"), "第一章\n银河核心第一次出现。", "utf8");
+    await fs.writeFile(path.join(libraryDir, "series", "02.txt"), "第二章\n再次返回银河核心。", "utf8");
+    const chapterBookInsert = db.prepare(
+      `INSERT INTO novels
+        (title, file_name, relative_path, source_id, storage_mode, chapter_count, content_hash, size_bytes, mtime_ms, word_count, updated_at)
+       VALUES ('章节小说', 'series', 'series', 1, 'chapters', 2, 'chapter-hash', 60, 1, 30, CURRENT_TIMESTAMP)`,
+    ).run();
+    const chapterBookId = Number(chapterBookInsert.lastInsertRowid);
+    db.prepare(
+      `INSERT INTO novel_chapters
+        (novel_id, title, relative_path, sort_order, content_hash, size_bytes, mtime_ms, word_count)
+       VALUES (?, ?, ?, ?, ?, ?, 1, 15)`,
+    ).run(chapterBookId, "第一章", "series/01.txt", 0, "chapter-1", 30);
+    db.prepare(
+      `INSERT INTO novel_chapters
+        (novel_id, title, relative_path, sort_order, content_hash, size_bytes, mtime_ms, word_count)
+       VALUES (?, ?, ?, ?, ?, ?, 1, 15)`,
+    ).run(chapterBookId, "第二章", "series/02.txt", 1, "chapter-2", 30);
+    const chapterQuery = parseSearchQuery("银河核心");
+    assert.equal(chapterQuery.ok, true);
+    if (chapterQuery.ok) {
+      const { getNovelById } = await import("./books");
+      const { searchNovelBookContent } = await import("./search");
+      const chapterBook = getNovelById(chapterBookId);
+      assert.ok(chapterBook);
+      const chapterResults = await searchNovelBookContent(chapterBook!, chapterQuery.query);
+      assert.deepEqual(chapterResults.map((result) => result.title), ["第一章", "第二章"]);
+      assert.deepEqual(chapterResults.map((result) => result.segmentIndex), [0, 0]);
     }
+
+    searchDb.exec("DROP TABLE content_trigram_fts; DROP TABLE content_bigram_fts;");
+    const unavailableIndexResult = await searchNovelContent(matching.query, undefined, { candidateNovelIds: [2] });
+    assert.deepEqual(unavailableIndexResult.results, []);
+    assert.equal(unavailableIndexResult.searchedBooks, 0);
   } finally {
     mainDb?.close();
-    searchDb?.close();
+    const { closeAllContentSearchDbs } = await import("./content-search-db");
+    closeAllContentSearchDbs();
     delete (globalThis as typeof globalThis & { novelReaderDb?: DatabaseSync }).novelReaderDb;
-    delete (globalThis as typeof globalThis & { novelReaderContentSearchDb?: DatabaseSync }).novelReaderContentSearchDb;
+    await fs.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+  }
+});
+
+test("merges ready library shards and isolates a removed shard", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "novel-search-shards-"));
+  const libraryDir = path.join(root, "library");
+  process.env.NOVEL_LIBRARY_DIR = libraryDir;
+  process.env.DATABASE_PATH = path.join(root, "novels.db");
+  process.env.CONTENT_SEARCH_DB_PATH = path.join(root, "legacy-content-search.db");
+  process.env.CONTENT_SEARCH_INDEX_DIR = path.join(root, "indexes");
+  process.env.ADMIN_SETTINGS_PATH = path.join(root, "admin-settings.json");
+  await fs.mkdir(path.join(libraryDir, "second"), { recursive: true });
+
+  try {
+    const { getDb } = await import("./db");
+    const { closeAllContentSearchDbs, deleteContentSearchDatabase, getContentSearchDb } = await import("./content-search-db");
+    const { buildContentSearchIndex } = await import("./content-search-index");
+    const { parseSearchQuery } = await import("./search-query");
+    const { searchNovelContent } = await import("./search");
+    const db = getDb();
+    const defaultSource = db.prepare("SELECT id FROM novel_sources WHERE slug = 'default'").get() as { id: number };
+    const secondSource = db.prepare(
+      "INSERT INTO novel_sources (slug, name, relative_path) VALUES ('second', '第二书库', 'second') RETURNING id",
+    ).get() as { id: number };
+    await fs.writeFile(path.join(libraryDir, "first.txt"), "第一书库出现银河核心。", "utf8");
+    await fs.writeFile(path.join(libraryDir, "second", "second.txt"), "第二书库也出现银河核心。", "utf8");
+    db.prepare(
+      `INSERT INTO novels (title, file_name, relative_path, source_id, content_hash, size_bytes, mtime_ms, word_count)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
+    ).run("第一本", "first.txt", "first.txt", defaultSource.id, "first-hash", 36, 12);
+    db.prepare(
+      `INSERT INTO novels (title, file_name, relative_path, source_id, content_hash, size_bytes, mtime_ms, word_count)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
+    ).run("第二本", "second.txt", "second/second.txt", secondSource.id, "second-hash", 39, 13);
+    await buildContentSearchIndex(db, getContentSearchDb(defaultSource.id), undefined, { optimize: false, sourceId: defaultSource.id });
+    await buildContentSearchIndex(db, getContentSearchDb(secondSource.id), undefined, { optimize: false, sourceId: secondSource.id });
+
+    const parsed = parseSearchQuery("银河核心");
+    assert.equal(parsed.ok, true);
+    if (!parsed.ok) return;
+    const combined = await searchNovelContent(parsed.query);
+    assert.deepEqual(combined.results.map((result) => result.title).sort(), ["第一本", "第二本"]);
+
+    deleteContentSearchDatabase(secondSource.id);
+    const isolated = await searchNovelContent(parsed.query);
+    assert.deepEqual(isolated.results.map((result) => result.title), ["第一本"]);
+    closeAllContentSearchDbs();
+  } finally {
+    const { closeAllContentSearchDbs } = await import("./content-search-db");
+    closeAllContentSearchDbs();
+    const globalForDb = globalThis as typeof globalThis & { novelReaderDb?: DatabaseSync };
+    globalForDb.novelReaderDb?.close();
+    delete globalForDb.novelReaderDb;
+    delete process.env.CONTENT_SEARCH_INDEX_DIR;
     await fs.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 });
@@ -140,7 +222,7 @@ test("updates a novel file, database metadata, and its title", async () => {
     const { getContentSearchDb } = await import("./content-search-db");
     const { renameNovelFile, updateNovelFile } = await import("./novel-files");
     mainDb = getDb();
-    searchDb = getContentSearchDb();
+    searchDb = getContentSearchDb(1);
     await fs.writeFile(path.join(libraryDir, "旧书名.txt"), "旧正文", "utf8");
     const insert = mainDb
       .prepare(
@@ -178,9 +260,9 @@ test("updates a novel file, database metadata, and its title", async () => {
     assert.equal(await fs.readFile(path.join(libraryDir, "最终书名.txt"), "utf8"), "第一章\n新的正文");
   } finally {
     mainDb?.close();
-    searchDb?.close();
+    const { closeAllContentSearchDbs } = await import("./content-search-db");
+    closeAllContentSearchDbs();
     delete (globalThis as typeof globalThis & { novelReaderDb?: DatabaseSync }).novelReaderDb;
-    delete (globalThis as typeof globalThis & { novelReaderContentSearchDb?: DatabaseSync }).novelReaderContentSearchDb;
     if (previousLibraryDir === undefined) delete process.env.NOVEL_LIBRARY_DIR;
     else process.env.NOVEL_LIBRARY_DIR = previousLibraryDir;
     if (previousDatabasePath === undefined) delete process.env.DATABASE_PATH;

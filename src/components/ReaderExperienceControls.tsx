@@ -101,6 +101,41 @@ export function ReaderExperienceControls({
     const shell = document.querySelector<HTMLElement>(".readerShell");
     if (!shell) return;
 
+    const originalThemeColorMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    const originalThemeColor = originalThemeColorMeta?.getAttribute("content") ?? null;
+    let themeColorMeta = originalThemeColorMeta;
+
+    function restoreThemeColor() {
+      if (!themeColorMeta) return;
+      if (themeColorMeta !== originalThemeColorMeta) {
+        themeColorMeta.remove();
+        themeColorMeta = originalThemeColorMeta;
+      } else if (originalThemeColor === null) {
+        themeColorMeta.removeAttribute("content");
+      } else {
+        themeColorMeta.setAttribute("content", originalThemeColor);
+      }
+    }
+
+    function syncReaderViewportTheme(theme: ReaderTheme | null) {
+      const viewportColor = READER_THEME_OPTIONS.find((item) => item.value === theme)?.outer;
+      if (!viewportColor) {
+        root.removeAttribute("data-reader-viewport");
+        root.style.removeProperty("--reader-viewport-bg");
+        restoreThemeColor();
+        return;
+      }
+
+      root.dataset.readerViewport = "true";
+      root.style.setProperty("--reader-viewport-bg", viewportColor);
+      if (!themeColorMeta) {
+        themeColorMeta = document.createElement("meta");
+        themeColorMeta.setAttribute("name", "theme-color");
+        document.head.append(themeColorMeta);
+      }
+      themeColorMeta.setAttribute("content", viewportColor);
+    }
+
     const savedTheme = localStorage.getItem(READER_PAPER_STORAGE_KEY);
     const savedWidth = localStorage.getItem(READER_WIDTH_STORAGE_KEY);
     const savedFontSize = Number(localStorage.getItem(READER_FONT_SIZE_STORAGE_KEY));
@@ -129,6 +164,7 @@ export function ReaderExperienceControls({
       shell.removeAttribute("data-reader-theme");
       root.removeAttribute("data-reader-theme");
     }
+    syncReaderViewportTheme(initialReaderTheme);
     shell.dataset.readerWidth = String(initialWidth);
     if (initialWidth !== "auto") shell.style.setProperty("--reader-paper-width", `${initialWidth}px`);
     shell.style.setProperty("--reader-font-size", `${initialFontSize}px`);
@@ -137,7 +173,9 @@ export function ReaderExperienceControls({
     const syncGlobalTheme = () => {
       setGlobalTheme(currentGlobalTheme());
       const nextReaderTheme = localStorage.getItem(READER_PAPER_STORAGE_KEY);
-      setReaderTheme(isReaderTheme(nextReaderTheme) ? nextReaderTheme : null);
+      const normalizedReaderTheme = isReaderTheme(nextReaderTheme) ? nextReaderTheme : null;
+      setReaderTheme(normalizedReaderTheme);
+      syncReaderViewportTheme(normalizedReaderTheme);
     };
     const themeObserver = new MutationObserver(syncGlobalTheme);
     const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
@@ -146,6 +184,9 @@ export function ReaderExperienceControls({
     return () => {
       themeObserver.disconnect();
       systemTheme.removeEventListener("change", syncGlobalTheme);
+      root.removeAttribute("data-reader-viewport");
+      root.style.removeProperty("--reader-viewport-bg");
+      restoreThemeColor();
     };
   }, []);
 
@@ -217,7 +258,7 @@ export function ReaderExperienceControls({
     window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   }
 
-  const panelTitle = panel === "directory" ? "章节目录" : panel === "info" ? "书详情" : "设置";
+  const panelTitle = panel === "directory" ? "章节目录" : panel === "info" ? "详情" : "设置";
   const readerIsDark = readerTheme ? readerTheme === "night" : globalTheme === "dark";
 
   return (
@@ -233,7 +274,7 @@ export function ReaderExperienceControls({
           <ChevronRight size={20} aria-hidden="true" /><span>下一章</span>
         </Link>
         <button className="readerToolItem isInfo" type="button" onClick={() => setPanel("info")}>
-          <Info size={20} aria-hidden="true" /><span>书详情</span>
+          <Info size={20} aria-hidden="true" /><span>详情</span>
         </button>
         <button className="readerToolItem isTheme" type="button" onClick={toggleTheme}>
           {readerIsDark ? <Sun size={20} aria-hidden="true" /> : <Moon size={20} aria-hidden="true" />}
@@ -281,8 +322,8 @@ export function ReaderExperienceControls({
             {panel === "settings" ? (
               <div className="readerSettingsPanel">
                 <div className="readerSettingRow isThemes">
-                  <span>阅读主题</span>
-                  <div role="group" aria-label="阅读主题">
+                  <span>主题</span>
+                  <div role="group" aria-label="主题">
                     {READER_THEME_OPTIONS.map((item) => (
                       <button
                         className={readerTheme === item.value ? "isActive" : ""}
@@ -299,7 +340,7 @@ export function ReaderExperienceControls({
                   </div>
                 </div>
                 <div className="readerSettingRow isFontSize">
-                  <span>字体大小</span>
+                  <span>字号</span>
                   <ReaderFontSizeStepper value={fontSize} onChange={changeFontSize} />
                 </div>
                 <div className="readerSettingRow isLineHeight">

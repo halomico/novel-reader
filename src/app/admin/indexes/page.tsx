@@ -3,8 +3,11 @@ import type { Metadata } from "next";
 import { AdminSearchIndexManager } from "@/components/AdminSearchIndexManager";
 import { LocalDateTime } from "@/components/LocalDateTime";
 import { shouldShowProgressBars } from "@/lib/config";
-import { getContentSearchDb } from "@/lib/content-search-db";
-import { getContentSearchIndexSummary } from "@/lib/content-search-index";
+import {
+  getContentSearchCombinedSummary,
+  getLegacyContentSearchDiskUsage,
+  listContentSearchSourceSummaries,
+} from "@/lib/content-search-sources";
 import { getDb } from "@/lib/db";
 import { AdminFrame } from "../AdminFrame";
 
@@ -36,7 +39,10 @@ function formatBytes(value: number) {
 
 export default async function AdminIndexesPage({ searchParams }: AdminIndexesPageProps) {
   const params = await searchParams;
-  const summary = getContentSearchIndexSummary(getDb(), getContentSearchDb());
+  const db = getDb();
+  const sources = listContentSearchSourceSummaries(db);
+  const summary = getContentSearchCombinedSummary(db);
+  const legacyBytes = getLegacyContentSearchDiskUsage();
 
   return (
     <AdminFrame active="indexes" notice={params.notice} tone={params.tone}>
@@ -44,7 +50,7 @@ export default async function AdminIndexesPage({ searchParams }: AdminIndexesPag
         <div className="adminPanelHeader">
           <div>
             <h2>搜索索引</h2>
-            <p>中文双字使用二元索引，三字以上使用 FTS5 三元索引。</p>
+            <p>每个普通书库使用独立索引分片；轻量书库不会写入全文索引。</p>
           </div>
           <Search size={20} aria-hidden="true" />
         </div>
@@ -82,7 +88,11 @@ export default async function AdminIndexesPage({ searchParams }: AdminIndexesPag
           <span>最近完成：<LocalDateTime value={summary.lastIndexedAt} /></span>
         </div>
 
-        <AdminSearchIndexManager showProgressBars={shouldShowProgressBars()} />
+        {legacyBytes > 0 ? (
+          <p className="adminIndexLegacyNotice">检测到旧版共享索引 {formatBytes(legacyBytes)}。缺少新分片的书库会临时只读使用它；所有分片构建完成后即可安全删除并释放空间。</p>
+        ) : null}
+
+        <AdminSearchIndexManager showProgressBars={shouldShowProgressBars()} sources={sources} legacyBytes={legacyBytes} />
       </article>
     </AdminFrame>
   );

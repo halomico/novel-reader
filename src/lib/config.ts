@@ -34,12 +34,13 @@ export function getContentSearchDatabasePath(): string {
   return resolveFromProject(process.env.CONTENT_SEARCH_DB_PATH || "./data/content-search.db");
 }
 
-export function getRipgrepPath(): string {
-  const configured = process.env.RIPGREP_PATH?.trim();
-  if (!configured) {
-    return "rg";
+export function getContentSearchIndexDirectory(): string {
+  const configured = process.env.CONTENT_SEARCH_INDEX_DIR?.trim();
+  if (configured) {
+    return resolveFromProject(configured);
   }
-  return path.isAbsolute(configured) || !/[\\/]/.test(configured) ? configured : resolveFromProject(configured);
+  const legacyPath = getContentSearchDatabasePath();
+  return path.join(path.dirname(legacyPath), path.basename(legacyPath, path.extname(legacyPath)));
 }
 
 export function getMediaDir(): string {
@@ -410,6 +411,7 @@ export function getConfiguredPaths() {
     libraryDir: getLibraryDir(),
     databasePath: getDatabasePath(),
     contentSearchDatabasePath: process.env.CONTENT_SEARCH_DB_PATH || "./data/content-search.db",
+    contentSearchIndexDirectory: getContentSearchIndexDirectory(),
     adminSettingsPath: process.env.ADMIN_SETTINGS_PATH || "./data/admin-settings.json",
   };
 }

@@ -24,6 +24,7 @@ import { hasUserPermission } from "@/lib/user-levels";
 import type { UserProfile } from "@/lib/users";
 import { getRequestLocale, localizeText, localizeTexts } from "@/lib/locale-server";
 import { countUserUnreadMessages } from "@/lib/station";
+import { isNovelSourceFullTextSearchEnabled } from "@/lib/novel-search-policy";
 import { HeaderSearch } from "./HeaderSearch";
 import { HeaderPrimaryNav } from "./HeaderPrimaryNav";
 import { ReaderHeaderBehavior } from "./ReaderHeaderBehavior";
@@ -42,6 +43,7 @@ export async function SiteHeader({
   readerMode = false,
   authMode = false,
   library = "default",
+  currentSearchBookId,
   currentUser,
   unreadMessages,
 }: {
@@ -56,6 +58,7 @@ export async function SiteHeader({
   readerMode?: boolean;
   authMode?: boolean;
   library?: string;
+  currentSearchBookId?: number;
   currentUser?: UserProfile | null;
   unreadMessages?: number;
 }) {
@@ -88,6 +91,7 @@ export async function SiteHeader({
     (canAccessAdvancedTagSearch(Boolean(user)) && hasUserPermission(user, "advanced_search"));
   const showMarket = Boolean(user && isMarketEnabled() && hasUserPermission(user, "market_access"));
   const canShowSearch = showSearch && showLibraryNav && !authMode;
+  const contentSearchEnabled = library === "all" || isNovelSourceFullTextSearchEnabled(library);
 
   const headerClassName = [
     "siteHeader",
@@ -118,6 +122,8 @@ export async function SiteHeader({
                 showAdvancedSearch={showAdvancedSearch}
                 noticeDisplaySeconds={noticeDisplaySeconds}
                 library={library}
+                contentSearchEnabled={contentSearchEnabled}
+                currentSearchBookId={currentSearchBookId}
               />
             ) : null}
             <div className="headerActions">

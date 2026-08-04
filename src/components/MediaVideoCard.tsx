@@ -28,7 +28,7 @@ export function MediaVideoCard({
   priority?: boolean;
 }) {
   const title = displayTitle(asset.title, asset.fileName);
-  const watchHref = `/media/${asset.id}`;
+  const watchHref = `/media/${asset.id}#watch`;
   const isNew = Boolean(asset.newUntil && Date.parse(asset.newUntil) > Date.now());
   return (
     <article className="mediaVideoCard">

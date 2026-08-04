@@ -1,4 +1,4 @@
-import { Check, CupSoda, History, KeyRound, Save, ShieldCheck, Sparkles, UserRound } from "lucide-react";
+import { Check, CupSoda, History, Save, ShieldCheck, Sparkles, UserRound } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "@/components/LocalizedLink";
@@ -129,11 +129,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
 
             <section className="accountFormSection accountSecurity" id="account-security">
               <header>
-                <KeyRound size={17} aria-hidden="true" />
-                <div>
-                  <h2>{tr("安全")}</h2>
-                  <p>{tr("更新后，其他登录状态会自动失效。")}</p>
-                </div>
+                <h2>{tr("安全")}</h2>
               </header>
               <form className="accountPasswordForm" action={updateAccountPasswordAction}>
                 <label>

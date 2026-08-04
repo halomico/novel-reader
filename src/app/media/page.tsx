@@ -269,7 +269,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
     { label: uiText(locale, KIND_LABELS[kind]), href: segments.length || activeVideoCategory || activeVideoTag ? mediaHref(kind) : undefined },
   ];
   if (displayVideoTag) {
-    breadcrumbItems.push({ label: uiText(locale, "视频标签"), href: "/media/tags" });
+    breadcrumbItems.push({ label: uiText(locale, "标签"), href: "/media/tags" });
     breadcrumbItems.push({ label: `#${displayVideoTag.name}` });
   } else if (displayCategory) {
     breadcrumbItems.push({ label: displayCategory.name });

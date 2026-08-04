@@ -31,9 +31,9 @@ export async function POST(request: NextRequest) {
     return auth.response;
   }
 
-  let body: { force?: unknown } = {};
+  let body: { force?: unknown; sourceId?: unknown } = {};
   try {
-    body = (await request.json()) as { force?: unknown };
+    body = (await request.json()) as { force?: unknown; sourceId?: unknown };
   } catch {
     return jsonError("索引请求格式有误", 400);
   }
@@ -41,8 +41,16 @@ export async function POST(request: NextRequest) {
     return jsonError("已有索引任务正在运行，请等待完成或先取消当前任务", 409);
   }
 
-  const job = startContentIndexJob({ force: body.force === true });
-  return NextResponse.json({ ok: true, jobId: job.id, job, showProgressBars: shouldShowProgressBars() });
+  const sourceId = Number(body.sourceId || 0);
+  try {
+    const job = startContentIndexJob({
+      force: body.force === true,
+      sourceId: Number.isInteger(sourceId) && sourceId > 0 ? sourceId : undefined,
+    });
+    return NextResponse.json({ ok: true, jobId: job.id, job, showProgressBars: shouldShowProgressBars() });
+  } catch (error) {
+    return jsonError(error instanceof Error ? error.message : "索引任务启动失败", 400);
+  }
 }
 
 export async function GET(request: NextRequest) {

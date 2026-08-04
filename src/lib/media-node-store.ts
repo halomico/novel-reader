@@ -53,6 +53,9 @@ const MIME_TYPES: Record<string, string> = {
   ".mp4": "video/mp4",
   ".m4v": "video/x-m4v",
   ".mov": "video/quicktime",
+  ".ts": "video/mp2t",
+  ".mts": "video/mp2t",
+  ".m2ts": "video/mp2t",
   ".ogv": "video/ogg",
   ".webm": "video/webm",
   ".aac": "audio/aac",
@@ -318,7 +321,9 @@ export class MediaNodeStore {
       throw new MediaNodeStoreError("上传目标无效");
     }
     const extension = path.posix.extname(storedName).toLowerCase();
-    if (request.kind !== "file" && !PLAYABLE_EXTENSIONS[request.kind].has(extension)) {
+    const conversionSource = request.kind === "video" && getActiveVideoTranscodeProfile() &&
+      [".ts", ".mts", ".m2ts"].includes(extension);
+    if (request.kind !== "file" && !PLAYABLE_EXTENSIONS[request.kind].has(extension) && !conversionSource) {
       throw new MediaNodeStoreError("媒体格式不受支持");
     }
     const parentPath = path.dirname(this.mediaPath(storedName));
@@ -434,10 +439,15 @@ export class MediaNodeStore {
     if (fs.existsSync(sourcePath)) {
       if (transcodeProfile) {
         try {
-          await transcodeVideoToProfile(sourcePath, finalPath, transcodeProfile);
+          await transcodeVideoToProfile(
+            sourcePath,
+            finalPath,
+            transcodeProfile,
+            path.posix.extname(session.storedName),
+          );
         } catch (error) {
           throw new MediaNodeStoreError(
-            error instanceof Error ? `视频转码失败：${error.message}` : "视频转码失败",
+            error instanceof Error ? `视频兼容处理失败：${error.message}` : "视频兼容处理失败",
             422,
           );
         }
