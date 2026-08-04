@@ -48,7 +48,7 @@ export default async function NovelSourcesPage({ searchParams }: NovelSourcesPag
             <span>显示名称</span>
             <input name="name" maxLength={120} placeholder="留空则与文件夹相同" />
           </label>
-          <button className="adminIconTextButton" type="submit"><FolderPlus size={15} aria-hidden="true" />新建来源</button>
+          <button className="adminIconTextButton adminNovelSourceCreateButton" type="submit"><FolderPlus size={15} aria-hidden="true" />新建来源</button>
         </form>
 
         <section className="adminNovelSourceList" aria-label="小说来源列表">

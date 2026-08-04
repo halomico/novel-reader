@@ -18072,6 +18072,15 @@ a.analyticsSearchTag:focus-visible {
   color: var(--text);
 }
 
+.adminNovelSourceCreateButton {
+  width: fit-content;
+  min-width: 92px;
+  min-height: 34px;
+  justify-self: start;
+  justify-content: center;
+  border-radius: 6px;
+}
+
 .adminNovelSourceList {
   display: grid;
   gap: 7px;
