@@ -30,7 +30,7 @@ export function MediaVideoCard({
   returnHref?: string;
 }) {
   const title = displayTitle(asset.title, asset.fileName);
-  const watchHref = `/media/${asset.id}${returnHref ? `?from=${encodeURIComponent(returnHref)}` : ""}`;
+  const watchHref = `/media/${asset.id}${returnHref ? `?from=${encodeURIComponent(returnHref)}` : ""}#watch`;
   const isNew = Boolean(asset.newUntil && Date.parse(asset.newUntil) > Date.now());
   return (
     <article className="mediaVideoCard">
