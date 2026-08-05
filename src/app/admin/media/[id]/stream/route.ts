@@ -34,5 +34,5 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return new Response(null, { status: 503 });
     }
   }
-  return serveMediaDelivery(request, { asset, download: false });
+  return serveMediaDelivery(request, { asset, download: false, downloadToken: "" });
 }

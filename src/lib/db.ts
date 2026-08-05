@@ -443,6 +443,12 @@ function migrateMarketplaceAndRegistration(db: DatabaseSync) {
     "video_concurrency_limit",
     "video_concurrency_limit INTEGER NOT NULL DEFAULT 1 CHECK(video_concurrency_limit BETWEEN 0 AND 20)",
   );
+  addColumnIfMissing(
+    db,
+    "user_levels",
+    "daily_video_download_limit",
+    "daily_video_download_limit INTEGER NOT NULL DEFAULT 3 CHECK(daily_video_download_limit BETWEEN 0 AND 1000)",
+  );
 
   db.exec(`
     CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
@@ -678,6 +684,36 @@ function migrateMarketplaceAndRegistration(db: DatabaseSync) {
 
     CREATE INDEX IF NOT EXISTS idx_media_playback_grants_expiry
       ON media_playback_grants(expires_at);
+
+    CREATE TABLE IF NOT EXISTS media_download_grants (
+      user_id INTEGER NOT NULL,
+      media_id INTEGER NOT NULL,
+      soda_spent INTEGER NOT NULL DEFAULT 0 CHECK(soda_spent >= 0),
+      granted_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(user_id, media_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_media_download_grants_expiry
+      ON media_download_grants(expires_at);
+
+    CREATE TABLE IF NOT EXISTS media_download_sessions (
+      token_hash TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      media_id INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_media_download_sessions_user_time
+      ON media_download_sessions(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_media_download_sessions_expiry
+      ON media_download_sessions(expires_at);
   `);
   addColumnIfMissing(
     db,
@@ -899,19 +935,19 @@ function migrateMediaRecommendations(db: DatabaseSync) {
 
 function seedUserLevels(db: DatabaseSync) {
   const defaults = [
-    [0, "访客", 0, []],
-    [1, "初见", 0, []],
-    [2, "熟客", 50, ["advanced_search", "market_access", "market_purchase"]],
-    [3, "常驻", 200, ["advanced_search", "market_access", "market_purchase"]],
-    [4, "活跃", 500, ["advanced_search", "market_access", "market_purchase"]],
-    [5, "资深", 1200, ["advanced_search", "market_access", "market_purchase"]],
-    [6, "核心", 2500, ["advanced_search", "market_access", "market_purchase"]],
+    [0, "访客", 0, 0, []],
+    [1, "初见", 0, 3, ["video_download"]],
+    [2, "熟客", 50, 5, ["advanced_search", "market_access", "market_purchase", "video_download"]],
+    [3, "常驻", 200, 8, ["advanced_search", "market_access", "market_purchase", "video_download"]],
+    [4, "活跃", 500, 12, ["advanced_search", "market_access", "market_purchase", "video_download"]],
+    [5, "资深", 1200, 20, ["advanced_search", "market_access", "market_purchase", "video_download"]],
+    [6, "核心", 2500, 30, ["advanced_search", "market_access", "market_purchase", "video_download"]],
   ] as const;
   const insert = db.prepare(
-    "INSERT OR IGNORE INTO user_levels (level, name, soda_required, permissions) VALUES (?, ?, ?, ?)",
+    "INSERT OR IGNORE INTO user_levels (level, name, soda_required, daily_video_download_limit, permissions) VALUES (?, ?, ?, ?, ?)",
   );
-  for (const [level, name, sodaRequired, permissions] of defaults) {
-    insert.run(level, name, sodaRequired, JSON.stringify(permissions));
+  for (const [level, name, sodaRequired, dailyVideoDownloadLimit, permissions] of defaults) {
+    insert.run(level, name, sodaRequired, dailyVideoDownloadLimit, JSON.stringify(permissions));
   }
 
   const migrationKey = "user_level_defaults_v2";
@@ -922,7 +958,7 @@ function seedUserLevels(db: DatabaseSync) {
       | undefined;
     if (levelZero?.permissions === JSON.stringify(["content_report", "station_message"])) {
       db.prepare("UPDATE user_levels SET permissions = ?, updated_at = CURRENT_TIMESTAMP WHERE level = 0")
-        .run(JSON.stringify(defaults[0][3]));
+        .run(JSON.stringify(defaults[0][4]));
     }
     db.prepare("INSERT INTO app_metadata (key, value) VALUES (?, '1')").run(migrationKey);
   }
@@ -987,6 +1023,42 @@ function seedUserLevels(db: DatabaseSync) {
       update.run(JSON.stringify([...new Set(permissions)]), row.level);
     }
     db.prepare("INSERT INTO app_metadata (key, value) VALUES (?, '1')").run(downloadPermissionCleanupKey);
+  }
+
+  const videoDownloadDefaultsKey = "user_level_video_download_defaults_v2";
+  if (!db.prepare("SELECT 1 AS found FROM app_metadata WHERE key = ?").get(videoDownloadDefaultsKey)) {
+    const rows = db.prepare("SELECT level, permissions FROM user_levels WHERE level >= 1").all() as Array<{ level: number; permissions: string }>;
+    const update = db.prepare("UPDATE user_levels SET permissions = ?, updated_at = CURRENT_TIMESTAMP WHERE level = ?");
+    for (const row of rows) {
+      let permissions: string[] = [];
+      try {
+        const parsed = JSON.parse(row.permissions);
+        if (Array.isArray(parsed)) permissions = parsed.filter((item): item is string => typeof item === "string");
+      } catch {
+        permissions = [];
+      }
+      update.run(JSON.stringify([...new Set([...permissions, "video_download"])]), row.level);
+    }
+    db.prepare("INSERT INTO app_metadata (key, value) VALUES (?, '1')").run(videoDownloadDefaultsKey);
+  }
+
+  const dailyDownloadDefaultsKey = "user_level_daily_download_defaults_v1";
+  if (!db.prepare("SELECT 1 AS found FROM app_metadata WHERE key = ?").get(dailyDownloadDefaultsKey)) {
+    db.exec(`
+      UPDATE user_levels
+      SET daily_video_download_limit = CASE level
+        WHEN 0 THEN 0
+        WHEN 1 THEN 3
+        WHEN 2 THEN 5
+        WHEN 3 THEN 8
+        WHEN 4 THEN 12
+        WHEN 5 THEN 20
+        WHEN 6 THEN 30
+        ELSE 0
+      END,
+      updated_at = CURRENT_TIMESTAMP;
+    `);
+    db.prepare("INSERT INTO app_metadata (key, value) VALUES (?, '1')").run(dailyDownloadDefaultsKey);
   }
 }
 
@@ -1339,6 +1411,7 @@ function initialize(db: DatabaseSync) {
       level INTEGER PRIMARY KEY CHECK(level BETWEEN 0 AND 6),
       name TEXT NOT NULL,
       soda_required INTEGER NOT NULL DEFAULT 0 CHECK(soda_required >= 0),
+      daily_video_download_limit INTEGER NOT NULL DEFAULT 3 CHECK(daily_video_download_limit BETWEEN 0 AND 1000),
       permissions TEXT NOT NULL DEFAULT '[]',
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -1566,6 +1639,7 @@ function initialize(db: DatabaseSync) {
       content_updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       new_until TEXT,
       play_soda_price INTEGER NOT NULL DEFAULT 0 CHECK(play_soda_price >= 0),
+      download_soda_price INTEGER NOT NULL DEFAULT 1 CHECK(download_soda_price >= 0),
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -1701,6 +1775,7 @@ function initialize(db: DatabaseSync) {
   addColumnIfMissing(db, "media_assets", "content_updated_at", "content_updated_at TEXT");
   addColumnIfMissing(db, "media_assets", "new_until", "new_until TEXT");
   addColumnIfMissing(db, "media_assets", "play_soda_price", "play_soda_price INTEGER NOT NULL DEFAULT 0 CHECK(play_soda_price >= 0)");
+  addColumnIfMissing(db, "media_assets", "download_soda_price", "download_soda_price INTEGER NOT NULL DEFAULT 1 CHECK(download_soda_price >= 0)");
   db.exec("UPDATE media_assets SET published_at = COALESCE(published_at, created_at), content_updated_at = COALESCE(content_updated_at, updated_at);");
   migrateMediaRecommendations(db);
   db.exec(`

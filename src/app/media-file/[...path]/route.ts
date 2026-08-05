@@ -3,7 +3,7 @@ import { authorizeMediaDelivery, resolveMediaDeliveryUri, serveMediaDelivery } f
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 import { checkContentAccess, hasScopedContentAccessRules } from "@/lib/content-access";
 import { isMediaKindPublic } from "@/lib/media";
-import { hasMediaAssetEntitlement } from "@/lib/entitlements";
+import { hasValidVideoDownloadSession } from "@/lib/media-access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -24,7 +24,11 @@ async function deliver(request: NextRequest) {
     !access.allowed ||
     !authorizeMediaDelivery(delivery, Boolean(user)) ||
     (delivery.download && delivery.asset.kind === "video" && (
-      !user || (user.role !== "admin" && !hasMediaAssetEntitlement(user.id, delivery.asset, "download"))
+      !user || (user.role !== "admin" && !hasValidVideoDownloadSession({
+        userId: user.id,
+        mediaId: delivery.asset.id,
+        token: delivery.downloadToken,
+      }))
     ))
   ) {
     return new Response(null, { status: 404 });

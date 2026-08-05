@@ -119,7 +119,7 @@ export function queueReportTelegramNotification(reportId: number) {
   } | undefined;
   if (!report) return;
   const text = [
-    `<b>内容举报</b> · ${escapeHtml(report.target_title)}`,
+    `<b>内容反馈</b> · ${escapeHtml(report.target_title)}`,
     `${escapeHtml(report.display_name)} (@${escapeHtml(report.username)}) · ${escapeHtml(report.category)}`,
     report.details ? `\n${escapeHtml(report.details)}` : "",
   ].join("\n");

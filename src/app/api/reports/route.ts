@@ -13,10 +13,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, message: "请先登录" }, { status: 401 });
   }
   if (user.role !== "user") {
-    return NextResponse.json({ ok: false, message: "管理员无需提交举报" }, { status: 403 });
+    return NextResponse.json({ ok: false, message: "管理员无需提交内容反馈" }, { status: 403 });
   }
   if (!hasUserPermission(user, "content_report")) {
-    return NextResponse.json({ ok: false, message: "当前等级暂不能提交举报" }, { status: 403 });
+    return NextResponse.json({ ok: false, message: "当前等级暂不能提交内容反馈" }, { status: 403 });
   }
 
   let body: Record<string, unknown>;
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     details.length > 200 ||
     (category === "other" && !details)
   ) {
-    return NextResponse.json({ ok: false, message: category === "other" && !details ? "请填写补充说明" : "举报内容有误" }, { status: 400 });
+    return NextResponse.json({ ok: false, message: category === "other" && !details ? "请填写补充说明" : "反馈内容有误" }, { status: 400 });
   }
 
   try {
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     });
     if (!result.ok) {
       return NextResponse.json(
-        { ok: false, message: result.reason === "limit" ? "今日举报次数已达上限" : "举报对象不存在" },
+        { ok: false, message: result.reason === "limit" ? "今日反馈次数已达上限" : "反馈对象不存在" },
         { status: result.reason === "limit" ? 429 : 400 },
       );
     }

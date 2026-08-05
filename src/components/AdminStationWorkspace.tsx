@@ -285,7 +285,7 @@ export function AdminReportList({ reports: initialReports }: { reports: ContentR
   }
 
   function remove(report: ContentReport) {
-    if (!window.confirm("删除这条举报记录？")) return;
+    if (!window.confirm("删除这条反馈记录？")) return;
     mutation.run(
       () => deleteContentReportInlineAction(report.id),
       (result) => {
@@ -317,13 +317,13 @@ export function AdminReportList({ reports: initialReports }: { reports: ContentR
                     <button className="adminTableIconButton" type="button" onClick={() => toggle(report)} disabled={mutation.pending} title={report.status === "open" ? "标记已处理" : "重新打开"} aria-label={report.status === "open" ? "标记已处理" : "重新打开"}>
                       {report.status === "open" ? <Check size={15} aria-hidden="true" /> : <RotateCcw size={15} aria-hidden="true" />}
                     </button>
-                    <button className="adminTableIconButton isDanger" type="button" onClick={() => remove(report)} disabled={mutation.pending} title="删除" aria-label="删除举报">
+                    <button className="adminTableIconButton isDanger" type="button" onClick={() => remove(report)} disabled={mutation.pending} title="删除" aria-label="删除反馈">
                       <Trash2 size={15} aria-hidden="true" />
                     </button>
                   </div>
                 </td>
               </tr>
-            )) : <tr><td colSpan={6} className="adminCommerceEmpty">暂无举报记录</td></tr>}
+            )) : <tr><td colSpan={6} className="adminCommerceEmpty">暂无反馈记录</td></tr>}
           </tbody>
         </table>
       </div>

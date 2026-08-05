@@ -359,7 +359,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 <input name="userDailyRegistrationLimitPerIp" type="number" min="0" max="100" defaultValue={userDailyRegistrationLimit} />
               </label>
               <label>
-                <span>单用户每日举报上限</span>
+                <span>单用户每日反馈上限</span>
                 <input name="userDailyReportLimit" type="number" min="1" max="500" defaultValue={userDailyReportLimit} />
               </label>
             </div>

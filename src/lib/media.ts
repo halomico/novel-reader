@@ -60,6 +60,7 @@ export type MediaAsset = {
   contentUpdatedAt: string;
   newUntil: string | null;
   playSodaPrice: number;
+  downloadSodaPrice: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -125,6 +126,7 @@ type MediaRow = {
   content_updated_at: string | null;
   new_until: string | null;
   play_soda_price: number;
+  download_soda_price: number;
   created_at: string;
   updated_at: string;
 };
@@ -300,6 +302,7 @@ function toAsset(row: MediaRow): MediaAsset {
     contentUpdatedAt: row.content_updated_at || row.updated_at,
     newUntil: row.new_until,
     playSodaPrice: Math.max(Math.floor(row.play_soda_price || 0), 0),
+    downloadSodaPrice: Math.max(Math.floor(row.download_soda_price ?? 1), 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1764,19 +1767,21 @@ function normalizedMediaDate(value: string | null | undefined, fallback: string)
 export function updateVideoPublishingSettings(input: {
   id: number;
   playSodaPrice: number;
+  downloadSodaPrice: number;
   publishedAt: string;
   newUntil?: string | null;
 }): MediaAsset | null {
   const asset = getMediaAsset(input.id);
   if (!asset || asset.kind !== "video") return null;
   const playSodaPrice = Math.min(Math.max(Math.floor(Number(input.playSodaPrice) || 0), 0), 1_000_000);
+  const downloadSodaPrice = Math.min(Math.max(Math.floor(Number(input.downloadSodaPrice) || 0), 0), 1_000_000);
   const publishedAt = normalizedMediaDate(input.publishedAt, asset.publishedAt);
   const newUntil = input.newUntil ? normalizedMediaDate(input.newUntil, input.newUntil) : null;
   getDb().prepare(
     `UPDATE media_assets
-     SET play_soda_price = ?, published_at = ?, new_until = ?, updated_at = CURRENT_TIMESTAMP
+     SET play_soda_price = ?, download_soda_price = ?, published_at = ?, new_until = ?, updated_at = CURRENT_TIMESTAMP
      WHERE id = ? AND kind = 'video'`,
-  ).run(playSodaPrice, publishedAt, newUntil, input.id);
+  ).run(playSodaPrice, downloadSodaPrice, publishedAt, newUntil, input.id);
   return getMediaAsset(input.id);
 }
 

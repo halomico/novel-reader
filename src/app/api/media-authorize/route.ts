@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { authorizeMediaDelivery, mediaDeliveryHeaders, resolveMediaDeliveryUri } from "@/lib/media-delivery";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 import { checkContentAccess } from "@/lib/content-access";
+import { hasValidVideoDownloadSession } from "@/lib/media-access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,7 +24,17 @@ export function GET(request: NextRequest) {
     admin: user?.role === "admin",
     rateLimit: false,
   });
-  if (!access.allowed || !authorizeMediaDelivery(delivery, Boolean(user))) {
+  if (
+    !access.allowed ||
+    !authorizeMediaDelivery(delivery, Boolean(user)) ||
+    (delivery.download && delivery.asset.kind === "video" && (
+      !user || (user.role !== "admin" && !hasValidVideoDownloadSession({
+        userId: user.id,
+        mediaId: delivery.asset.id,
+        token: delivery.downloadToken,
+      }))
+    ))
+  ) {
     return new Response(null, { status: 404 });
   }
 

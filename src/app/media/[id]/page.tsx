@@ -19,8 +19,7 @@ import { recordAnalyticsEvent } from "@/lib/analytics";
 import { getAudioDefaultPlaybackMode, getRelatedVideoSettings, getVideoThumbnailSettings } from "@/lib/config";
 import { checkContentAccess, hasScopedContentAccessRules } from "@/lib/content-access";
 import { isMediaFavorite } from "@/lib/favorites";
-import { hasMediaAssetEntitlement } from "@/lib/entitlements";
-import { getVideoPlaybackAccess } from "@/lib/media-access";
+import { getVideoDownloadAccess, getVideoPlaybackAccess } from "@/lib/media-access";
 import { mediaCoverVersion } from "@/lib/media-cover-version";
 import {
   getMediaAsset,
@@ -202,12 +201,8 @@ export default async function MediaDetailPage({
   const recommendation = user && feedbackMedia ? getMediaRecommendationState(user.id, asset.id) : null;
   const canRecommend = feedbackMedia && hasUserPermission(user, "novel_feedback");
   const canReport = Boolean(feedbackMedia && user?.role === "user" && hasUserPermission(user, "content_report"));
-  const canDownloadVideo = asset.kind === "video" && Boolean(
-    user && (
-      user.role === "admin" ||
-      hasMediaAssetEntitlement(user.id, asset, "download")
-    ),
-  );
+  const videoDownloadAccess = asset.kind === "video" ? getVideoDownloadAccess(asset, user) : null;
+  const showVideoDownload = asset.kind === "video" && Boolean(user && hasUserPermission(user, "video_download"));
   const textPreviewSupported = isMediaTextPreviewSupported(asset);
   const videoPlaybackAccess = asset.kind === "video" ? getVideoPlaybackAccess(asset, user) : null;
   const videoReturnHref = safeVideoReturnHref(detailQuery.from);
@@ -254,11 +249,6 @@ export default async function MediaDetailPage({
               <div className="mediaVideoStats" aria-label={uiText(locale, "视频信息")}>
                 <span><Eye size={15} aria-hidden="true" />{formatCompactCount(asset.playCount, locale)}</span>
                 <span><Clock3 size={15} aria-hidden="true" />{formatMediaDuration(asset.durationSeconds)}</span>
-                {canDownloadVideo ? (
-                  <a href={`/media/${asset.id}/download`} aria-label="下载视频" title="下载视频">
-                    <Download size={15} aria-hidden="true" />
-                  </a>
-                ) : null}
               </div>
             </header>
             <div className="mediaVideoStage">
@@ -293,6 +283,14 @@ export default async function MediaDetailPage({
                     initialRecommended={Boolean(recommendation?.recommended)}
                     canRecommend={canRecommend}
                     canReport={canReport}
+                    download={showVideoDownload && user ? {
+                      price: asset.downloadSodaPrice,
+                      sodaBalance: user.sodaBalance,
+                      available: Boolean(videoDownloadAccess?.allowed),
+                      accessExpiresAt: videoDownloadAccess?.expiresAt ?? null,
+                      admin: user.role === "admin",
+                      sizeLabel: formatBytes(asset.sizeBytes),
+                    } : undefined}
                   />
                 ) : null}
               </div> : null}

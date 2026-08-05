@@ -10,7 +10,7 @@ const ITEMS: Array<{
   icon: typeof Mail;
 }> = [
   { key: "inbox", href: "/admin/station", label: "留言", icon: Mail },
-  { key: "reports", href: "/admin/station/reports", label: "举报", icon: Flag },
+  { key: "reports", href: "/admin/station/reports", label: "反馈", icon: Flag },
   { key: "announcements", href: "/admin/station/announcements", label: "公告", icon: Bell },
 ];
 

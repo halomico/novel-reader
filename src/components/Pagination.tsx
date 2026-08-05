@@ -3,7 +3,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "@/components/LocalizedLink";
 import { usePathname, useRouter } from "next/navigation";
-import { FormEvent, useEffect, useRef, useState, useTransition } from "react";
+import { FormEvent, MouseEvent, useEffect, useRef, useState, useTransition } from "react";
 import { localeFromPathname, withLocalePath } from "@/lib/locale";
 import { beginNavigationProgress } from "./NavigationProgress";
 
@@ -36,6 +36,13 @@ function pageHrefWithParams(
 
 function scrollToPageTop() {
   window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+}
+
+function scrollOnPaginationClick(event: MouseEvent<HTMLAnchorElement>) {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+    return;
+  }
+  scrollToPageTop();
 }
 
 function getPageItems(page: number, totalPages: number): PageItem[] {
@@ -121,6 +128,7 @@ function PageJump({
       localeFromPathname(pathname),
     );
     beginNavigationProgress();
+    scrollToPageTop();
     startTransition(() => router.push(href, { scroll: true }));
     setIsOpen(false);
     setValue("");
@@ -204,7 +212,7 @@ export function Pagination({
             <ChevronLeft size={18} aria-hidden="true" />
           </button>
         ) : (
-          <Link className="pageButton" href={pageHrefWithParams(page - 1, query, basePath, extraParams, pageParam)} scroll aria-label="上一页">
+          <Link className="pageButton" href={pageHrefWithParams(page - 1, query, basePath, extraParams, pageParam)} scroll onClick={scrollOnPaginationClick} aria-label="上一页">
             <ChevronLeft size={18} aria-hidden="true" />
           </Link>
         )
@@ -236,7 +244,7 @@ export function Pagination({
               {item}
             </button>
           ) : (
-            <Link className="pageNumber" href={pageHrefWithParams(item, query, basePath, extraParams, pageParam)} scroll key={item} aria-label={`第 ${item} 页`}>
+            <Link className="pageNumber" href={pageHrefWithParams(item, query, basePath, extraParams, pageParam)} scroll onClick={scrollOnPaginationClick} key={item} aria-label={`第 ${item} 页`}>
               {item}
             </Link>
           ),
@@ -249,7 +257,7 @@ export function Pagination({
             <ChevronRight size={18} aria-hidden="true" />
           </button>
         ) : (
-          <Link className="pageButton" href={pageHrefWithParams(page + 1, query, basePath, extraParams, pageParam)} scroll aria-label="下一页">
+          <Link className="pageButton" href={pageHrefWithParams(page + 1, query, basePath, extraParams, pageParam)} scroll onClick={scrollOnPaginationClick} aria-label="下一页">
             <ChevronRight size={18} aria-hidden="true" />
           </Link>
         )

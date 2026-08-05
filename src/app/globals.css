@@ -3949,6 +3949,25 @@ mark {
   min-height: 54px;
 }
 
+.mediaAudioStatus {
+  display: flex;
+  min-height: 22px;
+  align-items: center;
+  gap: 6px;
+  margin: -4px 2px 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.mediaAudioStatus.is-error {
+  color: #b34138;
+}
+
+.mediaAudioStatus.is-notice {
+  color: color-mix(in srgb, var(--accent) 76%, var(--text));
+}
+
 .mediaAudioStage {
   display: grid;
   grid-template-columns: 160px minmax(0, 1fr);
@@ -11894,7 +11913,7 @@ a.analyticsSearchTag:focus-visible {
 }
 
 .adminUserLevelRow {
-  grid-template-columns: 52px minmax(120px, 180px) minmax(110px, 145px) minmax(100px, 135px) minmax(0, 1fr);
+  grid-template-columns: 52px minmax(120px, 180px) minmax(110px, 145px) minmax(100px, 135px) minmax(105px, 140px) minmax(0, 1fr);
 }
 
 .adminUserLevelRow > .adminUserLevelThreshold:nth-of-type(2) {
@@ -16444,13 +16463,17 @@ a.analyticsSearchTag:focus-visible {
   grid-column: 4;
 }
 
-.adminUserLevelPermissions {
+.adminUserLevelThreshold.isDownload {
   grid-column: 5;
 }
 
-@media (max-width: 1040px) {
+.adminUserLevelPermissions {
+  grid-column: 6;
+}
+
+@media (max-width: 1180px) {
   .adminUserLevelRow {
-    grid-template-columns: 48px minmax(130px, 1fr) minmax(110px, 140px) minmax(100px, 130px);
+    grid-template-columns: 48px minmax(130px, 1fr) minmax(105px, 135px) minmax(95px, 125px) minmax(105px, 135px);
   }
 
   .adminUserLevelThreshold.isSoda {
@@ -16459,6 +16482,10 @@ a.analyticsSearchTag:focus-visible {
 
   .adminUserLevelThreshold.isVideo {
     grid-column: 4;
+  }
+
+  .adminUserLevelThreshold.isDownload {
+    grid-column: 5;
   }
 
   .adminUserLevelPermissions {
@@ -16477,12 +16504,17 @@ a.analyticsSearchTag:focus-visible {
   }
 
   .adminUserLevelThreshold.isSoda,
-  .adminUserLevelThreshold.isVideo {
+  .adminUserLevelThreshold.isVideo,
+  .adminUserLevelThreshold.isDownload {
     grid-column: 3;
   }
 
   .adminUserLevelThreshold.isVideo {
     grid-row: 2;
+  }
+
+  .adminUserLevelThreshold.isDownload {
+    grid-row: 3;
   }
 
   .adminUserLevelPermissions {
@@ -16497,7 +16529,8 @@ a.analyticsSearchTag:focus-visible {
 
   .adminUserLevelName,
   .adminUserLevelThreshold.isSoda,
-  .adminUserLevelThreshold.isVideo {
+  .adminUserLevelThreshold.isVideo,
+  .adminUserLevelThreshold.isDownload {
     grid-column: 2;
     grid-row: auto;
   }

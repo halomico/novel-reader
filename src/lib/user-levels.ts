@@ -4,10 +4,11 @@ export const USER_PERMISSION_DEFINITIONS = [
   { key: "advanced_search", label: "高级搜索" },
   { key: "market_access", label: "访问集市" },
   { key: "market_purchase", label: "购买商品" },
+  { key: "video_download", label: "显示视频下载" },
 ] as const;
 
 export const BASE_USER_PERMISSION_DEFINITIONS = [
-  { key: "content_report", label: "内容举报" },
+  { key: "content_report", label: "内容反馈" },
   { key: "station_message", label: "站务留言" },
   { key: "novel_feedback", label: "推荐" },
 ] as const;
@@ -21,6 +22,7 @@ export type UserLevelDefinition = {
   name: string;
   sodaRequired: number;
   videoConcurrencyLimit: number;
+  dailyVideoDownloadLimit: number;
   permissions: UserPermission[];
   updatedAt: string;
 };
@@ -30,6 +32,7 @@ type UserLevelRow = {
   name: string;
   soda_required: number;
   video_concurrency_limit: number;
+  daily_video_download_limit: number;
   permissions: string;
   updated_at: string;
 };
@@ -59,6 +62,7 @@ function toLevelDefinition(row: UserLevelRow): UserLevelDefinition {
     name: row.name,
     sodaRequired: Math.max(Math.floor(row.soda_required || 0), 0),
     videoConcurrencyLimit: Math.min(Math.max(Math.floor(row.video_concurrency_limit || 0), 0), 20),
+    dailyVideoDownloadLimit: Math.min(Math.max(Math.floor(row.daily_video_download_limit || 0), 0), 1_000),
     permissions: parsePermissions(row.permissions),
     updatedAt: row.updated_at,
   };
@@ -67,7 +71,7 @@ function toLevelDefinition(row: UserLevelRow): UserLevelDefinition {
 export function listUserLevelDefinitions(): UserLevelDefinition[] {
   return (getDb()
     .prepare(
-      "SELECT level, name, soda_required, video_concurrency_limit, permissions, updated_at FROM user_levels ORDER BY level ASC",
+      "SELECT level, name, soda_required, video_concurrency_limit, daily_video_download_limit, permissions, updated_at FROM user_levels ORDER BY level ASC",
     )
     .all() as UserLevelRow[]).map(toLevelDefinition);
 }
@@ -76,7 +80,7 @@ export function getUserLevelDefinition(level: number): UserLevelDefinition {
   const normalized = normalizeLevel(level);
   const row = getDb()
     .prepare(
-      "SELECT level, name, soda_required, video_concurrency_limit, permissions, updated_at FROM user_levels WHERE level = ?",
+      "SELECT level, name, soda_required, video_concurrency_limit, daily_video_download_limit, permissions, updated_at FROM user_levels WHERE level = ?",
     )
     .get(normalized) as UserLevelRow | undefined;
   return row
@@ -86,6 +90,7 @@ export function getUserLevelDefinition(level: number): UserLevelDefinition {
         name: `等级 ${normalized}`,
         sodaRequired: 0,
         videoConcurrencyLimit: normalized === 0 ? 0 : 1,
+        dailyVideoDownloadLimit: normalized === 0 ? 0 : 3,
         permissions: [],
         updatedAt: "",
       };
@@ -96,6 +101,7 @@ export function saveUserLevelDefinition(input: {
   name: string;
   sodaRequired: number;
   videoConcurrencyLimit?: number;
+  dailyVideoDownloadLimit?: number;
   permissions: readonly string[];
 }): boolean {
   const level = normalizeLevel(input.level);
@@ -114,13 +120,18 @@ export function saveUserLevelDefinition(input: {
     : input.videoConcurrencyLimit == null
       ? getUserLevelDefinition(level).videoConcurrencyLimit
       : Math.min(Math.max(Math.floor(Number(input.videoConcurrencyLimit) || 0), 0), 20);
+  const dailyVideoDownloadLimit = level === 0
+    ? 0
+    : input.dailyVideoDownloadLimit == null
+      ? getUserLevelDefinition(level).dailyVideoDownloadLimit
+      : Math.min(Math.max(Math.floor(Number(input.dailyVideoDownloadLimit) || 0), 0), 1_000);
   return getDb()
     .prepare(
       `UPDATE user_levels
-       SET name = ?, soda_required = ?, video_concurrency_limit = ?, permissions = ?, updated_at = CURRENT_TIMESTAMP
+       SET name = ?, soda_required = ?, video_concurrency_limit = ?, daily_video_download_limit = ?, permissions = ?, updated_at = CURRENT_TIMESTAMP
        WHERE level = ?`,
     )
-    .run(name, sodaRequired, videoConcurrencyLimit, JSON.stringify(permissions), level).changes > 0;
+    .run(name, sodaRequired, videoConcurrencyLimit, dailyVideoDownloadLimit, JSON.stringify(permissions), level).changes > 0;
 }
 
 export function getUserLevelForExperience(sodaExperience: number): number {

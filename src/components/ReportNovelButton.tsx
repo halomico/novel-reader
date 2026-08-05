@@ -68,7 +68,7 @@ export function ReportNovelButton({ novelId, title, variant = "icon" }: { novelI
       setCategory("tag_error");
       setDetails("");
       setMessage("");
-      setNotice("举报已提交");
+      setNotice("反馈已提交");
     } catch {
       setMessage("提交失败，请稍后重试");
     } finally {
@@ -78,9 +78,9 @@ export function ReportNovelButton({ novelId, title, variant = "icon" }: { novelI
 
   return (
     <div className="readerReportAction">
-      <button type="button" aria-label={`举报 ${title}`} title="举报" onClick={() => setOpen(true)}>
+      <button type="button" aria-label={`反馈 ${title}`} title="反馈" onClick={() => setOpen(true)}>
         {variant !== "text" ? <Flag size={16} aria-hidden="true" /> : null}
-        {variant !== "icon" ? <span>举报</span> : null}
+        {variant !== "icon" ? <span>反馈</span> : null}
       </button>
       {notice ? <span className="readerActionToast" role="status">{notice}</span> : null}
       {open ? (
@@ -88,7 +88,7 @@ export function ReportNovelButton({ novelId, title, variant = "icon" }: { novelI
           <form className="readerReportDialog" role="dialog" aria-modal="true" aria-labelledby="reader-report-title" onSubmit={submit}>
             <header>
               <div>
-                <h2 id="reader-report-title">举报内容</h2>
+                <h2 id="reader-report-title">反馈内容问题</h2>
                 <p>{title}</p>
               </div>
               <button ref={closeButtonRef} type="button" onClick={close} aria-label="关闭" title="关闭">

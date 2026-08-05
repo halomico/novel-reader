@@ -73,6 +73,19 @@ export default async function AdminUserLevelsPage({ searchParams }: AdminUserLev
                   />
                   <small>视频并发</small>
                 </label>
+                <label className="adminUserLevelThreshold isDownload">
+                  <span className="srOnly">每日下载次数</span>
+                  <input
+                    name={`dailyVideoDownloadLimit:${level.level}`}
+                    type="number"
+                    min="0"
+                    max="1000"
+                    defaultValue={level.dailyVideoDownloadLimit}
+                    disabled={level.level === 0}
+                    aria-label={`Lv.${level.level} 每日下载次数`}
+                  />
+                  <small>每日下载</small>
+                </label>
                 <div className="adminUserLevelPermissions">
                   {USER_PERMISSION_DEFINITIONS.map((permission) => (
                     <label key={permission.key}>

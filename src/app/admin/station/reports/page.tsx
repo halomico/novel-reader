@@ -21,11 +21,11 @@ export default async function AdminStationReportsPage({ searchParams }: AdminSta
     pageSize: 30,
   });
   return (
-    <AdminFrame active="station" breadcrumbs={[{ label: "站务管理", href: "/admin/station" }, { label: "举报" }]}>
+    <AdminFrame active="station" breadcrumbs={[{ label: "站务管理", href: "/admin/station" }, { label: "反馈" }]}>
       <div className="adminWorkspace">
         <AdminStationNavigation active="reports" />
-        <header className="adminWorkspaceHeader"><div><h1>内容举报</h1><p>核对用户提交的内容问题。</p></div></header>
-        <nav className="adminCompactTabs" aria-label="举报状态">
+        <header className="adminWorkspaceHeader"><div><h1>内容反馈</h1><p>核对并处理用户反馈的内容问题。</p></div></header>
+        <nav className="adminCompactTabs" aria-label="反馈状态">
           {([
             ["open", "待处理"],
             ["resolved", "已处理"],

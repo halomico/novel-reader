@@ -1013,6 +1013,7 @@ export async function updateAdminMediaAction(
       updateVideoPublishingSettings({
         id,
         playSodaPrice: Number(formData.get("playSodaPrice") || 0),
+        downloadSodaPrice: Number(formData.get("downloadSodaPrice") || 0),
         publishedAt: latestAction === "mark" ? new Date().toISOString() : asset.publishedAt,
         newUntil: latestAction === "mark"
           ? new Date(Date.now() + newDays * 86_400_000).toISOString()
@@ -1053,6 +1054,7 @@ export async function batchUpdateAdminMediaAction(
   const applyDescription = formData.get("applyDescription") === "on";
   const applyTags = formData.get("applyTags") === "on";
   const applyVideoPrice = formData.get("applyVideoPrice") === "on";
+  const applyVideoDownloadPrice = formData.get("applyVideoDownloadPrice") === "on";
   const latestAction = String(formData.get("latestAction") || "keep");
   const newDays = Math.min(Math.max(Math.floor(Number(formData.get("newDays")) || 14), 1), 365);
   const artist = String(formData.get("artist") || "").trim();
@@ -1083,10 +1085,13 @@ export async function batchUpdateAdminMediaAction(
         asset.kind === "video" && categoryId !== "__keep__" ? categoryId : undefined,
       );
       if (asset.kind === "video" && applyTags) setVideoTagsForAssets([id], tagIds);
-      if (asset.kind === "video" && (applyVideoPrice || latestAction !== "keep")) {
+      if (asset.kind === "video" && (applyVideoPrice || applyVideoDownloadPrice || latestAction !== "keep")) {
         updateVideoPublishingSettings({
           id,
           playSodaPrice: applyVideoPrice ? Number(formData.get("playSodaPrice") || 0) : asset.playSodaPrice,
+          downloadSodaPrice: applyVideoDownloadPrice
+            ? Number(formData.get("downloadSodaPrice") || 0)
+            : asset.downloadSodaPrice,
           publishedAt: latestAction === "mark" ? new Date().toISOString() : asset.publishedAt,
           newUntil: latestAction === "mark"
             ? new Date(Date.now() + newDays * 86_400_000).toISOString()
@@ -1592,6 +1597,9 @@ export async function saveUserLevelsAction(formData: FormData) {
     videoConcurrencyLimit: level === 0
       ? 0
       : Math.min(Math.max(Math.floor(Number(formData.get(`videoConcurrencyLimit:${level}`)) || 0), 0), 20),
+    dailyVideoDownloadLimit: level === 0
+      ? 0
+      : Math.min(Math.max(Math.floor(Number(formData.get(`dailyVideoDownloadLimit:${level}`)) || 0), 0), 1_000),
     permissions: formData.getAll(`permissions:${level}`).map(String),
   }));
   if (levels.some((level) => !level.name)) {
@@ -1607,6 +1615,7 @@ export async function saveUserLevelsAction(formData: FormData) {
       name: level.name,
       sodaRequired: level.sodaRequired,
       videoConcurrencyLimit: level.videoConcurrencyLimit,
+      dailyVideoDownloadLimit: level.dailyVideoDownloadLimit,
       permissions: level.permissions,
     })) {
       saved += 1;

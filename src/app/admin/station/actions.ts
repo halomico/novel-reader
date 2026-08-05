@@ -149,11 +149,11 @@ export async function setContentReportStatusInlineAction(
   const session = await requireAdmin();
   const reportId = Math.floor(Number(reportIdValue));
   if (!setContentReportStatus(reportId, status, session.username)) {
-    return mutationResult(false, "举报记录不存在", "warning");
+    return mutationResult(false, "反馈记录不存在", "warning");
   }
   return mutationResult(
     true,
-    status === "resolved" ? "举报已处理" : "举报已重新打开",
+    status === "resolved" ? "反馈已处理" : "反馈已重新打开",
     "success",
     { status },
   );
@@ -163,6 +163,6 @@ export async function deleteContentReportInlineAction(idValue: number): Promise<
   await requireAdmin();
   const deleted = deleteContentReport(Math.floor(Number(idValue)));
   return deleted
-    ? mutationResult(true, "举报记录已删除", "success")
-    : mutationResult(false, "举报记录不存在", "warning");
+    ? mutationResult(true, "反馈记录已删除", "success")
+    : mutationResult(false, "反馈记录不存在", "warning");
 }

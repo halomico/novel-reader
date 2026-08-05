@@ -188,6 +188,7 @@ export function listFavoriteMedia(
     content_updated_at: string | null;
     new_until: string | null;
     play_soda_price: number;
+    download_soda_price: number;
     created_at: string;
     updated_at: string;
   }>;
@@ -215,6 +216,7 @@ export function listFavoriteMedia(
     contentUpdatedAt: row.content_updated_at || row.updated_at,
     newUntil: row.new_until,
     playSodaPrice: Math.max(Math.floor(row.play_soda_price || 0), 0),
+    downloadSodaPrice: Math.max(Math.floor(row.download_soda_price ?? 1), 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));

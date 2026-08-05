@@ -722,6 +722,10 @@ export function AdminMediaManager({
                       <span><input name="applyVideoPrice" type="checkbox" />统一播放价格</span>
                       <input name="playSodaPrice" type="number" min="0" max="1000000" defaultValue="0" aria-label="24 小时播放所需苏打" />
                     </label>
+                    <label className="adminMediaBatchApplyField">
+                      <span><input name="applyVideoDownloadPrice" type="checkbox" />统一下载价格</span>
+                      <input name="downloadSodaPrice" type="number" min="0" max="1000000" defaultValue="1" aria-label="视频下载所需苏打" />
+                    </label>
                     <div className="adminFieldGrid">
                       <label>
                         <span>最新状态</span>
@@ -806,6 +810,10 @@ export function AdminMediaManager({
                 <label>
                   <span>24 小时播放 / 苏打</span>
                   <input name="playSodaPrice" type="number" min="0" max="1000000" defaultValue={editingAsset.playSodaPrice} />
+                </label>
+                <label>
+                  <span>下载 / 苏打</span>
+                  <input name="downloadSodaPrice" type="number" min="0" max="1000000" defaultValue={editingAsset.downloadSodaPrice} />
                 </label>
                 <div className="adminFieldGrid">
                   <label>

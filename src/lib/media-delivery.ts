@@ -18,6 +18,7 @@ import {
 export type ResolvedMediaDelivery = {
   asset: MediaAsset;
   download: boolean;
+  downloadToken: string;
 };
 
 function encodedStoredName(storedName: string): string {
@@ -33,7 +34,7 @@ function contentDisposition(asset: MediaAsset, download: boolean): string {
 export function mediaDeliveryUrl(
   asset: MediaAsset,
   download = false,
-  options: { publiclyAccessible?: boolean; estimatedKbps?: number } = {},
+  options: { publiclyAccessible?: boolean; estimatedKbps?: number; downloadToken?: string } = {},
 ): string {
   if (isRemoteMediaStorage()) {
     const node = resolveRemoteMediaNodeForAsset(asset.storageNodeId, asset.kind);
@@ -52,6 +53,7 @@ export function mediaDeliveryUrl(
   const params = new URLSearchParams({ id: String(asset.id), v: String(Math.floor(asset.mtimeMs)) });
   if (download) {
     params.set("download", "1");
+    if (options.downloadToken) params.set("ticket", options.downloadToken);
   }
   return `/media-file/${encodedStoredName(asset.storedName)}?${params.toString()}`;
 }
@@ -95,7 +97,11 @@ export function resolveMediaDeliveryUri(uri: string): ResolvedMediaDelivery | nu
   if (download && asset.kind !== "file" && asset.kind !== "video") {
     return null;
   }
-  return { asset, download };
+  const downloadToken = url.searchParams.get("ticket") || "";
+  if (downloadToken && !/^[A-Za-z0-9_-]{32,128}$/u.test(downloadToken)) {
+    return null;
+  }
+  return { asset, download, downloadToken };
 }
 
 export function mediaDeliveryHeaders(

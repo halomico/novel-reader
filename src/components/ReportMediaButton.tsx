@@ -82,7 +82,7 @@ export function ReportMediaButton({
         return;
       }
       close();
-      setNotice("举报已提交");
+      setNotice("反馈已提交");
     } catch {
       setMessage("提交失败，请稍后重试");
     } finally {
@@ -92,7 +92,7 @@ export function ReportMediaButton({
 
   return (
     <div className="readerReportAction">
-      <button type="button" aria-label={`举报 ${title}`} title="举报" onClick={() => setOpen(true)}>
+      <button type="button" aria-label={`反馈 ${title}`} title="反馈" onClick={() => setOpen(true)}>
         <Flag size={16} aria-hidden="true" />
       </button>
       {notice ? <span className="readerActionToast" role="status">{notice}</span> : null}
@@ -101,7 +101,7 @@ export function ReportMediaButton({
           <form className="readerReportDialog" role="dialog" aria-modal="true" aria-labelledby="media-report-title" onSubmit={submit}>
             <header>
               <div>
-                <h2 id="media-report-title">举报{kindLabel}</h2>
+                <h2 id="media-report-title">反馈{kindLabel}问题</h2>
                 <p>{title}</p>
               </div>
               <button ref={closeButtonRef} type="button" onClick={close} aria-label="关闭" title="关闭">

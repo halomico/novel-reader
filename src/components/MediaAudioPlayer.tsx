@@ -1,6 +1,6 @@
 "use client";
 
-import { Disc3, ListMusic, Play, Repeat1, SkipBack, SkipForward, Square } from "lucide-react";
+import { CircleAlert, Disc3, ListMusic, LoaderCircle, Play, Repeat1, SkipBack, SkipForward, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { MediaAudioFeedbackActions } from "@/components/MediaAudioFeedbackActions";
 import { formatMediaDuration } from "@/lib/media-format";
@@ -32,6 +32,16 @@ const QUEUE_ROW_HEIGHT = 52;
 const QUEUE_VIEWPORT_HEIGHT = 312;
 const QUEUE_OVERSCAN = 5;
 
+type AudioStatus = "ready" | "loading" | "notice" | "error";
+
+function audioErrorMessage(error: MediaError | null, locale: AppLocale): string {
+  if (!error) return uiText(locale, "音频加载失败，请稍后重试。");
+  if (error.code === MediaError.MEDIA_ERR_NETWORK) return uiText(locale, "音频网络加载失败，请检查连接后重试。");
+  if (error.code === MediaError.MEDIA_ERR_DECODE) return uiText(locale, "当前音频无法解码，请切换浏览器或联系管理员。");
+  if (error.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) return uiText(locale, "音频地址不可用或浏览器不支持此格式。");
+  return uiText(locale, "音频加载已中断，请重新播放。");
+}
+
 export function MediaAudioPlayer({
   initialId,
   tracks,
@@ -53,9 +63,14 @@ export function MediaAudioPlayer({
   const audioRef = useRef<HTMLAudioElement>(null);
   const queueRef = useRef<HTMLDivElement>(null);
   const autoPlayRef = useRef(false);
+  const pendingAutoPlayTrackIdRef = useRef<number | null>(null);
+  const activeTrackIdRef = useRef(initialTrack.id);
   const loadedTrackIdRef = useRef(initialTrack.id);
   const countedIdsRef = useRef(new Set<number>());
   const [queueScrollTop, setQueueScrollTop] = useState(0);
+  const [audioStatus, setAudioStatus] = useState<AudioStatus>("ready");
+  const [audioStatusMessage, setAudioStatusMessage] = useState("");
+  activeTrackIdRef.current = activeTrack.id;
   const activeIndex = tracks.findIndex((track) => track.id === activeTrack.id);
   const visibleStart = Math.max(0, Math.floor(queueScrollTop / QUEUE_ROW_HEIGHT) - QUEUE_OVERSCAN);
   const visibleEnd = Math.min(tracks.length, Math.ceil((queueScrollTop + QUEUE_VIEWPORT_HEIGHT) / QUEUE_ROW_HEIGHT) + QUEUE_OVERSCAN);
@@ -69,14 +84,15 @@ export function MediaAudioPlayer({
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || loadedTrackIdRef.current === activeTrack.id) return;
-    loadedTrackIdRef.current = activeTrack.id;
     const shouldAutoPlay = autoPlayRef.current;
     autoPlayRef.current = false;
+    audio.pause();
+    loadedTrackIdRef.current = activeTrack.id;
+    pendingAutoPlayTrackIdRef.current = shouldAutoPlay ? activeTrack.id : null;
+    setAudioStatus("loading");
+    setAudioStatusMessage(uiText(locale, "正在加载音频…"));
     audio.load();
-    if (shouldAutoPlay) {
-      void audio.play().catch(() => undefined);
-    }
-  }, [activeTrack.id]);
+  }, [activeTrack.id, locale]);
 
   useEffect(() => {
     const queue = queueRef.current;
@@ -98,8 +114,36 @@ export function MediaAudioPlayer({
   function chooseTrack(track: AudioQueueTrack, autoPlay = false) {
     if (track.id === activeTrack.id) return;
     autoPlayRef.current = autoPlay;
+    pendingAutoPlayTrackIdRef.current = null;
     setActiveTrack(track);
     void fetch(`${basePathPrefix}/${track.id}/access`, { method: "POST", keepalive: true });
+  }
+
+  function playWhenReady(audio: HTMLAudioElement, trackId: number) {
+    void audio.play().catch((error: unknown) => {
+      if (activeTrackIdRef.current !== trackId) return;
+      const blocked = error instanceof DOMException && error.name === "NotAllowedError";
+      setAudioStatus(blocked ? "notice" : "error");
+      setAudioStatusMessage(blocked
+        ? uiText(locale, "音频已切换，请点击播放继续。")
+        : uiText(locale, "播放启动失败，请重新点击播放。"));
+    });
+  }
+
+  function handleCanPlay() {
+    const audio = audioRef.current;
+    if (!audio) return;
+    setAudioStatus("ready");
+    setAudioStatusMessage("");
+    if (pendingAutoPlayTrackIdRef.current !== activeTrack.id) return;
+    pendingAutoPlayTrackIdRef.current = null;
+    playWhenReady(audio, activeTrack.id);
+  }
+
+  function handleAudioError() {
+    pendingAutoPlayTrackIdRef.current = null;
+    setAudioStatus("error");
+    setAudioStatusMessage(audioErrorMessage(audioRef.current?.error || null, locale));
   }
 
   function recordPlay() {
@@ -117,7 +161,7 @@ export function MediaAudioPlayer({
     const audio = audioRef.current;
     if (mode === "repeat-one" && audio) {
       audio.currentTime = 0;
-      void audio.play();
+      playWhenReady(audio, activeTrack.id);
       return;
     }
     if (mode === "next") playAdjacent(1, true);
@@ -138,21 +182,48 @@ export function MediaAudioPlayer({
           className="mediaAudioPlayer"
           controls
           preload="metadata"
+          src={`${basePathPrefix}/${activeTrack.id}/stream?v=${Math.floor(activeTrack.version)}`}
+          onLoadStart={() => {
+            setAudioStatus("loading");
+            setAudioStatusMessage(uiText(locale, "正在加载音频…"));
+          }}
+          onCanPlay={handleCanPlay}
+          onPlaying={() => {
+            setAudioStatus("ready");
+            setAudioStatusMessage("");
+          }}
+          onWaiting={() => {
+            setAudioStatus("loading");
+            setAudioStatusMessage(uiText(locale, "网络较慢，音频仍在加载…"));
+          }}
+          onStalled={() => {
+            setAudioStatus("notice");
+            setAudioStatusMessage(uiText(locale, "音频加载较慢，正在继续尝试…"));
+          }}
+          onError={handleAudioError}
           onPlay={recordPlay}
-          onPause={() => { autoPlayRef.current = false; }}
+          onPause={() => {
+            autoPlayRef.current = false;
+            pendingAutoPlayTrackIdRef.current = null;
+          }}
           onEnded={handleEnded}
           aria-label={`${uiText(locale, "播放")} ${activeTrack.title}`}
         >
-          <source src={`${basePathPrefix}/${activeTrack.id}/stream?v=${Math.floor(activeTrack.version)}`} />
           {uiText(locale, "当前浏览器无法播放这个音频。")}
         </audio>
+        {audioStatus !== "ready" && audioStatusMessage ? (
+          <p className={`mediaAudioStatus is-${audioStatus}`} role={audioStatus === "error" ? "alert" : "status"}>
+            {audioStatus === "loading" ? <LoaderCircle className="isSpinning" size={14} aria-hidden="true" /> : <CircleAlert size={14} aria-hidden="true" />}
+            <span>{audioStatusMessage}</span>
+          </p>
+        ) : null}
         <div className="mediaAudioControls">
           <div className="mediaAudioPlaybackControls">
             <div className="mediaAudioTransport" aria-label={uiText(locale, "切换音频")}>
-              <button type="button" onClick={() => playAdjacent(-1)} disabled={activeIndex <= 0} aria-label={uiText(locale, "上一首")} title={uiText(locale, "上一首")}>
+              <button type="button" onClick={() => playAdjacent(-1, true)} disabled={activeIndex <= 0} aria-label={uiText(locale, "上一首")} title={uiText(locale, "上一首")}>
                 <SkipBack size={17} aria-hidden="true" />
               </button>
-              <button type="button" onClick={() => playAdjacent(1)} disabled={activeIndex < 0 || activeIndex >= tracks.length - 1} aria-label={uiText(locale, "下一首")} title={uiText(locale, "下一首")}>
+              <button type="button" onClick={() => playAdjacent(1, true)} disabled={activeIndex < 0 || activeIndex >= tracks.length - 1} aria-label={uiText(locale, "下一首")} title={uiText(locale, "下一首")}>
                 <SkipForward size={17} aria-hidden="true" />
               </button>
             </div>
@@ -188,7 +259,7 @@ export function MediaAudioPlayer({
           <div className="mediaAudioQueueViewport" ref={queueRef} onScroll={(event) => setQueueScrollTop(event.currentTarget.scrollTop)}>
             {visibleStart ? <div className="mediaAudioQueueSpacer" style={{ height: visibleStart * QUEUE_ROW_HEIGHT }} aria-hidden="true" /> : null}
             {visibleTracks.map((track) => (
-              <button className={track.id === activeTrack.id ? "isActive" : ""} type="button" onClick={() => chooseTrack(track)} key={track.id}>
+              <button className={track.id === activeTrack.id ? "isActive" : ""} type="button" onClick={() => chooseTrack(track, true)} key={track.id}>
                 <span aria-hidden="true">{track.id === activeTrack.id ? <Play size={13} fill="currentColor" /> : null}</span>
                 <strong title={track.title}>{track.title}</strong>
                 <time aria-label={`${uiText(locale, "时长")} ${formatMediaDuration(track.durationSeconds)}`}>
