@@ -52,6 +52,11 @@ export type SiteSettings = {
   siteTitle: string;
   brandLinkTarget: BrandLinkTarget;
   settingsPreviewText: string;
+  defaultNovelLibrarySlug: string;
+  siteEntryNoticeEnabled: boolean;
+  siteEntryNoticeTitle: string;
+  siteEntryNoticeMarkdown: string;
+  siteEntryNoticeVersion: string;
   siteIconFileName: string;
   siteIconMimeType: SiteIconMimeType;
   siteIconUpdatedAt: string;
@@ -124,7 +129,7 @@ type SiteSettingsGlobal = typeof globalThis & {
   siteSettingsCache?: SiteSettingsCache;
 };
 
-const SITE_SETTINGS_CACHE_SCHEMA_VERSION = 11;
+const SITE_SETTINGS_CACHE_SCHEMA_VERSION = 13;
 
 const DEFAULT_SETTINGS_PREVIEW_TEXT =
   process.env.SETTINGS_PREVIEW_TEXT?.trim() ||
@@ -160,6 +165,11 @@ const DEFAULT_SETTINGS: SiteSettings = {
   siteTitle: "",
   brandLinkTarget: "novels",
   settingsPreviewText: DEFAULT_SETTINGS_PREVIEW_TEXT,
+  defaultNovelLibrarySlug: "default",
+  siteEntryNoticeEnabled: false,
+  siteEntryNoticeTitle: "重要通知",
+  siteEntryNoticeMarkdown: "",
+  siteEntryNoticeVersion: "",
   siteIconFileName: "",
   siteIconMimeType: "",
   siteIconUpdatedAt: "",
@@ -269,6 +279,11 @@ function cleanUserRegistrationMode(value: unknown, legacyEnabled: boolean): User
 
 function cleanBrandLinkTarget(value: unknown): BrandLinkTarget {
   return value === "home" ? "home" : "novels";
+}
+
+function cleanDefaultNovelLibrarySlug(value: unknown): string {
+  const slug = cleanText(value).normalize("NFKC").toLocaleLowerCase("en-US").slice(0, 64);
+  return slug === "all" || /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(slug) ? slug : "default";
 }
 
 function cleanCatalogPromotionOrder(value: unknown): CatalogPromotionOrder {
@@ -426,6 +441,15 @@ function readSiteSettingsFromDisk(): SiteSettings {
         typeof parsed.settingsPreviewText === "string"
           ? cleanText(parsed.settingsPreviewText)
           : DEFAULT_SETTINGS.settingsPreviewText,
+      defaultNovelLibrarySlug: cleanDefaultNovelLibrarySlug(parsed.defaultNovelLibrarySlug),
+      siteEntryNoticeEnabled: cleanBool(
+        parsed.siteEntryNoticeEnabled,
+        DEFAULT_SETTINGS.siteEntryNoticeEnabled,
+      ),
+      siteEntryNoticeTitle:
+        cleanText(parsed.siteEntryNoticeTitle).slice(0, 80) || DEFAULT_SETTINGS.siteEntryNoticeTitle,
+      siteEntryNoticeMarkdown: cleanText(parsed.siteEntryNoticeMarkdown).slice(0, 20_000),
+      siteEntryNoticeVersion: cleanText(parsed.siteEntryNoticeVersion).slice(0, 80),
       siteIconFileName: path.basename(cleanText(parsed.siteIconFileName)),
       siteIconMimeType: cleanSiteIconMimeType(parsed.siteIconMimeType),
       siteIconUpdatedAt: cleanText(parsed.siteIconUpdatedAt),

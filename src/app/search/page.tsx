@@ -10,7 +10,13 @@ import {
   recordSearchQuery,
   resolveSearchQueryEventKey,
 } from "@/lib/analytics";
-import { canAccessNovelLibrary, getSearchResultsPageSize, isGuestLibraryNavEnabled, shouldShowProgressBars } from "@/lib/config";
+import {
+  canAccessNovelLibrary,
+  getDefaultNovelLibrarySlug,
+  getSearchResultsPageSize,
+  isGuestLibraryNavEnabled,
+  shouldShowProgressBars,
+} from "@/lib/config";
 import { validateSearchKeyword } from "@/lib/search";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { getCurrentUser } from "@/lib/user-auth";
@@ -66,7 +72,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   });
   if (!access.allowed) notFound();
   const originalQuery = params.q || "";
-  const libraryScope = resolveNovelLibraryScope(params.library || params.sourceLibrary);
+  const libraryScope = resolveNovelLibraryScope(
+    params.library || params.sourceLibrary || getDefaultNovelLibrarySlug(),
+  );
   const fullTextSearchEnabled = libraryScope.kind === "all" || isNovelSourceFullTextSearchEnabled(libraryScope.source.slug);
   const validation = validateSearchKeyword(originalQuery);
   const pageSize = getSearchResultsPageSize();

@@ -2,8 +2,15 @@ import type { Novel } from "./books";
 import { canConsumeNovelLibrary } from "./config";
 import { getDb } from "./db";
 import { grantUserEntitlement, hasNovelReadEntitlement } from "./entitlements";
+import type { NovelSegment } from "./segments";
 
 type NovelAccessUser = { id: number; role: "user" | "admin" } | null;
+type NovelAccessBook = Pick<
+  Novel,
+  "id" | "source_id" | "storage_mode" | "chapter_count" | "access_mode" | "soda_price" | "preview_chapter_count"
+>;
+
+export const SODA_NOVEL_PREVIEW_RATIO = 0.3;
 
 export type NovelReadAccess = {
   allowed: boolean;
@@ -11,10 +18,47 @@ export type NovelReadAccess = {
   reason: "public" | "member" | "admin" | "preview" | "granted" | "login_required" | "unlock_required";
 };
 
+export function getNovelPreviewChapterCount(book: NovelAccessBook): number {
+  if (book.storage_mode !== "chapters" || book.access_mode !== "soda" || book.soda_price <= 0) return 0;
+  const chapterCount = Math.max(Math.floor(book.chapter_count || 0), 0);
+  if (!chapterCount) return 0;
+  const configuredCount = Math.max(Math.floor(book.preview_chapter_count || 0), 0);
+  const automaticCount = Math.max(1, Math.ceil(chapterCount * SODA_NOVEL_PREVIEW_RATIO));
+  return Math.min(chapterCount, Math.max(configuredCount, automaticCount));
+}
+
+export function getSodaNovelPreviewSegments(segments: NovelSegment[]): NovelSegment[] {
+  const totalChars = segments.at(-1)?.charEnd || 0;
+  if (!totalChars) return [];
+  const previewEnd = Math.max(1, Math.ceil(totalChars * SODA_NOVEL_PREVIEW_RATIO));
+  const preview: NovelSegment[] = [];
+
+  for (const segment of segments) {
+    if (segment.charStart >= previewEnd) break;
+    if (segment.charEnd <= previewEnd) {
+      preview.push(segment);
+      continue;
+    }
+
+    const targetLength = Math.max(previewEnd - segment.charStart, 0);
+    let content = segment.content.slice(0, targetLength);
+    const paragraphBreak = content.lastIndexOf("\n");
+    if (paragraphBreak >= Math.floor(content.length * 0.72)) {
+      content = content.slice(0, paragraphBreak + 1);
+    }
+    if (content.trim()) {
+      preview.push({ ...segment, charEnd: segment.charStart + content.length, content });
+    }
+    break;
+  }
+
+  return preview;
+}
+
 export function getNovelReadAccess(
-  book: Pick<Novel, "id" | "source_id" | "access_mode" | "soda_price" | "preview_chapter_count">,
+  book: NovelAccessBook,
   user: NovelAccessUser,
-  options: { chapterSortOrder?: number | null } = {},
+  options: { chapterSortOrder?: number | null; contentPreview?: boolean } = {},
 ): NovelReadAccess {
   const price = Math.max(Math.floor(book.soda_price || 0), 0);
   if (user?.role === "admin") {
@@ -26,18 +70,21 @@ export function getNovelReadAccess(
   if (book.access_mode !== "soda" || price === 0) {
     return { allowed: true, price: 0, reason: user ? "member" : "public" };
   }
+  if (user && hasNovelReadEntitlement(user.id, book.id, book.source_id)) {
+    return { allowed: true, price, reason: "granted" };
+  }
   if (
     options.chapterSortOrder !== undefined &&
     options.chapterSortOrder !== null &&
-    options.chapterSortOrder < Math.max(Math.floor(book.preview_chapter_count || 0), 0)
+    options.chapterSortOrder < getNovelPreviewChapterCount(book)
   ) {
+    return { allowed: true, price, reason: "preview" };
+  }
+  if (options.contentPreview && book.storage_mode !== "chapters") {
     return { allowed: true, price, reason: "preview" };
   }
   if (!user) {
     return { allowed: false, price, reason: "login_required" };
-  }
-  if (hasNovelReadEntitlement(user.id, book.id, book.source_id)) {
-    return { allowed: true, price, reason: "granted" };
   }
   return { allowed: false, price, reason: "unlock_required" };
 }

@@ -19,26 +19,20 @@ export function ReaderHeaderBehavior() {
 
     function resetChrome() {
       header!.classList.remove("isReaderHeaderOverlay");
-      shell?.style.removeProperty("--reader-header-flow-height");
       document.documentElement.classList.remove("isReaderChromeHidden");
     }
 
     function showCompactChrome() {
       if (window.scrollY > 24) {
-        if (!header!.classList.contains("isReaderHeaderOverlay")) {
-          shell?.style.setProperty("--reader-header-flow-height", `${header!.offsetHeight}px`);
-        }
         header!.classList.add("isReaderHeaderOverlay");
       } else {
         header!.classList.remove("isReaderHeaderOverlay");
-        shell?.style.removeProperty("--reader-header-flow-height");
       }
       document.documentElement.classList.remove("isReaderChromeHidden");
     }
 
     function hideChrome() {
       header!.classList.remove("isReaderHeaderOverlay");
-      shell?.style.removeProperty("--reader-header-flow-height");
       document.documentElement.classList.add("isReaderChromeHidden");
     }
 
@@ -123,7 +117,6 @@ export function ReaderHeaderBehavior() {
       mobile.removeEventListener("change", handleViewportOrModeChange);
       header.classList.remove("isReaderHeaderOverlay");
       shell?.classList.remove("isReaderChromeReady");
-      shell?.style.removeProperty("--reader-header-flow-height");
       document.documentElement.classList.remove("isReaderChromeHidden");
     };
   }, []);

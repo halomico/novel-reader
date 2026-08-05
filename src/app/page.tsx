@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Bell, BookOpenText, ChevronRight, Clapperboard, Clock3, File, Headphones, Tags, type LucideIcon } from "lucide-react";
+import { Bell, BookOpenText, Clapperboard, Clock3, File, Headphones, Tags, type LucideIcon } from "lucide-react";
 import { redirect } from "next/navigation";
 import Link from "@/components/LocalizedLink";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -132,10 +132,9 @@ export default async function Home({ searchParams }: HomeProps) {
             if (!showNovels) return null;
             const recentOverview = overview.recent;
             return (
-              <Link className="homePortalCard is-recent" href="/novels/recent" key={key}>
+              <Link className="homePortalCard is-recent hasNoTrailingIcon" href="/novels/recent" key={key}>
                 <span className="homePortalCardIcon" aria-hidden="true"><Clock3 size={30} /></span>
                 <span className="homePortalCardCopy"><strong>{uiText(locale, "最近更新")}</strong><small>最近更新：{formatHomeUpdateTime(recentOverview?.updatedAt || null)}</small></span>
-                <ChevronRight className="homePortalCardArrow" size={19} aria-hidden="true" />
               </Link>
             );
           }
@@ -145,7 +144,7 @@ export default async function Home({ searchParams }: HomeProps) {
           const label = uiText(locale, card.label);
           return (
             <Link
-              className={`homePortalCard is-${card.kind}`}
+              className={`homePortalCard is-${card.kind} hasNoTrailingIcon`}
               href={card.href}
               key={card.kind}
             >
@@ -153,7 +152,6 @@ export default async function Home({ searchParams }: HomeProps) {
                 <Icon size={30} />
               </span>
               <span className="homePortalCardCopy"><strong>{label}</strong><small>{overview[card.kind]?.count || 0} {card.kind === "announcement" ? "条" : card.kind === "novels" ? "本" : "个"}{label}　最近更新：{formatHomeUpdateTime(overview[card.kind]?.updatedAt || null)}</small></span>
-              <ChevronRight className="homePortalCardArrow" size={19} aria-hidden="true" />
             </Link>
           );
         })}

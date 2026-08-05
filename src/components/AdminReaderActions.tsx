@@ -1,19 +1,22 @@
 "use client";
 
-import { Pencil, Pin, Trash2 } from "lucide-react";
-import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
-import { deleteNovelsAction, togglePinnedNovelAction } from "@/app/admin/actions";
-import { stripLocalePath } from "@/lib/locale";
+import { Pin, Trash2 } from "lucide-react";
+import { deleteReaderNovelAction, toggleReaderPinnedNovelAction } from "@/app/books/actions";
 
-export function AdminReaderActions({ bookId, title, isPinned }: { bookId: number; title: string; isPinned: boolean }) {
-  const pathname = stripLocalePath(usePathname());
-  const searchParams = useSearchParams();
-  const returnPath = `${pathname}${searchParams.size ? `?${searchParams.toString()}` : ""}`;
-
+export function AdminReaderActions({
+  bookId,
+  title,
+  isPinned,
+  returnHref,
+}: {
+  bookId: number;
+  title: string;
+  isPinned: boolean;
+  returnHref: string;
+}) {
   return (
     <div className="adminReaderActions" aria-label="管理员小说操作">
-      <form action={togglePinnedNovelAction}>
+      <form action={toggleReaderPinnedNovelAction}>
         <input name="bookId" type="hidden" value={bookId} />
         <button
           className={isPinned ? "adminReaderPinButton isActive" : "adminReaderPinButton"}
@@ -24,23 +27,16 @@ export function AdminReaderActions({ bookId, title, isPinned }: { bookId: number
           <Pin size={16} fill={isPinned ? "currentColor" : "none"} aria-hidden="true" />
         </button>
       </form>
-      <Link
-        href={`/admin/books/${bookId}/edit?returnPath=${encodeURIComponent(returnPath)}`}
-        aria-label={`编辑 ${title}`}
-        title="编辑小说"
-      >
-        <Pencil size={16} aria-hidden="true" />
-      </Link>
       <form
-        action={deleteNovelsAction}
+        action={deleteReaderNovelAction}
         onSubmit={(event) => {
           if (!window.confirm(`确认删除《${title}》及其小说文件？`)) {
             event.preventDefault();
           }
         }}
       >
-        <input name="bookIds" type="hidden" value={bookId} />
-        <input name="returnPath" type="hidden" value="/admin/books" />
+        <input name="bookId" type="hidden" value={bookId} />
+        <input name="returnPath" type="hidden" value={returnHref} />
         <button className="adminReaderDeleteButton" type="submit" aria-label={`删除 ${title}`} title="删除小说">
           <Trash2 size={16} aria-hidden="true" />
         </button>

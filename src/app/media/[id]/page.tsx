@@ -76,6 +76,18 @@ function listHref(kind: MediaKind, folder: string): string {
   return `/media?${params.toString()}`;
 }
 
+function safeVideoReturnHref(value: string | undefined): string {
+  const fallback = listHref("video", "");
+  if (!value || !value.startsWith("/media?") || value.startsWith("//") || /[\\\r\n#]/u.test(value)) {
+    return fallback;
+  }
+  try {
+    return new URL(value, "http://local").searchParams.get("kind") === "video" ? value : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function formatCompactCount(value: number, locale: AppLocale): string {
   return new Intl.NumberFormat(locale === "zh-Hant" ? "zh-TW" : "zh-CN", {
     notation: "compact",
@@ -108,10 +120,17 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   };
 }
 
-export default async function MediaDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function MediaDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
+}) {
   const locale = await getRequestLocale();
   const user = await getCurrentUser();
-  const asset = getAssetById(Number((await params).id));
+  const [routeParams, detailQuery] = await Promise.all([params, searchParams]);
+  const asset = getAssetById(Number(routeParams.id));
   if (!asset) notFound();
   if (!isMediaKindAccessible(asset.kind, Boolean(user))) {
     if (!user && isMediaKindEntryVisible(asset.kind, false)) {
@@ -146,6 +165,7 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
   const title = await localizeText(displayTitle(asset.title, asset.fileName), locale);
   const displayDescription = await localizeText(asset.description, locale);
   const displayFolder = await localizeText(asset.folder, locale);
+  const displayArtist = asset.artist ? await localizeText(asset.artist, locale) : "";
   const listFolder = asset.kind === "video" ? "" : asset.folder;
   const folderAudio = asset.kind === "audio" && contentAccessible ? listMediaFolderAssets("audio", asset.folder, 2_000) : [];
   if (asset.kind === "audio" && !folderAudio.some((item) => item.id === asset.id)) folderAudio.push(asset);
@@ -190,12 +210,18 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
   );
   const textPreviewSupported = isMediaTextPreviewSupported(asset);
   const videoPlaybackAccess = asset.kind === "video" ? getVideoPlaybackAccess(asset, user) : null;
+  const videoReturnHref = safeVideoReturnHref(detailQuery.from);
 
   return (
     <>
       <MediaConnectionHint origin={mediaPublicOrigin} />
       <main className="appShell">
-      <SiteHeader currentUser={user} />
+      <SiteHeader
+        currentUser={user}
+        mobileBackHref={asset.kind === "video" ? videoReturnHref : undefined}
+        mobileBackLabel={asset.kind === "video" ? uiText(locale, "返回视频列表") : undefined}
+        mediaSearchKind={asset.kind === "video" ? "video" : undefined}
+      />
       <article className={`mediaDetail is-${asset.kind}`}>
         <Breadcrumbs
           items={[
@@ -208,13 +234,15 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
           ]}
         />
 
-        {asset.kind === "file" ? (
+        {asset.kind === "file" || (asset.kind === "audio" && !contentAccessible) ? (
           <header className="mediaDetailHeader">
             <span className={`mediaAssetIcon is-${asset.kind}`} aria-hidden="true"><Icon size={23} /></span>
             <div>
               <span>{uiText(locale, KIND_LABELS[asset.kind])}{displayFolder ? ` · ${displayFolder}` : ""}</span>
               <h1>{title}</h1>
-              <p>{formatBytes(asset.sizeBytes)}</p>
+              <p>{asset.kind === "audio"
+                ? [displayArtist, formatMediaDuration(asset.durationSeconds)].filter(Boolean).join(" · ")
+                : formatBytes(asset.sizeBytes)}</p>
             </div>
           </header>
         ) : null}
@@ -240,7 +268,7 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
                 posterUrl={posterUrl}
                 sourceVersion={asset.mtimeMs}
                 authenticated={Boolean(user)}
-                playSodaPrice={asset.playSodaPrice}
+                playSodaPrice={user ? asset.playSodaPrice : 0}
                 initialPlaybackAllowed={Boolean(videoPlaybackAccess?.allowed)}
                 initialAccessExpiresAt={videoPlaybackAccess?.expiresAt || null}
                 contentAccessible={contentAccessible}
@@ -308,6 +336,7 @@ export default async function MediaDetailPage({ params }: { params: Promise<{ id
                   thumbnailUrl={directThumbnails
                     ? directMediaThumbnailUrl(item, thumbnailSettings.singlePercent, publiclyAccessibleThumbnails)
                     : null}
+                  returnHref={videoReturnHref}
                   key={item.id}
                 />
               ))}

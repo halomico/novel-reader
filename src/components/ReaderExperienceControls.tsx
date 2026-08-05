@@ -38,6 +38,7 @@ type ReaderWidth = "auto" | 640 | 800 | 900 | 1000 | 1280;
 
 const READER_WIDTH_STORAGE_KEY = "novel-reader-width";
 const READER_FONT_SIZE_STORAGE_KEY = "novel-font-size";
+const MOBILE_READER_QUERY = "(max-width: 820px)";
 const READER_WIDTHS: ReaderWidth[] = ["auto", 640, 800, 900, 1000, 1280];
 
 function chapterHref(bookId: number, chapterId: number, from?: string) {
@@ -104,6 +105,7 @@ export function ReaderExperienceControls({
     const originalThemeColorMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
     const originalThemeColor = originalThemeColorMeta?.getAttribute("content") ?? null;
     let themeColorMeta = originalThemeColorMeta;
+    const mobileViewport = window.matchMedia(MOBILE_READER_QUERY);
 
     function restoreThemeColor() {
       if (!themeColorMeta) return;
@@ -118,7 +120,10 @@ export function ReaderExperienceControls({
     }
 
     function syncReaderViewportTheme(theme: ReaderTheme | null) {
-      const viewportColor = READER_THEME_OPTIONS.find((item) => item.value === theme)?.outer;
+      const themeOption = READER_THEME_OPTIONS.find((item) => item.value === theme);
+      const viewportColor = themeOption
+        ? mobileViewport.matches ? themeOption.paper : themeOption.outer
+        : getComputedStyle(shell!).getPropertyValue(mobileViewport.matches ? "--reader-paper" : "--reader-bg").trim();
       if (!viewportColor) {
         root.removeAttribute("data-reader-viewport");
         root.style.removeProperty("--reader-viewport-bg");
@@ -181,9 +186,11 @@ export function ReaderExperienceControls({
     const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
     themeObserver.observe(root, { attributes: true, attributeFilter: ["data-theme", "data-reader-theme"] });
     systemTheme.addEventListener("change", syncGlobalTheme);
+    mobileViewport.addEventListener("change", syncGlobalTheme);
     return () => {
       themeObserver.disconnect();
       systemTheme.removeEventListener("change", syncGlobalTheme);
+      mobileViewport.removeEventListener("change", syncGlobalTheme);
       root.removeAttribute("data-reader-viewport");
       root.style.removeProperty("--reader-viewport-bg");
       restoreThemeColor();

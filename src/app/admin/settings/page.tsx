@@ -26,6 +26,11 @@ import {
 } from "@/lib/config";
 import { readSiteSettings } from "@/lib/site-settings";
 import { getSiteIconHref } from "@/lib/site-icon";
+import {
+  ALL_NOVEL_LIBRARIES_SLUG,
+  listNovelSources,
+  novelLibraryDisplayName,
+} from "@/lib/novel-library";
 import { countRecommendationPoolNovels } from "@/lib/recommendation-pool";
 import { isEmailVerificationConfigured } from "@/lib/email-verification";
 import { normalizeReaderLineHeight, READER_LINE_HEIGHTS } from "@/lib/ui-preferences";
@@ -78,6 +83,11 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
   const analyticsRealtimeLimit = settings.analyticsRealtimeLimit || getAnalyticsRealtimeLimit();
   const frontendSearchConcurrencyLimit = settings.frontendSearchConcurrencyLimit || getFrontendSearchConcurrencyLimit();
   const siteIconHref = getSiteIconHref();
+  const novelSources = listNovelSources({ includeEmpty: true });
+  const defaultNovelLibrarySlug = settings.defaultNovelLibrarySlug === ALL_NOVEL_LIBRARIES_SLUG ||
+    novelSources.some((source) => source.slug === settings.defaultNovelLibrarySlug)
+    ? settings.defaultNovelLibrarySlug
+    : "default";
   const recommendationPoolCount = countRecommendationPoolNovels();
   const mailConfigured = isEmailVerificationConfigured();
 
@@ -145,6 +155,18 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 <option value="home">首页</option>
               </AdminSelect>
             </label>
+            <label className="adminCompactField">
+              <span>默认进入书库</span>
+              <AdminSelect name="defaultNovelLibrarySlug" defaultValue={defaultNovelLibrarySlug}>
+                {novelSources.map((source) => (
+                  <option value={source.slug} key={source.id}>
+                    {novelLibraryDisplayName(source)}（{source.novelCount} 本）
+                  </option>
+                ))}
+                <option value={ALL_NOVEL_LIBRARIES_SLUG}>全部书库</option>
+              </AdminSelect>
+              <small>仅影响尚未保存个人书库选择的用户；用户手动选择后以个人选择为准。</small>
+            </label>
             <label>
               <span>设置页底部文案</span>
               <textarea name="settingsPreviewText" rows={3} defaultValue={settings.settingsPreviewText} />
@@ -195,6 +217,36 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 max="10080"
                 defaultValue={settings.defaultPaletteRotationMinutes}
               />
+            </label>
+          </details>
+
+          <details className="adminSettingsSection adminSettingsDisclosure">
+            <summary>重要弹窗</summary>
+            <AdminSwitchRow
+              name="siteEntryNoticeEnabled"
+              title="启用进站重要通知"
+              description="访客进入前台时以抽屉展示；后台页面不显示。"
+              defaultChecked={settings.siteEntryNoticeEnabled}
+            />
+            <label>
+              <span>通知标题</span>
+              <input
+                name="siteEntryNoticeTitle"
+                maxLength={80}
+                defaultValue={settings.siteEntryNoticeTitle}
+                placeholder="重要通知"
+              />
+            </label>
+            <label>
+              <span>通知正文</span>
+              <textarea
+                name="siteEntryNoticeMarkdown"
+                rows={10}
+                maxLength={20_000}
+                defaultValue={settings.siteEntryNoticeMarkdown}
+                placeholder="支持 Markdown，可用于发布维护安排、使用提醒等重要信息。"
+              />
+              <small>支持 Markdown。正文、标题或开关变化后，会作为新版本再次展示。</small>
             </label>
           </details>
 
@@ -424,7 +476,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                   </AdminSelect>
                 </label>
               </div>
-              <p className="adminFieldHint">公开展示只显示首页卡片和顶部入口，点入后提示登录；公开可用允许访客直接浏览和使用内容。</p>
+              <p className="adminFieldHint">公开展示允许访客浏览列表、标题、封面和基础信息，播放、阅读、预览或下载时提示登录；公开可用允许访客直接使用内容。</p>
               <HomeCardOrderField initialOrder={settings.homePortalOrder} />
             </div>
             <div className="adminFieldGrid">

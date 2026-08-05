@@ -19,6 +19,7 @@ export function MediaVideoCard({
   thumbnail,
   thumbnailUrl,
   priority = false,
+  returnHref,
 }: {
   asset: MediaAsset;
   thumbnail: {
@@ -26,9 +27,10 @@ export function MediaVideoCard({
   };
   thumbnailUrl?: string | null;
   priority?: boolean;
+  returnHref?: string;
 }) {
   const title = displayTitle(asset.title, asset.fileName);
-  const watchHref = `/media/${asset.id}#watch`;
+  const watchHref = `/media/${asset.id}${returnHref ? `?from=${encodeURIComponent(returnHref)}` : ""}`;
   const isNew = Boolean(asset.newUntil && Date.parse(asset.newUntil) > Date.now());
   return (
     <article className="mediaVideoCard">

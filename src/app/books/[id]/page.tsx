@@ -97,7 +97,7 @@ export default async function BookPage({ params, searchParams }: BookPageProps) 
       requestHeaders={headerStore}
       user={user}
       locale={locale}
-      readAccess={getNovelReadAccess(book, user)}
+      readAccess={getNovelReadAccess(book, user, { contentPreview: true })}
     />
   );
 }

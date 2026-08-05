@@ -7,6 +7,7 @@ import test, { type TestContext } from "node:test";
 import {
   createVideoTag,
   isMediaKindAccessible,
+  isMediaKindConsumable,
   listMediaAssets,
   listMediaAssetsNeedingPreparation,
   listMediaFolders,
@@ -56,7 +57,7 @@ function withTempDatabase(t: TestContext) {
   });
 }
 
-test("applies public, signed-in, and disabled media access modes", (t) => {
+test("separates public metadata browsing from signed-in media consumption", (t) => {
   const originalSettingsPath = process.env.ADMIN_SETTINGS_PATH;
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-media-access-"));
   process.env.ADMIN_SETTINGS_PATH = path.join(directory, "settings.json");
@@ -70,13 +71,15 @@ test("applies public, signed-in, and disabled media access modes", (t) => {
     ...readSiteSettings(),
     homePortalAccessModes: {
       ...readSiteSettings().homePortalAccessModes,
-      video: "public",
+      video: "browse",
       audio: "member",
       file: "off",
     },
   });
 
   assert.equal(isMediaKindAccessible("video", false), true);
+  assert.equal(isMediaKindConsumable("video", false), false);
+  assert.equal(isMediaKindConsumable("video", true), true);
   assert.equal(isMediaKindAccessible("audio", false), false);
   assert.equal(isMediaKindAccessible("audio", true), true);
   assert.equal(isMediaKindAccessible("file", true), false);

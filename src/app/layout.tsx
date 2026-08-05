@@ -4,6 +4,8 @@ import { Suspense } from "react";
 import { DefaultPaletteRotation } from "@/components/DefaultPaletteRotation";
 import { LocalePreferenceSync } from "@/components/LocalePreferenceSync";
 import { NavigationProgress } from "@/components/NavigationProgress";
+import { RouteScrollState } from "@/components/RouteScrollState";
+import { SiteEntryNotice } from "@/components/SiteEntryNotice";
 import { ThemeScript } from "@/components/ThemeScript";
 import { getReaderDefaultFontSize, getSiteTitle } from "@/lib/config";
 import { getRequestLocale, localizeTexts } from "@/lib/locale-server";
@@ -70,6 +72,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       <body>
         <LocalePreferenceSync />
         <Suspense fallback={null}><NavigationProgress /></Suspense>
+        <Suspense fallback={null}><RouteScrollState /></Suspense>
         {settings.defaultPaletteRandomEnabled ? (
           <DefaultPaletteRotation
             fallback={settings.defaultPalette}
@@ -84,6 +87,12 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           <Script src={umami.recorderUrl} data-website-id={umami.websiteId} strategy="lazyOnload" />
         ) : null}
         {children}
+        <SiteEntryNotice
+          enabled={settings.siteEntryNoticeEnabled}
+          title={settings.siteEntryNoticeTitle}
+          markdown={settings.siteEntryNoticeMarkdown}
+          version={settings.siteEntryNoticeVersion}
+        />
       </body>
     </html>
   );

@@ -1,7 +1,8 @@
-import { BookOpen } from "lucide-react";
 import Link from "@/components/LocalizedLink";
+import { cookies } from "next/headers";
 import {
   canAccessAdvancedTagSearch,
+  getDefaultNovelLibrarySlug,
   getNoticeDisplaySeconds,
   getSiteBrandHref,
   getSiteName,
@@ -24,11 +25,14 @@ import { hasUserPermission } from "@/lib/user-levels";
 import type { UserProfile } from "@/lib/users";
 import { getRequestLocale, localizeText, localizeTexts } from "@/lib/locale-server";
 import { countUserUnreadMessages } from "@/lib/station";
+import { novelLibraryPreferenceCookieName } from "@/lib/novel-library-scope";
 import { isNovelSourceFullTextSearchEnabled } from "@/lib/novel-search-policy";
 import { HeaderSearch } from "./HeaderSearch";
+import { HeaderMediaSearch } from "./HeaderMediaSearch";
 import { HeaderPrimaryNav } from "./HeaderPrimaryNav";
 import { ReaderHeaderBehavior } from "./ReaderHeaderBehavior";
 import { HeaderUserMenu } from "./HeaderUserMenu";
+import { MobileContextBackLink } from "./MobileContextBackLink";
 import { ThemeToggle } from "./ThemeToggle";
 
 export async function SiteHeader({
@@ -42,10 +46,13 @@ export async function SiteHeader({
   isHomePage = false,
   readerMode = false,
   authMode = false,
-  library = "default",
+  library,
   currentSearchBookId,
   currentUser,
   unreadMessages,
+  mobileBackHref,
+  mobileBackLabel = "返回上一级",
+  mediaSearchKind,
 }: {
   query?: string;
   defaultSearchMode?: "title" | "content" | "current";
@@ -61,6 +68,9 @@ export async function SiteHeader({
   currentSearchBookId?: number;
   currentUser?: UserProfile | null;
   unreadMessages?: number;
+  mobileBackHref?: string;
+  mobileBackLabel?: string;
+  mediaSearchKind?: "video" | "audio" | "file";
 }) {
   const locale = await getRequestLocale();
   const siteName = await localizeText(getSiteName(), locale);
@@ -70,6 +80,10 @@ export async function SiteHeader({
   );
   const brandHref = getSiteBrandHref();
   const user = currentUser === undefined ? await getCurrentUser() : currentUser;
+  const rememberedLibrary = library === undefined && user
+    ? (await cookies()).get(novelLibraryPreferenceCookieName(user.id))?.value
+    : undefined;
+  const activeLibrary = library || rememberedLibrary || getDefaultNovelLibrarySlug();
   const loginEnabled = isUserLoginEnabled();
   const registrationEnabled = isUserRegistrationEnabled();
   const enabledMediaKinds = [
@@ -90,8 +104,9 @@ export async function SiteHeader({
   const showAdvancedSearch = canAccessAdvancedTagSearch(false) ||
     (canAccessAdvancedTagSearch(Boolean(user)) && hasUserPermission(user, "advanced_search"));
   const showMarket = Boolean(user && isMarketEnabled() && hasUserPermission(user, "market_access"));
-  const canShowSearch = showSearch && showLibraryNav && !authMode;
-  const contentSearchEnabled = library === "all" || isNovelSourceFullTextSearchEnabled(library);
+  const canShowNovelSearch = showSearch && !authMode && (readerMode || showLibraryNav);
+  const canShowSearch = Boolean(mediaSearchKind) || canShowNovelSearch;
+  const contentSearchEnabled = activeLibrary === "all" || isNovelSourceFullTextSearchEnabled(activeLibrary);
 
   const headerClassName = [
     "siteHeader",
@@ -99,21 +114,28 @@ export async function SiteHeader({
     isHomePage ? "isHomeHeader" : "",
     readerMode ? "readerSiteHeader" : "",
     authMode ? "isAuthHeader" : "",
+    mobileBackHref ? "hasMobileContext" : "",
   ]
     .filter(Boolean)
     .join(" ");
 
   return (
     <header className={headerClassName}>
+        {mobileBackHref ? (
+          <div className="mobileContextHeader">
+            <MobileContextBackLink href={mobileBackHref} label={mobileBackLabel} />
+          </div>
+        ) : null}
         <Link className="brand" href={brandHref} aria-label={brandHref === "/novels" ? novelsLabel : homeLabel}>
-          <BookOpen size={24} aria-hidden="true" />
           <span>{siteName}</span>
         </Link>
         {readerMode ? <ReaderHeaderBehavior /> : null}
         {showPrimaryNav ? <HeaderPrimaryNav mediaKinds={mediaKinds} showLibrary={showLibraryNav} showTags={showTagNav} /> : null}
         {showTools ? (
           <div className={canShowSearch ? "headerTools" : "headerTools hasNoSearch"}>
-            {canShowSearch ? (
+            {mediaSearchKind ? (
+              <HeaderMediaSearch kind={mediaSearchKind} />
+            ) : canShowNovelSearch ? (
               <HeaderSearch
                 query={query}
                 defaultMode={defaultSearchMode}
@@ -121,7 +143,7 @@ export async function SiteHeader({
                 showCurrentSearch={showCurrentSearch}
                 showAdvancedSearch={showAdvancedSearch}
                 noticeDisplaySeconds={noticeDisplaySeconds}
-                library={library}
+                library={activeLibrary}
                 contentSearchEnabled={contentSearchEnabled}
                 currentSearchBookId={currentSearchBookId}
               />

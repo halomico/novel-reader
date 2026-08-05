@@ -21,7 +21,7 @@ import {
 import { isNovelFavorite } from "@/lib/favorites";
 import type { AppLocale } from "@/lib/locale";
 import { localizeNovelSegments, localizeText, localizeTexts } from "@/lib/locale-server";
-import { getNovelReadAccess, type NovelReadAccess } from "@/lib/novel-access";
+import { getNovelReadAccess, getSodaNovelPreviewSegments, type NovelReadAccess } from "@/lib/novel-access";
 import {
   novelChapterContentVersion,
   getNovelSourceById,
@@ -113,6 +113,7 @@ async function ReaderContent({
   locale,
   initialProgress,
   resume,
+  preview,
 }: {
   book: Novel;
   chapterContext: ChapterContext | null;
@@ -122,11 +123,17 @@ async function ReaderContent({
   locale: AppLocale;
   initialProgress: ReadingProgress | null;
   resume: boolean;
+  preview: boolean;
 }) {
   const chapter = chapterContext?.chapter || null;
   const sourceSegments = chapter ? await readNovelChapterSegments(chapter) : await readNovelSegments(book);
   const contentVersion = chapter ? novelChapterContentVersion(chapter) : novelContentVersion(book);
-  const segments = await localizeNovelSegments(sourceSegments, locale, contentVersion);
+  const readableSegments = preview && !chapter ? getSodaNovelPreviewSegments(sourceSegments) : sourceSegments;
+  const segments = await localizeNovelSegments(
+    readableSegments,
+    locale,
+    preview && !chapter ? `${contentVersion}:soda-preview-30` : contentVersion,
+  );
   const path = chapter ? `/books/${book.id}/chapters/${chapter.id}` : `/books/${book.id}`;
   if (user) {
     after(() => {
@@ -158,7 +165,7 @@ async function ReaderContent({
           </section>
         ))}
       </div>
-      {user ? (
+      {user && !preview ? (
         <ReadingProgressTracker
           novelId={book.id}
           chapterId={chapter?.id || null}
@@ -194,9 +201,10 @@ export async function NovelReaderView({
 }) {
   const authenticated = Boolean(user);
   const chapter = chapterContext?.chapter || null;
+  const preview = readAccess.reason === "preview";
   const hitSegment = Number(query.hit);
   const showTags = isTagLibraryEnabled() && (authenticated || isTagLibraryPublic());
-  const showHotwords = readAccess.allowed && areHotwordLinksEnabled() && (authenticated || areGuestHotwordLinksEnabled());
+  const showHotwords = readAccess.allowed && !preview && areHotwordLinksEnabled() && (authenticated || areGuestHotwordLinksEnabled());
   const tagAudience = user?.role === "admin" ? "admin" : user ? "member" : "public";
   const sourceTags = showTags ? listTagsForNovel(book.id, { audience: tagAudience }) : [];
   const tags = filterTagsForUser(sourceTags, user?.id);
@@ -217,6 +225,8 @@ export async function NovelReaderView({
     query.from,
     library === "default" ? "/novels" : `/novels?library=${encodeURIComponent(library)}`,
   );
+  const chapterCatalogHref = `/books/${book.id}/chapters${query.from ? `?from=${encodeURIComponent(query.from)}` : ""}`;
+  const mobileBackHref = chapter ? chapterCatalogHref : catalogHref;
   const sourceChapters = book.storage_mode === "chapters" ? listNovelChapters(book.id) : [];
   const chapters = await Promise.all(sourceChapters.map(async (item) => ({
     id: item.id,
@@ -236,6 +246,8 @@ export async function NovelReaderView({
         currentUser={user}
         library={library}
         currentSearchBookId={currentSearchBookId}
+        mobileBackHref={mobileBackHref}
+        mobileBackLabel={chapter ? "返回章节目录" : "返回小说列表"}
       />
       <ReaderExperienceControls
         bookId={book.id}
@@ -272,7 +284,12 @@ export async function NovelReaderView({
             {chapter ? <p>{displayTitle}</p> : null}
           </div>
           {user?.role === "admin" ? (
-            <AdminReaderActions bookId={book.id} title={displayTitle} isPinned={isNovelPinned(book.id)} />
+            <AdminReaderActions
+              bookId={book.id}
+              title={displayTitle}
+              isPinned={isNovelPinned(book.id)}
+              returnHref={catalogHref}
+            />
           ) : null}
         </header>
         <ReaderTagLinks
@@ -290,6 +307,7 @@ export async function NovelReaderView({
               locale={locale}
               initialProgress={initialProgress}
               resume={query.resume === "1"}
+              preview={preview}
             />
           </Suspense>
         ) : (
@@ -299,6 +317,14 @@ export async function NovelReaderView({
             loginRequired={readAccess.reason === "login_required"}
           />
         )}
+        {preview ? (
+          <NovelAccessGate
+            novelId={book.id}
+            price={readAccess.price}
+            loginRequired={!authenticated}
+            preview
+          />
+        ) : null}
         {chapterContext && readAccess.allowed ? (
           <ChapterNavigation bookId={book.id} context={chapterContext} from={query.from} />
         ) : null}

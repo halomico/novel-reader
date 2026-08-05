@@ -13,6 +13,7 @@ import { recordSearchQuery, resolveSearchQueryEventKey } from "@/lib/analytics";
 import {
   canAccessAdvancedTagSearch,
   getCatalogPageSize,
+  getDefaultNovelLibrarySlug,
   getSearchResultsPageSize,
   shouldShowProgressBars,
 } from "@/lib/config";
@@ -71,7 +72,9 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
   const audience = user?.role === "admin" ? "admin" : user ? "member" : "public";
   const novelSources = listNovelSources({ includeEmpty: true })
     .filter((source) => source.slug === DEFAULT_NOVEL_LIBRARY_SLUG || source.novelCount > 0);
-  const libraryScope = resolveNovelLibraryScope(params.library || params.sourceLibrary);
+  const libraryScope = resolveNovelLibraryScope(
+    params.library || params.sourceLibrary || getDefaultNovelLibrarySlug(),
+  );
   const activeSource = libraryScope.kind === "source" ? libraryScope.source : null;
   const hiddenTagIds = user ? listEffectivelyHiddenTagIds(user.id) : new Set<number>();
   const sourceGroups = listTagGroups({
@@ -205,7 +208,6 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
           query={titleInput}
           basePath="/tags/search"
           extraParams={{ tags: selectedSlugs.join(",") || undefined, exclude: excludedSlugs.join(",") || undefined, library: libraryScope.slug === DEFAULT_NOVEL_LIBRARY_SLUG ? undefined : libraryScope.slug }}
-          hash="advanced-search-results"
         />
       ) : null}
     </main>

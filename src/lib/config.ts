@@ -63,6 +63,10 @@ export function getSettingsPreviewText(): string {
   return readSiteSettings().settingsPreviewText;
 }
 
+export function getDefaultNovelLibrarySlug(): string {
+  return readSiteSettings().defaultNovelLibrarySlug || "default";
+}
+
 export function getReaderDefaultFontSize(): number {
   return readSiteSettings().readerDefaultFontSize;
 }

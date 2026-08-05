@@ -5,6 +5,8 @@ import path from "node:path";
 import test from "node:test";
 import type { HomePortalCardKey } from "./home-portal";
 import {
+  canBrowseHomePortal,
+  canConsumeHomePortal,
   isHomePortalCardVisible,
   resolveHomePortalAccessMode,
 } from "./home-portal";
@@ -13,6 +15,7 @@ import {
   canAccessHomeAnnouncementCard,
   canAccessNovelLibrary,
   canConsumeNovelLibrary,
+  getDefaultNovelLibrarySlug,
   getSettingsPreviewText,
   isAdvancedTagSearchPublic,
   isNovelLibraryPublic,
@@ -45,6 +48,11 @@ test("atomically replaces an existing settings file", () => {
     assert.equal(defaults.readerDefaultFontSize, 18);
     assert.equal(defaults.readerDefaultLineHeight, 1.7);
     assert.equal(defaults.readerDefaultTagsMode, "collapsed");
+    assert.equal(defaults.defaultNovelLibrarySlug, "default");
+    assert.equal(defaults.siteEntryNoticeEnabled, false);
+    assert.equal(defaults.siteEntryNoticeTitle, "重要通知");
+    assert.equal(defaults.siteEntryNoticeMarkdown, "");
+    assert.equal(defaults.siteEntryNoticeVersion, "");
     assert.equal(defaults.manualPinnedNovelsEnabled, true);
     assert.equal(defaults.randomRecommendationsEnabled, false);
     assert.equal(defaults.catalogPromotionOrder, "manual-first");
@@ -123,6 +131,7 @@ test("preserves an empty settings preview and normalizes home portal settings", 
     writeSiteSettings({
       ...readSiteSettings(),
       settingsPreviewText: "",
+      defaultNovelLibrarySlug: "all",
       homePortalAccessModes: {
         ...readSiteSettings().homePortalAccessModes,
         announcement: "member",
@@ -135,6 +144,7 @@ test("preserves an empty settings preview and normalizes home portal settings", 
     });
     const settings = readSiteSettings();
     assert.equal(getSettingsPreviewText(), "");
+    assert.equal(getDefaultNovelLibrarySlug(), "all");
     assert.deepEqual(settings.homePortalOrder.slice(0, 3), ["recent", "novels", "announcement"]);
     assert.equal(canAccessHomeAnnouncementCard(false), false);
     assert.equal(canAccessHomeAnnouncementCard(true), true);
@@ -151,7 +161,7 @@ test("preserves an empty settings preview and normalizes home portal settings", 
   }
 });
 
-test("separates public home-card display from public content access", () => {
+test("separates public metadata browsing from public content consumption", () => {
   const publicMode = resolveHomePortalAccessMode(true, true, false);
   const browseMode = resolveHomePortalAccessMode(true, false, true);
   const memberMode = resolveHomePortalAccessMode(true, false, false);
@@ -159,6 +169,8 @@ test("separates public home-card display from public content access", () => {
   assert.equal(browseMode, "browse");
   assert.equal(memberMode, "member");
   assert.equal(isHomePortalCardVisible(browseMode, false), true);
+  assert.equal(canBrowseHomePortal(browseMode, false), true);
+  assert.equal(canConsumeHomePortal(browseMode, false), false);
   assert.equal(isHomePortalCardVisible(memberMode, false), false);
   assert.equal(isHomePortalCardVisible(memberMode, true), true);
   assert.equal(isHomePortalCardVisible(resolveHomePortalAccessMode(false, true, true), true), false);
@@ -306,10 +318,10 @@ test("applies disabled, signed-in, and public novel access modes", () => {
       homePortalAccessModes: { ...readSiteSettings().homePortalAccessModes, novels: "browse" },
     });
     assert.equal(isHomePortalCardVisible("browse", false), true);
-    assert.equal(canAccessNovelLibrary(false), false);
+    assert.equal(canAccessNovelLibrary(false), true);
     assert.equal(canConsumeNovelLibrary(false), false);
     assert.equal(canConsumeNovelLibrary(true), true);
-    assert.equal(isNovelLibraryPublic(), false);
+    assert.equal(isNovelLibraryPublic(), true);
 
     writeSiteSettings({
       ...readSiteSettings(),

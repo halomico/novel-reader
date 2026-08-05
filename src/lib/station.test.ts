@@ -7,6 +7,7 @@ import test, { type TestContext } from "node:test";
 import { getDb } from "./db";
 import {
   addStationReply,
+  countAdminUnreadMessages,
   countUserUnreadMessages,
   createStationThread,
   deleteStationThread,
@@ -80,9 +81,11 @@ test("keeps station messages private and updates unread state", (t) => {
   const threadId = createStationThread(userId, "标签问题", "这里有一处错误");
   assert.equal(listUserStationThreads(userId)[0].unreadForUser, false);
   assert.equal(getStationThread(threadId, { admin: true })?.unreadForAdmin, true);
+  assert.equal(countAdminUnreadMessages(), 1);
 
   markStationThreadRead(threadId, "admin");
   assert.equal(getStationThread(threadId, { admin: true })?.unreadForAdmin, false);
+  assert.equal(countAdminUnreadMessages(), 0);
   assert.equal(addStationReply({ threadId, authorRole: "admin", body: "已经处理" }), true);
   assert.equal(getStationThread(threadId, { userId })?.unreadForUser, true);
   assert.equal(listStationMessages(threadId).length, 2);

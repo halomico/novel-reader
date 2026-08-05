@@ -6,12 +6,14 @@ import {
   AdminSidebarNavigation,
   type AdminNavKey,
 } from "@/components/AdminNavigation";
+import { AdminMessageLink } from "@/components/AdminMessageLink";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
 import { Breadcrumbs, type BreadcrumbItem } from "@/components/Breadcrumbs";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
 import { getNoticeDisplaySeconds, getSiteName } from "@/lib/config";
+import { countAdminUnreadMessages } from "@/lib/station";
 import { logoutAdminAction } from "./actions";
 
 type AdminFrameProps = {
@@ -70,6 +72,7 @@ export async function AdminFrame({ active, notice = "", tone, breadcrumbs, child
 
   const siteName = getSiteName();
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
+  const unreadMessages = active === "station" ? 0 : countAdminUnreadMessages();
   const trail = breadcrumbs ?? (active === "home" ? [] : [{ label: titleFor(active) }]);
   const breadcrumbItems: BreadcrumbItem[] = [
     trail.length ? { label: "后台", href: "/admin" } : { label: "后台" },
@@ -86,6 +89,7 @@ export async function AdminFrame({ active, notice = "", tone, breadcrumbs, child
             <h1>{titleFor(active)}</h1>
           </div>
           <div className="adminTopActions">
+            <AdminMessageLink unreadCount={unreadMessages} active={active === "station"} />
             <ThemeToggle />
             <AdminMobileNavigation active={active} logoutAction={logoutAdminAction} />
           </div>

@@ -9,6 +9,29 @@ type PlaybackLease = {
   expiresAt: number;
 };
 
+function playbackErrorName(reason: unknown): string {
+  return reason && typeof reason === "object" && "name" in reason
+    ? String((reason as { name?: unknown }).name || "")
+    : "";
+}
+
+function playRequestErrorMessage(reason: unknown): string {
+  const name = playbackErrorName(reason);
+  if (name === "NotSupportedError") return "当前浏览器不支持此视频编码或格式";
+  if (name === "NetworkError") return "网络连接中断，请检查网络后重试";
+  if (name === "SecurityError") return "浏览器阻止了当前视频地址";
+  return "无法开始播放，请重试";
+}
+
+function mediaErrorMessage(error: MediaError | null): string {
+  if (!error) return "视频加载失败，请重试";
+  if (error.code === 1) return "视频加载已中止，请重新播放";
+  if (error.code === 2) return "视频加载时网络中断，请检查网络后重试";
+  if (error.code === 3) return "视频解码失败，建议更新 Safari 或切换浏览器";
+  if (error.code === 4) return "当前浏览器不支持此视频编码或格式";
+  return "视频加载失败，请重试";
+}
+
 export function MediaPlayer({
   id,
   posterVersion,
@@ -42,6 +65,8 @@ export function MediaPlayer({
   const [sourceUrl, setSourceUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [manualPlayRequired, setManualPlayRequired] = useState(false);
+  const [playbackHint, setPlaybackHint] = useState("");
   const [playbackAllowed, setPlaybackAllowed] = useState(initialPlaybackAllowed);
   const [accessExpiresAt, setAccessExpiresAt] = useState(initialAccessExpiresAt);
   const mediaBasePath = useMemo(() => basePath || `/media/${id}`, [basePath, id]);
@@ -82,7 +107,7 @@ export function MediaPlayer({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mediaId: id, clientId: clientId() }),
     });
-    const body = await response.json() as {
+    const body = await response.json().catch(() => ({})) as {
       ok?: boolean;
       message?: string;
       sessionId?: string;
@@ -104,7 +129,7 @@ export function MediaPlayer({
     }
     if (!authenticated) throw new Error("登录后可用苏打解锁");
     const response = await fetch(`/api/media/${id}/unlock`, { method: "POST" });
-    const body = await response.json() as {
+    const body = await response.json().catch(() => ({})) as {
       ok?: boolean;
       message?: string;
       expiresAt?: number | null;
@@ -114,10 +139,36 @@ export function MediaPlayer({
     setAccessExpiresAt(body.expiresAt || null);
   }, [accessExpiresAt, authenticated, contentAccessible, id, playbackAllowed]);
 
-  const startPlayback = useCallback(async () => {
-    if (loading) return;
+  const failPlayback = useCallback((message: string) => {
+    pendingPlayRef.current = false;
+    releaseLease();
+    setSourceUrl("");
+    setLoading(false);
+    setManualPlayRequired(false);
+    setPlaybackHint("");
+    setError(message);
+  }, [releaseLease]);
+
+  const handlePlayRejection = useCallback((reason: unknown) => {
+    const name = playbackErrorName(reason);
+    if (name === "NotAllowedError" || name === "AbortError") {
+      setLoading(false);
+      setError("");
+      setManualPlayRequired(true);
+      setPlaybackHint(name === "NotAllowedError" ? "视频已就绪，点击播放" : "播放被浏览器暂停，点击继续");
+      return;
+    }
+    failPlayback(playRequestErrorMessage(reason));
+  }, [failPlayback]);
+
+  const startPlayback = useCallback(async (force = false) => {
+    if (loading && !force) return;
+    pendingPlayRef.current = false;
+    releaseLease();
     setLoading(true);
     setError("");
+    setManualPlayRequired(false);
+    setPlaybackHint("");
     try {
       await ensurePlaybackAccess();
       const lease = await acquireLease();
@@ -130,21 +181,46 @@ export function MediaPlayer({
       pendingPlayRef.current = true;
       setSourceUrl(`${mediaBasePath}/stream?${params.toString()}`);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "暂时无法开始播放");
-      setLoading(false);
+      failPlayback(reason instanceof TypeError
+        ? "网络连接异常，请检查网络后重试"
+        : reason instanceof Error ? reason.message : "暂时无法开始播放");
     }
-  }, [acquireLease, ensurePlaybackAccess, loading, mediaBasePath, sourceVersion]);
+  }, [acquireLease, ensurePlaybackAccess, failPlayback, loading, mediaBasePath, releaseLease, sourceVersion]);
+
+  const playLoadedVideo = useCallback(() => {
+    if (loading) return;
+    const lease = leaseRef.current;
+    if (lease && lease.expiresAt <= Date.now()) {
+      releaseLease();
+      setSourceUrl("");
+      setManualPlayRequired(false);
+      setPlaybackHint("");
+      void startPlayback();
+      return;
+    }
+    const video = videoRef.current;
+    if (!video) {
+      failPlayback("播放器尚未准备好，请重试");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    setManualPlayRequired(false);
+    setPlaybackHint("");
+    try {
+      void video.play().catch(handlePlayRejection);
+    } catch (reason) {
+      handlePlayRejection(reason);
+    }
+  }, [failPlayback, handlePlayRejection, loading, releaseLease, startPlayback]);
 
   useEffect(() => {
     if (!sourceUrl || !pendingPlayRef.current) return;
     pendingPlayRef.current = false;
     const video = videoRef.current;
     if (!video) return;
-    video.load();
-    void video.play().catch(() => {
-      setLoading(false);
-    });
-  }, [sourceUrl]);
+    void video.play().catch(handlePlayRejection);
+  }, [handlePlayRejection, sourceUrl]);
 
   useEffect(() => releaseLease, [releaseLease]);
 
@@ -154,10 +230,12 @@ export function MediaPlayer({
       videoRef.current?.pause();
       releaseLease();
       setSourceUrl("");
-      void startPlayback();
+      void startPlayback(true);
       return;
     }
     setLoading(false);
+    setManualPlayRequired(false);
+    setPlaybackHint("");
     if (!countedRef.current) {
       countedRef.current = true;
       void fetch(`${mediaBasePath}/play`, { method: "POST", keepalive: true }).catch(() => {
@@ -216,20 +294,19 @@ export function MediaPlayer({
         playsInline
         poster={poster}
         preload={sourceUrl ? "metadata" : "none"}
+        src={sourceUrl || undefined}
         onPlay={recordPlay}
         onPause={handlePause}
         onEnded={handleEnded}
-        onError={() => {
+        onError={(event) => {
           if (sourceUrl) {
-            setLoading(false);
-            setError("视频加载失败，请重试");
+            failPlayback(mediaErrorMessage(event.currentTarget.error));
           }
         }}
       >
-        {sourceUrl ? <source src={sourceUrl} /> : null}
         当前浏览器无法播放这个视频。
       </video>
-      {!sourceUrl || error ? (
+      {!sourceUrl || loading || error || manualPlayRequired ? (
         <div className="mediaVideoStartLayer">
           <button
             className={needsUnlock || needsLogin ? "isUnlockAction" : ""}
@@ -239,10 +316,14 @@ export function MediaPlayer({
                 window.location.assign(`/login?${new URLSearchParams({ returnTo: `/media/${id}` }).toString()}`);
                 return;
               }
+              if (manualPlayRequired && sourceUrl) {
+                playLoadedVideo();
+                return;
+              }
               void startPlayback();
             }}
             disabled={loading}
-            aria-label={needsLogin ? "登录后播放" : needsUnlock ? `使用 ${playSodaPrice} 苏打解锁 24 小时` : error ? "重新播放" : "播放视频"}
+            aria-label={needsLogin ? "登录后播放" : needsUnlock ? `使用 ${playSodaPrice} 苏打解锁 24 小时` : manualPlayRequired ? "视频已就绪，点击播放" : error ? "重新播放" : "播放视频"}
           >
             {loading ? <LoaderCircle className="isSpinning" size={23} aria-hidden="true" /> :
               needsLogin ? (
@@ -252,6 +333,7 @@ export function MediaPlayer({
               ) : error ? <RotateCcw size={22} aria-hidden="true" /> : <Play size={24} fill="currentColor" aria-hidden="true" />}
           </button>
           {error ? <p role="alert">{error}</p> : null}
+          {!error && playbackHint ? <p>{playbackHint}</p> : null}
         </div>
       ) : null}
     </div>

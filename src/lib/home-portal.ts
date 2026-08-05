@@ -79,7 +79,7 @@ export function isHomePortalEntryVisible(mode: HomePortalAccessMode, authenticat
 }
 
 export function canBrowseHomePortal(mode: HomePortalAccessMode, authenticated: boolean): boolean {
-  return mode === "public" || (authenticated && (mode === "browse" || mode === "member"));
+  return mode === "browse" || mode === "public" || (authenticated && mode === "member");
 }
 
 export function canConsumeHomePortal(mode: HomePortalAccessMode, authenticated: boolean): boolean {

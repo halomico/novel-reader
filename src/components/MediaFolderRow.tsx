@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, Folder } from "lucide-react";
+import { Folder } from "lucide-react";
 import Link from "@/components/LocalizedLink";
 import { uiText, type AppLocale } from "@/lib/locale";
 
@@ -30,7 +30,6 @@ export function MediaFolderRow({
         <small>{uiText(locale, "文件夹")}</small>
       </span>
       <span className="mediaCardSize">{sizeLabel}</span>
-      <ChevronRight size={17} aria-hidden="true" />
     </Link>
   );
 }

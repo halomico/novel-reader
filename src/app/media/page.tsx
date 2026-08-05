@@ -1,4 +1,4 @@
-import { ChevronRight, Clapperboard, File, Headphones, Search, X } from "lucide-react";
+import { Clapperboard, File, Headphones, Search, X } from "lucide-react";
 import type { Metadata } from "next";
 import Form from "next/form";
 import Link from "@/components/LocalizedLink";
@@ -147,7 +147,6 @@ function MediaResourceRow({
         <small title={metadata}>{metadata}</small>
       </span>
       <span className="mediaCardSize">{asset.kind === "audio" ? formatMediaDuration(asset.durationSeconds) : formatBytes(asset.sizeBytes)}</span>
-      <ChevronRight size={17} aria-hidden="true" />
     </Link>
   );
 }
@@ -214,6 +213,12 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
     sortOrder,
   });
   const result = { ...sourceResult, query: queryInput };
+  const videoListBaseHref = kind === "video"
+    ? mediaHref(kind, "", result.query, categoryParam, sortBy, sortOrder, tagParam)
+    : "";
+  const videoListReturnHref = kind === "video" && result.page > 1
+    ? `${videoListBaseHref}&page=${result.page}`
+    : videoListBaseHref;
   const displayAssets = await Promise.all(result.assets.map(async (asset) => ({
     ...asset,
     title: await localizeText(asset.title, locale),
@@ -293,12 +298,9 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
       <MediaConnectionHint origin={mediaPublicOrigin} />
       <main className="appShell">
       <SiteHeader currentUser={user} />
-      <Breadcrumbs items={breadcrumbItems} />
       <section className="mediaLibrary">
         <header className="mediaLibraryHeader">
-          <div className="mediaLibraryHeading">
-            <h1>{displayVideoTag ? `#${displayVideoTag.name}` : displayCategory?.name || uiText(locale, KIND_LABELS[kind])}</h1>
-          </div>
+          <Breadcrumbs items={breadcrumbItems} />
           <div className="mediaLibraryActions">
             <MediaPublicSort
               kind={kind}
@@ -371,6 +373,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
                         ? directMediaThumbnailUrl(asset, thumbnailSettings.singlePercent, publiclyAccessibleThumbnails)
                         : null}
                       priority={index < 8}
+                      returnHref={videoListReturnHref}
                       key={asset.id}
                     />
                   ))}

@@ -35,7 +35,7 @@ export function AdminNovelAccessFields({
           </label>
           {storageMode === "chapters" ? (
             <label>
-              <span>免费预览</span>
+              <span>试读章节</span>
               <input
                 name="previewChapterCount"
                 type="number"
@@ -43,7 +43,7 @@ export function AdminNovelAccessFields({
                 max={chapterCount}
                 defaultValue={previewChapterCount}
               />
-              <small>前几章可直接阅读</small>
+              <small>系统至少开放前约 30%；填写更大数值可增加试读章节</small>
             </label>
           ) : null}
         </>

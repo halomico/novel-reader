@@ -518,7 +518,6 @@ export default async function AdminAnalyticsPage({ searchParams }: AdminAnalytic
             query=""
             basePath="/admin/analytics"
             extraParams={paginationParams}
-            hash="realtime-activity"
           />
         </section>
       </section>

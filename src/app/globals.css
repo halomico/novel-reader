@@ -1,12 +1,12 @@
 :root {
   color-scheme: light;
-  --theme-bg: #f7f7f8;
-  --theme-bg-soft: #fafafa;
+  --theme-bg: #f6f7f8;
+  --theme-bg-soft: #fafbfc;
   --theme-surface: #ffffff;
-  --theme-surface-strong: #f0f1f3;
-  --theme-text: #202124;
-  --theme-muted: #676d75;
-  --theme-border: #e1e3e7;
+  --theme-surface-strong: #f1f2f4;
+  --theme-text: #1f2329;
+  --theme-muted: #646a73;
+  --theme-border: #e5e6eb;
   --palette-light-accent: #9f3142;
   --palette-light-strong: #7d2433;
   --palette-dark-accent: #b65d2d;
@@ -22,6 +22,7 @@
   --accent-strong: var(--palette-light-strong);
   --tag-color: var(--accent-strong);
   --font-ui: "PingFang SC", "PingFang TC", -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --font-brand: "OpenAI Sans", "SF Pro Display", "Segoe UI Variable Display", "Inter", "PingFang SC", "PingFang TC", "Microsoft YaHei UI", sans-serif;
   --font-title: var(--font-ui);
   --font-content-title: "PingFang SC", "PingFang TC", -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
   --font-reading: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
@@ -69,13 +70,13 @@
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --theme-bg: #f7f7f8;
-  --theme-bg-soft: #fafafa;
+  --theme-bg: #f6f7f8;
+  --theme-bg-soft: #fafbfc;
   --theme-surface: #ffffff;
-  --theme-surface-strong: #f0f1f3;
-  --theme-text: #202124;
-  --theme-muted: #676d75;
-  --theme-border: #e1e3e7;
+  --theme-surface-strong: #f1f2f4;
+  --theme-text: #1f2329;
+  --theme-muted: #646a73;
+  --theme-border: #e5e6eb;
   --accent: var(--palette-light-accent);
   --accent-strong: var(--palette-light-strong);
   --tag-color: var(--accent-strong);
@@ -194,14 +195,26 @@ textarea {
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 0;
   grid-column: 1;
   grid-row: 1;
   color: var(--accent);
-  font-family: var(--font-title);
-  font-size: 24px;
-  font-weight: 650;
-  letter-spacing: 0;
+  font-family: var(--font-brand);
+  font-size: 23px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.028em;
+  text-rendering: geometricPrecision;
+  transition: color 150ms ease;
+}
+
+.brand:hover,
+.brand:focus-visible {
+  color: var(--accent-strong);
+}
+
+.mobileContextHeader {
+  display: none;
 }
 
 .searchForm {
@@ -285,12 +298,26 @@ textarea {
   height: 32px;
   border: 0;
   border-radius: 6px;
-  padding: 0 10px;
+  padding: 0 9px;
   background: transparent;
-  color: var(--accent);
+  color: color-mix(in srgb, var(--accent) 84%, var(--text));
   cursor: pointer;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.015em;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.searchForm .searchSubmit:focus-visible {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--accent-strong);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .searchForm .searchSubmit:hover {
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
+    color: var(--accent-strong);
+  }
 }
 
 .searchModeMenu {
@@ -658,6 +685,10 @@ textarea {
 
 .homePortalCard.is-random {
   --portal-accent: color-mix(in srgb, #52794e 84%, var(--text));
+}
+
+.homePortalCard.hasNoTrailingIcon {
+  grid-template-columns: 54px minmax(0, 1fr);
 }
 
 .homePortalCard:hover,
@@ -1676,29 +1707,22 @@ button.pageNumber {
   margin-left: auto;
 }
 
-.adminReaderActions a,
 .adminReaderActions button {
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   place-items: center;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  border: 0;
+  border-radius: 50%;
   padding: 0;
-  background: color-mix(in srgb, var(--surface-strong) 38%, transparent);
+  background: transparent;
   color: var(--muted);
   cursor: pointer;
 }
 
-.adminReaderActions a:hover,
-.adminReaderActions a:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
-  color: var(--accent);
-}
-
 .adminReaderActions button:hover,
 .adminReaderActions button:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
   color: var(--accent);
 }
 
@@ -1707,14 +1731,13 @@ button.pageNumber {
 }
 
 .adminReaderActions .adminReaderPinButton.isActive {
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent);
 }
 
 .adminReaderActions .adminReaderDeleteButton:hover,
 .adminReaderActions .adminReaderDeleteButton:focus-visible {
-  border-color: color-mix(in srgb, #b3261e 42%, var(--border));
+  background: color-mix(in srgb, #b3261e 9%, transparent);
   color: #b3261e;
 }
 
@@ -2937,6 +2960,17 @@ mark {
   justify-content: space-between;
 }
 
+.mediaLibraryHeader > .breadcrumbs {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  margin: 0;
+}
+
+.mediaLibraryHeader > .breadcrumbs ol {
+  overflow: hidden;
+}
+
 .mediaLibraryHeading {
   display: flex;
   min-width: 0;
@@ -2975,8 +3009,9 @@ mark {
 
 .mediaLibraryActions {
   display: flex;
-  width: min(68%, 560px);
+  width: min(330px, 48%);
   min-width: 0;
+  flex: 0 1 330px;
   align-items: center;
   justify-content: flex-end;
   gap: 7px;
@@ -3233,9 +3268,9 @@ mark {
 }
 
 .mediaLibraryActions .mediaSearchForm {
-  width: auto;
-  min-width: 110px;
-  flex: 1 1 auto;
+  width: min(280px, 100%);
+  min-width: 0;
+  flex: 0 1 280px;
 }
 
 .mediaSearchForm input {
@@ -3738,7 +3773,7 @@ mark {
 
 .mediaResourceRow {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto 20px;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
   align-items: center;
   gap: 11px;
   min-width: 0;
@@ -4407,17 +4442,6 @@ mark {
   gap: 12px;
 }
 
-.adminLogo {
-  display: inline-flex;
-  width: 42px;
-  height: 42px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--accent) 13%, transparent);
-  color: var(--accent);
-}
-
 .adminLoginBrand p,
 .adminTitleBlock p,
 .adminPanelHeader p {
@@ -4644,6 +4668,25 @@ mark {
 .adminTopActions {
   align-items: center;
   gap: 4px;
+}
+
+.adminMessageLink {
+  position: relative;
+}
+
+.adminMessageLink.isActive {
+  color: var(--accent);
+}
+
+.adminUnreadDot {
+  position: absolute;
+  top: 5px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e5484d;
+  box-shadow: 0 0 0 2px var(--bg), 0 2px 6px rgb(229 72 77 / 42%);
 }
 
 .adminTopActions .iconLink,
@@ -5119,12 +5162,6 @@ mark {
 
 .adminSidebar.isCollapsed .adminSidebarHeader,
 :root[data-admin-sidebar="collapsed"] .adminSidebarHeader {
-  justify-content: center;
-  padding-inline: 0;
-}
-
-.adminSidebar.isCollapsed .adminBrandCompact span:last-child,
-:root[data-admin-sidebar="collapsed"] .adminBrandCompact span:last-child {
   display: none;
 }
 
@@ -5154,8 +5191,18 @@ mark {
   gap: 10px;
   min-width: 0;
   color: var(--accent);
+  font-family: var(--font-brand);
   font-size: 18px;
-  font-weight: 800;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.024em;
+  text-rendering: geometricPrecision;
+  transition: color 150ms ease;
+}
+
+.adminBrandCompact:hover,
+.adminBrandCompact:focus-visible {
+  color: var(--accent-strong);
 }
 
 .adminBrandCompact span:last-child {
@@ -9372,8 +9419,13 @@ a.analyticsSearchTag:focus-visible {
   }
 
   .mediaLibraryActions {
-    width: auto;
-    flex: 1 1 0;
+    width: min(220px, 65%);
+    flex: 0 1 220px;
+  }
+
+  .mediaLibraryActions .mediaSearchForm {
+    width: min(180px, 100%);
+    flex-basis: 180px;
   }
 
   .mediaExplorer {
@@ -10006,7 +10058,7 @@ a.analyticsSearchTag:focus-visible {
 
 .mediaResourceRow {
   min-height: 66px;
-  grid-template-columns: 32px minmax(0, 1fr) auto 18px;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
   padding-block: 8px;
 }
 
@@ -16829,15 +16881,8 @@ a.analyticsSearchTag:focus-visible {
   gap: 16px;
 }
 
-.novelChapterCatalogHeader > span:first-child {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 10px;
-  color: var(--accent);
-}
-
 .novelChapterCatalogHeader h1 {
+  min-width: 0;
   overflow: hidden;
   margin: 0;
   color: var(--text);
@@ -18116,7 +18161,13 @@ a.analyticsSearchTag:focus-visible {
 
   .readerShell {
     width: 100%;
+    min-height: 100dvh;
     padding-top: 0;
+    background: var(--reader-paper);
+  }
+
+  .readerShell::before {
+    background: var(--reader-paper);
   }
 
   .readerShell .readerSiteHeader {
@@ -18860,7 +18911,7 @@ a.analyticsSearchTag:focus-visible {
 .mediaResourceRow,
 .mediaResourceRow.isAudioRow {
   min-height: 66px;
-  grid-template-columns: 32px minmax(0, 1fr) auto 18px;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
   border: 0;
   border-bottom: 1px solid var(--border);
   border-radius: 0;

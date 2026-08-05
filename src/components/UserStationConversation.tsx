@@ -146,6 +146,7 @@ export function UserStationConversation({
                 }
               }}
               rows={1}
+              enterKeyHint="send"
               placeholder={placeholder}
               required
             />

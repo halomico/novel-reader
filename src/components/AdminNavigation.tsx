@@ -108,9 +108,6 @@ export function AdminSidebarNavigation({
     <aside className={collapsed ? "adminSidebar isCollapsed" : "adminSidebar"}>
       <div className="adminSidebarHeader">
         <Link className="adminBrandCompact" href="/admin" title={siteName}>
-          <span className="adminLogo" aria-hidden="true">
-            <BookOpen size={21} />
-          </span>
           <span>{siteName}</span>
         </Link>
       </div>

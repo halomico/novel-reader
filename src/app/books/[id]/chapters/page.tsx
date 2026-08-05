@@ -1,4 +1,4 @@
-import { BookOpenText, ChevronRight, LockKeyhole } from "lucide-react";
+import { ChevronRight, LockKeyhole } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
@@ -13,7 +13,7 @@ import { getNovelById } from "@/lib/books";
 import { canAccessNovelLibrary, canConsumeNovelLibrary, isGuestLibraryNavEnabled, isNovelLibraryPublic } from "@/lib/config";
 import { checkContentAccess } from "@/lib/content-access";
 import { getRequestLocale, localizeText, localizeTexts } from "@/lib/locale-server";
-import { getNovelReadAccess } from "@/lib/novel-access";
+import { getNovelPreviewChapterCount, getNovelReadAccess } from "@/lib/novel-access";
 import { getNovelSourceById, listNovelChaptersPage } from "@/lib/novel-library";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { getCurrentUser } from "@/lib/user-auth";
@@ -68,10 +68,9 @@ export default async function NovelChaptersPage({
     ...chapter,
     title: await localizeText(chapter.title, locale),
   })));
-  const fullAccess = getNovelReadAccess(book, user, {
-    chapterSortOrder: Math.max(book.preview_chapter_count, 0),
-  }).allowed;
-  const previewAvailable = canConsumeNovelLibrary(Boolean(user)) && book.preview_chapter_count > 0;
+  const previewChapterCount = getNovelPreviewChapterCount(book);
+  const fullAccess = getNovelReadAccess(book, user, { chapterSortOrder: previewChapterCount }).allowed;
+  const previewAvailable = canConsumeNovelLibrary(Boolean(user)) && previewChapterCount > 0;
   const returnQuery = query.from ? `?from=${encodeURIComponent(query.from)}` : "";
 
   return (
@@ -85,12 +84,12 @@ export default async function NovelChaptersPage({
           { label: chaptersLabel },
         ]} />
         <header className="novelChapterCatalogHeader">
-          <span><BookOpenText size={22} aria-hidden="true" /><h1>{displayTitle}</h1></span>
+          <h1>{displayTitle}</h1>
           <ResultCount count={result.totalChapters} unit="章" />
         </header>
         <section className="novelChapterGrid" aria-label={`${displayTitle}章节`}>
           {displayChapters.map((chapter) => {
-            const locked = !fullAccess && !(previewAvailable && chapter.sortOrder < book.preview_chapter_count);
+            const locked = !fullAccess && !(previewAvailable && chapter.sortOrder < previewChapterCount);
             return (
               <Link
                 className={locked ? "novelChapterCard isLocked" : "novelChapterCard"}

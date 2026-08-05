@@ -26,6 +26,7 @@ import { novelLibraryPreferenceCookieName } from "@/lib/novel-library-scope";
 import {
   canAccessNovelLibrary,
   getCatalogPageSize,
+  getDefaultNovelLibrarySlug,
   getSiteTitle,
   isGuestLibraryNavEnabled,
   isNovelLibraryPublic,
@@ -121,7 +122,9 @@ export default async function NovelsPage({ searchParams }: NovelsPageProps) {
   const rememberedLibrary = !requestedLibrary && user
     ? (await cookies()).get(novelLibraryPreferenceCookieName(user.id))?.value
     : undefined;
-  const libraryScope = resolveNovelLibraryScope(requestedLibrary || rememberedLibrary);
+  const libraryScope = resolveNovelLibraryScope(
+    requestedLibrary || rememberedLibrary || getDefaultNovelLibrarySlug(),
+  );
   const activeSource = libraryScope.kind === "source" ? libraryScope.source : null;
   const randomSeed = query ? "" : params.random || "";
   const sourceResult = listNovels({ page, q: normalizedQuery, pageSize, randomSeed, sourceId: activeSource?.id });

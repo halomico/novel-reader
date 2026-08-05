@@ -77,7 +77,14 @@ import {
   updateNovelFile,
   updateNovelSourceSettings,
 } from "@/lib/novel-files";
-import { getNovelSourceById, updateNovelAccessPolicy, updateNovelChapterOverrides, updateNovelDescription } from "@/lib/novel-library";
+import {
+  ALL_NOVEL_LIBRARIES_SLUG,
+  getNovelSourceById,
+  listNovelSources,
+  updateNovelAccessPolicy,
+  updateNovelChapterOverrides,
+  updateNovelDescription,
+} from "@/lib/novel-library";
 import { getNovelSourceSearchMode, removeNovelSourceSearchMode, setNovelSourceSearchMode } from "@/lib/novel-search-policy";
 import { hashPassword } from "@/lib/password";
 import { replacePinnedNovels, togglePinnedNovel } from "@/lib/pinned-novels";
@@ -772,8 +779,39 @@ export async function saveAdminSettingsAction(formData: FormData) {
     file: fileAccessMode,
   };
   const defaultPalette = String(formData.get("defaultPalette") || "default");
+  const defaultNovelLibrarySlug = String(formData.get("defaultNovelLibrarySlug") || "default")
+    .normalize("NFKC")
+    .trim()
+    .toLocaleLowerCase("en-US")
+    .slice(0, 64);
+  const availableNovelLibrarySlugs = new Set([
+    ALL_NOVEL_LIBRARIES_SLUG,
+    ...listNovelSources({ includeEmpty: true }).map((source) => source.slug),
+  ]);
+  if (!availableNovelLibrarySlugs.has(defaultNovelLibrarySlug)) {
+    adminNotice("默认进入书库不存在，请重新选择", "warning", "/admin/settings");
+  }
   const adminAllowedNetworks = normalizeAdminNetworkRules(formData.get("adminAllowedNetworks"));
   const adminIpAllowlistEnabled = formData.get("adminIpAllowlistEnabled") === "on";
+  const siteEntryNoticeEnabled = formData.get("siteEntryNoticeEnabled") === "on";
+  const siteEntryNoticeTitle = String(formData.get("siteEntryNoticeTitle") || "")
+    .normalize("NFKC")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .slice(0, 80) || "重要通知";
+  const siteEntryNoticeRaw = String(formData.get("siteEntryNoticeMarkdown") || "")
+    .replace(/\r\n?/gu, "\n")
+    .trim();
+  if (siteEntryNoticeRaw.length > 20_000) {
+    adminNotice("重要通知正文不能超过 20000 个字符", "warning", "/admin/settings");
+  }
+  if (siteEntryNoticeEnabled && !siteEntryNoticeRaw) {
+    adminNotice("启用重要通知前，请先填写正文", "warning", "/admin/settings");
+  }
+  const siteEntryNoticeChanged =
+    siteEntryNoticeEnabled !== previous.siteEntryNoticeEnabled ||
+    siteEntryNoticeTitle !== previous.siteEntryNoticeTitle ||
+    siteEntryNoticeRaw !== previous.siteEntryNoticeMarkdown;
   const currentAdminIp = getClientIp(headerStore);
   if (adminIpAllowlistEnabled && adminAllowedNetworks.length === 0) {
     adminNotice("启用后台白名单前，请至少填写一个 IP 或 CIDR", "warning", "/admin/settings");
@@ -787,6 +825,14 @@ export async function saveAdminSettingsAction(formData: FormData) {
     siteTitle: String(formData.get("siteTitle") || "").trim(),
     brandLinkTarget: formData.get("brandLinkTarget") === "home" ? "home" : "novels",
     settingsPreviewText: String(formData.get("settingsPreviewText") || "").trim(),
+    defaultNovelLibrarySlug,
+    siteEntryNoticeEnabled,
+    siteEntryNoticeTitle,
+    siteEntryNoticeMarkdown: siteEntryNoticeRaw,
+    siteEntryNoticeVersion:
+      siteEntryNoticeChanged || (siteEntryNoticeEnabled && !previous.siteEntryNoticeVersion)
+        ? Date.now().toString(36)
+        : previous.siteEntryNoticeVersion,
     readerDefaultFontSize: intField(formData, "readerDefaultFontSize", previous.readerDefaultFontSize || 18, 8, 25),
     readerDefaultLineHeight: normalizeReaderLineHeight(
       String(formData.get("readerDefaultLineHeight") || ""),

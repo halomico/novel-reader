@@ -24,7 +24,6 @@ function pageHrefWithParams(
   basePath: string,
   extraParams: Record<string, string | undefined>,
   pageParam: string,
-  hash = "",
 ) {
   const params = new URLSearchParams(pageHref(page, query, basePath, pageParam).split("?")[1]);
   for (const [key, value] of Object.entries(extraParams)) {
@@ -32,7 +31,11 @@ function pageHrefWithParams(
       params.set(key, value);
     }
   }
-  return `${basePath}?${params.toString()}${hash ? `#${encodeURIComponent(hash)}` : ""}`;
+  return `${basePath}?${params.toString()}`;
+}
+
+function scrollToPageTop() {
+  window.scrollTo({ top: 0, left: 0, behavior: "auto" });
 }
 
 function getPageItems(page: number, totalPages: number): PageItem[] {
@@ -67,7 +70,6 @@ function PageJump({
   extraParams,
   pageParam,
   index,
-  hash,
   onPageChange,
 }: {
   totalPages: number;
@@ -76,7 +78,6 @@ function PageJump({
   extraParams: Record<string, string | undefined>;
   pageParam: string;
   index: number;
-  hash?: string;
   onPageChange?: (page: number) => void;
 }) {
   const router = useRouter();
@@ -108,6 +109,7 @@ function PageJump({
     const nextPage = Math.min(Math.max(Math.floor(numericPage), 1), totalPages);
     if (onPageChange) {
       onPageChange(nextPage);
+      scrollToPageTop();
       setIsOpen(false);
       setValue("");
       clearCloseTimer();
@@ -115,11 +117,11 @@ function PageJump({
     }
     clearCloseTimer();
     const href = withLocalePath(
-      pageHrefWithParams(nextPage, query, basePath, extraParams, pageParam, hash),
+      pageHrefWithParams(nextPage, query, basePath, extraParams, pageParam),
       localeFromPathname(pathname),
     );
     beginNavigationProgress();
-    startTransition(() => router.push(href));
+    startTransition(() => router.push(href, { scroll: true }));
     setIsOpen(false);
     setValue("");
   }
@@ -176,7 +178,6 @@ export function Pagination({
   basePath = "/",
   extraParams = {},
   pageParam = "page",
-  hash,
   onPageChange,
 }: {
   page: number;
@@ -185,7 +186,6 @@ export function Pagination({
   basePath?: string;
   extraParams?: Record<string, string | undefined>;
   pageParam?: string;
-  hash?: string;
   onPageChange?: (page: number) => void;
 }) {
   const canGoPrev = page > 1;
@@ -200,11 +200,11 @@ export function Pagination({
     <nav className="pagination" aria-label="分页导航">
       {canGoPrev ? (
         onPageChange ? (
-          <button className="pageButton" type="button" onClick={() => onPageChange(page - 1)} aria-label="上一页">
+          <button className="pageButton" type="button" onClick={() => { onPageChange(page - 1); scrollToPageTop(); }} aria-label="上一页">
             <ChevronLeft size={18} aria-hidden="true" />
           </button>
         ) : (
-          <Link className="pageButton" href={pageHrefWithParams(page - 1, query, basePath, extraParams, pageParam, hash)} aria-label="上一页">
+          <Link className="pageButton" href={pageHrefWithParams(page - 1, query, basePath, extraParams, pageParam)} scroll aria-label="上一页">
             <ChevronLeft size={18} aria-hidden="true" />
           </Link>
         )
@@ -224,7 +224,6 @@ export function Pagination({
               extraParams={extraParams}
               pageParam={pageParam}
               index={index}
-              hash={hash}
               onPageChange={onPageChange}
               key={`ellipsis-${index}`}
             />
@@ -233,11 +232,11 @@ export function Pagination({
               {item}
             </span>
           ) : onPageChange ? (
-            <button className="pageNumber" type="button" key={item} onClick={() => onPageChange(item)} aria-label={`第 ${item} 页`}>
+            <button className="pageNumber" type="button" key={item} onClick={() => { onPageChange(item); scrollToPageTop(); }} aria-label={`第 ${item} 页`}>
               {item}
             </button>
           ) : (
-            <Link className="pageNumber" href={pageHrefWithParams(item, query, basePath, extraParams, pageParam, hash)} key={item} aria-label={`第 ${item} 页`}>
+            <Link className="pageNumber" href={pageHrefWithParams(item, query, basePath, extraParams, pageParam)} scroll key={item} aria-label={`第 ${item} 页`}>
               {item}
             </Link>
           ),
@@ -246,11 +245,11 @@ export function Pagination({
 
       {canGoNext ? (
         onPageChange ? (
-          <button className="pageButton" type="button" onClick={() => onPageChange(page + 1)} aria-label="下一页">
+          <button className="pageButton" type="button" onClick={() => { onPageChange(page + 1); scrollToPageTop(); }} aria-label="下一页">
             <ChevronRight size={18} aria-hidden="true" />
           </button>
         ) : (
-          <Link className="pageButton" href={pageHrefWithParams(page + 1, query, basePath, extraParams, pageParam, hash)} aria-label="下一页">
+          <Link className="pageButton" href={pageHrefWithParams(page + 1, query, basePath, extraParams, pageParam)} scroll aria-label="下一页">
             <ChevronRight size={18} aria-hidden="true" />
           </Link>
         )

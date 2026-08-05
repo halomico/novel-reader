@@ -1,4 +1,4 @@
-import { Activity, ChevronRight, Disc3 } from "lucide-react";
+import { Activity, Disc3 } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
@@ -226,7 +226,6 @@ export default async function ActivityPage({
                             <small>{asset.artist || uiText(locale, "未知作者")}</small>
                           </span>
                           <span className="mediaCardSize">{formatMediaDuration(asset.durationSeconds)}</span>
-                          <ChevronRight size={17} aria-hidden="true" />
                         </Link>
                       </FavoriteSelectableItem>
                     );

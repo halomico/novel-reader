@@ -510,3 +510,20 @@ export function countUserUnreadMessages(userId: number): number {
     .get(userId, userId) as { count: number };
   return unread.count;
 }
+
+export function countAdminUnreadMessages(): number {
+  const unread = getDb()
+    .prepare(
+      `SELECT COUNT(*) AS count
+       FROM station_threads t
+       WHERE EXISTS (
+         SELECT 1
+         FROM station_messages m
+         WHERE m.thread_id = t.id
+           AND m.author_role = 'user'
+           AND m.id > t.admin_last_read_message_id
+       )`,
+    )
+    .get() as { count: number };
+  return unread.count;
+}
