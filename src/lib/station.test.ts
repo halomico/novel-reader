@@ -12,6 +12,7 @@ import {
   createStationThread,
   deleteStationThread,
   getHomeAnnouncement,
+  getEntryDrawerAnnouncement,
   getStationThread,
   listStationMessages,
   listUserStationThreads,
@@ -95,6 +96,32 @@ test("keeps station messages private and updates unread state", (t) => {
   assert.equal(getStationThread(threadId, { userId: userId + 1 }), null);
   assert.equal(deleteStationThread(threadId), true);
   assert.equal(getStationThread(threadId, { admin: true }), null);
+});
+
+test("separates entry drawer announcements from the public announcement list", (t) => {
+  withTempDatabase(t);
+  const publishedAt = new Date(Date.now() - 60_000).toISOString();
+  const drawer = saveAnnouncement({
+    title: "进站提示",
+    body: "请先阅读说明",
+    audience: "public",
+    importance: "important",
+    displayMode: "drawer",
+    status: "published",
+    publishedAt,
+  });
+  assert.equal(getEntryDrawerAnnouncement(false)?.id, drawer.id);
+  assert.deepEqual(listVisibleAnnouncements(false), []);
+  saveAnnouncement({
+    title: "列表公告",
+    body: "公开信息",
+    audience: "public",
+    displayMode: "both",
+    status: "published",
+    publishedAt,
+  });
+  assert.equal(listVisibleAnnouncements(false).length, 1);
+  assert.equal(getEntryDrawerAnnouncement(false)?.title, "进站提示");
 });
 
 test("rejects station messages longer than 500 characters without truncating them", (t) => {

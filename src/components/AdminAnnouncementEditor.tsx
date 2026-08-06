@@ -7,7 +7,7 @@ import {
   deleteAnnouncementInlineAction,
   saveAnnouncementInlineAction,
 } from "@/app/admin/station/actions";
-import type { Announcement } from "@/lib/station";
+import type { Announcement, AnnouncementDisplayMode } from "@/lib/station";
 import { AdminSelect } from "./AdminSelect";
 import { InlineMutationNotice, mutationNoticePath, useInlineMutation } from "./useInlineMutation";
 
@@ -18,7 +18,13 @@ function localDateTime(value: string | null): string {
   return date.toISOString().slice(0, 16);
 }
 
-export function AdminAnnouncementEditor({ announcement }: { announcement: Announcement | null }) {
+export function AdminAnnouncementEditor({
+  announcement,
+  initialDisplayMode = "list",
+}: {
+  announcement: Announcement | null;
+  initialDisplayMode?: AnnouncementDisplayMode;
+}) {
   const router = useRouter();
   const mutation = useInlineMutation();
 
@@ -70,6 +76,14 @@ export function AdminAnnouncementEditor({ announcement }: { announcement: Announ
             <AdminSelect name="importance" defaultValue={announcement?.importance || "normal"}>
               <option value="normal">普通</option>
               <option value="important">重要</option>
+            </AdminSelect>
+          </label>
+          <label>
+            <span>展示方式</span>
+            <AdminSelect name="displayMode" defaultValue={announcement?.displayMode || initialDisplayMode}>
+              <option value="list">公告列表</option>
+              <option value="drawer">进站抽屉</option>
+              <option value="both">列表和进站抽屉</option>
             </AdminSelect>
           </label>
           <label>

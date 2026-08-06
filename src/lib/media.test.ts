@@ -6,6 +6,8 @@ import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import {
   createVideoTag,
+  getMediaAsset,
+  hasPublishedMediaHls,
   isMediaKindAccessible,
   isMediaKindConsumable,
   listMediaAssets,
@@ -18,6 +20,10 @@ import {
   normalizeMediaSortBy,
   normalizeMediaSortOrder,
   parseMediaByteRange,
+  markMediaPlaybackProcessing,
+  requestMediaPlaybackPreparation,
+  saveMediaPlaybackFailure,
+  saveMediaPlaybackReady,
   saveMediaDuration,
   saveMediaThumbnailVersion,
   setVideoTagsForAssets,
@@ -35,6 +41,7 @@ import {
   reconcileMediaPreparationJobs,
 } from "./media-preparation-jobs";
 import { readSiteSettings, writeSiteSettings } from "./site-settings";
+import { mediaPlaybackSourceVersion } from "./video-hls";
 
 function withTempDatabase(t: TestContext) {
   const previousPath = process.env.DATABASE_PATH;
@@ -236,4 +243,48 @@ test("tracks media preparation independently from public list requests", (t) => 
   assert.equal(getMediaPreparationJob(audioId), null);
   assert.deepEqual(listMediaAssetsNeedingPreparation(), []);
   assert.deepEqual(listMediaAssetsNeedingPreparation(1_000, 40).map((asset) => asset.id), [videoId]);
+});
+
+test("publishes HLS atomically while a replacement version is prepared", (t) => {
+  withTempDatabase(t);
+  const db = getDb();
+  const id = Number(db.prepare(
+    `INSERT INTO media_assets (
+       kind, title, file_name, stored_name, mime_type, size_bytes, mtime_ms,
+       playback_format, playback_version, playback_manifest_path, playback_status
+     ) VALUES ('video', '视频', 'video.mp4', 'video/video.mp4', 'video/mp4', 100, 10,
+       'hls', '9-90', 'video/.hls/1/9-90/index.m3u8', 'ready')`,
+  ).run().lastInsertRowid);
+  const sourceVersion = mediaPlaybackSourceVersion(10, 100);
+  const original = getMediaAsset(id)!;
+
+  assert.equal(hasPublishedMediaHls(original), true);
+  assert.equal(requestMediaPlaybackPreparation(original, true), true);
+  assert.equal(markMediaPlaybackProcessing(id, sourceVersion), true);
+  assert.equal(markMediaPlaybackProcessing(id, sourceVersion), false);
+  let processing = getMediaAsset(id)!;
+  assert.equal(processing.playbackStatus, "processing");
+  assert.equal(processing.playbackVersion, "9-90");
+  assert.equal(processing.playbackManifestPath, "video/.hls/1/9-90/index.m3u8");
+
+  assert.equal(saveMediaPlaybackFailure(id, sourceVersion, new Error("temporary")), true);
+  const failed = getMediaAsset(id)!;
+  assert.equal(failed.playbackStatus, "ready");
+  assert.equal(hasPublishedMediaHls(failed), true);
+  assert.equal(failed.playbackVersion, "9-90");
+
+  assert.equal(requestMediaPlaybackPreparation(failed, true), true);
+  assert.equal(markMediaPlaybackProcessing(id, sourceVersion), true);
+  assert.equal(saveMediaPlaybackReady({
+    id,
+    sourceVersion,
+    manifestPath: `video/.hls/${id}/${sourceVersion}/index.m3u8`,
+  }), true);
+  const published = getMediaAsset(id)!;
+  assert.equal(published.playbackStatus, "ready");
+  assert.equal(published.playbackVersion, sourceVersion);
+  assert.equal(
+    (db.prepare("SELECT COUNT(*) AS count FROM media_playback_jobs WHERE media_id = ?").get(id) as { count: number }).count,
+    0,
+  );
 });

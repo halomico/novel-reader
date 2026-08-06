@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getMediaAsset, incrementMediaDownloadCount, isMediaKindConsumable } from "@/lib/media";
+import {
+  getMediaAsset,
+  hasPublishedMediaHls,
+  incrementMediaDownloadCount,
+  isMediaKindConsumable,
+} from "@/lib/media";
 import { mediaDeliveryUrl } from "@/lib/media-delivery";
+import { mediaHlsFileUrl } from "@/lib/media-hls-delivery";
 import { hasValidVideoDownloadSession, unlockVideoDownloadWithSoda } from "@/lib/media-access";
 import { checkContentAccess } from "@/lib/content-access";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 import { hasUserPermission } from "@/lib/user-levels";
+import { getVideoPlaybackMode } from "@/lib/video-playback-mode";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -40,11 +47,23 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   incrementMediaDownloadCount(asset.id);
   let location: string;
   try {
-    location = mediaDeliveryUrl(asset, true, {
-      downloadToken: asset.kind === "video" && user?.role !== "admin"
-        ? request.nextUrl.searchParams.get("session") || ""
-        : undefined,
-    });
+    const hlsReady = asset.kind === "video" &&
+      hasPublishedMediaHls(asset);
+    if (hlsReady) {
+      location = mediaHlsFileUrl(asset, true);
+      if (location.startsWith("/")) {
+        const separator = location.includes("?") ? "&" : "?";
+        location = `${location}${separator}session=${encodeURIComponent(request.nextUrl.searchParams.get("session") || "")}`;
+      }
+    } else if (asset.kind !== "video" || getVideoPlaybackMode() !== "hls-only") {
+      location = mediaDeliveryUrl(asset, true, {
+        downloadToken: asset.kind === "video" && user?.role !== "admin"
+          ? request.nextUrl.searchParams.get("session") || ""
+          : undefined,
+      });
+    } else {
+      return new Response(null, { status: 503, headers: { "Retry-After": "60" } });
+    }
   } catch {
     return new Response(null, { status: 503 });
   }

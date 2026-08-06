@@ -30,6 +30,7 @@ import {
 } from "./media-storage-config";
 import { isIgnoredMediaStorageEntry } from "./media-scan-filter";
 import { normalizeMediaStoragePath, resolveMediaStoragePath } from "./media-storage-path";
+import { removePlaybackHlsVersions, resolvePlaybackHlsFile } from "./video-hls";
 
 export type MediaKind = "video" | "audio" | "file";
 export type FeedbackMediaKind = Extract<MediaKind, "video" | "audio">;
@@ -53,6 +54,12 @@ export type MediaAsset = {
   durationSeconds: number | null;
   thumbnailVersion: number;
   customCoverKey: string | null;
+  playbackFormat: "mp4" | "hls";
+  playbackVersion: string;
+  playbackManifestPath: string | null;
+  playbackStatus: "none" | "pending" | "processing" | "ready" | "failed";
+  playbackError: string;
+  playbackPublishedAt: string | null;
   playCount: number;
   recommendCount: number;
   downloadCount: number;
@@ -119,6 +126,12 @@ type MediaRow = {
   duration_seconds: number | null;
   thumbnail_version: number;
   custom_cover_key: string | null;
+  playback_format: "mp4" | "hls";
+  playback_version: string;
+  playback_manifest_path: string | null;
+  playback_status: "none" | "pending" | "processing" | "ready" | "failed";
+  playback_error: string;
+  playback_published_at: string | null;
   play_count: number;
   recommend_count: number;
   download_count: number;
@@ -295,6 +308,12 @@ function toAsset(row: MediaRow): MediaAsset {
     durationSeconds: row.duration_seconds,
     thumbnailVersion: row.thumbnail_version,
     customCoverKey: row.custom_cover_key,
+    playbackFormat: row.playback_format === "hls" ? "hls" : "mp4",
+    playbackVersion: row.playback_version || "",
+    playbackManifestPath: row.playback_manifest_path || null,
+    playbackStatus: row.playback_status || "none",
+    playbackError: row.playback_error || "",
+    playbackPublishedAt: row.playback_published_at || null,
     playCount: row.play_count,
     recommendCount: row.recommend_count,
     downloadCount: row.download_count,
@@ -665,6 +684,14 @@ export function isMediaKindContentPublic(kind: MediaKind): boolean {
   return canConsumeHomePortalContent(kind, false);
 }
 
+export function hasPublishedMediaHls(
+  asset: Pick<MediaAsset, "playbackFormat" | "playbackVersion" | "playbackManifestPath">,
+): boolean {
+  return asset.playbackFormat === "hls" &&
+    Boolean(asset.playbackVersion) &&
+    Boolean(asset.playbackManifestPath);
+}
+
 export function getAccessibleMediaKinds(authenticated: boolean): MediaKind[] {
   return MEDIA_KINDS.filter((kind) => isMediaKindAccessible(kind, authenticated));
 }
@@ -1017,6 +1044,18 @@ async function performMediaLibrarySync(state: MediaLibrarySyncState, force = fal
     if (scanned.has(mediaStorageKey(null, row.stored_name))) {
       return false;
     }
+    const canonicalManifest = row.playback_manifest_path
+      ? resolvePlaybackHlsFile(getMediaDir(), row.playback_manifest_path, "index.m3u8")
+      : null;
+    if (
+      row.kind === "video" &&
+      row.playback_format === "hls" &&
+      Boolean(row.playback_version) &&
+      canonicalManifest &&
+      fs.existsSync(canonicalManifest)
+    ) {
+      return false;
+    }
     try {
       return !fs.existsSync(mediaFilePath(row.stored_name));
     } catch {
@@ -1070,6 +1109,14 @@ async function performMediaLibrarySync(state: MediaLibrarySyncState, force = fal
        SET storage_node_id = ?, title = ?, file_name = ?, mime_type = ?, size_bytes = ?, mtime_ms = ?,
            duration_seconds = CASE WHEN size_bytes <> ? OR mtime_ms <> ? THEN NULL ELSE duration_seconds END,
            thumbnail_version = CASE WHEN size_bytes <> ? OR mtime_ms <> ? THEN 0 ELSE thumbnail_version END,
+           playback_status = CASE WHEN size_bytes <> ? OR mtime_ms <> ? THEN
+             CASE
+               WHEN playback_format = 'hls' AND playback_manifest_path IS NOT NULL AND playback_version <> '' THEN 'ready'
+               ELSE 'none'
+             END
+             ELSE playback_status
+           END,
+           playback_error = CASE WHEN size_bytes <> ? OR mtime_ms <> ? THEN '' ELSE playback_error END,
            content_updated_at = CASE WHEN size_bytes <> ? OR mtime_ms <> ? THEN CURRENT_TIMESTAMP ELSE content_updated_at END,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
@@ -1080,6 +1127,9 @@ async function performMediaLibrarySync(state: MediaLibrarySyncState, force = fal
        WHERE id = ?`,
     );
     const updateHistoryTitle = db.prepare("UPDATE user_media_history SET title = ? WHERE media_id = ?");
+    const deleteObsoletePlaybackJob = db.prepare(
+      "DELETE FROM media_playback_jobs WHERE media_id = ? AND source_version <> ?",
+    );
     const claimedStoredNames = new Set(rows.map((row) => row.stored_name));
     for (const { row, file } of renamedPairs) {
       const title = path.basename(file.fileName, path.extname(file.fileName));
@@ -1116,6 +1166,7 @@ async function performMediaLibrarySync(state: MediaLibrarySyncState, force = fal
         row.size_bytes !== file.sizeBytes ||
         row.mtime_ms !== file.mtimeMs
       )) {
+        const sourceChanged = row.size_bytes !== file.sizeBytes || row.mtime_ms !== file.mtimeMs;
         const title = row.file_name === file.fileName ? row.title : path.basename(file.fileName, path.extname(file.fileName));
         update.run(
           file.storageNodeId,
@@ -1130,8 +1181,18 @@ async function performMediaLibrarySync(state: MediaLibrarySyncState, force = fal
           file.mtimeMs,
           file.sizeBytes,
           file.mtimeMs,
+          file.sizeBytes,
+          file.mtimeMs,
+          file.sizeBytes,
+          file.mtimeMs,
           row.id,
         );
+        if (row.kind === "video" && sourceChanged) {
+          deleteObsoletePlaybackJob.run(
+            row.id,
+            `${Math.max(0, Math.floor(file.mtimeMs))}-${Math.max(0, Math.floor(file.sizeBytes))}`,
+          );
+        }
         if (title !== row.title) {
           updateHistoryTitle.run(title, row.id);
         }
@@ -1150,6 +1211,9 @@ async function performMediaLibrarySync(state: MediaLibrarySyncState, force = fal
 
   for (const row of removedRows) {
     removeThumbnailFile(row.id);
+    if (row.kind === "video" && !isRemoteMediaStorage()) {
+      removePlaybackHlsVersions(getMediaDir(), row.id);
+    }
     await deleteMediaCustomCover(
       { kind: row.kind, storageNodeId: row.storage_node_id },
       row.custom_cover_key,
@@ -1785,6 +1849,160 @@ export function updateVideoPublishingSettings(input: {
   return getMediaAsset(input.id);
 }
 
+export function requestMediaPlaybackPreparation(
+  asset: Pick<MediaAsset, "id" | "kind" | "mtimeMs" | "sizeBytes" | "playbackStatus" | "playbackVersion">,
+  force = false,
+): boolean {
+  if (asset.kind !== "video") return false;
+  const sourceVersion = `${Math.max(0, Math.floor(asset.mtimeMs))}-${Math.max(0, Math.floor(asset.sizeBytes))}`;
+  const current = getMediaAsset(asset.id);
+  if (
+    !force &&
+    current?.playbackFormat === "hls" &&
+    current.playbackVersion === sourceVersion &&
+    current.playbackManifestPath
+  ) {
+    return false;
+  }
+  const db = getDb();
+  const result = db.prepare(
+    `INSERT INTO media_playback_jobs (media_id, source_version, status, attempts, last_error)
+     VALUES (?, ?, 'pending', 0, '')
+     ON CONFLICT(media_id) DO UPDATE SET
+       source_version = excluded.source_version,
+       status = 'pending',
+       attempts = CASE
+         WHEN media_playback_jobs.source_version = excluded.source_version THEN media_playback_jobs.attempts
+         ELSE 0
+       END,
+       last_error = '',
+       updated_at = CURRENT_TIMESTAMP
+     WHERE media_playback_jobs.status <> 'processing'
+        OR media_playback_jobs.source_version <> excluded.source_version`,
+  ).run(asset.id, sourceVersion);
+  if (Number(result.changes) > 0) {
+    db.prepare(
+      "UPDATE media_assets SET playback_status = 'pending', playback_error = '', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    ).run(asset.id);
+    return true;
+  }
+  return false;
+}
+
+export function markMediaPlaybackProcessing(id: number, sourceVersion: string): boolean {
+  const db = getDb();
+  const claimed = db.prepare(
+    `UPDATE media_playback_jobs
+     SET status = 'processing', attempts = attempts + 1, last_error = '', updated_at = CURRENT_TIMESTAMP
+     WHERE media_id = ? AND source_version = ? AND status = 'pending'`,
+  ).run(id, sourceVersion).changes > 0;
+  if (claimed) {
+    db.prepare(
+      "UPDATE media_assets SET playback_status = 'processing', playback_error = '', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    ).run(id);
+  }
+  return claimed;
+}
+
+export function refreshMediaPlaybackProcessing(id: number, sourceVersion: string): boolean {
+  const db = getDb();
+  const refreshed = db.prepare(
+    `UPDATE media_playback_jobs
+     SET updated_at = CURRENT_TIMESTAMP
+     WHERE media_id = ? AND source_version = ? AND status = 'processing'`,
+  ).run(id, sourceVersion).changes > 0;
+  if (refreshed) {
+    db.prepare("UPDATE media_assets SET updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);
+  }
+  return refreshed;
+}
+
+export function recoverStaleMediaPlaybackPreparations(staleBefore: string): number {
+  const db = getDb();
+  const result = db.prepare(
+    `UPDATE media_playback_jobs
+     SET status = 'pending', last_error = '', updated_at = CURRENT_TIMESTAMP
+     WHERE status = 'processing' AND updated_at < ?`,
+  ).run(staleBefore);
+  if (Number(result.changes) > 0) {
+    db.prepare(
+      `UPDATE media_assets
+       SET playback_status = 'pending', playback_error = '', updated_at = CURRENT_TIMESTAMP
+       WHERE id IN (SELECT media_id FROM media_playback_jobs WHERE status = 'pending')`,
+    ).run();
+  }
+  return Number(result.changes);
+}
+
+export function saveMediaPlaybackReady(input: {
+  id: number;
+  sourceVersion: string;
+  manifestPath: string;
+}): boolean {
+  const db = getDb();
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const published = db.prepare(
+      `UPDATE media_assets
+       SET playback_format = 'hls', playback_version = ?, playback_manifest_path = ?,
+           playback_status = 'ready', playback_error = '', playback_published_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND kind = 'video'
+         AND CAST(mtime_ms AS INTEGER) || '-' || CAST(size_bytes AS INTEGER) = ?
+         AND EXISTS (
+           SELECT 1 FROM media_playback_jobs
+           WHERE media_id = ? AND source_version = ? AND status = 'processing'
+         )`,
+    ).run(
+      input.sourceVersion,
+      input.manifestPath,
+      input.id,
+      input.sourceVersion,
+      input.id,
+      input.sourceVersion,
+    ).changes > 0;
+    const removedJob = published && db.prepare(
+      "DELETE FROM media_playback_jobs WHERE media_id = ? AND source_version = ? AND status = 'processing'",
+    ).run(input.id, input.sourceVersion).changes > 0;
+    if (!published || !removedJob) {
+      db.exec("ROLLBACK");
+      return false;
+    }
+    db.exec("COMMIT");
+    return true;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+export function saveMediaPlaybackFailure(id: number, sourceVersion: string, error: unknown): boolean {
+  const message = (error instanceof Error ? error.message : "HLS 播放准备失败")
+    .normalize("NFKC")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .slice(0, 500);
+  const db = getDb();
+  const failed = db.prepare(
+    `UPDATE media_playback_jobs
+     SET status = 'failed', last_error = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE media_id = ? AND source_version = ? AND status = 'processing'`,
+  ).run(message, id, sourceVersion).changes > 0;
+  if (failed) {
+    db.prepare(
+      `UPDATE media_assets
+       SET playback_status = CASE
+             WHEN playback_format = 'hls' AND playback_manifest_path IS NOT NULL AND playback_version <> ''
+               THEN 'ready'
+             ELSE 'failed'
+           END,
+           playback_error = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+    ).run(message, id);
+  }
+  return failed;
+}
+
 export async function deleteMediaAssets(ids: number[]): Promise<{ deleted: number; fileDeleteFailures: number }> {
   const uniqueIds = Array.from(new Set(ids.filter((id) => Number.isInteger(id) && id > 0)));
   if (!uniqueIds.length) {
@@ -1808,7 +2026,11 @@ export async function deleteMediaAssets(ids: number[]): Promise<{ deleted: numbe
     }
     for (const [nodeId, nodeRows] of rowsByNode) {
       try {
-        const result = await deleteRemoteMediaAssets(nodeId, nodeRows.map((row) => row.stored_name));
+        const result = await deleteRemoteMediaAssets(
+          nodeId,
+          nodeRows.map((row) => row.stored_name),
+          Object.fromEntries(nodeRows.map((row) => [row.stored_name, row.kind === "video" ? row.id : 0])),
+        );
         const deletedNames = new Set(result.deletedStoredNames);
         for (const row of nodeRows) {
           if (deletedNames.has(row.stored_name)) {
@@ -1827,6 +2049,9 @@ export async function deleteMediaAssets(ids: number[]): Promise<{ deleted: numbe
       try {
         fs.rmSync(mediaFilePath(row.stored_name), { force: true });
         removeThumbnailFile(row.id);
+        if (row.kind === "video") {
+          removePlaybackHlsVersions(getMediaDir(), row.id);
+        }
         deletedIds.push(row.id);
       } catch {
         fileDeleteFailures += 1;

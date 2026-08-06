@@ -14,7 +14,9 @@ import {
   startMediaStorageUpload,
 } from "@/lib/media-upload-service";
 import { scheduleMediaPreparation } from "@/lib/media-maintenance";
+import { scheduleMediaPlaybackPreparation } from "@/lib/media-playback-preparation";
 import { isRemoteMediaStorage, MediaStorageConfigurationError } from "@/lib/media-storage-config";
+import { getVideoPlaybackMode } from "@/lib/video-playback-mode";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -126,6 +128,9 @@ export async function POST(request: NextRequest) {
     if (action === "finish") {
       const asset = await finishMediaStorageUpload(uploadId);
       scheduleMediaPreparation([asset]);
+      if (asset.kind === "video" && getVideoPlaybackMode() !== "mp4") {
+        scheduleMediaPlaybackPreparation(asset);
+      }
       revalidatePath("/media");
       revalidatePath("/admin");
       revalidatePath("/admin/media");

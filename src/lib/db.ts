@@ -1469,6 +1469,8 @@ function initialize(db: DatabaseSync) {
       body TEXT NOT NULL DEFAULT '',
       audience TEXT NOT NULL DEFAULT 'public' CHECK(audience IN ('public', 'member')),
       importance TEXT NOT NULL DEFAULT 'normal' CHECK(importance IN ('normal', 'important')),
+      display_mode TEXT NOT NULL DEFAULT 'list' CHECK(display_mode IN ('list', 'drawer', 'both')),
+      entry_version TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'published', 'archived')),
       published_at TEXT,
       expires_at TEXT,
@@ -1632,6 +1634,12 @@ function initialize(db: DatabaseSync) {
       duration_seconds REAL,
       thumbnail_version INTEGER NOT NULL DEFAULT 0,
       custom_cover_key TEXT,
+      playback_format TEXT NOT NULL DEFAULT 'mp4' CHECK(playback_format IN ('mp4', 'hls')),
+      playback_version TEXT NOT NULL DEFAULT '',
+      playback_manifest_path TEXT,
+      playback_status TEXT NOT NULL DEFAULT 'none' CHECK(playback_status IN ('none', 'pending', 'processing', 'ready', 'failed')),
+      playback_error TEXT NOT NULL DEFAULT '',
+      playback_published_at TEXT,
       play_count INTEGER NOT NULL DEFAULT 0,
       recommend_count INTEGER NOT NULL DEFAULT 0 CHECK(recommend_count >= 0),
       download_count INTEGER NOT NULL DEFAULT 0,
@@ -1689,6 +1697,20 @@ function initialize(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_media_prepare_jobs_ready
       ON media_prepare_jobs(status, next_run_at, media_id);
 
+    CREATE TABLE IF NOT EXISTS media_playback_jobs (
+      media_id INTEGER PRIMARY KEY,
+      source_version TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'failed')),
+      attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+      last_error TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_media_playback_jobs_ready
+      ON media_playback_jobs(status, updated_at, media_id);
+
     CREATE TABLE IF NOT EXISTS user_media_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -1737,6 +1759,16 @@ function initialize(db: DatabaseSync) {
   dropLegacyContentAccessBans(db);
   migrateContentReports(db);
   migrateContentAccessSchema(db);
+  addColumnIfMissing(
+    db,
+    "announcements",
+    "display_mode",
+    "display_mode TEXT NOT NULL DEFAULT 'list' CHECK(display_mode IN ('list', 'drawer', 'both'))",
+  );
+  addColumnIfMissing(db, "announcements", "entry_version", "entry_version TEXT NOT NULL DEFAULT ''");
+  db.exec(
+    "CREATE INDEX IF NOT EXISTS idx_announcements_entry_visible ON announcements(display_mode, status, audience, importance, published_at, expires_at);",
+  );
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_content_access_rules_match
       ON content_access_rules(enabled, scope, country_mode, audience, target_type, target_value);
@@ -1769,6 +1801,40 @@ function initialize(db: DatabaseSync) {
   addColumnIfMissing(db, "media_assets", "duration_seconds", "duration_seconds REAL");
   addColumnIfMissing(db, "media_assets", "thumbnail_version", "thumbnail_version INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(db, "media_assets", "custom_cover_key", "custom_cover_key TEXT");
+  addColumnIfMissing(db, "media_assets", "playback_format", "playback_format TEXT NOT NULL DEFAULT 'mp4' CHECK(playback_format IN ('mp4', 'hls'))");
+  addColumnIfMissing(db, "media_assets", "playback_version", "playback_version TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, "media_assets", "playback_manifest_path", "playback_manifest_path TEXT");
+  addColumnIfMissing(db, "media_assets", "playback_status", "playback_status TEXT NOT NULL DEFAULT 'none' CHECK(playback_status IN ('none', 'pending', 'processing', 'ready', 'failed'))");
+  addColumnIfMissing(db, "media_assets", "playback_error", "playback_error TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, "media_assets", "playback_published_at", "playback_published_at TEXT");
+  const playbackJobsMigrationKey = "media_playback_jobs_v1";
+  if (!db.prepare("SELECT 1 AS found FROM app_metadata WHERE key = ?").get(playbackJobsMigrationKey)) {
+    db.exec("BEGIN");
+    try {
+      db.exec(`
+        INSERT OR IGNORE INTO media_playback_jobs (media_id, source_version, status, last_error)
+        SELECT id,
+               CAST(mtime_ms AS INTEGER) || '-' || CAST(size_bytes AS INTEGER),
+               CASE WHEN playback_status = 'processing' THEN 'pending' ELSE playback_status END,
+               playback_error
+        FROM media_assets
+        WHERE kind = 'video' AND playback_status IN ('pending', 'processing');
+
+        UPDATE media_assets
+        SET playback_status = CASE
+              WHEN playback_format = 'hls' AND playback_manifest_path IS NOT NULL AND playback_version <> '' THEN 'ready'
+              ELSE 'none'
+            END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE playback_status IN ('pending', 'processing');
+      `);
+      db.prepare("INSERT INTO app_metadata (key, value) VALUES (?, '1')").run(playbackJobsMigrationKey);
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  }
   addColumnIfMissing(db, "media_assets", "recommend_count", "recommend_count INTEGER NOT NULL DEFAULT 0 CHECK(recommend_count >= 0)");
   addColumnIfMissing(db, "media_assets", "category_id", "category_id INTEGER REFERENCES video_categories(id) ON DELETE SET NULL");
   addColumnIfMissing(db, "media_assets", "published_at", "published_at TEXT");

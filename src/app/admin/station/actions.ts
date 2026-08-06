@@ -70,6 +70,7 @@ export async function saveAnnouncementInlineAction(
       body: formData.get("body"),
       audience: formData.get("audience"),
       importance: formData.get("importance"),
+      displayMode: formData.get("displayMode"),
       status: formData.get("status") === "archived" ? "archived" : "published",
       publishedAt: optionalDate(formData.get("publishedAt")),
       expiresAt: optionalDate(formData.get("expiresAt")),

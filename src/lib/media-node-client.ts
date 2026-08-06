@@ -7,6 +7,7 @@ import {
   type MediaNodeUploadRequest,
   type MediaNodeUploadStart,
 } from "./media-node-protocol";
+import type { VideoHlsPackageResult } from "./video-hls";
 import { getRemoteMediaNodeConfig } from "./media-storage-config";
 
 type NodeResponse<T> = T & { ok?: boolean; message?: string };
@@ -163,13 +164,17 @@ export async function moveRemoteMediaAsset(
   return Boolean(result.moved);
 }
 
-export async function deleteRemoteMediaAssets(nodeId: string, storedNames: string[]): Promise<{
+export async function deleteRemoteMediaAssets(
+  nodeId: string,
+  storedNames: string[],
+  playbackMediaIds: Record<string, number> = {},
+): Promise<{
   deletedStoredNames: string[];
   failedStoredNames: string[];
 }> {
   const result = await controlRequest<{ deletedStoredNames: string[]; failedStoredNames: string[] }>(nodeId, "/control/assets/delete", {
     method: "POST",
-    body: JSON.stringify({ storedNames }),
+    body: JSON.stringify({ storedNames, playbackMediaIds }),
   });
   return {
     deletedStoredNames: Array.isArray(result.deletedStoredNames) ? result.deletedStoredNames : [],
@@ -196,6 +201,94 @@ export async function probeRemoteMediaDuration(asset: {
     throw new MediaNodeClientError("媒体节点未返回有效时长");
   }
   return duration;
+}
+
+export async function packageRemoteMediaPlayback(asset: {
+  storageNodeId: string;
+  id: number;
+  storedName: string;
+  mtimeMs: number;
+  sizeBytes: number;
+}): Promise<VideoHlsPackageResult> {
+  const result = await controlRequest<VideoHlsPackageResult>(asset.storageNodeId, "/control/playback/package", {
+    method: "POST",
+    body: JSON.stringify({
+      mediaId: asset.id,
+      storedName: asset.storedName,
+      mtimeMs: asset.mtimeMs,
+      sizeBytes: asset.sizeBytes,
+    }),
+  }, 12 * 60 * 60_000);
+  if (!result.manifestPath || !result.version) throw new MediaNodeClientError("濯掍綋鑺傜偣鏈繑鍥炴湁鏁?HLS 播放清单");
+  return {
+    version: result.version,
+    manifestPath: result.manifestPath,
+    directoryPath: result.directoryPath || "",
+  };
+}
+
+export async function pruneRemoteMediaPlaybackVersions(
+  nodeId: string,
+  mediaId: number,
+  keepVersion: string,
+): Promise<void> {
+  await controlRequest<{ ok: boolean }>(nodeId, "/control/playback/prune", {
+    method: "POST",
+    body: JSON.stringify({ mediaId, keepVersion }),
+  });
+}
+
+export async function readRemoteMediaPlaybackManifest(nodeId: string, manifestPath: string): Promise<string> {
+  const params = new URLSearchParams({ path: manifestPath });
+  const result = await controlRequest<{ manifest: string }>(
+    nodeId,
+    `/control/playback/manifest?${params.toString()}`,
+    {},
+    30_000,
+  );
+  if (typeof result.manifest !== "string" || !result.manifest.startsWith("#EXTM3U")) {
+    throw new MediaNodeClientError("濯掍綋鑺傜偣鏈繑鍥炴湁鏁?HLS 播放清单");
+  }
+  return result.manifest;
+}
+
+export async function getRemoteMediaPlaybackFileInfo(
+  nodeId: string,
+  manifestPath: string,
+): Promise<{ sizeBytes: number; fileCount: number }> {
+  const params = new URLSearchParams({ path: manifestPath });
+  const result = await controlRequest<{ sizeBytes: number; fileCount: number }>(
+    nodeId,
+    `/control/playback/file-info?${params.toString()}`,
+    {},
+    30_000,
+  );
+  const sizeBytes = Math.floor(Number(result.sizeBytes));
+  const fileCount = Math.floor(Number(result.fileCount));
+  if (sizeBytes <= 0 || fileCount < 2) {
+    throw new MediaNodeClientError("媒体节点返回的 HLS 虚拟文件信息无效");
+  }
+  return { sizeBytes, fileCount };
+}
+
+export async function verifyRemoteMediaPlayback(
+  nodeId: string,
+  manifestPath: string,
+): Promise<{ sizeBytes: number; fileCount: number; durationSeconds: number }> {
+  const params = new URLSearchParams({ path: manifestPath });
+  const result = await controlRequest<{ sizeBytes: number; fileCount: number; durationSeconds: number }>(
+    nodeId,
+    `/control/playback/verify?${params.toString()}`,
+    {},
+    60_000,
+  );
+  const sizeBytes = Math.floor(Number(result.sizeBytes));
+  const fileCount = Math.floor(Number(result.fileCount));
+  const durationSeconds = Number(result.durationSeconds);
+  if (sizeBytes <= 0 || fileCount < 2 || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    throw new MediaNodeClientError("媒体节点返回的 HLS 校验结果无效");
+  }
+  return { sizeBytes, fileCount, durationSeconds };
 }
 
 export async function prepareRemoteMediaThumbnail(asset: {

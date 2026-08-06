@@ -12,6 +12,8 @@ import { getRequestLocale, localizeTexts } from "@/lib/locale-server";
 import { getSiteUrl, getUmamiConfig } from "@/lib/seo";
 import { getSiteIconHref } from "@/lib/site-icon";
 import { readSiteSettings } from "@/lib/site-settings";
+import { getEntryDrawerAnnouncement } from "@/lib/station";
+import { getCurrentUser } from "@/lib/user-auth";
 import { resolveDefaultPalette } from "@/lib/ui-preferences";
 import "./globals.css";
 import "./ui-final.css";
@@ -50,6 +52,8 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const settings = readSiteSettings();
   const locale = await getRequestLocale();
+  const user = await getCurrentUser();
+  const entryAnnouncement = getEntryDrawerAnnouncement(Boolean(user));
   const defaultFontSize = getReaderDefaultFontSize();
   const umami = getUmamiConfig();
   const defaultPalette = resolveDefaultPalette(
@@ -88,10 +92,10 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         ) : null}
         {children}
         <SiteEntryNotice
-          enabled={settings.siteEntryNoticeEnabled}
-          title={settings.siteEntryNoticeTitle}
-          markdown={settings.siteEntryNoticeMarkdown}
-          version={settings.siteEntryNoticeVersion}
+          enabled={Boolean(entryAnnouncement)}
+          title={entryAnnouncement?.title || "重要通知"}
+          markdown={entryAnnouncement?.body || ""}
+          version={entryAnnouncement?.entryVersion || `announcement-${entryAnnouncement?.id || "none"}`}
         />
       </body>
     </html>

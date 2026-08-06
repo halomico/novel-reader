@@ -2,9 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createSignedMediaCoverUrl,
+  createSignedMediaHlsFileUrl,
+  createSignedMediaHlsUrl,
   createSignedMediaThumbnailUrl,
   createSignedMediaUrl,
   verifySignedMediaCoverUrl,
+  verifySignedMediaHlsFileUrl,
+  verifySignedMediaHlsUrl,
   verifySignedMediaThumbnailUrl,
   verifySignedMediaUrl,
 } from "./media-signing";
@@ -157,6 +161,50 @@ test("signs immutable custom media covers", () => {
       }),
       /封面标识无效/,
     );
+  });
+});
+
+test("signs HLS playlist and fragment paths without allowing traversal", () => {
+  withMediaEnvironment({}, () => {
+    const signed = createSignedMediaHlsUrl({
+      storageNodeId: "default",
+      storedPath: "video/.hls/42/100-200/bundle.m4s",
+      publiclyAccessible: false,
+      now: 1_000_000,
+    });
+    assert.deepEqual(verifySignedMediaHlsUrl(new URL(signed), 1_000_000), {
+      storedPath: "video/.hls/42/100-200/bundle.m4s",
+      expiresAt: 1_600,
+      publiclyAccessible: false,
+    });
+    const tampered = new URL(signed);
+    tampered.pathname = "/media-hls/video/.hls/42/100-200/../bundle.m4s";
+    assert.equal(verifySignedMediaHlsUrl(tampered, 1_000_000), null);
+    assert.throws(
+      () => createSignedMediaHlsUrl({ storageNodeId: "default", storedPath: "video/.hls/42/../bundle.m4s" }),
+      /HLS/,
+    );
+  });
+});
+
+test("signs the virtual fragmented MP4 download without exposing the source file", () => {
+  withMediaEnvironment({}, () => {
+    const signed = createSignedMediaHlsFileUrl({
+      storageNodeId: "default",
+      manifestPath: "video/.hls/42/100-200/index.m3u8",
+      fileName: "example.mp4",
+      download: true,
+      now: 1_000_000,
+    });
+    assert.deepEqual(verifySignedMediaHlsFileUrl(new URL(signed), 1_000_000), {
+      manifestPath: "video/.hls/42/100-200/index.m3u8",
+      expiresAt: 1_600,
+      fileName: "example.mp4",
+      download: true,
+    });
+    const tampered = new URL(signed);
+    tampered.searchParams.set("dl", "0");
+    assert.equal(verifySignedMediaHlsFileUrl(tampered, 1_000_000), null);
   });
 });
 

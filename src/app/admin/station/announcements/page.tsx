@@ -31,13 +31,14 @@ export default async function AdminAnnouncementsPage({ searchParams }: AdminAnno
         <header className="adminWorkspaceHeader"><div><h1>公告</h1><p>管理公开或仅登录用户可见的站点通知。</p></div></header>
         <div className="adminCommerceTableWrap">
           <table className="adminCommerceTable">
-            <thead><tr><th>标题</th><th>范围</th><th>级别</th><th>状态</th><th>发布时间</th><th><span className="srOnly">操作</span></th></tr></thead>
+            <thead><tr><th>标题</th><th>范围</th><th>级别</th><th>展示</th><th>状态</th><th>发布时间</th><th><span className="srOnly">操作</span></th></tr></thead>
             <tbody>
               {announcements.length ? announcements.map((announcement) => (
                 <tr key={announcement.id}>
                   <td><Link className="adminCommerceProductName" href={`/admin/station/announcements/${announcement.id}`}><strong>{announcement.title}</strong></Link></td>
                   <td>{announcement.audience === "public" ? "公开" : "登录可见"}</td>
                   <td>{announcement.importance === "important" ? "重要" : "普通"}</td>
+                  <td>{announcement.displayMode === "drawer" ? "进站抽屉" : announcement.displayMode === "both" ? "列表 + 抽屉" : "公告列表"}</td>
                   <td><span className={announcement.status === "published" ? "adminStatusBadge isLive" : "adminStatusBadge"}>{announcement.status === "published" ? "已发布" : "已下线"}</span></td>
                   <td>{announcement.publishedAt ? <LocalDateTime value={announcement.publishedAt} /> : "未设置"}</td>
                   <td>
@@ -46,7 +47,7 @@ export default async function AdminAnnouncementsPage({ searchParams }: AdminAnno
                     </Link>
                   </td>
                 </tr>
-              )) : <tr><td colSpan={6} className="adminCommerceEmpty">暂无公告</td></tr>}
+              )) : <tr><td colSpan={7} className="adminCommerceEmpty">暂无公告</td></tr>}
             </tbody>
           </table>
         </div>

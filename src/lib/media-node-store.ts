@@ -14,6 +14,16 @@ import {
   type MediaNodeUploadStart,
 } from "./media-node-protocol";
 import { generateVideoThumbnailFile, optimizeMediaFileFastStart, probeMediaDurationFile } from "./media-processing";
+import {
+  cleanupRetiredPlaybackHlsVersions,
+  getPlaybackHlsFileSet,
+  packageVideoHls,
+  prunePlaybackHlsVersions,
+  readPlaybackHlsManifest,
+  removePlaybackHlsVersions,
+  verifyPlaybackHls,
+  type VideoHlsPackageResult,
+} from "./video-hls";
 import { isIgnoredMediaStorageEntry } from "./media-scan-filter";
 import { normalizeMediaStoragePath, resolveMediaStoragePath } from "./media-storage-path";
 import {
@@ -169,10 +179,14 @@ export class MediaNodeStore {
   private readonly thumbnailJobs = new Map<string, Promise<string>>();
   private readonly thumbnailQueue: Array<() => void> = [];
   private activeThumbnailJobs = 0;
+  private playbackQueue: Promise<void> = Promise.resolve();
+  private readonly playbackJobs = new Map<string, Promise<VideoHlsPackageResult>>();
 
   constructor(rootValue: string) {
     this.root = path.resolve(rootValue);
     this.ensureDirectories();
+    const cleanup = setTimeout(() => cleanupRetiredPlaybackHlsVersions(this.root), 1_000);
+    cleanup.unref?.();
   }
 
   private ensureDirectories() {
@@ -656,7 +670,7 @@ export class MediaNodeStore {
     return true;
   }
 
-  deleteAssets(storedNames: string[]): {
+  deleteAssets(storedNames: string[], playbackMediaIds: Record<string, number> = {}): {
     deletedStoredNames: string[];
     failedStoredNames: string[];
   } {
@@ -670,6 +684,10 @@ export class MediaNodeStore {
       }
       try {
         fs.rmSync(this.mediaPath(storedName), { force: true });
+        const mediaId = Number(playbackMediaIds[storedName]);
+        if (Number.isInteger(mediaId) && mediaId > 0) {
+          removePlaybackHlsVersions(this.root, mediaId);
+        }
         deletedStoredNames.push(storedName);
       } catch {
         failedStoredNames.push(storedName);
@@ -711,6 +729,50 @@ export class MediaNodeStore {
       if (error instanceof MediaNodeStoreError) throw error;
       throw new MediaNodeStoreError("无法读取媒体时长", 422);
     }
+  }
+
+  async packagePlaybackHls(input: {
+    mediaId: number;
+    storedName: string;
+    mtimeMs: number;
+    sizeBytes: number;
+  }): Promise<VideoHlsPackageResult> {
+    const identity = `${input.mediaId}:${Math.floor(input.mtimeMs)}:${Math.floor(input.sizeBytes)}`;
+    const existing = this.playbackJobs.get(identity);
+    if (existing) return existing;
+    const job = this.playbackQueue
+      .catch(() => undefined)
+      .then(async () => {
+        return packageVideoHls({ root: this.root, ...input });
+      });
+    this.playbackQueue = job.then(() => undefined, () => undefined);
+    this.playbackJobs.set(identity, job);
+    try {
+      return await job;
+    } finally {
+      if (this.playbackJobs.get(identity) === job) this.playbackJobs.delete(identity);
+    }
+  }
+
+  prunePlaybackHls(mediaId: number, keepVersion: string): void {
+    prunePlaybackHlsVersions(this.root, mediaId, keepVersion);
+  }
+
+  async readPlaybackManifest(manifestPath: string): Promise<string> {
+    return readPlaybackHlsManifest(this.root, manifestPath);
+  }
+
+  async playbackFileInfo(manifestPath: string): Promise<{ sizeBytes: number; fileCount: number }> {
+    const fileSet = await getPlaybackHlsFileSet(this.root, manifestPath);
+    return { sizeBytes: fileSet.sizeBytes, fileCount: fileSet.files.length };
+  }
+
+  async verifyPlaybackHls(manifestPath: string): Promise<{
+    sizeBytes: number;
+    fileCount: number;
+    durationSeconds: number;
+  }> {
+    return verifyPlaybackHls(this.root, manifestPath);
   }
 
   private thumbnailPaths(params: MediaThumbnailRequest): {

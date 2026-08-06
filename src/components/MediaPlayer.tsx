@@ -7,6 +7,15 @@ type PlaybackLease = {
   sessionId: string;
   token: string;
   expiresAt: number;
+  mediaUrl: string;
+  fallbackMediaUrl: string;
+  format: "mp4" | "hls";
+};
+
+type HlsController = {
+  destroy: () => void;
+  recoverMediaError: () => void;
+  startLoad: () => void;
 };
 
 function playbackErrorName(reason: unknown): string {
@@ -61,8 +70,15 @@ export function MediaPlayer({
   const countedRef = useRef(false);
   const leaseRef = useRef<PlaybackLease | null>(null);
   const heartbeatRef = useRef<number | null>(null);
+  const hlsRef = useRef<HlsController | null>(null);
+  const hlsFallbackTriedRef = useRef(false);
+  const hlsNetworkRecoveryRef = useRef(0);
+  const hlsMediaRecoveryRef = useRef(0);
+  const resumeTimeRef = useRef(0);
   const pendingPlayRef = useRef(false);
   const [sourceUrl, setSourceUrl] = useState("");
+  const [sourceFormat, setSourceFormat] = useState<"mp4" | "hls">("mp4");
+  const [fallbackSourceUrl, setFallbackSourceUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [manualPlayRequired, setManualPlayRequired] = useState(false);
@@ -113,11 +129,21 @@ export function MediaPlayer({
       sessionId?: string;
       token?: string;
       expiresAt?: number;
+      mediaUrl?: string;
+      fallbackMediaUrl?: string;
+      format?: "mp4" | "hls";
     };
-    if (!response.ok || !body.sessionId || !body.token || !body.expiresAt) {
+    if (!response.ok || !body.sessionId || !body.token || !body.expiresAt || !body.mediaUrl) {
       throw new Error(body.message || "暂时无法开始播放");
     }
-    return { sessionId: body.sessionId, token: body.token, expiresAt: body.expiresAt };
+    return {
+      sessionId: body.sessionId,
+      token: body.token,
+      expiresAt: body.expiresAt,
+      mediaUrl: body.mediaUrl,
+      fallbackMediaUrl: body.fallbackMediaUrl || "",
+      format: body.format === "hls" ? "hls" : "mp4",
+    };
   }, [clientId, id, leaseRequired]);
 
   const ensurePlaybackAccess = useCallback(async () => {
@@ -143,11 +169,33 @@ export function MediaPlayer({
     pendingPlayRef.current = false;
     releaseLease();
     setSourceUrl("");
+    setSourceFormat("mp4");
+    setFallbackSourceUrl("");
+    hlsFallbackTriedRef.current = false;
     setLoading(false);
+    setError("");
     setManualPlayRequired(false);
     setPlaybackHint("");
     setError(message);
   }, [releaseLease]);
+
+  const fallbackFromHls = useCallback(() => {
+    const fallback = fallbackSourceUrl || leaseRef.current?.fallbackMediaUrl || "";
+    if (!fallback || hlsFallbackTriedRef.current) {
+      failPlayback("HLS 播放失败，正在等待重试");
+      return;
+    }
+    const video = videoRef.current;
+    resumeTimeRef.current = video && Number.isFinite(video.currentTime) ? video.currentTime : 0;
+    hlsFallbackTriedRef.current = true;
+    hlsRef.current?.destroy();
+    hlsRef.current = null;
+    setSourceFormat("mp4");
+    setSourceUrl(fallback);
+    setLoading(true);
+    setError("已切换兼容播放模式");
+    pendingPlayRef.current = true;
+  }, [failPlayback, fallbackSourceUrl]);
 
   const handlePlayRejection = useCallback((reason: unknown) => {
     const name = playbackErrorName(reason);
@@ -169,17 +217,18 @@ export function MediaPlayer({
     setError("");
     setManualPlayRequired(false);
     setPlaybackHint("");
+    hlsFallbackTriedRef.current = false;
+    hlsNetworkRecoveryRef.current = 0;
+    hlsMediaRecoveryRef.current = 0;
+    resumeTimeRef.current = 0;
     try {
       await ensurePlaybackAccess();
       const lease = await acquireLease();
       leaseRef.current = lease;
-      const params = new URLSearchParams({ v: String(Math.floor(sourceVersion)) });
-      if (lease) {
-        params.set("ps", lease.sessionId);
-        params.set("pt", lease.token);
-      }
       pendingPlayRef.current = true;
-      setSourceUrl(`${mediaBasePath}/stream?${params.toString()}`);
+      setSourceFormat(lease?.format || "mp4");
+      setFallbackSourceUrl(lease?.fallbackMediaUrl || "");
+      setSourceUrl(lease?.mediaUrl || `${mediaBasePath}/stream?v=${String(Math.floor(sourceVersion))}`);
     } catch (reason) {
       failPlayback(reason instanceof TypeError
         ? "网络连接异常，请检查网络后重试"
@@ -215,12 +264,92 @@ export function MediaPlayer({
   }, [failPlayback, handlePlayRejection, loading, releaseLease, startPlayback]);
 
   useEffect(() => {
-    if (!sourceUrl || !pendingPlayRef.current) return;
-    pendingPlayRef.current = false;
     const video = videoRef.current;
     if (!video) return;
-    void video.play().catch(handlePlayRejection);
-  }, [handlePlayRejection, sourceUrl]);
+    hlsRef.current?.destroy();
+    hlsRef.current = null;
+    if (!sourceUrl) {
+      video.removeAttribute("src");
+      video.load();
+      return;
+    }
+    let cancelled = false;
+    const restorePosition = () => {
+      const resumeTime = resumeTimeRef.current;
+      if (resumeTime > 0 && Number.isFinite(video.duration) && video.duration > 0) {
+        video.currentTime = Math.min(resumeTime, Math.max(video.duration - 0.25, 0));
+      }
+      resumeTimeRef.current = 0;
+    };
+    const tryPlay = () => {
+      if (!pendingPlayRef.current || cancelled) return;
+      pendingPlayRef.current = false;
+      void video.play().catch(handlePlayRejection);
+    };
+    video.pause();
+    video.removeAttribute("src");
+    if (sourceFormat === "mp4") {
+      video.src = sourceUrl;
+      video.addEventListener("loadedmetadata", restorePosition, { once: true });
+      video.addEventListener("loadedmetadata", tryPlay, { once: true });
+      video.load();
+      return () => {
+        cancelled = true;
+        video.removeEventListener("loadedmetadata", restorePosition);
+        video.removeEventListener("loadedmetadata", tryPlay);
+      };
+    }
+    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = sourceUrl;
+      video.addEventListener("loadedmetadata", restorePosition, { once: true });
+      video.addEventListener("loadedmetadata", tryPlay, { once: true });
+      video.load();
+      return () => {
+        cancelled = true;
+        video.removeEventListener("loadedmetadata", restorePosition);
+        video.removeEventListener("loadedmetadata", tryPlay);
+      };
+    }
+    void import("hls.js").then(({ default: Hls }) => {
+      if (cancelled) return;
+      if (!Hls.isSupported()) {
+        fallbackFromHls();
+        return;
+      }
+      const hls = new Hls({
+        capLevelToPlayerSize: true,
+        enableWorker: true,
+        backBufferLength: 30,
+        maxBufferLength: 30,
+        lowLatencyMode: false,
+      });
+      hlsRef.current = hls;
+      video.addEventListener("loadedmetadata", restorePosition, { once: true });
+      hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(sourceUrl));
+      hls.on(Hls.Events.MANIFEST_PARSED, tryPlay);
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (!data.fatal) return;
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && hlsNetworkRecoveryRef.current < 2) {
+          hlsNetworkRecoveryRef.current += 1;
+          hls.startLoad();
+          return;
+        }
+        if (data.type === Hls.ErrorTypes.MEDIA_ERROR && hlsMediaRecoveryRef.current < 1) {
+          hlsMediaRecoveryRef.current += 1;
+          hls.recoverMediaError();
+          return;
+        }
+        fallbackFromHls();
+      });
+      hls.attachMedia(video);
+    }).catch(() => fallbackFromHls());
+    return () => {
+      cancelled = true;
+      video.removeEventListener("loadedmetadata", restorePosition);
+      hlsRef.current?.destroy();
+      hlsRef.current = null;
+    };
+  }, [fallbackFromHls, handlePlayRejection, sourceFormat, sourceUrl]);
 
   useEffect(() => releaseLease, [releaseLease]);
 
@@ -234,6 +363,7 @@ export function MediaPlayer({
       return;
     }
     setLoading(false);
+    setError("");
     setManualPlayRequired(false);
     setPlaybackHint("");
     if (!countedRef.current) {
@@ -296,11 +426,19 @@ export function MediaPlayer({
         preload={sourceUrl ? "metadata" : "none"}
         src={sourceUrl || undefined}
         onPlay={recordPlay}
+        onPlaying={() => {
+          setLoading(false);
+          setError("");
+        }}
+        onCanPlay={() => setLoading(false)}
+        onWaiting={() => setLoading(true)}
+        onStalled={() => setLoading(true)}
         onPause={handlePause}
         onEnded={handleEnded}
         onError={(event) => {
           if (sourceUrl) {
-            failPlayback(mediaErrorMessage(event.currentTarget.error));
+            if (sourceFormat === "hls") fallbackFromHls();
+            else failPlayback(mediaErrorMessage(event.currentTarget.error));
           }
         }}
       >

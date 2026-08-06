@@ -1,5 +1,5 @@
 # Independent media node. Keep port 3100 private; the browser only uses
-# /media-upload, /media-file and /media-thumbnail. /control is protected
+# /media-upload, /media-file, /media-thumbnail, /media-hls and /media-hls-file. /control is protected
 # by MEDIA_CONTROL_SECRET and can additionally be restricted to the main IP.
 media.example.com {
     reverse_proxy 127.0.0.1:3100

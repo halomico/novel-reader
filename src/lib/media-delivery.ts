@@ -19,6 +19,8 @@ export type ResolvedMediaDelivery = {
   asset: MediaAsset;
   download: boolean;
   downloadToken: string;
+  playbackSessionId: string;
+  playbackToken: string;
 };
 
 function encodedStoredName(storedName: string): string {
@@ -34,7 +36,13 @@ function contentDisposition(asset: MediaAsset, download: boolean): string {
 export function mediaDeliveryUrl(
   asset: MediaAsset,
   download = false,
-  options: { publiclyAccessible?: boolean; estimatedKbps?: number; downloadToken?: string } = {},
+  options: {
+    publiclyAccessible?: boolean;
+    estimatedKbps?: number;
+    downloadToken?: string;
+    playbackSessionId?: string;
+    playbackToken?: string;
+  } = {},
 ): string {
   if (isRemoteMediaStorage()) {
     const node = resolveRemoteMediaNodeForAsset(asset.storageNodeId, asset.kind);
@@ -54,6 +62,9 @@ export function mediaDeliveryUrl(
   if (download) {
     params.set("download", "1");
     if (options.downloadToken) params.set("ticket", options.downloadToken);
+  } else if (asset.kind === "video" && options.playbackSessionId && options.playbackToken) {
+    params.set("ps", options.playbackSessionId);
+    params.set("pt", options.playbackToken);
   }
   return `/media-file/${encodedStoredName(asset.storedName)}?${params.toString()}`;
 }
@@ -101,7 +112,11 @@ export function resolveMediaDeliveryUri(uri: string): ResolvedMediaDelivery | nu
   if (downloadToken && !/^[A-Za-z0-9_-]{32,128}$/u.test(downloadToken)) {
     return null;
   }
-  return { asset, download, downloadToken };
+  const playbackSessionId = url.searchParams.get("ps") || "";
+  const playbackToken = url.searchParams.get("pt") || "";
+  if (playbackSessionId && !/^[A-Za-z0-9_-]{16,128}$/u.test(playbackSessionId)) return null;
+  if (playbackToken && !/^[A-Za-z0-9_-]{32,128}$/u.test(playbackToken)) return null;
+  return { asset, download, downloadToken, playbackSessionId, playbackToken };
 }
 
 export function mediaDeliveryHeaders(

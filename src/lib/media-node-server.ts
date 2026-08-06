@@ -6,11 +6,14 @@ import { pipeline } from "node:stream";
 import { MEDIA_UPLOAD_CHUNK_BYTES, type MediaNodeKind, type MediaNodeUploadRequest } from "./media-node-protocol";
 import { MediaNodeStore, MediaNodeStoreError } from "./media-node-store";
 import {
+  verifySignedMediaHlsFileUrl,
+  verifySignedMediaHlsUrl,
   verifySignedMediaCoverUrl,
   verifySignedMediaThumbnailUrl,
   verifySignedMediaUrl,
 } from "./media-signing";
 import { resolveMediaStoragePath } from "./media-storage-path";
+import { createPlaybackHlsFileStream, getPlaybackHlsFileSet } from "./video-hls";
 
 export type MediaNodeServerOptions = {
   root: string;
@@ -25,10 +28,12 @@ type ByteRange = { start: number; end: number };
 type MediaNodeRuntime = {
   startedAt: number;
   activeVideoStreams: number;
+  activeHlsRequests: number;
   reservedVideoKbps: number;
   bytesServed: number;
   maxVideoStreams: number;
   videoBandwidthKbps: number;
+  maxHlsRequests: number;
 };
 
 function safeEqual(left: string, right: string): boolean {
@@ -236,6 +241,202 @@ async function serveSignedMedia(
   pipeline(stream, response, release);
 }
 
+function hlsMimeType(filePath: string): string {
+  const extension = path.extname(filePath).toLowerCase();
+  if (extension === ".m3u8") return "application/vnd.apple.mpegurl";
+  if (extension === ".m4s") return "video/iso.segment";
+  return "video/mp4";
+}
+
+async function serveSignedHls(
+  request: IncomingMessage,
+  response: ServerResponse,
+  url: URL,
+  root: string,
+  signingSecret: string,
+  runtime: MediaNodeRuntime,
+) {
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Expose-Headers": "Accept-Ranges, Content-Length, Content-Range, ETag, Last-Modified",
+    "Cross-Origin-Resource-Policy": "cross-origin",
+  };
+  if (request.method === "OPTIONS") {
+    empty(response, 204, {
+      "Access-Control-Allow-Headers": "Range, If-None-Match, If-Range",
+      "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Max-Age": "600",
+    });
+    return;
+  }
+  const payload = verifySignedMediaHlsUrl(url, Date.now(), signingSecret);
+  if (!payload) {
+    empty(response, 404, corsHeaders);
+    return;
+  }
+  let filePath: string;
+  try {
+    filePath = resolveMediaStoragePath(root, payload.storedPath);
+  } catch {
+    empty(response, 404, corsHeaders);
+    return;
+  }
+  let stat: fs.Stats;
+  try {
+    stat = await fs.promises.stat(filePath);
+  } catch {
+    empty(response, 404, corsHeaders);
+    return;
+  }
+  if (!stat.isFile() || stat.size <= 0) {
+    empty(response, 404, corsHeaders);
+    return;
+  }
+  const etag = `"hls-${Math.floor(stat.mtimeMs)}-${stat.size}"`;
+  if (
+    request.method === "GET" &&
+    runtime.maxHlsRequests > 0 &&
+    runtime.activeHlsRequests >= runtime.maxHlsRequests
+  ) {
+    empty(response, 503, { ...corsHeaders, "Cache-Control": "no-store", "Retry-After": "5" });
+    return;
+  }
+  let rangeHeader = request.headers.range;
+  const ifRange = request.headers["if-range"];
+  if (rangeHeader && ifRange && ifRange !== etag && ifRange !== stat.mtime.toUTCString()) {
+    rangeHeader = undefined;
+  }
+  const range = parseRange(rangeHeader, stat.size);
+  if (range === "invalid") {
+    empty(response, 416, { ...corsHeaders, ETag: etag, "Content-Range": `bytes */${stat.size}` });
+    return;
+  }
+  const start = range?.start ?? 0;
+  const end = range?.end ?? stat.size - 1;
+  const publicMaxAge = Math.max(60, Math.min(86_400, payload.expiresAt - Math.floor(Date.now() / 1_000) - 30));
+  const headers: Record<string, string> = {
+    "Accept-Ranges": "bytes",
+    ...corsHeaders,
+    "Cache-Control": payload.publiclyAccessible
+      ? `public, max-age=${publicMaxAge}, immutable, no-transform`
+      : "private, max-age=300, no-transform",
+    "Content-Length": String(end - start + 1),
+    "Content-Type": hlsMimeType(filePath),
+    ETag: etag,
+    "Last-Modified": stat.mtime.toUTCString(),
+    "X-Content-Type-Options": "nosniff",
+  };
+  if (payload.publiclyAccessible) headers["Cloudflare-CDN-Cache-Control"] = `public, max-age=${publicMaxAge}, no-transform`;
+  if (range) headers["Content-Range"] = `bytes ${start}-${end}/${stat.size}`;
+  if (!range && request.headers["if-none-match"] === etag) {
+    delete headers["Content-Length"];
+    empty(response, 304, headers);
+    return;
+  }
+  response.writeHead(range ? 206 : 200, headers);
+  if (request.method === "HEAD") {
+    response.end();
+    return;
+  }
+  runtime.activeHlsRequests += 1;
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    runtime.activeHlsRequests = Math.max(0, runtime.activeHlsRequests - 1);
+  };
+  const stream = fs.createReadStream(filePath, { start, end });
+  stream.on("data", (chunk) => {
+    runtime.bytesServed += chunk.length;
+  });
+  response.once("close", release);
+  pipeline(stream, response, release);
+}
+
+async function serveSignedHlsFile(
+  request: IncomingMessage,
+  response: ServerResponse,
+  url: URL,
+  root: string,
+  signingSecret: string,
+  runtime: MediaNodeRuntime,
+) {
+  const payload = verifySignedMediaHlsFileUrl(url, Date.now(), signingSecret);
+  if (!payload) {
+    empty(response, 404, { "Cache-Control": "no-store" });
+    return;
+  }
+  let fileSet;
+  try {
+    fileSet = await getPlaybackHlsFileSet(root, payload.manifestPath);
+  } catch {
+    empty(response, 404, { "Cache-Control": "no-store" });
+    return;
+  }
+  const etagIdentity = crypto
+    .createHash("sha256")
+    .update(`${payload.manifestPath}\n${fileSet.sizeBytes}`)
+    .digest("hex")
+    .slice(0, 24);
+  const etag = `"hls-file-${etagIdentity}"`;
+  let rangeHeader = request.headers.range;
+  const ifRange = request.headers["if-range"];
+  if (rangeHeader && ifRange && ifRange !== etag) rangeHeader = undefined;
+  const range = parseRange(rangeHeader, fileSet.sizeBytes);
+  const baseHeaders: Record<string, string> = {
+    "Accept-Ranges": "bytes",
+    "Access-Control-Allow-Origin": request.headers.origin || "*",
+    "Cache-Control": "private, max-age=300, no-transform",
+    "Content-Disposition": contentDisposition(payload.fileName, payload.download),
+    "Content-Type": "video/mp4",
+    "Cross-Origin-Resource-Policy": "cross-origin",
+    ETag: etag,
+    "X-Content-Type-Options": "nosniff",
+  };
+  if (range === "invalid") {
+    empty(response, 416, { ...baseHeaders, "Content-Range": `bytes */${fileSet.sizeBytes}` });
+    return;
+  }
+  if (!range && request.headers["if-none-match"] === etag) {
+    empty(response, 304, baseHeaders);
+    return;
+  }
+  if (
+    request.method === "GET" &&
+    runtime.maxHlsRequests > 0 &&
+    runtime.activeHlsRequests >= runtime.maxHlsRequests
+  ) {
+    empty(response, 503, { ...baseHeaders, "Retry-After": "5" });
+    return;
+  }
+  const start = range?.start ?? 0;
+  const end = range?.end ?? fileSet.sizeBytes - 1;
+  const headers = {
+    ...baseHeaders,
+    "Content-Length": String(end - start + 1),
+    ...(range ? { "Content-Range": `bytes ${start}-${end}/${fileSet.sizeBytes}` } : {}),
+  };
+  response.writeHead(range ? 206 : 200, headers);
+  if (request.method === "HEAD") {
+    response.end();
+    return;
+  }
+  runtime.activeHlsRequests += 1;
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    runtime.activeHlsRequests = Math.max(0, runtime.activeHlsRequests - 1);
+  };
+  const stream = createPlaybackHlsFileStream(fileSet, start, end);
+  stream.on("data", (chunk) => {
+    runtime.bytesServed += chunk.length;
+  });
+  response.once("close", release);
+  pipeline(stream, response, release);
+}
+
 async function serveSignedThumbnail(
   request: IncomingMessage,
   response: ServerResponse,
@@ -355,12 +556,14 @@ export function createMediaNodeServer(options: MediaNodeServerOptions): http.Ser
   const runtime: MediaNodeRuntime = {
     startedAt: Date.now(),
     activeVideoStreams: 0,
+    activeHlsRequests: 0,
     reservedVideoKbps: 0,
     bytesServed: 0,
     maxVideoStreams: Math.min(Math.max(Math.floor(options.maxVideoStreams || 0), 0), 100_000),
     videoBandwidthKbps: Math.floor(
       Math.min(Math.max(Number(options.videoBandwidthMbps) || 0, 0), 100_000) * 1_000,
     ),
+    maxHlsRequests: Math.min(Math.max(Math.floor(options.maxVideoStreams || 0) * 8, 0), 100_000),
   };
   return http.createServer(async (request, response) => {
     if (!request.url) {
@@ -424,6 +627,7 @@ export function createMediaNodeServer(options: MediaNodeServerOptions): http.Ser
           json(response, 200, {
             ok: true,
             activeVideoStreams: runtime.activeVideoStreams,
+            activeHlsRequests: runtime.activeHlsRequests,
             reservedVideoMbps: runtime.reservedVideoKbps / 1_000,
             bytesServed: runtime.bytesServed,
             uptimeSeconds: Math.floor((Date.now() - runtime.startedAt) / 1_000),
@@ -479,8 +683,14 @@ export function createMediaNodeServer(options: MediaNodeServerOptions): http.Ser
           return;
         }
         if (url.pathname === "/control/assets/delete" && request.method === "POST") {
-          const body = await readJson<{ storedNames: string[] }>(request);
-          json(response, 200, { ok: true, ...store.deleteAssets(Array.isArray(body.storedNames) ? body.storedNames : []) });
+          const body = await readJson<{ storedNames: string[]; playbackMediaIds?: Record<string, number> }>(request);
+          json(response, 200, {
+            ok: true,
+            ...store.deleteAssets(
+              Array.isArray(body.storedNames) ? body.storedNames : [],
+              body.playbackMediaIds && typeof body.playbackMediaIds === "object" ? body.playbackMediaIds : {},
+            ),
+          });
           return;
         }
         if (url.pathname === "/control/probe" && request.method === "POST") {
@@ -492,6 +702,43 @@ export function createMediaNodeServer(options: MediaNodeServerOptions): http.Ser
               sizeBytes: Number(body.sizeBytes),
             }),
           });
+          return;
+        }
+        if (url.pathname === "/control/playback/package" && request.method === "POST") {
+          const body = await readJson<{
+            mediaId: number;
+            storedName: string;
+            mtimeMs: number;
+            sizeBytes: number;
+          }>(request);
+          const result = await store.packagePlaybackHls({
+              mediaId: Number(body.mediaId),
+              storedName: body.storedName,
+              mtimeMs: Number(body.mtimeMs),
+              sizeBytes: Number(body.sizeBytes),
+            });
+          json(response, 200, { ok: true, version: result.version, manifestPath: result.manifestPath });
+          return;
+        }
+        if (url.pathname === "/control/playback/prune" && request.method === "POST") {
+          const body = await readJson<{ mediaId: number; keepVersion: string }>(request);
+          store.prunePlaybackHls(Number(body.mediaId), String(body.keepVersion || ""));
+          json(response, 200, { ok: true });
+          return;
+        }
+        if (url.pathname === "/control/playback/manifest" && request.method === "GET") {
+          const manifestPath = url.searchParams.get("path") || "";
+          json(response, 200, { ok: true, manifest: await store.readPlaybackManifest(manifestPath) });
+          return;
+        }
+        if (url.pathname === "/control/playback/file-info" && request.method === "GET") {
+          const manifestPath = url.searchParams.get("path") || "";
+          json(response, 200, { ok: true, ...(await store.playbackFileInfo(manifestPath)) });
+          return;
+        }
+        if (url.pathname === "/control/playback/verify" && request.method === "GET") {
+          const manifestPath = url.searchParams.get("path") || "";
+          json(response, 200, { ok: true, ...(await store.verifyPlaybackHls(manifestPath)) });
           return;
         }
         if (url.pathname === "/control/thumbnails/prepare" && request.method === "POST") {
@@ -524,6 +771,20 @@ export function createMediaNodeServer(options: MediaNodeServerOptions): http.Ser
         return;
       }
 
+      if (
+        (request.method === "GET" || request.method === "HEAD") &&
+        url.pathname.startsWith("/media-hls-file/")
+      ) {
+        await serveSignedHlsFile(request, response, url, store.root, options.signingSecret, runtime);
+        return;
+      }
+      if (
+        (request.method === "GET" || request.method === "HEAD" || request.method === "OPTIONS") &&
+        url.pathname.startsWith("/media-hls/")
+      ) {
+        await serveSignedHls(request, response, url, store.root, options.signingSecret, runtime);
+        return;
+      }
       if (
         (request.method === "GET" || request.method === "HEAD") &&
         url.pathname.startsWith("/media-cover/")

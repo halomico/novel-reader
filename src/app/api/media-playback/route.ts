@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getVideoPlaybackAccess } from "@/lib/media-access";
-import { getMediaAsset, isMediaKindConsumable } from "@/lib/media";
+import { getMediaAsset, hasPublishedMediaHls, isMediaKindConsumable } from "@/lib/media";
+import { mediaDeliveryUrl } from "@/lib/media-delivery";
 import { getMediaNodePlaybackCapacity } from "@/lib/media-storage-config";
+import { getVideoPlaybackMode } from "@/lib/video-playback-mode";
 import { attachPlaybackViewerCookie, playbackViewerFromRequest } from "@/lib/playback-viewer";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 import {
@@ -77,11 +79,67 @@ export async function POST(request: NextRequest) {
       },
     );
   }
+  let mediaUrl = "";
+  let fallbackMediaUrl = "";
+  let format: "mp4" | "hls" = "mp4";
+  try {
+    const playbackMode = getVideoPlaybackMode();
+    const hlsReady = hasPublishedMediaHls(asset);
+    if (playbackMode !== "mp4" && hlsReady) {
+      const query = new URLSearchParams({
+        v: asset.playbackVersion,
+        ps: result.lease.id,
+        pt: result.lease.token,
+      });
+      mediaUrl = `/media/${asset.id}/hls/manifest?${query.toString()}`;
+      format = "hls";
+      if (playbackMode === "migration") {
+        fallbackMediaUrl = mediaDeliveryUrl(asset, false, {
+          publiclyAccessible: false,
+          estimatedKbps: estimateVideoBitrateKbps(asset),
+          playbackSessionId: result.lease.id,
+          playbackToken: result.lease.token,
+        });
+      }
+    } else if (playbackMode === "hls-only") {
+      releaseVideoPlaybackLease({
+        id: result.lease.id,
+        token: result.lease.token,
+        viewerKey: viewer.viewerKey,
+        mediaId: asset.id,
+      });
+      const unavailable = NextResponse.json(
+        { ok: false, message: "视频正在迁移为 HLS，暂时无法播放" },
+        { status: 503, headers: { "Retry-After": "60" } },
+      );
+      attachPlaybackViewerCookie(unavailable, viewer);
+      return unavailable;
+    } else {
+      mediaUrl = mediaDeliveryUrl(asset, false, {
+        publiclyAccessible: false,
+        estimatedKbps: estimateVideoBitrateKbps(asset),
+        playbackSessionId: result.lease.id,
+        playbackToken: result.lease.token,
+      });
+      fallbackMediaUrl = mediaUrl;
+    }
+  } catch {
+    releaseVideoPlaybackLease({
+      id: result.lease.id,
+      token: result.lease.token,
+      viewerKey: viewer.viewerKey,
+      mediaId: asset.id,
+    });
+    return NextResponse.json({ ok: false, message: "媒体节点暂不可用" }, { status: 503 });
+  }
   const response = NextResponse.json({
     ok: true,
     sessionId: result.lease.id,
     token: result.lease.token,
     expiresAt: result.lease.expiresAt,
+    mediaUrl,
+    fallbackMediaUrl,
+    format,
   });
   attachPlaybackViewerCookie(response, viewer);
   return response;

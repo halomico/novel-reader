@@ -793,25 +793,6 @@ export async function saveAdminSettingsAction(formData: FormData) {
   }
   const adminAllowedNetworks = normalizeAdminNetworkRules(formData.get("adminAllowedNetworks"));
   const adminIpAllowlistEnabled = formData.get("adminIpAllowlistEnabled") === "on";
-  const siteEntryNoticeEnabled = formData.get("siteEntryNoticeEnabled") === "on";
-  const siteEntryNoticeTitle = String(formData.get("siteEntryNoticeTitle") || "")
-    .normalize("NFKC")
-    .replace(/\s+/gu, " ")
-    .trim()
-    .slice(0, 80) || "重要通知";
-  const siteEntryNoticeRaw = String(formData.get("siteEntryNoticeMarkdown") || "")
-    .replace(/\r\n?/gu, "\n")
-    .trim();
-  if (siteEntryNoticeRaw.length > 20_000) {
-    adminNotice("重要通知正文不能超过 20000 个字符", "warning", "/admin/settings");
-  }
-  if (siteEntryNoticeEnabled && !siteEntryNoticeRaw) {
-    adminNotice("启用重要通知前，请先填写正文", "warning", "/admin/settings");
-  }
-  const siteEntryNoticeChanged =
-    siteEntryNoticeEnabled !== previous.siteEntryNoticeEnabled ||
-    siteEntryNoticeTitle !== previous.siteEntryNoticeTitle ||
-    siteEntryNoticeRaw !== previous.siteEntryNoticeMarkdown;
   const currentAdminIp = getClientIp(headerStore);
   if (adminIpAllowlistEnabled && adminAllowedNetworks.length === 0) {
     adminNotice("启用后台白名单前，请至少填写一个 IP 或 CIDR", "warning", "/admin/settings");
@@ -826,13 +807,6 @@ export async function saveAdminSettingsAction(formData: FormData) {
     brandLinkTarget: formData.get("brandLinkTarget") === "home" ? "home" : "novels",
     settingsPreviewText: String(formData.get("settingsPreviewText") || "").trim(),
     defaultNovelLibrarySlug,
-    siteEntryNoticeEnabled,
-    siteEntryNoticeTitle,
-    siteEntryNoticeMarkdown: siteEntryNoticeRaw,
-    siteEntryNoticeVersion:
-      siteEntryNoticeChanged || (siteEntryNoticeEnabled && !previous.siteEntryNoticeVersion)
-        ? Date.now().toString(36)
-        : previous.siteEntryNoticeVersion,
     readerDefaultFontSize: intField(formData, "readerDefaultFontSize", previous.readerDefaultFontSize || 18, 8, 25),
     readerDefaultLineHeight: normalizeReaderLineHeight(
       String(formData.get("readerDefaultLineHeight") || ""),

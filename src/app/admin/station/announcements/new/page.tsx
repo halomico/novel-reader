@@ -6,7 +6,13 @@ import { AdminFrame } from "../../../AdminFrame";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
 
-export default function AdminNewAnnouncementPage() {
+export default async function AdminNewAnnouncementPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ display?: string }>;
+}) {
+  const query = await searchParams;
+  const initialDisplayMode = query.display === "drawer" || query.display === "both" ? query.display : "list";
   return (
     <AdminFrame
       active="station"
@@ -15,7 +21,7 @@ export default function AdminNewAnnouncementPage() {
       <div className="adminWorkspace">
         <AdminStationNavigation active="announcements" />
         <header className="adminWorkspaceHeader"><div><h1>发布公告</h1><p>填写完成后直接发布，也可以选择暂不展示。</p></div></header>
-        <AdminAnnouncementEditor announcement={null} />
+        <AdminAnnouncementEditor announcement={null} initialDisplayMode={initialDisplayMode} />
       </div>
     </AdminFrame>
   );

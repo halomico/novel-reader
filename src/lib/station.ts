@@ -4,10 +4,12 @@ import {
   queueStationTelegramNotification,
 } from "./telegram-outbox";
 import { STATION_MESSAGE_MAX_LENGTH, stationMessageLength } from "./station-protocol";
+import { readSiteSettings } from "./site-settings";
 
 export type AnnouncementAudience = "public" | "member";
 export type AnnouncementImportance = "normal" | "important";
 export type AnnouncementStatus = "draft" | "published" | "archived";
+export type AnnouncementDisplayMode = "list" | "drawer" | "both";
 
 export type Announcement = {
   id: number;
@@ -15,6 +17,8 @@ export type Announcement = {
   body: string;
   audience: AnnouncementAudience;
   importance: AnnouncementImportance;
+  displayMode: AnnouncementDisplayMode;
+  entryVersion: string;
   status: AnnouncementStatus;
   publishedAt: string | null;
   expiresAt: string | null;
@@ -50,6 +54,8 @@ type AnnouncementRow = {
   body: string;
   audience: AnnouncementAudience;
   importance: AnnouncementImportance;
+  display_mode: AnnouncementDisplayMode;
+  entry_version: string;
   status: AnnouncementStatus;
   published_at: string | null;
   expires_at: string | null;
@@ -106,12 +112,78 @@ function toAnnouncement(row: AnnouncementRow): Announcement {
     body: row.body,
     audience: row.audience,
     importance: row.importance,
+    displayMode: row.display_mode,
+    entryVersion: row.entry_version,
     status: row.status,
     publishedAt: row.published_at,
     expiresAt: row.expires_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+const ANNOUNCEMENT_SELECT = `
+  SELECT id, title, body, audience, importance, display_mode, entry_version,
+         status, published_at, expires_at, created_at, updated_at
+  FROM announcements`;
+
+const LEGACY_ENTRY_NOTICE_MIGRATION_KEY = "announcements.entry-drawer-legacy-v1";
+
+function createEntryVersion(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`.slice(0, 80);
+}
+
+function cleanDisplayMode(value: unknown): AnnouncementDisplayMode {
+  return value === "drawer" || value === "both" ? value : "list";
+}
+
+function ensureLegacyEntryNoticeMigrated() {
+  const db = getDb();
+  if (db.prepare("SELECT 1 AS found FROM app_metadata WHERE key = ?").get(LEGACY_ENTRY_NOTICE_MIGRATION_KEY)) {
+    return;
+  }
+
+  const settings = readSiteSettings();
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const alreadyMigrated = db
+      .prepare("SELECT 1 AS found FROM app_metadata WHERE key = ?")
+      .get(LEGACY_ENTRY_NOTICE_MIGRATION_KEY);
+    if (alreadyMigrated) {
+      db.exec("COMMIT");
+      return;
+    }
+
+    if (settings.siteEntryNoticeEnabled && settings.siteEntryNoticeMarkdown.trim()) {
+      const exists = db
+        .prepare(
+          `SELECT 1 AS found FROM announcements
+           WHERE display_mode IN ('drawer', 'both') AND title = ? AND body = ?
+           LIMIT 1`,
+        )
+        .get(settings.siteEntryNoticeTitle, settings.siteEntryNoticeMarkdown);
+      if (!exists) {
+        db.prepare(
+          `INSERT INTO announcements (
+             title, body, audience, importance, display_mode, entry_version,
+             status, published_at, expires_at
+           ) VALUES (?, ?, 'public', 'important', 'drawer', ?, 'published', CURRENT_TIMESTAMP, NULL)`,
+        ).run(
+          settings.siteEntryNoticeTitle,
+          settings.siteEntryNoticeMarkdown,
+          settings.siteEntryNoticeVersion || createEntryVersion(),
+        );
+      }
+    }
+    db.prepare(
+      `INSERT INTO app_metadata (key, value) VALUES (?, '1')
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
+    ).run(LEGACY_ENTRY_NOTICE_MIGRATION_KEY);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 }
 
 function toStationThread(row: StationThreadRow): StationThread {
@@ -167,8 +239,12 @@ function cleanStationMessageBody(value: unknown): string {
   return body;
 }
 
-function visibleAnnouncementWhere(authenticated: boolean): string {
+function visibleAnnouncementWhere(authenticated: boolean, displayMode: "list" | "drawer" = "list"): string {
+  const modeClause = displayMode === "drawer"
+    ? "display_mode IN ('drawer', 'both')"
+    : "display_mode IN ('list', 'both')";
   return `status = 'published'
+    AND ${modeClause}
     AND published_at IS NOT NULL
     AND datetime(published_at) <= CURRENT_TIMESTAMP
     AND (expires_at IS NULL OR datetime(expires_at) > CURRENT_TIMESTAMP)
@@ -176,11 +252,11 @@ function visibleAnnouncementWhere(authenticated: boolean): string {
 }
 
 export function getHomeAnnouncement(authenticated: boolean): Announcement | null {
+  ensureLegacyEntryNoticeMigrated();
   const row = getDb()
     .prepare(
-      `SELECT id, title, body, audience, importance, status, published_at, expires_at, created_at, updated_at
-       FROM announcements
-       WHERE ${visibleAnnouncementWhere(authenticated)}
+      `${ANNOUNCEMENT_SELECT}
+       WHERE ${visibleAnnouncementWhere(authenticated, "list")}
        ORDER BY CASE importance WHEN 'important' THEN 0 ELSE 1 END,
                 published_at DESC, id DESC
        LIMIT 1`,
@@ -190,12 +266,12 @@ export function getHomeAnnouncement(authenticated: boolean): Announcement | null
 }
 
 export function listVisibleAnnouncements(authenticated: boolean, limit = 50): Announcement[] {
+  ensureLegacyEntryNoticeMigrated();
   const safeLimit = Math.min(Math.max(Math.floor(limit), 1), 200);
   return (getDb()
     .prepare(
-      `SELECT id, title, body, audience, importance, status, published_at, expires_at, created_at, updated_at
-       FROM announcements
-       WHERE ${visibleAnnouncementWhere(authenticated)}
+      `${ANNOUNCEMENT_SELECT}
+       WHERE ${visibleAnnouncementWhere(authenticated, "list")}
        ORDER BY CASE importance WHEN 'important' THEN 0 ELSE 1 END,
                 published_at DESC, id DESC
        LIMIT ?`,
@@ -203,26 +279,40 @@ export function listVisibleAnnouncements(authenticated: boolean, limit = 50): An
     .all(safeLimit) as AnnouncementRow[]).map(toAnnouncement);
 }
 
+export function getEntryDrawerAnnouncement(authenticated: boolean): Announcement | null {
+  ensureLegacyEntryNoticeMigrated();
+  const row = getDb()
+    .prepare(
+      `${ANNOUNCEMENT_SELECT}
+       WHERE ${visibleAnnouncementWhere(authenticated, "drawer")}
+       ORDER BY CASE importance WHEN 'important' THEN 0 ELSE 1 END,
+                published_at DESC, id DESC
+       LIMIT 1`,
+    )
+    .get() as AnnouncementRow | undefined;
+  return row ? toAnnouncement(row) : null;
+}
+
 export function getVisibleAnnouncement(
   id: number,
   options: { authenticated?: boolean; admin?: boolean } = {},
 ): Announcement | null {
+  ensureLegacyEntryNoticeMigrated();
   const where = options.admin ? "id = ?" : `id = ? AND ${visibleAnnouncementWhere(Boolean(options.authenticated))}`;
   const row = getDb()
     .prepare(
-      `SELECT id, title, body, audience, importance, status, published_at, expires_at, created_at, updated_at
-       FROM announcements WHERE ${where}`,
+      `${ANNOUNCEMENT_SELECT} WHERE ${where}`,
     )
     .get(id) as AnnouncementRow | undefined;
   return row ? toAnnouncement(row) : null;
 }
 
 export function listAdminAnnouncements(limit = 100): Announcement[] {
+  ensureLegacyEntryNoticeMigrated();
   const safeLimit = Math.min(Math.max(Math.floor(limit), 1), 300);
   return (getDb()
     .prepare(
-      `SELECT id, title, body, audience, importance, status, published_at, expires_at, created_at, updated_at
-       FROM announcements
+      `${ANNOUNCEMENT_SELECT}
        ORDER BY CASE status WHEN 'published' THEN 0 WHEN 'draft' THEN 1 ELSE 2 END,
                 updated_at DESC, id DESC
        LIMIT ?`,
@@ -236,6 +326,7 @@ export function saveAnnouncement(input: {
   body: unknown;
   audience?: unknown;
   importance?: unknown;
+  displayMode?: unknown;
   status?: unknown;
   publishedAt?: string | null;
   expiresAt?: string | null;
@@ -245,6 +336,7 @@ export function saveAnnouncement(input: {
   const body = cleanBody(input.body);
   const audience: AnnouncementAudience = input.audience === "member" ? "member" : "public";
   const importance: AnnouncementImportance = input.importance === "important" ? "important" : "normal";
+  const displayMode = cleanDisplayMode(input.displayMode);
   const status: AnnouncementStatus = input.status === "published" || input.status === "archived" ? input.status : "draft";
   const publishedAt = status === "published"
     ? input.publishedAt || new Date().toISOString()
@@ -253,24 +345,47 @@ export function saveAnnouncement(input: {
   const db = getDb();
 
   if (Number.isInteger(id) && id > 0) {
-    const changed = db.prepare(
+    const previous = db.prepare(
+      `SELECT title, body, audience, importance, display_mode, entry_version,
+              status, published_at, expires_at
+       FROM announcements WHERE id = ?`,
+    ).get(id) as {
+      title: string;
+      body: string;
+      audience: AnnouncementAudience;
+      importance: AnnouncementImportance;
+      display_mode: AnnouncementDisplayMode;
+      entry_version: string;
+      status: AnnouncementStatus;
+      published_at: string | null;
+      expires_at: string | null;
+    } | undefined;
+    if (!previous) throw new StationInputError("公告不存在");
+    const fieldsChanged = previous.title !== title || previous.body !== body || previous.audience !== audience ||
+      previous.importance !== importance || previous.display_mode !== displayMode || previous.status !== status ||
+      previous.published_at !== publishedAt || previous.expires_at !== expiresAt;
+    const entryVersion = displayMode === "list"
+      ? ""
+      : fieldsChanged
+        ? createEntryVersion()
+        : previous.entry_version || createEntryVersion();
+    const updated = db.prepare(
       `UPDATE announcements
-       SET title = ?, body = ?, audience = ?, importance = ?, status = ?,
-           published_at = ?, expires_at = ?, updated_at = CURRENT_TIMESTAMP
+       SET title = ?, body = ?, audience = ?, importance = ?, display_mode = ?,
+           entry_version = ?, status = ?, published_at = ?, expires_at = ?,
+           updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-    ).run(title, body, audience, importance, status, publishedAt, expiresAt, id).changes;
-    if (!changed) {
-      throw new StationInputError("公告不存在");
-    }
+    ).run(title, body, audience, importance, displayMode, entryVersion, status, publishedAt, expiresAt, id).changes;
+    if (!updated) throw new StationInputError("公告不存在");
     const announcement = getVisibleAnnouncement(id, { admin: true })!;
     if (announcement.status === "published") notifyAnnouncement(announcement);
     return announcement;
   }
   const result = db.prepare(
     `INSERT INTO announcements
-      (title, body, audience, importance, status, published_at, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(title, body, audience, importance, status, publishedAt, expiresAt);
+      (title, body, audience, importance, display_mode, entry_version, status, published_at, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(title, body, audience, importance, displayMode, displayMode === "list" ? "" : createEntryVersion(), status, publishedAt, expiresAt);
   const announcement = getVisibleAnnouncement(Number(result.lastInsertRowid), { admin: true })!;
   if (announcement.status === "published") notifyAnnouncement(announcement);
   return announcement;

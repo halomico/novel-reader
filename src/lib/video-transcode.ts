@@ -45,6 +45,7 @@ export type VideoInputProbe = {
   videoCodec: string;
   pixelFormat: string;
   audioCodec: string | null;
+  durationSeconds?: number;
 };
 
 export type VideoProcessingMode = "passthrough" | "remux" | "audio-transcode" | "transcode";
@@ -154,13 +155,13 @@ export function selectVideoBitrateKbps(
     ?? profile.fallbackVideoBitrateKbps;
 }
 
-function probeVideoInput(sourcePath: string): Promise<VideoInputProbe> {
+export function probeVideoInput(sourcePath: string): Promise<VideoInputProbe> {
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.env.FFPROBE_PATH || "ffprobe",
       [
         "-v", "error",
-        "-show_entries", "stream=codec_type,codec_name,pix_fmt,width,height",
+        "-show_entries", "stream=codec_type,codec_name,pix_fmt,width,height,duration:format=duration",
         "-of", "json",
         sourcePath,
       ],
@@ -193,7 +194,9 @@ function probeVideoInput(sourcePath: string): Promise<VideoInputProbe> {
             pix_fmt?: string;
             width?: number;
             height?: number;
+            duration?: string;
           }>;
+          format?: { duration?: string };
         };
         const video = parsed.streams?.find((stream) => stream.codec_type === "video");
         const audio = parsed.streams?.find((stream) => stream.codec_type === "audio");
@@ -202,12 +205,20 @@ function probeVideoInput(sourcePath: string): Promise<VideoInputProbe> {
         if (width <= 0 || height <= 0) throw new Error("视频分辨率无效");
         const videoCodec = String(video?.codec_name || "").trim().toLowerCase();
         if (!videoCodec) throw new Error("无法读取视频编码");
+        const streamDurationSeconds = Math.max(
+          0,
+          ...(parsed.streams || []).map((stream) => Number(stream.duration) || 0),
+        );
+        const durationSeconds = Number(parsed.format?.duration) || streamDurationSeconds;
         resolve({
           width,
           height,
           videoCodec,
           pixelFormat: String(video?.pix_fmt || "").trim().toLowerCase(),
           audioCodec: audio?.codec_name ? String(audio.codec_name).trim().toLowerCase() : null,
+          durationSeconds: Number.isFinite(durationSeconds) && durationSeconds > 0
+            ? durationSeconds
+            : undefined,
         });
       } catch (error) {
         reject(error instanceof Error ? error : new Error("无法读取视频编码信息"));

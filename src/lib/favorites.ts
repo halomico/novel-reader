@@ -181,6 +181,12 @@ export function listFavoriteMedia(
     duration_seconds: number | null;
     thumbnail_version: number;
     custom_cover_key: string | null;
+    playback_format: "mp4" | "hls";
+    playback_version: string;
+    playback_manifest_path: string | null;
+    playback_status: "none" | "pending" | "processing" | "ready" | "failed";
+    playback_error: string;
+    playback_published_at: string | null;
     play_count: number;
     recommend_count: number;
     download_count: number;
@@ -192,7 +198,7 @@ export function listFavoriteMedia(
     created_at: string;
     updated_at: string;
   }>;
-  const assets = rows.map((row) => ({
+  const assets: MediaAsset[] = rows.map((row) => ({
     id: row.id,
     kind: row.kind,
     storageNodeId: row.storage_node_id,
@@ -209,6 +215,12 @@ export function listFavoriteMedia(
     durationSeconds: row.duration_seconds,
     thumbnailVersion: row.thumbnail_version,
     customCoverKey: row.custom_cover_key,
+    playbackFormat: (row.playback_format === "hls" ? "hls" : "mp4") as "mp4" | "hls",
+    playbackVersion: row.playback_version || "",
+    playbackManifestPath: row.playback_manifest_path || null,
+    playbackStatus: row.playback_status || "none",
+    playbackError: row.playback_error || "",
+    playbackPublishedAt: row.playback_published_at || null,
     playCount: row.play_count,
     recommendCount: row.recommend_count,
     downloadCount: row.download_count,

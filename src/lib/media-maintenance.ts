@@ -1,4 +1,4 @@
-import { getVideoThumbnailSettings } from "./config";
+import { getMediaDir as getConfiguredMediaDir, getVideoThumbnailSettings } from "./config";
 import {
   getMediaAsset,
   mediaThumbnailVersion,
@@ -20,6 +20,8 @@ import {
   type MediaPreparationJob,
 } from "./media-preparation-jobs";
 import { ensureMediaThumbnail } from "./media-thumbnail";
+import { resumePendingMediaPlaybackPreparation } from "./media-playback-preparation";
+import { cleanupRetiredPlaybackHlsVersions } from "./video-hls";
 import {
   isRemoteMediaStorage,
   resolveRemoteMediaNodeForAsset,
@@ -121,6 +123,7 @@ export function scheduleMediaPreparation(assets: MediaAsset[], options: { force?
 export function scheduleMissingMediaPreparation() {
   reconcileMediaPreparationJobs(getVideoThumbnailSettings().singlePercent);
   runNextMediaPreparationJobs();
+  resumePendingMediaPlaybackPreparation();
 }
 
 export async function runMediaLibraryMaintenance(force = false): Promise<MediaSyncResult> {
@@ -136,11 +139,15 @@ export function initializeMediaLibraryMaintenance() {
   }
   state.mediaMaintenanceStarted = true;
   runNextMediaPreparationJobs();
+  resumePendingMediaPlaybackPreparation();
 
   const initialRun = setTimeout(() => {
     void runMediaLibraryMaintenance(true).catch((error) => {
       console.error("[media] initial library sync failed", error);
     });
+    if (!isRemoteMediaStorage()) {
+      cleanupRetiredPlaybackHlsVersions(getConfiguredMediaDir());
+    }
   }, 1_500);
   initialRun.unref?.();
 
@@ -151,6 +158,9 @@ export function initializeMediaLibraryMaintenance() {
   }, MEDIA_SYNC_INTERVAL_MS);
   state.mediaMaintenanceTimer.unref?.();
 
-  state.mediaPreparationTimer = setInterval(runNextMediaPreparationJobs, MEDIA_PREPARATION_POLL_MS);
+  state.mediaPreparationTimer = setInterval(() => {
+    runNextMediaPreparationJobs();
+    resumePendingMediaPlaybackPreparation();
+  }, MEDIA_PREPARATION_POLL_MS);
   state.mediaPreparationTimer.unref?.();
 }

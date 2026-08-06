@@ -28,6 +28,7 @@ export function getHomeOverview(authenticated: boolean): Partial<Record<HomePort
     `SELECT COUNT(*) AS count, MAX(COALESCE(published_at, updated_at)) AS updated
      FROM announcements
      WHERE status = 'published' AND published_at IS NOT NULL
+       AND display_mode IN ('list', 'both')
        AND datetime(published_at) <= CURRENT_TIMESTAMP
        AND (expires_at IS NULL OR datetime(expires_at) > CURRENT_TIMESTAMP)
        ${authenticated ? "" : "AND audience = 'public'"}`,

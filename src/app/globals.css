@@ -5376,6 +5376,45 @@ mark {
   content: "-";
 }
 
+.adminSettingsHint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.adminSettingsLinkGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.adminSettingsLinkGroup .adminPrimaryLink,
+.adminSettingsLinkGroup .adminSecondaryLink {
+  margin: 0;
+  text-decoration: none;
+}
+
+.adminSettingsLinkGroup .adminSecondaryLink {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px 11px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.adminSettingsLinkGroup .adminSecondaryLink:hover,
+.adminSettingsLinkGroup .adminSecondaryLink:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .adminTagsPanel,
 .adminBookTagPanel {
   max-width: 980px;

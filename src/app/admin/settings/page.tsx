@@ -1,5 +1,6 @@
 ﻿import { Settings } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { BookOpen, ChevronRight, Clapperboard, File, Globe2, Headphones, ListFilter, Megaphone, Search, Tags, Trash2, Upload } from "lucide-react";
 import { AdminPaletteField } from "@/components/AdminPaletteField";
 import { AdminSelect } from "@/components/AdminSelect";
@@ -221,33 +222,12 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
           </details>
 
           <details className="adminSettingsSection adminSettingsDisclosure">
-            <summary>重要弹窗</summary>
-            <AdminSwitchRow
-              name="siteEntryNoticeEnabled"
-              title="启用进站重要通知"
-              description="访客进入前台时以抽屉展示；后台页面不显示。"
-              defaultChecked={settings.siteEntryNoticeEnabled}
-            />
-            <label>
-              <span>通知标题</span>
-              <input
-                name="siteEntryNoticeTitle"
-                maxLength={80}
-                defaultValue={settings.siteEntryNoticeTitle}
-                placeholder="重要通知"
-              />
-            </label>
-            <label>
-              <span>通知正文</span>
-              <textarea
-                name="siteEntryNoticeMarkdown"
-                rows={10}
-                maxLength={20_000}
-                defaultValue={settings.siteEntryNoticeMarkdown}
-                placeholder="支持 Markdown，可用于发布维护安排、使用提醒等重要信息。"
-              />
-              <small>支持 Markdown。正文、标题或开关变化后，会作为新版本再次展示。</small>
-            </label>
+            <summary>站务公告</summary>
+            <p className="adminSettingsHint">公告、首页通知和进站抽屉统一在站务管理中维护，避免重复编辑和展示状态不一致。</p>
+            <div className="adminSettingsLinkGroup">
+              <Link className="adminPrimaryLink" href="/admin/station/announcements">管理全部公告</Link>
+              <Link className="adminSecondaryLink" href="/admin/station/announcements/new?display=drawer">发布进站弹窗</Link>
+            </div>
           </details>
 
           <details className="adminSettingsSection adminSettingsDisclosure">
