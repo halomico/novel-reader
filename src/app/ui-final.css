@@ -1663,7 +1663,7 @@ nav.accountGrowthTools > a + a {
 
   .readerSettingRow {
     min-height: 56px;
-    grid-template-columns: 60px minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
     gap: 12px;
     border-bottom: 1px solid color-mix(in srgb, var(--reader-border) 72%, transparent);
     padding: 0;
@@ -1673,27 +1673,37 @@ nav.accountGrowthTools > a + a {
     color: var(--reader-text);
     font-size: 13px;
     font-weight: 650;
+    justify-self: start;
   }
 
+  /* Selection controls hug the right edge (thumb-friendly) */
   .readerSettingRow > :last-child {
     justify-self: end;
+    justify-content: flex-end;
     margin-left: auto;
+    width: auto;
+    max-width: 100%;
   }
 
   .readerSettingRow.isThemes > div {
+    display: inline-flex;
     justify-content: flex-end;
-    gap: 5px;
+    justify-self: end;
+    gap: 6px;
+    width: auto;
+    margin-left: auto;
   }
 
   .readerSettingRow.isThemes button {
     width: 28px;
     height: 28px;
-    flex-basis: 28px;
+    flex: 0 0 28px;
   }
 
   .readerSettingRow.isFontSize > .fontSizeStepper,
   .readerSettingRow.isLineHeight > .readerLineHeightControl {
     justify-self: end;
+    margin-left: auto;
   }
 
   .readerSettingRow.isFontSize > .fontSizeStepper {

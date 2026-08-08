@@ -9470,6 +9470,12 @@ a.analyticsSearchTag:focus-visible {
     justify-self: start;
   }
 
+  /* Reader settings controls stay right-aligned for thumb reach on mobile */
+  .readerSettingsPanel .fontSizeStepper,
+  .readerSettingsPanel .readerLineHeightControl {
+    justify-self: end;
+  }
+
   .settingMetaToggles {
     justify-content: flex-start;
   }
