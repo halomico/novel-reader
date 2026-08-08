@@ -403,8 +403,8 @@
     position: absolute;
     top: 50%;
     right: calc(var(--header-action-width) + 10px);
-    width: min(440px, calc(100vw - 520px));
-    grid-template-columns: 30px minmax(0, 1fr) auto;
+    width: min(420px, calc(100vw - 520px));
+    grid-template-columns: 28px minmax(0, 1fr) auto;
     transform: translateY(-50%);
   }
 
@@ -420,8 +420,8 @@
     grid-row: 1;
   }
 
-  .siteHeader.hasPrimaryNav .headerTools .searchForm.isPinnedOpen > .searchTrailing,
-  .siteHeader.hasPrimaryNav .headerTools .searchForm.isDefaultOpen > .searchTrailing {
+  .siteHeader.hasPrimaryNav .headerTools .searchForm.isPinnedOpen > .searchClearButton,
+  .siteHeader.hasPrimaryNav .headerTools .searchForm.isDefaultOpen > .searchClearButton {
     grid-column: 3;
     grid-row: 1;
   }
@@ -1470,9 +1470,9 @@ nav.accountGrowthTools > a + a {
     z-index: 80;
     display: grid;
     width: calc(100vw - 16px);
-    grid-template-columns: 30px minmax(0, 1fr) auto;
-    gap: 6px;
-    padding: 4px 5px 4px 7px;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    gap: 2px;
+    padding: 3px 4px;
     box-shadow: none;
   }
 

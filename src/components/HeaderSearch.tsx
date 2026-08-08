@@ -428,35 +428,34 @@ export function HeaderSearch({
       <input name="source" type="hidden" value={searchSource} />
       {library && library !== "default" ? <input name="library" type="hidden" value={library} /> : null}
       {originNovelId ? <input name="origin" type="hidden" value={originNovelId} /> : null}
-      <div className="searchTrailing">
-        {keyword.trim() ? (
-          <button
-            className="searchClearButton"
-            type="button"
-            aria-label={tr("清除搜索")}
-            title={tr("清除搜索")}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => {
-              setKeyword("");
-              if (mode === "current" && currentMatchesRef.current.length) {
-                resetCurrentMatches();
-                setIsMessageVisible(false);
-              }
-            }}
-          >
-            <X size={14} strokeWidth={1.5} aria-hidden="true" />
-          </button>
-        ) : null}
+      {keyword.trim() ? (
         <button
-          className="searchSubmit"
-          type="submit"
-          aria-label={`${tr(activeOption.label)}${tr("搜索")}`}
-          title={`${tr(activeOption.label)}${tr("搜索")}`}
-          disabled={isCurrentSearching}
+          className="searchClearButton"
+          type="button"
+          aria-label={tr("清除搜索")}
+          title={tr("清除搜索")}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            setKeyword("");
+            if (mode === "current" && currentMatchesRef.current.length) {
+              resetCurrentMatches();
+              setIsMessageVisible(false);
+            }
+          }}
         >
-          <Search className="searchSubmitIcon" size={16} strokeWidth={1.85} aria-hidden="true" />
+          <X size={14} strokeWidth={1.5} aria-hidden="true" />
         </button>
-      </div>
+      ) : null}
+      {/* Submit via Enter; no second magnifier next to the left toggle icon. */}
+      <button
+        className="searchSubmit isVisuallyHidden"
+        type="submit"
+        tabIndex={-1}
+        aria-label={`${tr(activeOption.label)}${tr("搜索")}`}
+        disabled={isCurrentSearching}
+      >
+        {tr("搜索")}
+      </button>
       {mode === "current" && currentMatchCount > 0 ? (
         <div className="currentFindControls" role="group" aria-label={tr("本文查找结果")}>
           <output aria-live="polite">

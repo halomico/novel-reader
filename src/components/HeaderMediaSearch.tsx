@@ -63,26 +63,24 @@ export function HeaderMediaSearch({ kind, query = "" }: { kind: MediaKind; query
         onChange={(event) => setKeyword(event.target.value)}
       />
       <input name="kind" type="hidden" value={kind} />
-      <div className="searchTrailing">
-        {keyword.trim() ? (
-          <button
-            className="searchClearButton"
-            type="button"
-            aria-label={uiText(locale, "清除搜索")}
-            title={uiText(locale, "清除搜索")}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => {
-              setKeyword("");
-              window.requestAnimationFrame(() => inputRef.current?.focus());
-            }}
-          >
-            <X size={14} strokeWidth={1.5} aria-hidden="true" />
-          </button>
-        ) : null}
-        <button className="searchSubmit" type="submit" aria-label={label} title={label}>
-          <Search className="searchSubmitIcon" size={16} strokeWidth={1.85} aria-hidden="true" />
+      {keyword.trim() ? (
+        <button
+          className="searchClearButton"
+          type="button"
+          aria-label={uiText(locale, "清除搜索")}
+          title={uiText(locale, "清除搜索")}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            setKeyword("");
+            window.requestAnimationFrame(() => inputRef.current?.focus());
+          }}
+        >
+          <X size={14} strokeWidth={1.5} aria-hidden="true" />
         </button>
-      </div>
+      ) : null}
+      <button className="searchSubmit isVisuallyHidden" type="submit" tabIndex={-1} aria-label={label}>
+        {label}
+      </button>
     </Form>
   );
 }

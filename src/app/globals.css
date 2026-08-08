@@ -220,23 +220,23 @@ textarea {
 .searchForm {
   position: relative;
   display: grid;
-  /* toggle | input | trailing actions (clear + submit) — no empty reserved slots */
-  grid-template-columns: 30px minmax(0, 1fr) auto;
+  /* left toggle | input | optional clear — no duplicate submit magnifier */
+  grid-template-columns: 28px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 4px;
-  height: 40px;
+  gap: 2px;
+  height: 38px;
   min-width: 0;
-  min-height: 40px;
-  padding: 3px 4px 3px 6px;
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  min-height: 38px;
+  padding: 2px 4px 2px 4px;
+  border: 1px solid color-mix(in srgb, var(--border) 64%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
   box-shadow: none;
   -webkit-tap-highlight-color: transparent;
 }
 
 .searchForm:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
   background: var(--surface);
   box-shadow: none;
 }
@@ -264,14 +264,18 @@ textarea {
   display: none;
 }
 
-/* Trailing cluster: clear only when typing, submit icon always flush right */
-.searchTrailing {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0;
-  flex: 0 0 auto;
-  min-width: 30px;
+/* Keep Enter-submit for forms without taking layout space */
+.searchForm .searchSubmit.isVisuallyHidden,
+.isVisuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .searchClearButton {
@@ -284,7 +288,7 @@ textarea {
   border-radius: 50%;
   padding: 0;
   background: transparent;
-  color: color-mix(in srgb, var(--muted) 72%, transparent);
+  color: color-mix(in srgb, var(--muted) 68%, transparent);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
@@ -319,13 +323,13 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border: 0;
   border-radius: 6px;
   padding: 0;
   background: transparent;
-  color: var(--muted);
+  color: color-mix(in srgb, var(--muted) 88%, var(--text));
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
@@ -346,12 +350,13 @@ textarea {
   }
 }
 
-.searchForm .searchSubmit {
+/* Visible submit only when used outside header light search (legacy/media list keep icons) */
+.searchForm .searchSubmit:not(.isVisuallyHidden) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border: 0;
   border-radius: 7px;
   padding: 0;
@@ -361,13 +366,13 @@ textarea {
   transition: background-color 140ms ease, color 140ms ease;
 }
 
-.searchForm .searchSubmit:focus-visible {
+.searchForm .searchSubmit:not(.isVisuallyHidden):focus-visible {
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--accent);
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .searchForm .searchSubmit:hover {
+  .searchForm .searchSubmit:not(.isVisuallyHidden):hover {
     background: color-mix(in srgb, var(--accent) 8%, transparent);
     color: var(--accent);
   }
@@ -490,6 +495,7 @@ textarea {
 
 .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) input,
 .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .searchTrailing,
+.searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .searchClearButton,
 .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .searchSubmit,
 .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .searchModeMenu,
 .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .currentFindControls,
@@ -9416,6 +9422,7 @@ a.analyticsSearchTag:focus-visible {
 
   .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) input,
   .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .searchTrailing,
+  .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .searchClearButton,
   .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .searchSubmit,
   .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .searchModeMenu,
   .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .currentFindControls {
@@ -9427,10 +9434,10 @@ a.analyticsSearchTag:focus-visible {
     top: calc(100% + 4px);
     left: calc((100% - 100vw) / 2 + 8px);
     z-index: 80;
-    grid-template-columns: 30px minmax(0, 1fr) auto;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
     width: calc(100vw - 16px);
-    gap: 4px;
-    padding: 4px 5px 4px 7px;
+    gap: 2px;
+    padding: 3px 4px;
     box-shadow: none;
   }
 
@@ -9557,6 +9564,7 @@ a.analyticsSearchTag:focus-visible {
 
   .readerShell .readerSearchForm:not(.isPinnedOpen) input,
   .readerShell .readerSearchForm:not(.isPinnedOpen) .searchTrailing,
+  .readerShell .readerSearchForm:not(.isPinnedOpen) .searchClearButton,
   .readerShell .readerSearchForm:not(.isPinnedOpen) .searchSubmit,
   .readerShell .readerSearchForm:not(.isPinnedOpen) .searchModeMenu,
   .readerShell .readerSearchForm:not(.isPinnedOpen) .currentFindControls {
@@ -9568,11 +9576,11 @@ a.analyticsSearchTag:focus-visible {
     top: calc(100% + 4px);
     left: 0;
     z-index: 80;
-    grid-template-columns: 30px minmax(0, 1fr) auto;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
     justify-self: stretch;
     width: 100%;
-    gap: 8px;
-    padding: 4px 5px 4px 7px;
+    gap: 2px;
+    padding: 3px 4px;
     box-shadow: none;
   }
 
