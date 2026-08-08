@@ -1481,13 +1481,13 @@ nav.accountGrowthTools > a + a {
   }
 
   .siteHeader.hasMobileContext {
-    grid-template-columns: 40px minmax(0, 1fr);
-    gap: 4px;
+    grid-template-columns: 44px minmax(0, 1fr) !important;
+    gap: 0;
     min-height: 48px;
-    padding-top: 4px;
-    padding-right: max(6px, env(safe-area-inset-right));
-    padding-bottom: 4px;
-    padding-left: max(6px, env(safe-area-inset-left));
+    padding-top: 2px;
+    padding-right: max(8px, env(safe-area-inset-right));
+    padding-bottom: 2px;
+    padding-left: max(2px, env(safe-area-inset-left));
     border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
     background: color-mix(in srgb, var(--bg) 96%, transparent);
     backdrop-filter: blur(12px);
@@ -1495,32 +1495,42 @@ nav.accountGrowthTools > a + a {
 
   .siteHeader.hasMobileContext > .brand,
   .siteHeader.hasMobileContext > .headerPrimaryNav {
-    display: none;
+    display: none !important;
   }
 
   .siteHeader.hasMobileContext > .headerTools {
-    display: grid;
+    display: grid !important;
     width: auto;
-    grid-column: 2;
-    grid-row: 1;
+    grid-column: 2 !important;
+    grid-row: 1 !important;
     justify-self: end;
+    gap: 4px;
+  }
+
+  /* Kill the generic mobile rule that parks tools on row 2 full-width */
+  .siteHeader.hasMobileContext.hasPrimaryNav > .headerTools,
+  .siteHeader.hasMobileContext .headerTools {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+    width: auto !important;
   }
 
   .mobileContextHeader {
     position: relative;
     z-index: 2;
     display: grid;
-    width: 40px;
-    grid-template-columns: 40px;
+    width: 44px;
+    grid-template-columns: 44px;
     align-items: center;
+    justify-self: start;
     grid-column: 1;
     grid-row: 1;
   }
 
   .mobileContextBackLink {
     display: grid;
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     place-items: center;
     border-radius: 50%;
     color: var(--text);
@@ -1775,8 +1785,57 @@ nav.accountGrowthTools > a + a {
     gap: 6px;
   }
 
-  .mediaDetail.is-video {
+  /*
+   * Video detail mobile: full-bleed player without 100vw breakout hacks.
+   * Parent appShell is widened to 100% so stage + header align to screen edges.
+   */
+  .appShell:has(.mediaDetail.is-video) {
+    width: 100%;
+    max-width: none;
+    margin-inline: 0;
+    padding-inline: 0;
+    padding-top: 0;
+    overflow-x: clip;
+  }
+
+  .appShell:has(.mediaDetail.is-video) > .siteHeader.hasMobileContext {
+    width: 100%;
+    margin-inline: 0;
+    padding-top: max(2px, env(safe-area-inset-top));
+    padding-right: max(8px, env(safe-area-inset-right));
+    padding-bottom: 2px;
+    padding-left: max(2px, env(safe-area-inset-left));
+    border-bottom-color: color-mix(in srgb, var(--border) 80%, transparent);
+  }
+
+  /* Pin back control to the true left edge */
+  .appShell:has(.mediaDetail.is-video) .siteHeader.hasMobileContext {
+    grid-template-columns: 44px minmax(0, 1fr);
     gap: 0;
+  }
+
+  .appShell:has(.mediaDetail.is-video) .mobileContextHeader {
+    width: 44px;
+    justify-self: start;
+  }
+
+  .appShell:has(.mediaDetail.is-video) .mobileContextBackLink {
+    width: 44px;
+    height: 44px;
+  }
+
+  .appShell:has(.mediaDetail.is-video) .siteHeader.hasMobileContext > .headerTools {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    padding-right: 2px;
+  }
+
+  .mediaDetail.is-video {
+    width: 100%;
+    max-width: none;
+    gap: 0;
+    margin-inline: 0;
     padding-bottom: 0;
   }
 
@@ -1785,22 +1844,30 @@ nav.accountGrowthTools > a + a {
   }
 
   .mediaVideoWatch {
+    display: grid;
     gap: 10px;
     scroll-margin-top: 52px;
   }
 
   .mediaDetail.is-video .mediaVideoStage {
     order: -1;
-    width: 100vw;
-    margin-left: calc(50% - 50vw);
+    width: 100%;
+    max-width: none;
+    margin: 0;
     border: 0;
     border-radius: 0;
     box-shadow: none;
+    background: #0c0f11;
+  }
+
+  .mediaDetail.is-video .mediaVideoPlayerShell {
+    width: 100%;
+    border-radius: 0;
   }
 
   .mediaVideoHeading {
     gap: 5px;
-    padding: 3px 2px 0;
+    padding: 8px 14px 0;
   }
 
   .mediaVideoHeading h1 {
@@ -1821,7 +1888,7 @@ nav.accountGrowthTools > a + a {
 
   .mediaVideoInfo {
     gap: 10px;
-    padding: 0 2px 13px;
+    padding: 0 14px 13px;
   }
 
   .mediaVideoInfo .mediaDescription {
@@ -1831,7 +1898,7 @@ nav.accountGrowthTools > a + a {
 
   .mediaRelatedVideos {
     gap: 10px;
-    padding-top: 14px;
+    padding: 14px 14px 0;
   }
 
   .mediaRelatedVideos h2 {

@@ -9335,6 +9335,14 @@ a.analyticsSearchTag:focus-visible {
     gap: 10px;
   }
 
+  /* Context-back pages (video detail etc.): tools stay on row 1, right side */
+  .siteHeader.hasMobileContext > .headerTools {
+    grid-column: 2;
+    grid-row: 1;
+    width: auto;
+    justify-self: end;
+  }
+
   .headerTools .headerActions {
     grid-column: 2;
     grid-row: 1;
@@ -9458,28 +9466,54 @@ a.analyticsSearchTag:focus-visible {
     display: none;
   }
 
+  /*
+   * /settings "阅读设置": keep one row — label left, controls right.
+   * Previous 1fr stack put segmented controls on line 2, left-aligned.
+   */
   .settingRow {
-    grid-template-columns: 1fr;
-    gap: 9px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 12px;
+  }
+
+  .settingRowTitle {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  .settingRowTitle strong {
+    display: none; /* hide duplicate current-value on narrow screens */
+  }
+
+  .settingRow > :last-child {
+    flex: 0 0 auto;
+    margin-left: auto;
+    justify-self: end;
+    max-width: min(70vw, 280px);
   }
 
   .segmentedControl,
   .fontSizeStepper,
   .readerLineHeightControl,
   .settingPalettePicker {
-    justify-self: start;
-  }
-
-  /* Reader settings: keep controls right-aligned (override page-settings left bias) */
-  .readerSettingsPanel .fontSizeStepper,
-  .readerSettingsPanel .readerLineHeightControl,
-  .readerSettingsPanel .readerSettingRow > :last-child {
     justify-self: end;
     margin-left: auto;
   }
 
   .settingMetaToggles {
-    justify-content: flex-start;
+    justify-content: flex-end;
+    margin-left: auto;
+  }
+
+  /* In-reader bottom sheet settings */
+  .readerSettingsPanel .fontSizeStepper,
+  .readerSettingsPanel .readerLineHeightControl,
+  .readerSettingsPanel .readerSettingRow > :last-child {
+    justify-self: end;
+    margin-left: auto;
   }
 
   .readerShell .siteHeader {
