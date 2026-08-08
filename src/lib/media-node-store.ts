@@ -803,10 +803,31 @@ export class MediaNodeStore {
   }
 
   async findThumbnail(params: MediaThumbnailRequest): Promise<string | null> {
-    const { sourceStat, targetPath } = this.thumbnailPaths(params);
+    const normalizedSourcePath = this.mediaPath(params.storedName);
+    const cacheIdentity = crypto
+      .createHash("sha256")
+      .update(`${params.storedName}\n${Math.floor(params.mtimeMs)}\n${params.sizeBytes}\n${params.percent}`)
+      .digest("hex");
+    const targetPath = path.join(this.root, ".thumbnails", `${cacheIdentity}.jpg`);
+    let sourceStat: fs.Stats | null = null;
+    try {
+      sourceStat = await fs.promises.stat(normalizedSourcePath);
+      if (
+        !sourceStat.isFile() ||
+        sourceStat.size !== params.sizeBytes ||
+        Math.floor(sourceStat.mtimeMs) !== Math.floor(params.mtimeMs)
+      ) {
+        return null;
+      }
+    } catch {
+      // The source may have been purged after this cached thumbnail was generated.
+    }
     try {
       const thumbnailStat = await fs.promises.stat(targetPath);
-      return thumbnailStat.size > 0 && thumbnailStat.mtimeMs >= sourceStat.mtimeMs ? targetPath : null;
+      return thumbnailStat.isFile() && thumbnailStat.size > 0 &&
+        (!sourceStat || thumbnailStat.mtimeMs >= sourceStat.mtimeMs)
+        ? targetPath
+        : null;
     } catch {
       return null;
     }

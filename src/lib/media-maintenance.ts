@@ -45,7 +45,10 @@ function thumbnailOptions(percent = getVideoThumbnailSettings().singlePercent) {
 }
 
 async function prepareMediaAsset(asset: MediaAsset, thumbnailPercent: number) {
-  if (asset.kind === "file") return;
+  if (
+    asset.kind === "file" ||
+    (asset.kind === "video" && (asset.playbackFormat === "hls" || asset.playbackStatus === "processing"))
+  ) return;
   const durationSeconds = await ensureMediaDuration(asset);
   const options = thumbnailOptions(thumbnailPercent);
   const expectedThumbnailVersion = mediaThumbnailVersion(asset.mtimeMs, thumbnailPercent);

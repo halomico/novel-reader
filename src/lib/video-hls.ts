@@ -3,13 +3,10 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
 import { normalizeMediaStoragePath, resolveMediaStoragePath } from "./media-storage-path";
 import {
   probeVideoInput,
-  selectVideoBitrateKbps,
-  VIDEO_TRANSCODE_PROFILES,
   type VideoInputProbe,
 } from "./video-transcode";
 
@@ -17,11 +14,11 @@ const execFileAsync = promisify(execFile);
 
 export const PLAYBACK_HLS_SEGMENT_SECONDS = 6;
 export const PLAYBACK_HLS_MANIFEST_FILE = "index.m3u8";
-const PLAYBACK_HLS_SOURCE_BUNDLE_FILE = "bundle-source.m4s";
 const PLAYBACK_HLS_INIT_FILE = "init.mp4";
 const PLAYBACK_HLS_BUNDLE_PATTERN = /^bundle-[0-9]{4}\.m4s$/u;
 const PLAYBACK_HLS_TRANSCODE_TIMEOUT_MS = 12 * 60 * 60_000;
 const DIRECT_H264_PIXEL_FORMATS = new Set(["yuv420p", "yuvj420p"]);
+export const VIDEO_HLS_INCOMPATIBLE_ERROR = "视频编码不兼容，已隔离，未执行 HLS";
 
 export type VideoHlsPackageResult = {
   version: string;
@@ -111,14 +108,6 @@ function finiteEnvNumber(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function playbackBundleTargetBytes(): number {
-  const mebibytes = Math.min(
-    Math.max(Math.floor(finiteEnvNumber(process.env.MEDIA_HLS_BUNDLE_MIB, 32)), 16),
-    64,
-  );
-  return mebibytes * 1024 * 1024;
-}
-
 function playbackRetireGraceMs(): number {
   const ttlSeconds = Math.min(
     Math.max(Math.floor(finiteEnvNumber(process.env.MEDIA_URL_TTL_SECONDS, 21_600)), 300),
@@ -129,18 +118,9 @@ function playbackRetireGraceMs(): number {
 
 export function estimatePlaybackHlsTemporaryBytes(
   sizeBytes: number,
-  probe: VideoInputProbe,
+  _probe: VideoInputProbe,
 ): number {
-  const durationSeconds = Number(probe.durationSeconds || 0);
-  const videoBitrateKbps = selectVideoBitrateKbps(VIDEO_TRANSCODE_PROFILES[0], probe) * 1.1;
-  const audioBitrateKbps = probe.audioCodec === null
-    ? 0
-    : VIDEO_TRANSCODE_PROFILES[0].audioBitrateKbps;
-  const estimatedTranscodeBytes = durationSeconds > 0
-    ? Math.ceil(durationSeconds * (videoBitrateKbps + audioBitrateKbps) * 1_000 / 8 * 1.2)
-    : Math.floor(sizeBytes) * 4;
-  const expectedOutputBytes = Math.max(Math.floor(sizeBytes), estimatedTranscodeBytes);
-  return Math.max(expectedOutputBytes * 2, 512 * 1024 * 1024);
+  return Math.max(Math.floor(sizeBytes), 512 * 1024 * 1024);
 }
 
 function ensurePackagingCapacity(
@@ -253,101 +233,23 @@ export function planSingleFileHlsBundles(
   };
 }
 
-async function copyByteRange(
-  sourcePath: string,
-  targetPath: string,
-  sourceStart: number,
-  length: number,
-  append = false,
-): Promise<void> {
-  await pipeline(
-    fs.createReadStream(sourcePath, { start: sourceStart, end: sourceStart + length - 1 }),
-    fs.createWriteStream(targetPath, { flags: append ? "a" : "w" }),
-  );
-}
-
-async function repackSingleFileHls(
-  directoryPath: string,
-  rawManifestPath: string,
-  sourceBundlePath: string,
-): Promise<void> {
-  const [manifest, sourceStat] = await Promise.all([
-    fs.promises.readFile(rawManifestPath, "utf8"),
-    fs.promises.stat(sourceBundlePath),
-  ]);
-  const plan = planSingleFileHlsBundles(
-    manifest,
-    path.basename(sourceBundlePath),
-    sourceStat.size,
-    playbackBundleTargetBytes(),
-  );
-  await copyByteRange(
-    sourceBundlePath,
-    path.join(directoryPath, PLAYBACK_HLS_INIT_FILE),
-    plan.initRange.sourceStart,
-    plan.initRange.length,
-  );
-  for (const bundle of plan.bundles) {
-    const bundlePath = path.join(directoryPath, bundle.fileName);
-    for (let index = 0; index < bundle.ranges.length; index += 1) {
-      const range = bundle.ranges[index];
-      await copyByteRange(
-        sourceBundlePath,
-        bundlePath,
-        range.sourceStart,
-        range.length,
-        index > 0,
-      );
-    }
-  }
-  await fs.promises.writeFile(
-    path.join(directoryPath, PLAYBACK_HLS_MANIFEST_FILE),
-    plan.manifest,
-    "utf8",
-  );
-  await Promise.all([
-    fs.promises.rm(rawManifestPath, { force: true }),
-    fs.promises.rm(sourceBundlePath, { force: true }),
-  ]);
-}
-
-function maxManifestSegmentDuration(manifest: string): number {
-  return Math.max(
-    0,
-    ...Array.from(manifest.matchAll(/^#EXTINF:([0-9]+(?:\.[0-9]+)?),/gmu))
-      .map((match) => Number(match[1]))
-      .filter(Number.isFinite),
-  );
-}
-
 function directH264(probe: VideoInputProbe): boolean {
   return probe.videoCodec === "h264" && DIRECT_H264_PIXEL_FORMATS.has(probe.pixelFormat);
 }
 
-function codecArguments(probe: VideoInputProbe, forceVideoTranscode: boolean): string[] {
-  const args: string[] = [];
-  if (directH264(probe) && !forceVideoTranscode) {
-    args.push("-c:v", "copy");
-  } else {
-    const bitrateKbps = selectVideoBitrateKbps(VIDEO_TRANSCODE_PROFILES[0], probe);
-    args.push(
-      "-c:v", "libx264",
-      "-preset", process.env.MEDIA_HLS_PRESET || "veryfast",
-      "-crf", process.env.MEDIA_HLS_CRF || "23",
-      "-maxrate", `${Math.round(bitrateKbps * 1.1)}k`,
-      "-bufsize", `${bitrateKbps * 2}k`,
-      "-profile:v", "high",
-      "-pix_fmt", "yuv420p",
-      "-sc_threshold", "0",
-      "-force_key_frames", `expr:gte(t,n_forced*${PLAYBACK_HLS_SEGMENT_SECONDS})`,
-    );
-  }
+export function isDirectHlsCompatible(probe: VideoInputProbe): boolean {
+  if (!directH264(probe)) return false;
+  if (probe.audioCodec !== null && probe.audioCodec !== "aac") return false;
+  return true;
+}
+
+function codecArguments(probe: VideoInputProbe): string[] {
+  if (!isDirectHlsCompatible(probe)) throw new Error(VIDEO_HLS_INCOMPATIBLE_ERROR);
+  const args = ["-c:v", "copy"];
   if (probe.audioCodec === null) {
     args.push("-an");
-  } else if (probe.audioCodec === "aac") {
-    args.push("-c:a", "copy");
   } else {
-    args.push("-c:a", "aac", "-b:a", "128k", "-ar", "48000");
+    args.push("-c:a", "copy");
   }
   return args;
 }
@@ -356,13 +258,11 @@ async function runFfmpegPass(
   sourcePath: string,
   directoryPath: string,
   probe: VideoInputProbe,
-  forceVideoTranscode: boolean,
-): Promise<{ rawManifestPath: string; sourceBundlePath: string; manifest: string }> {
-  const rawManifestPath = path.join(directoryPath, "index.raw.m3u8");
-  const sourceBundlePath = path.join(directoryPath, PLAYBACK_HLS_SOURCE_BUNDLE_FILE);
+): Promise<{ manifestPath: string; manifest: string }> {
+  const manifestPath = path.join(directoryPath, PLAYBACK_HLS_MANIFEST_FILE);
   await Promise.all([
-    fs.promises.rm(rawManifestPath, { force: true }),
-    fs.promises.rm(sourceBundlePath, { force: true }),
+    fs.promises.rm(manifestPath, { force: true }),
+    fs.promises.rm(path.join(directoryPath, PLAYBACK_HLS_INIT_FILE), { force: true }),
   ]);
   const result = await execFileAsync(
     process.env.FFMPEG_PATH || "ffmpeg",
@@ -373,15 +273,16 @@ async function runFfmpegPass(
       "-i", sourcePath,
       "-map", "0:v:0",
       "-map", "0:a:0?",
-      ...codecArguments(probe, forceVideoTranscode),
+      ...codecArguments(probe),
       "-avoid_negative_ts", "make_zero",
       "-f", "hls",
       "-hls_time", String(PLAYBACK_HLS_SEGMENT_SECONDS),
       "-hls_playlist_type", "vod",
       "-hls_segment_type", "fmp4",
-      "-hls_flags", "independent_segments+single_file",
-      "-hls_segment_filename", PLAYBACK_HLS_SOURCE_BUNDLE_FILE,
-      path.basename(rawManifestPath),
+      "-hls_flags", "independent_segments",
+      "-hls_fmp4_init_filename", PLAYBACK_HLS_INIT_FILE,
+      "-hls_segment_filename", path.join(directoryPath, "bundle-%04d.m4s"),
+      path.basename(manifestPath),
     ],
     {
       cwd: directoryPath,
@@ -391,17 +292,17 @@ async function runFfmpegPass(
     },
   );
   void result;
-  const manifest = await fs.promises.readFile(rawManifestPath, "utf8");
-  const sourceStat = await fs.promises.stat(sourceBundlePath);
+  const manifest = await fs.promises.readFile(manifestPath, "utf8");
   if (
     !manifest.startsWith("#EXTM3U") ||
     !manifest.includes("#EXT-X-MAP:URI=") ||
-    !manifest.includes(PLAYBACK_HLS_SOURCE_BUNDLE_FILE) ||
-    sourceStat.size <= 0
+    !manifest.includes(PLAYBACK_HLS_INIT_FILE) ||
+    !manifest.match(/(?:^|\n)bundle-[0-9]{4}\.m4s(?:\n|$)/mu) ||
+    !manifest.includes("#EXT-X-ENDLIST")
   ) {
     throw new Error("HLS 播放清单不完整");
   }
-  return { rawManifestPath, sourceBundlePath, manifest };
+  return { manifestPath, manifest };
 }
 
 async function validatePackagedPlayback(manifestPath: string): Promise<number> {
@@ -445,22 +346,8 @@ async function runFfmpeg(
   await fs.promises.rm(temporaryPath, { recursive: true, force: true });
   await fs.promises.mkdir(temporaryPath, { recursive: true });
   try {
-    let pass = await runFfmpegPass(sourcePath, temporaryPath, probe, false);
-    if (
-      directH264(probe) &&
-      maxManifestSegmentDuration(pass.manifest) > PLAYBACK_HLS_SEGMENT_SECONDS * 2
-    ) {
-      await fs.promises.rm(temporaryPath, { recursive: true, force: true });
-      await fs.promises.mkdir(temporaryPath, { recursive: true });
-      pass = await runFfmpegPass(sourcePath, temporaryPath, probe, true);
-    }
-    await repackSingleFileHls(
-      temporaryPath,
-      pass.rawManifestPath,
-      pass.sourceBundlePath,
-    );
-    const manifestPath = path.join(temporaryPath, PLAYBACK_HLS_MANIFEST_FILE);
-    await validatePackagedPlayback(manifestPath);
+    const pass = await runFfmpegPass(sourcePath, temporaryPath, probe);
+    await validatePackagedPlayback(pass.manifestPath);
     await fs.promises.rm(directoryPath, { recursive: true, force: true });
     await fs.promises.rename(temporaryPath, directoryPath);
   } finally {
@@ -485,16 +372,21 @@ export async function packageVideoHls(input: {
   const sourcePath = resolveMediaStoragePath(input.root, normalized);
   validSource(sourcePath, input.sizeBytes, input.mtimeMs);
   try {
-    await readPlaybackHlsManifest(input.root, playbackHlsStoredPath(input.mediaId, version));
-    return {
-      version,
-      manifestPath: playbackHlsStoredPath(input.mediaId, version),
-      directoryPath,
-    };
+    const existingManifest = await readPlaybackHlsManifest(input.root, playbackHlsStoredPath(input.mediaId, version));
+    if (!existingManifest.includes("#EXT-X-BYTERANGE:")) {
+      return {
+        version,
+        manifestPath: playbackHlsStoredPath(input.mediaId, version),
+        directoryPath,
+      };
+    }
   } catch {
     // Build the immutable version below.
   }
   const probe = await probeVideoInput(sourcePath);
+  if (!isDirectHlsCompatible(probe)) {
+    throw new Error(VIDEO_HLS_INCOMPATIBLE_ERROR);
+  }
   ensurePackagingCapacity(sourcePath, input.sizeBytes, probe);
   await runFfmpeg(sourcePath, directoryPath, probe);
   validSource(sourcePath, input.sizeBytes, input.mtimeMs);
@@ -558,14 +450,16 @@ export async function readPlaybackHlsManifest(root: string, manifestPath: string
     }
     if (line && !line.startsWith("#")) {
       const resourceName = line.trim();
-      if (!pendingRange || !PLAYBACK_HLS_BUNDLE_PATTERN.test(resourceName)) {
+      if (!PLAYBACK_HLS_BUNDLE_PATTERN.test(resourceName)) {
         throw new Error("HLS 播放清单分段格式无效");
       }
       resourceNames.add(resourceName);
-      requiredBundleSizes.set(
-        resourceName,
-        Math.max(requiredBundleSizes.get(resourceName) || 0, pendingRange.offset + pendingRange.length),
-      );
+      if (pendingRange) {
+        requiredBundleSizes.set(
+          resourceName,
+          Math.max(requiredBundleSizes.get(resourceName) || 0, pendingRange.offset + pendingRange.length),
+        );
+      }
       pendingRange = null;
       segmentCount += 1;
     }

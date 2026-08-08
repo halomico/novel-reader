@@ -42,6 +42,9 @@ function toJob(row: MediaPreparationJobRow): MediaPreparationJob {
 }
 
 export function mediaAssetNeedsPreparation(asset: MediaAsset, thumbnailPercent: number): boolean {
+  if (asset.kind === "video" && (asset.playbackFormat === "hls" || asset.playbackStatus === "processing")) {
+    return false;
+  }
   const durationReady = asset.kind === "file" || Boolean(asset.durationSeconds && asset.durationSeconds > 0);
   const thumbnailReady =
     asset.kind !== "video" ||
@@ -103,11 +106,16 @@ export function reconcileMediaPreparationJobs(thumbnailPercent: number, now = Da
        SELECT id, CAST(mtime_ms AS INTEGER), ?, 'pending', 0, ?, NULL, '', CURRENT_TIMESTAMP
        FROM media_assets
        WHERE (
-         kind IN ('video', 'audio')
+         kind = 'audio'
          AND (duration_seconds IS NULL OR duration_seconds <= 0)
        ) OR (
          kind = 'video'
-         AND thumbnail_version <> CAST(mtime_ms AS INTEGER) * 100 + ?
+         AND playback_format <> 'hls'
+         AND playback_status <> 'processing'
+         AND (
+           duration_seconds IS NULL OR duration_seconds <= 0
+           OR thumbnail_version <> CAST(mtime_ms AS INTEGER) * 100 + ?
+         )
        )
        ON CONFLICT(media_id) DO UPDATE SET
          source_version = excluded.source_version,
@@ -130,9 +138,12 @@ export function reconcileMediaPreparationJobs(thumbnailPercent: number, now = Da
        FROM media_prepare_jobs jobs
        LEFT JOIN media_assets assets ON assets.id = jobs.media_id
        WHERE assets.id IS NULL OR (
+         assets.kind = 'video' AND (assets.playback_format = 'hls' OR assets.playback_status = 'processing')
+       ) OR (
          (assets.kind = 'file' OR (assets.duration_seconds IS NOT NULL AND assets.duration_seconds > 0))
          AND (
            assets.kind <> 'video'
+           OR assets.playback_format = 'hls'
            OR assets.thumbnail_version = CAST(assets.mtime_ms AS INTEGER) * 100 + jobs.thumbnail_percent
          )
        )

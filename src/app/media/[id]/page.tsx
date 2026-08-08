@@ -258,7 +258,6 @@ export default async function MediaDetailPage({
                 posterUrl={posterUrl}
                 sourceVersion={asset.mtimeMs}
                 authenticated={Boolean(user)}
-                playSodaPrice={user ? asset.playSodaPrice : 0}
                 initialPlaybackAllowed={Boolean(videoPlaybackAccess?.allowed)}
                 initialAccessExpiresAt={videoPlaybackAccess?.expiresAt || null}
                 contentAccessible={contentAccessible}

@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import { once } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createMediaNodeServer } from "./media-node-server";
+import { MediaNodeStore } from "./media-node-store";
 
 test("requires a separate media-node control secret", () => {
   assert.throws(
@@ -15,6 +17,35 @@ test("requires a separate media-node control secret", () => {
     }),
     /MEDIA_CONTROL_SECRET/,
   );
+});
+
+test("serves a cached thumbnail after the source video is purged", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-thumbnail-cache-"));
+  const storedName = "video/cache-test.mp4";
+  const sourcePath = path.join(tempDir, storedName);
+  fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
+  fs.writeFileSync(sourcePath, "source");
+  const sourceStat = fs.statSync(sourcePath);
+  const percent = 33;
+  const cacheIdentity = crypto
+    .createHash("sha256")
+    .update(`${storedName}\n${Math.floor(sourceStat.mtimeMs)}\n${sourceStat.size}\n${percent}`)
+    .digest("hex");
+  const thumbnailPath = path.join(tempDir, ".thumbnails", `${cacheIdentity}.jpg`);
+  fs.mkdirSync(path.dirname(thumbnailPath), { recursive: true });
+  fs.writeFileSync(thumbnailPath, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+
+  const store = new MediaNodeStore(tempDir);
+  const request = {
+    storedName,
+    mtimeMs: sourceStat.mtimeMs,
+    sizeBytes: sourceStat.size,
+    percent,
+  };
+  assert.equal(await store.findThumbnail(request), thumbnailPath);
+  fs.rmSync(sourcePath);
+  assert.equal(await store.findThumbnail(request), thumbnailPath);
+  fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
 test("uploads directly to the media node while the main app keeps only the index", async () => {

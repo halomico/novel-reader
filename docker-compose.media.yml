@@ -15,10 +15,12 @@ services:
       MEDIA_NODE_VIDEO_BANDWIDTH_MBPS: ${MEDIA_NODE_VIDEO_BANDWIDTH_MBPS:-0}
       FFMPEG_PATH: ${FFMPEG_PATH:-ffmpeg}
       FFPROBE_PATH: ${FFPROBE_PATH:-ffprobe}
+      VIDEO_TRANSCODE_PROFILE: ${VIDEO_TRANSCODE_PROFILE:-source}
     ports:
-      - "127.0.0.1:${MEDIA_NODE_PORT:-3100}:3100"
+      - "${MEDIA_NODE_BIND_IP:-127.0.0.1}:${MEDIA_NODE_PORT:-3100}:3100"
     volumes:
       - ./data/media:/app/data/media
+      - ./scripts/migrate-video-standard-h264.sh:/app/maintenance/migrate-video-standard-h264.sh:ro
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3100/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 30s

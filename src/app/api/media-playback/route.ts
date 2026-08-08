@@ -13,6 +13,7 @@ import {
   refreshVideoPlaybackLease,
   releaseVideoPlaybackLease,
 } from "@/lib/video-playback";
+import { buildAuthorizedPlaybackHlsManifest } from "@/lib/video-hls-delivery";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -36,6 +37,12 @@ async function body(request: NextRequest): Promise<{
   }
 }
 
+/**
+ * Mint a playback ticket.
+ * HLS responses include the fully rewritten playlist (`manifest`) so the client
+ * can start without a second manifest round-trip. Segment URLs for free videos
+ * are time-bucketed public signatures (CDN-friendly); paid stay private.
+ */
 export async function POST(request: NextRequest) {
   const user = getCurrentUserFromRequest(request);
   const input = await body(request);
@@ -70,7 +77,7 @@ export async function POST(request: NextRequest) {
         ? "当前等级暂不能播放视频"
         : result.reason === "node_busy"
           ? "当前播放人数较多，请稍后重试"
-        : "视频不存在";
+          : "视频不存在";
     return NextResponse.json(
       { ok: false, message },
       {
@@ -79,13 +86,23 @@ export async function POST(request: NextRequest) {
       },
     );
   }
+
   let mediaUrl = "";
-  let fallbackMediaUrl = "";
+  let manifest: string | null = null;
   let format: "mp4" | "hls" = "mp4";
+  let segmentsPubliclyCacheable = false;
+
   try {
     const playbackMode = getVideoPlaybackMode();
     const hlsReady = hasPublishedMediaHls(asset);
     if (playbackMode !== "mp4" && hlsReady) {
+      const built = await buildAuthorizedPlaybackHlsManifest(asset, {
+        sessionId: result.lease.id,
+        token: result.lease.token,
+      });
+      manifest = built.manifest;
+      segmentsPubliclyCacheable = built.segmentsPubliclyCacheable;
+      // Fallback URL for clients that cannot feed a Blob playlist (rare Safari cases).
       const query = new URLSearchParams({
         v: asset.playbackVersion,
         ps: result.lease.id,
@@ -93,14 +110,6 @@ export async function POST(request: NextRequest) {
       });
       mediaUrl = `/media/${asset.id}/hls/manifest?${query.toString()}`;
       format = "hls";
-      if (playbackMode === "migration") {
-        fallbackMediaUrl = mediaDeliveryUrl(asset, false, {
-          publiclyAccessible: false,
-          estimatedKbps: estimateVideoBitrateKbps(asset),
-          playbackSessionId: result.lease.id,
-          playbackToken: result.lease.token,
-        });
-      }
     } else if (playbackMode === "hls-only") {
       releaseVideoPlaybackLease({
         id: result.lease.id,
@@ -121,7 +130,6 @@ export async function POST(request: NextRequest) {
         playbackSessionId: result.lease.id,
         playbackToken: result.lease.token,
       });
-      fallbackMediaUrl = mediaUrl;
     }
   } catch {
     releaseVideoPlaybackLease({
@@ -132,14 +140,16 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ ok: false, message: "媒体节点暂不可用" }, { status: 503 });
   }
+
   const response = NextResponse.json({
     ok: true,
     sessionId: result.lease.id,
     token: result.lease.token,
     expiresAt: result.lease.expiresAt,
     mediaUrl,
-    fallbackMediaUrl,
+    manifest,
     format,
+    segmentsPubliclyCacheable,
   });
   attachPlaybackViewerCookie(response, viewer);
   return response;

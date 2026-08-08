@@ -38,6 +38,7 @@ import {
   completeMediaPreparationJob,
   failMediaPreparationJob,
   getMediaPreparationJob,
+  mediaAssetNeedsPreparation,
   reconcileMediaPreparationJobs,
 } from "./media-preparation-jobs";
 import { readSiteSettings, writeSiteSettings } from "./site-settings";
@@ -218,11 +219,18 @@ test("tracks media preparation independently from public list requests", (t) => 
   const audioId = Number(insert
     .run("audio", "音频", "audio.mp3", "audio/audio.mp3", "audio/mpeg", 50, 10, null)
     .lastInsertRowid);
+  const hlsId = Number(insert
+    .run("video", "HLS 视频", "index.m3u8", "video/.hls/3/1-10/index.m3u8", "application/vnd.apple.mpegurl", 120, 10, 60)
+    .lastInsertRowid);
+  db.prepare(
+    "UPDATE media_assets SET playback_format = 'hls', playback_version = '1-10', playback_manifest_path = stored_name, playback_status = 'ready' WHERE id = ?",
+  ).run(hlsId);
 
   assert.deepEqual(
     new Set(listMediaAssetsNeedingPreparation().map((asset) => asset.id)),
     new Set([videoId, audioId]),
   );
+  assert.equal(mediaAssetNeedsPreparation(getMediaAsset(hlsId)!, 33), false);
   assert.equal(reconcileMediaPreparationJobs(33, 1_000), 2);
   const firstJob = claimMediaPreparationJob(1_000);
   assert.equal(firstJob?.mediaId, videoId);
@@ -241,6 +249,7 @@ test("tracks media preparation independently from public list requests", (t) => 
   assert.equal(reconcileMediaPreparationJobs(33), 0);
   assert.equal(getMediaPreparationJob(videoId), null);
   assert.equal(getMediaPreparationJob(audioId), null);
+  assert.equal(getMediaPreparationJob(hlsId), null);
   assert.deepEqual(listMediaAssetsNeedingPreparation(), []);
   assert.deepEqual(listMediaAssetsNeedingPreparation(1_000, 40).map((asset) => asset.id), [videoId]);
 });

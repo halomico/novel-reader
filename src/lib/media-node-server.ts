@@ -327,7 +327,11 @@ async function serveSignedHls(
     "Last-Modified": stat.mtime.toUTCString(),
     "X-Content-Type-Options": "nosniff",
   };
-  if (payload.publiclyAccessible) headers["Cloudflare-CDN-Cache-Control"] = `public, max-age=${publicMaxAge}, no-transform`;
+  if (payload.publiclyAccessible) {
+    // Dual CDN headers: Cloudflare + generic edge (Caddy/other).
+    headers["CDN-Cache-Control"] = `public, max-age=${publicMaxAge}, immutable, no-transform`;
+    headers["Cloudflare-CDN-Cache-Control"] = `public, max-age=${publicMaxAge}, immutable, no-transform`;
+  }
   if (range) headers["Content-Range"] = `bytes ${start}-${end}/${stat.size}`;
   if (!range && request.headers["if-none-match"] === etag) {
     delete headers["Content-Length"];

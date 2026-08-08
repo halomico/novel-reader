@@ -1558,11 +1558,16 @@ export function listMediaAssetsNeedingPreparation(limit = 1_000, thumbnailPercen
     .prepare(
       `SELECT * FROM media_assets
        WHERE (
-         kind IN ('video', 'audio')
+         kind = 'audio'
          AND (duration_seconds IS NULL OR duration_seconds <= 0)
        ) OR (
          kind = 'video'
-         AND thumbnail_version <> CAST(mtime_ms AS INTEGER) * 100 + ?
+         AND playback_format <> 'hls'
+         AND playback_status <> 'processing'
+         AND (
+           duration_seconds IS NULL OR duration_seconds <= 0
+           OR thumbnail_version <> CAST(mtime_ms AS INTEGER) * 100 + ?
+         )
        )
        ORDER BY updated_at DESC, id ASC
        LIMIT ?`,

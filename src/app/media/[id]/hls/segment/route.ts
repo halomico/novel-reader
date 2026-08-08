@@ -2,12 +2,11 @@ import fs from "node:fs";
 import { Readable } from "node:stream";
 import { NextRequest } from "next/server";
 import { getVideoPlaybackAccess } from "@/lib/media-access";
-import { checkContentAccess, hasScopedContentAccessControls } from "@/lib/content-access";
+import { checkContentAccess } from "@/lib/content-access";
 import {
   getMediaAsset,
   hasPublishedMediaHls,
   isMediaKindConsumable,
-  isMediaKindContentPublic,
   parseMediaByteRange,
 } from "@/lib/media";
 import { getMediaDir } from "@/lib/config";
@@ -15,6 +14,7 @@ import { isRemoteMediaStorage } from "@/lib/media-storage-config";
 import { playbackViewerFromRequest } from "@/lib/playback-viewer";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 import { resolvePlaybackHlsFile } from "@/lib/video-hls";
+import { hlsSegmentsPubliclyCacheable } from "@/lib/video-hls-delivery";
 import { validateVideoPlaybackLease } from "@/lib/video-playback";
 
 export const dynamic = "force-dynamic";
@@ -22,29 +22,25 @@ export const runtime = "nodejs";
 
 async function deliver(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const asset = getMediaAsset(Number((await params).id));
-  const publiclyAccessible = Boolean(
-    asset &&
-    asset.kind === "video" &&
-    asset.playSodaPrice === 0 &&
-    isMediaKindContentPublic("video") &&
-    !hasScopedContentAccessControls("video"),
-  );
-  const user = publiclyAccessible ? null : getCurrentUserFromRequest(request);
-  if (
-    !asset ||
-    asset.kind !== "video" ||
-    isRemoteMediaStorage() ||
-    !isMediaKindConsumable("video", Boolean(user))
-  ) {
+  // Free HLS segments are intentionally cacheable after a logged-in ticket mints the playlist.
+  if (!asset || asset.kind !== "video" || isRemoteMediaStorage()) {
     return new Response(null, { status: 404 });
   }
-  const access = checkContentAccess(request.headers, {
-    scope: "video",
-    authenticated: Boolean(user),
-    admin: user?.role === "admin",
-    rateLimit: !publiclyAccessible,
-  });
-  if (!access.allowed) return new Response(null, { status: access.status });
+  // Free HLS: playlist is minted only after login; segment bytes are cacheable without cookies.
+  const publiclyAccessible = hlsSegmentsPubliclyCacheable(asset);
+  const user = publiclyAccessible ? null : getCurrentUserFromRequest(request);
+  if (!publiclyAccessible) {
+    if (!isMediaKindConsumable("video", Boolean(user))) {
+      return new Response(null, { status: 404 });
+    }
+    const access = checkContentAccess(request.headers, {
+      scope: "video",
+      authenticated: Boolean(user),
+      admin: user?.role === "admin",
+      rateLimit: true,
+    });
+    if (!access.allowed) return new Response(null, { status: access.status });
+  }
   if (request.nextUrl.searchParams.get("v") !== asset.playbackVersion) {
     return new Response(null, { status: 404 });
   }
@@ -92,7 +88,7 @@ async function deliver(request: NextRequest, { params }: { params: Promise<{ id:
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Expose-Headers": "Accept-Ranges, Content-Length, Content-Range, ETag, Last-Modified",
     "Cache-Control": publiclyAccessible
-      ? "public, max-age=21600, immutable, no-transform"
+      ? "public, max-age=3600, immutable, no-transform"
       : "private, max-age=300, no-transform",
     "Content-Type": fileName.endsWith(".m4s") ? "video/iso.segment" : "video/mp4",
     "Cross-Origin-Resource-Policy": "cross-origin",
@@ -101,7 +97,8 @@ async function deliver(request: NextRequest, { params }: { params: Promise<{ id:
     "X-Content-Type-Options": "nosniff",
   });
   if (publiclyAccessible) {
-    headers.set("Cloudflare-CDN-Cache-Control", "public, max-age=21600, no-transform");
+    headers.set("CDN-Cache-Control", "public, max-age=3600, immutable, no-transform");
+    headers.set("Cloudflare-CDN-Cache-Control", "public, max-age=3600, immutable, no-transform");
   } else {
     headers.set("Vary", "Cookie, Origin");
   }

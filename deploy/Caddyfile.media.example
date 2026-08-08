@@ -1,6 +1,17 @@
 # Independent media node. Keep port 3100 private; the browser only uses
 # /media-upload, /media-file, /media-thumbnail, /media-hls and /media-hls-file. /control is protected
 # by MEDIA_CONTROL_SECRET and can additionally be restricted to the main IP.
+#
+# Cloudflare (recommended for free HLS segment CDN HITs):
+#   Cache Rule: (http.request.uri.path starts_with "/media-hls/")
+#     → Eligible for cache, respect origin Cache-Control / CDN-Cache-Control
+#   Free videos use time-bucketed public signatures (public=1) so edge keys are stable.
+#   Do not cache /control/* or /media-upload/*.
 media.example.com {
+    # Do not compress HLS media; Range + CDN caching expect identity encoding.
+    @hls path /media-hls/*
+    header @hls {
+        -Server
+    }
     reverse_proxy 127.0.0.1:3100
 }

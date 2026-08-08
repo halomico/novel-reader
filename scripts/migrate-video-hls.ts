@@ -1,5 +1,6 @@
 import "dotenv/config";
 import fs from "node:fs";
+import path from "node:path";
 import { getMediaDir } from "../src/lib/config";
 import { getDb } from "../src/lib/db";
 import {
@@ -10,7 +11,10 @@ import {
   type MediaAsset,
 } from "../src/lib/media";
 import {
+  createRemoteMediaFolder,
   deleteRemoteMediaAssets,
+  MediaNodeClientError,
+  moveRemoteMediaAsset,
   verifyRemoteMediaPlayback,
 } from "../src/lib/media-node-client";
 import { prepareMediaPlaybackAsset } from "../src/lib/media-playback-preparation";
@@ -21,6 +25,7 @@ import {
 import { getVideoPlaybackMode } from "../src/lib/video-playback-mode";
 import {
   mediaPlaybackSourceVersion,
+  VIDEO_HLS_INCOMPATIBLE_ERROR,
   verifyPlaybackHls,
 } from "../src/lib/video-hls";
 
@@ -28,6 +33,7 @@ const prepare = process.argv.includes("--prepare");
 const verify = process.argv.includes("--verify");
 const purge = process.argv.includes("--purge-sources");
 const purgeConfirmed = process.argv.includes("--confirm-purge=DELETE_SOURCE_MP4");
+const INCOMPATIBLE_FOLDER = ".hls-incompatible";
 
 function numericArgument(name: string, fallback: number): number {
   const raw = process.argv.find((argument) => argument.startsWith(`--${name}=`))?.split("=", 2)[1];
@@ -47,6 +53,63 @@ function preparationGroup(asset: MediaAsset): string {
   return isRemoteMediaStorage()
     ? resolveRemoteMediaNodeForAsset(asset.storageNodeId, asset.kind).id
     : "local";
+}
+
+function isIncompatible(asset: MediaAsset): boolean {
+  return asset.playbackError === VIDEO_HLS_INCOMPATIBLE_ERROR;
+}
+
+function quarantineStoredName(asset: MediaAsset): string {
+  return `video/${INCOMPATIBLE_FOLDER}/${asset.id}/${path.posix.basename(asset.storedName)}`;
+}
+
+async function ensureRemoteFolder(nodeId: string, folder: string): Promise<void> {
+  try {
+    await createRemoteMediaFolder(nodeId, "video", folder);
+  } catch (error) {
+    if (error instanceof MediaNodeClientError && error.status === 409) return;
+    throw error;
+  }
+}
+
+async function quarantineIncompatible(asset: MediaAsset): Promise<void> {
+  if (asset.storedName.startsWith(`video/${INCOMPATIBLE_FOLDER}/`)) return;
+  const targetStoredName = quarantineStoredName(asset);
+  let moved = false;
+  const remoteNode = isRemoteMediaStorage()
+    ? resolveRemoteMediaNodeForAsset(asset.storageNodeId, asset.kind)
+    : null;
+  try {
+    if (remoteNode) {
+      await ensureRemoteFolder(remoteNode.id, INCOMPATIBLE_FOLDER);
+      await ensureRemoteFolder(remoteNode.id, `${INCOMPATIBLE_FOLDER}/${asset.id}`);
+      if (!await moveRemoteMediaAsset(remoteNode.id, asset.storedName, targetStoredName)) {
+        throw new Error("不兼容源文件隔离失败");
+      }
+    } else {
+      const sourcePath = mediaFilePath(asset.storedName);
+      const targetPath = mediaFilePath(targetStoredName);
+      await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
+      await fs.promises.rename(sourcePath, targetPath);
+    }
+    moved = true;
+    const result = getDb().prepare(
+      `UPDATE media_assets
+       SET stored_name = ?, playback_status = 'failed', playback_error = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND stored_name = ?`,
+    ).run(targetStoredName, VIDEO_HLS_INCOMPATIBLE_ERROR, asset.id, asset.storedName);
+    if (Number(result.changes) !== 1) throw new Error("不兼容源文件状态更新失败");
+    console.info(`isolated #${asset.id} ${asset.storedName} -> ${targetStoredName}`);
+  } catch (error) {
+    if (moved) {
+      if (remoteNode) {
+        await moveRemoteMediaAsset(remoteNode.id, targetStoredName, asset.storedName).catch(() => undefined);
+      } else {
+        await fs.promises.rename(mediaFilePath(targetStoredName), mediaFilePath(asset.storedName)).catch(() => undefined);
+      }
+    }
+    throw error;
+  }
 }
 
 async function verifyAsset(asset: MediaAsset): Promise<{
@@ -78,15 +141,21 @@ function verifyPlaybackDuration(asset: MediaAsset, durationSeconds: number): voi
   }
 }
 
-async function prepareGroup(assets: MediaAsset[]): Promise<{ completed: number; failed: number }> {
+async function prepareGroup(assets: MediaAsset[]): Promise<{ completed: number; failed: number; skipped: number }> {
   let completed = 0;
   let failed = 0;
+  let skipped = 0;
   for (const asset of assets) {
     const current = getMediaAsset(asset.id);
     if (!current || current.kind !== "video") continue;
     if (ready(current)) {
       completed += 1;
       console.info(`ready   #${current.id} ${current.title}`);
+      continue;
+    }
+    if (isIncompatible(current)) {
+      await quarantineIncompatible(current);
+      skipped += 1;
       continue;
     }
     if (current.playbackStatus !== "pending") {
@@ -96,11 +165,17 @@ async function prepareGroup(assets: MediaAsset[]): Promise<{ completed: number; 
     if (await prepareMediaPlaybackAsset(current.id)) {
       completed += 1;
     } else {
+      const failedAsset = getMediaAsset(current.id);
+      if (failedAsset && isIncompatible(failedAsset)) {
+        await quarantineIncompatible(failedAsset);
+        skipped += 1;
+        continue;
+      }
       failed += 1;
       console.error(`failed  #${current.id} ${current.title}`);
     }
   }
-  return { completed, failed };
+  return { completed, failed, skipped };
 }
 
 async function purgeSource(asset: MediaAsset): Promise<boolean> {
@@ -144,6 +219,7 @@ async function main() {
     .filter((asset): asset is MediaAsset => Boolean(asset?.kind === "video"));
 
   let failed = 0;
+  let skipped = 0;
   if (prepare) {
     const groups = new Map<string, MediaAsset[]>();
     for (const asset of assets) {
@@ -152,12 +228,17 @@ async function main() {
     }
     const results = await Promise.all(Array.from(groups.values()).map(prepareGroup));
     failed += results.reduce((total, result) => total + result.failed, 0);
+    skipped += results.reduce((total, result) => total + result.skipped, 0);
   }
 
   if (verify || purge) {
     for (const original of assets) {
       const asset = getMediaAsset(original.id);
       if (!asset) continue;
+      if (isIncompatible(asset)) {
+        console.info(`isolated #${asset.id} ${asset.title}`);
+        continue;
+      }
       try {
         const info = await verifyAsset(asset);
         console.info(`verified #${asset.id} ${info.fileCount} files ${info.sizeBytes} bytes`);
@@ -173,7 +254,7 @@ async function main() {
       }
     }
   }
-  console.info(`summary: ${assets.length} selected, ${failed} failed`);
+  console.info(`summary: ${assets.length} selected, ${failed} failed, ${skipped} incompatible skipped`);
   if (failed) process.exitCode = 1;
 }
 

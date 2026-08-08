@@ -1,6 +1,6 @@
 "use client";
 
-import { CupSoda, LoaderCircle, LogIn, Play, RotateCcw } from "lucide-react";
+import Hls from "hls.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type PlaybackLease = {
@@ -8,7 +8,8 @@ type PlaybackLease = {
   token: string;
   expiresAt: number;
   mediaUrl: string;
-  fallbackMediaUrl: string;
+  /** Fully rewritten m3u8 from the ticket API (preferred — no second manifest RTT). */
+  manifest: string | null;
   format: "mp4" | "hls";
 };
 
@@ -18,19 +19,24 @@ type HlsController = {
   startLoad: () => void;
 };
 
-function playbackErrorName(reason: unknown): string {
-  return reason && typeof reason === "object" && "name" in reason
-    ? String((reason as { name?: unknown }).name || "")
-    : "";
-}
-
-function playRequestErrorMessage(reason: unknown): string {
-  const name = playbackErrorName(reason);
-  if (name === "NotSupportedError") return "当前浏览器不支持此视频编码或格式";
-  if (name === "NetworkError") return "网络连接中断，请检查网络后重试";
-  if (name === "SecurityError") return "浏览器阻止了当前视频地址";
-  return "无法开始播放，请重试";
-}
+/** Single-bitrate VOD: prefer thicker buffers over ABR thrash. */
+const HLS_CONFIG = {
+  enableWorker: true,
+  lowLatencyMode: false,
+  startFragPrefetch: true,
+  testBandwidth: true,
+  backBufferLength: 30,
+  maxBufferLength: 60,
+  maxMaxBufferLength: 120,
+  maxBufferSize: 60 * 1000 * 1000,
+  maxBufferHole: 0.5,
+  highBufferWatchdogPeriod: 1,
+  manifestLoadingMaxRetry: 2,
+  levelLoadingMaxRetry: 2,
+  fragLoadingMaxRetry: 4,
+  fragLoadingRetryDelay: 500,
+  capLevelToPlayerSize: true,
+} as const;
 
 function mediaErrorMessage(error: MediaError | null): string {
   if (!error) return "视频加载失败，请重试";
@@ -41,6 +47,16 @@ function mediaErrorMessage(error: MediaError | null): string {
   return "视频加载失败，请重试";
 }
 
+function revokeObjectUrl(url: string | null | undefined) {
+  if (url && url.startsWith("blob:")) {
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      // ignore
+    }
+  }
+}
+
 export function MediaPlayer({
   id,
   posterVersion,
@@ -49,7 +65,6 @@ export function MediaPlayer({
   basePath,
   authenticated,
   leaseRequired = true,
-  playSodaPrice = 0,
   initialPlaybackAllowed = true,
   initialAccessExpiresAt = null,
   contentAccessible = true,
@@ -61,7 +76,6 @@ export function MediaPlayer({
   basePath?: string;
   authenticated: boolean;
   leaseRequired?: boolean;
-  playSodaPrice?: number;
   initialPlaybackAllowed?: boolean;
   initialAccessExpiresAt?: number | null;
   contentAccessible?: boolean;
@@ -71,18 +85,12 @@ export function MediaPlayer({
   const leaseRef = useRef<PlaybackLease | null>(null);
   const heartbeatRef = useRef<number | null>(null);
   const hlsRef = useRef<HlsController | null>(null);
-  const hlsFallbackTriedRef = useRef(false);
+  const blobUrlRef = useRef<string | null>(null);
   const hlsNetworkRecoveryRef = useRef(0);
   const hlsMediaRecoveryRef = useRef(0);
-  const resumeTimeRef = useRef(0);
-  const pendingPlayRef = useRef(false);
+  const sourceLoadAttemptedRef = useRef(false);
   const [sourceUrl, setSourceUrl] = useState("");
   const [sourceFormat, setSourceFormat] = useState<"mp4" | "hls">("mp4");
-  const [fallbackSourceUrl, setFallbackSourceUrl] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [manualPlayRequired, setManualPlayRequired] = useState(false);
-  const [playbackHint, setPlaybackHint] = useState("");
   const [playbackAllowed, setPlaybackAllowed] = useState(initialPlaybackAllowed);
   const [accessExpiresAt, setAccessExpiresAt] = useState(initialAccessExpiresAt);
   const mediaBasePath = useMemo(() => basePath || `/media/${id}`, [basePath, id]);
@@ -101,6 +109,13 @@ export function MediaPlayer({
       window.clearInterval(heartbeatRef.current);
       heartbeatRef.current = null;
     }
+  }, []);
+
+  const clearSource = useCallback(() => {
+    revokeObjectUrl(blobUrlRef.current);
+    blobUrlRef.current = null;
+    setSourceUrl("");
+    setSourceFormat("mp4");
   }, []);
 
   const releaseLease = useCallback(() => {
@@ -130,19 +145,29 @@ export function MediaPlayer({
       token?: string;
       expiresAt?: number;
       mediaUrl?: string;
-      fallbackMediaUrl?: string;
+      manifest?: string | null;
       format?: "mp4" | "hls";
     };
-    if (!response.ok || !body.sessionId || !body.token || !body.expiresAt || !body.mediaUrl) {
+    if (!response.ok || !body.sessionId || !body.token || !body.expiresAt) {
+      throw new Error(body.message || "暂时无法开始播放");
+    }
+    const format = body.format === "hls" ? "hls" : "mp4";
+    const manifest = typeof body.manifest === "string" && body.manifest.startsWith("#EXTM3U")
+      ? body.manifest
+      : null;
+    if (format === "hls" && !manifest && !body.mediaUrl) {
+      throw new Error(body.message || "暂时无法开始播放");
+    }
+    if (format === "mp4" && !body.mediaUrl) {
       throw new Error(body.message || "暂时无法开始播放");
     }
     return {
       sessionId: body.sessionId,
       token: body.token,
       expiresAt: body.expiresAt,
-      mediaUrl: body.mediaUrl,
-      fallbackMediaUrl: body.fallbackMediaUrl || "",
-      format: body.format === "hls" ? "hls" : "mp4",
+      mediaUrl: body.mediaUrl || "",
+      manifest,
+      format,
     };
   }, [clientId, id, leaseRequired]);
 
@@ -166,102 +191,60 @@ export function MediaPlayer({
   }, [accessExpiresAt, authenticated, contentAccessible, id, playbackAllowed]);
 
   const failPlayback = useCallback((message: string) => {
-    pendingPlayRef.current = false;
     releaseLease();
-    setSourceUrl("");
-    setSourceFormat("mp4");
-    setFallbackSourceUrl("");
-    hlsFallbackTriedRef.current = false;
-    setLoading(false);
-    setError("");
-    setManualPlayRequired(false);
-    setPlaybackHint("");
-    setError(message);
-  }, [releaseLease]);
+    clearSource();
+    if (message) console.warn(`[video:${id}] ${message}`);
+  }, [clearSource, id, releaseLease]);
 
-  const fallbackFromHls = useCallback(() => {
-    const fallback = fallbackSourceUrl || leaseRef.current?.fallbackMediaUrl || "";
-    if (!fallback || hlsFallbackTriedRef.current) {
-      failPlayback("HLS 播放失败，正在等待重试");
+  const applyLeaseSource = useCallback((lease: PlaybackLease) => {
+    revokeObjectUrl(blobUrlRef.current);
+    blobUrlRef.current = null;
+    if (lease.format === "hls" && lease.manifest) {
+      const blob = new Blob([lease.manifest], { type: "application/vnd.apple.mpegurl" });
+      const url = URL.createObjectURL(blob);
+      blobUrlRef.current = url;
+      setSourceFormat("hls");
+      setSourceUrl(url);
       return;
     }
-    const video = videoRef.current;
-    resumeTimeRef.current = video && Number.isFinite(video.currentTime) ? video.currentTime : 0;
-    hlsFallbackTriedRef.current = true;
-    hlsRef.current?.destroy();
-    hlsRef.current = null;
-    setSourceFormat("mp4");
-    setSourceUrl(fallback);
-    setLoading(true);
-    setError("已切换兼容播放模式");
-    pendingPlayRef.current = true;
-  }, [failPlayback, fallbackSourceUrl]);
+    setSourceFormat(lease.format);
+    setSourceUrl(lease.mediaUrl || `${mediaBasePath}/stream?v=${String(Math.floor(sourceVersion))}`);
+  }, [mediaBasePath, sourceVersion]);
 
-  const handlePlayRejection = useCallback((reason: unknown) => {
-    const name = playbackErrorName(reason);
-    if (name === "NotAllowedError" || name === "AbortError") {
-      setLoading(false);
-      setError("");
-      setManualPlayRequired(true);
-      setPlaybackHint(name === "NotAllowedError" ? "视频已就绪，点击播放" : "播放被浏览器暂停，点击继续");
-      return;
-    }
-    failPlayback(playRequestErrorMessage(reason));
-  }, [failPlayback]);
-
-  const startPlayback = useCallback(async (force = false) => {
-    if (loading && !force) return;
-    pendingPlayRef.current = false;
+  const startPlayback = useCallback(async () => {
     releaseLease();
-    setLoading(true);
-    setError("");
-    setManualPlayRequired(false);
-    setPlaybackHint("");
-    hlsFallbackTriedRef.current = false;
+    clearSource();
     hlsNetworkRecoveryRef.current = 0;
     hlsMediaRecoveryRef.current = 0;
-    resumeTimeRef.current = 0;
     try {
       await ensurePlaybackAccess();
+      if (!leaseRequired) {
+        setSourceFormat("mp4");
+        setSourceUrl(`${mediaBasePath}/stream?v=${String(Math.floor(sourceVersion))}`);
+        return;
+      }
       const lease = await acquireLease();
+      if (!lease) {
+        throw new Error("暂时无法开始播放");
+      }
       leaseRef.current = lease;
-      pendingPlayRef.current = true;
-      setSourceFormat(lease?.format || "mp4");
-      setFallbackSourceUrl(lease?.fallbackMediaUrl || "");
-      setSourceUrl(lease?.mediaUrl || `${mediaBasePath}/stream?v=${String(Math.floor(sourceVersion))}`);
+      applyLeaseSource(lease);
     } catch (reason) {
       failPlayback(reason instanceof TypeError
         ? "网络连接异常，请检查网络后重试"
         : reason instanceof Error ? reason.message : "暂时无法开始播放");
     }
-  }, [acquireLease, ensurePlaybackAccess, failPlayback, loading, mediaBasePath, releaseLease, sourceVersion]);
-
-  const playLoadedVideo = useCallback(() => {
-    if (loading) return;
-    const lease = leaseRef.current;
-    if (lease && lease.expiresAt <= Date.now()) {
-      releaseLease();
-      setSourceUrl("");
-      setManualPlayRequired(false);
-      setPlaybackHint("");
-      void startPlayback();
-      return;
-    }
-    const video = videoRef.current;
-    if (!video) {
-      failPlayback("播放器尚未准备好，请重试");
-      return;
-    }
-    setLoading(true);
-    setError("");
-    setManualPlayRequired(false);
-    setPlaybackHint("");
-    try {
-      void video.play().catch(handlePlayRejection);
-    } catch (reason) {
-      handlePlayRejection(reason);
-    }
-  }, [failPlayback, handlePlayRejection, loading, releaseLease, startPlayback]);
+  }, [
+    acquireLease,
+    applyLeaseSource,
+    clearSource,
+    ensurePlaybackAccess,
+    failPlayback,
+    leaseRequired,
+    mediaBasePath,
+    releaseLease,
+    sourceVersion,
+  ]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -273,99 +256,107 @@ export function MediaPlayer({
       video.load();
       return;
     }
+
     let cancelled = false;
-    const restorePosition = () => {
-      const resumeTime = resumeTimeRef.current;
-      if (resumeTime > 0 && Number.isFinite(video.duration) && video.duration > 0) {
-        video.currentTime = Math.min(resumeTime, Math.max(video.duration - 0.25, 0));
-      }
-      resumeTimeRef.current = 0;
-    };
-    const tryPlay = () => {
-      if (!pendingPlayRef.current || cancelled) return;
-      pendingPlayRef.current = false;
-      void video.play().catch(handlePlayRejection);
-    };
     video.pause();
     video.removeAttribute("src");
+
     if (sourceFormat === "mp4") {
       video.src = sourceUrl;
-      video.addEventListener("loadedmetadata", restorePosition, { once: true });
-      video.addEventListener("loadedmetadata", tryPlay, { once: true });
       video.load();
       return () => {
         cancelled = true;
-        video.removeEventListener("loadedmetadata", restorePosition);
-        video.removeEventListener("loadedmetadata", tryPlay);
       };
     }
-    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+
+    // Safari / iOS: native HLS. Blob playlists work on modern Safari; fall back to ticket URL.
+    const nativeHls = video.canPlayType("application/vnd.apple.mpegurl");
+    if (nativeHls && !Hls.isSupported()) {
       video.src = sourceUrl;
-      video.addEventListener("loadedmetadata", restorePosition, { once: true });
-      video.addEventListener("loadedmetadata", tryPlay, { once: true });
       video.load();
+      video.addEventListener("error", function onNativeError() {
+        video.removeEventListener("error", onNativeError);
+        if (cancelled) return;
+        const lease = leaseRef.current;
+        if (lease?.mediaUrl && sourceUrl.startsWith("blob:")) {
+          setSourceUrl(lease.mediaUrl);
+        }
+      }, { once: true });
       return () => {
         cancelled = true;
-        video.removeEventListener("loadedmetadata", restorePosition);
-        video.removeEventListener("loadedmetadata", tryPlay);
       };
     }
-    void import("hls.js").then(({ default: Hls }) => {
-      if (cancelled) return;
-      if (!Hls.isSupported()) {
-        fallbackFromHls();
+
+    if (!Hls.isSupported()) {
+      // Native-capable browsers already handled above; remaining = unsupported.
+      if (nativeHls) {
+        video.src = sourceUrl;
+        video.load();
+        return () => {
+          cancelled = true;
+        };
+      }
+      failPlayback("当前浏览器不支持 HLS");
+      return;
+    }
+
+    const hls = new Hls(HLS_CONFIG);
+    hlsRef.current = hls;
+    hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+      if (!cancelled) hls.loadSource(sourceUrl);
+    });
+    hls.on(Hls.Events.ERROR, (_event, data) => {
+      if (!data.fatal || cancelled) return;
+      if (data.type === Hls.ErrorTypes.NETWORK_ERROR && hlsNetworkRecoveryRef.current < 2) {
+        hlsNetworkRecoveryRef.current += 1;
+        hls.startLoad();
         return;
       }
-      const hls = new Hls({
-        capLevelToPlayerSize: true,
-        enableWorker: true,
-        backBufferLength: 30,
-        maxBufferLength: 30,
-        lowLatencyMode: false,
-      });
-      hlsRef.current = hls;
-      video.addEventListener("loadedmetadata", restorePosition, { once: true });
-      hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(sourceUrl));
-      hls.on(Hls.Events.MANIFEST_PARSED, tryPlay);
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (!data.fatal) return;
-        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && hlsNetworkRecoveryRef.current < 2) {
-          hlsNetworkRecoveryRef.current += 1;
-          hls.startLoad();
-          return;
-        }
-        if (data.type === Hls.ErrorTypes.MEDIA_ERROR && hlsMediaRecoveryRef.current < 1) {
-          hlsMediaRecoveryRef.current += 1;
-          hls.recoverMediaError();
-          return;
-        }
-        fallbackFromHls();
-      });
-      hls.attachMedia(video);
-    }).catch(() => fallbackFromHls());
+      if (data.type === Hls.ErrorTypes.MEDIA_ERROR && hlsMediaRecoveryRef.current < 1) {
+        hlsMediaRecoveryRef.current += 1;
+        hls.recoverMediaError();
+        return;
+      }
+      // Blob playlist rejected → fall back to server manifest once.
+      const lease = leaseRef.current;
+      if (lease?.mediaUrl && sourceUrl.startsWith("blob:") && hlsNetworkRecoveryRef.current < 3) {
+        hlsNetworkRecoveryRef.current += 1;
+        setSourceUrl(lease.mediaUrl);
+        return;
+      }
+      failPlayback("HLS 播放失败");
+    });
+    hls.attachMedia(video);
+
     return () => {
       cancelled = true;
-      video.removeEventListener("loadedmetadata", restorePosition);
-      hlsRef.current?.destroy();
-      hlsRef.current = null;
+      hls.destroy();
+      if (hlsRef.current === hls) hlsRef.current = null;
     };
-  }, [fallbackFromHls, handlePlayRejection, sourceFormat, sourceUrl]);
+  }, [failPlayback, sourceFormat, sourceUrl]);
 
-  useEffect(() => releaseLease, [releaseLease]);
+  useEffect(() => {
+    if (sourceLoadAttemptedRef.current || !contentAccessible || !playbackAllowed) return;
+    sourceLoadAttemptedRef.current = true;
+    void startPlayback();
+  }, [contentAccessible, playbackAllowed, startPlayback]);
+
+  useEffect(() => () => {
+    releaseLease();
+    revokeObjectUrl(blobUrlRef.current);
+    blobUrlRef.current = null;
+  }, [releaseLease]);
 
   function recordPlay() {
     const currentLease = leaseRef.current;
     if (currentLease && currentLease.expiresAt <= Date.now()) {
       videoRef.current?.pause();
       releaseLease();
-      setSourceUrl("");
-      void startPlayback(true);
+      clearSource();
+      sourceLoadAttemptedRef.current = false;
+      void startPlayback();
       return;
     }
-    setLoading(false);
-    setError("");
-    setManualPlayRequired(false);
-    setPlaybackHint("");
     if (!countedRef.current) {
       countedRef.current = true;
       void fetch(`${mediaBasePath}/play`, { method: "POST", keepalive: true }).catch(() => {
@@ -392,13 +383,12 @@ export function MediaPlayer({
         if (!response.ok || !body.expiresAt) {
           video.pause();
           releaseLease();
-          setError("播放会话已失效，请重新播放");
-          setSourceUrl("");
+          clearSource();
           return;
         }
         activeLease.expiresAt = body.expiresAt;
       } catch {
-        // A later heartbeat retries; media delivery itself remains uninterrupted.
+        // Retry on a later heartbeat; segment CDN traffic stays uninterrupted.
       }
     }, 25_000);
   }
@@ -412,68 +402,37 @@ export function MediaPlayer({
   }
 
   const poster = posterUrl || `${mediaBasePath}/thumbnail?v=${encodeURIComponent(posterVersion)}`;
-  const needsLogin = !contentAccessible;
-  const needsUnlock = contentAccessible && !playbackAllowed && playSodaPrice > 0;
 
   return (
     <div className="mediaVideoPlayerShell">
       <video
         ref={videoRef}
         className="mediaVideoPlayer"
-        controls={Boolean(sourceUrl)}
+        controls
         playsInline
         poster={poster}
-        preload={sourceUrl ? "metadata" : "none"}
-        src={sourceUrl || undefined}
+        preload={sourceUrl ? "auto" : "none"}
+        // Avoid setting src for hls.js path (attachMedia owns the element).
+        src={sourceFormat === "mp4" && sourceUrl ? sourceUrl : undefined}
         onPlay={recordPlay}
-        onPlaying={() => {
-          setLoading(false);
-          setError("");
-        }}
-        onCanPlay={() => setLoading(false)}
-        onWaiting={() => setLoading(true)}
-        onStalled={() => setLoading(true)}
         onPause={handlePause}
         onEnded={handleEnded}
         onError={(event) => {
-          if (sourceUrl) {
-            if (sourceFormat === "hls") fallbackFromHls();
-            else failPlayback(mediaErrorMessage(event.currentTarget.error));
+          if (!sourceUrl) return;
+          if (sourceFormat === "hls") {
+            const lease = leaseRef.current;
+            if (lease?.mediaUrl && sourceUrl.startsWith("blob:")) {
+              setSourceUrl(lease.mediaUrl);
+              return;
+            }
+            failPlayback("HLS 播放失败");
+            return;
           }
+          failPlayback(mediaErrorMessage(event.currentTarget.error));
         }}
       >
         当前浏览器无法播放这个视频。
       </video>
-      {!sourceUrl || loading || error || manualPlayRequired ? (
-        <div className="mediaVideoStartLayer">
-          <button
-            className={needsUnlock || needsLogin ? "isUnlockAction" : ""}
-            type="button"
-            onClick={() => {
-              if (needsLogin) {
-                window.location.assign(`/login?${new URLSearchParams({ returnTo: `/media/${id}` }).toString()}`);
-                return;
-              }
-              if (manualPlayRequired && sourceUrl) {
-                playLoadedVideo();
-                return;
-              }
-              void startPlayback();
-            }}
-            disabled={loading}
-            aria-label={needsLogin ? "登录后播放" : needsUnlock ? `使用 ${playSodaPrice} 苏打解锁 24 小时` : manualPlayRequired ? "视频已就绪，点击播放" : error ? "重新播放" : "播放视频"}
-          >
-            {loading ? <LoaderCircle className="isSpinning" size={23} aria-hidden="true" /> :
-              needsLogin ? (
-                <><LogIn size={20} aria-hidden="true" /><span>登录后播放</span></>
-              ) : needsUnlock ? (
-                <><CupSoda size={20} aria-hidden="true" /><span>{playSodaPrice} 苏打 · 24 小时</span></>
-              ) : error ? <RotateCcw size={22} aria-hidden="true" /> : <Play size={24} fill="currentColor" aria-hidden="true" />}
-          </button>
-          {error ? <p role="alert">{error}</p> : null}
-          {!error && playbackHint ? <p>{playbackHint}</p> : null}
-        </div>
-      ) : null}
     </div>
   );
 }

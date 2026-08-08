@@ -15,6 +15,7 @@ RUN ./node_modules/.bin/esbuild scripts/*.ts \
   --platform=node \
   --format=cjs \
   --target=node24 \
+  --external:sharp \
   --outdir=maintenance
 RUN npm pkg set \
   scripts.start="node server.js" \
