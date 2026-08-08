@@ -1,7 +1,9 @@
 "use client";
 
 import Hls from "hls.js";
+import { CupSoda, LoaderCircle, LogIn, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "@/components/LocalizedLink";
 
 type PlaybackLease = {
   sessionId: string;
@@ -40,7 +42,7 @@ function mediaErrorMessage(error: MediaError | null): string {
   if (error.code === 1) return "视频加载已中止，请重新播放";
   if (error.code === 2) return "视频加载时网络中断，请检查网络后重试";
   if (error.code === 3) return "视频解码失败，建议更新浏览器后重试";
-  if (error.code === 4) return "当前浏览器不支持此视频格式";
+  if (error.code === 4) return "视频地址无效或暂时无法播放，请重试";
   return "视频加载失败，请重试";
 }
 
@@ -81,7 +83,17 @@ export function MediaPlayer({
   const [accessExpiresAt, setAccessExpiresAt] = useState(initialAccessExpiresAt);
   const [status, setStatus] = useState<PlayerStatus>("idle");
   const [statusMessage, setStatusMessage] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
   const mediaBasePath = useMemo(() => basePath || `/media/${id}`, [basePath, id]);
+  const returnTo = useMemo(() => `/media/${id}`, [id]);
+  const loginHref = useMemo(
+    () => `/login?${new URLSearchParams({ returnTo }).toString()}`,
+    [returnTo],
+  );
+
+  const needsLogin = !contentAccessible && !authenticated;
+  const needsUnlock = contentAccessible && !playbackAllowed;
+  const showAccessGate = needsLogin || needsUnlock;
 
   const clientId = useCallback(() => {
     const key = "novel-video-client-id";
@@ -153,13 +165,13 @@ export function MediaPlayer({
   }, [clientId, id]);
 
   const ensurePlaybackAccess = useCallback(async () => {
-    if (!contentAccessible) throw new Error("登录后可以播放此视频");
+    if (!contentAccessible) throw new Error("LOGIN_REQUIRED");
     if (playbackAllowed) {
       if (!accessExpiresAt || accessExpiresAt > Date.now()) return;
       setPlaybackAllowed(false);
       throw new Error("播放授权已到期，请重新解锁");
     }
-    if (!authenticated) throw new Error("登录后可用苏打解锁");
+    if (!authenticated) throw new Error("LOGIN_REQUIRED");
     const response = await fetch(`/api/media/${id}/unlock`, { method: "POST" });
     const body = await response.json().catch(() => ({})) as {
       ok?: boolean;
@@ -203,9 +215,15 @@ export function MediaPlayer({
       setStatus("ready");
       setStatusMessage("");
     } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "暂时无法开始播放";
+      if (message === "LOGIN_REQUIRED") {
+        setStatus("idle");
+        setStatusMessage("");
+        return;
+      }
       failPlayback(reason instanceof TypeError
         ? "网络连接异常，请检查网络后重试"
-        : reason instanceof Error ? reason.message : "暂时无法开始播放");
+        : message);
     }
   }, [
     acquireLease,
@@ -217,6 +235,18 @@ export function MediaPlayer({
     releaseLease,
     sourceVersion,
   ]);
+
+  const handleUnlock = useCallback(async () => {
+    if (unlocking) return;
+    setUnlocking(true);
+    setStatusMessage("");
+    try {
+      sourceLoadAttemptedRef.current = false;
+      await startPlayback();
+    } finally {
+      setUnlocking(false);
+    }
+  }, [startPlayback, unlocking]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -240,7 +270,44 @@ export function MediaPlayer({
       };
     }
 
-    // Prefer native HLS (Safari / iOS) when the engine can play m3u8 directly.
+    // WordPress / industry default: use hls.js on Chromium/Firefox first.
+    // Some Chromium builds return a non-empty canPlayType for mpegurl but still
+    // cannot play m3u8 natively (MEDIA_ERR_SRC_NOT_SUPPORTED). Prefer MSE.
+    if (Hls.isSupported()) {
+      const hls = new Hls(createHlsConfig());
+      hlsRef.current = hls;
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (!cancelled) {
+          setStatus("ready");
+          setStatusMessage("");
+        }
+      });
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (!data.fatal || cancelled) return;
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && hlsNetworkRecoveryRef.current < 3) {
+          hlsNetworkRecoveryRef.current += 1;
+          hls.startLoad();
+          return;
+        }
+        if (data.type === Hls.ErrorTypes.MEDIA_ERROR && hlsMediaRecoveryRef.current < 2) {
+          hlsMediaRecoveryRef.current += 1;
+          hls.recoverMediaError();
+          return;
+        }
+        failPlayback("HLS 播放失败，请刷新后重试");
+      });
+      // Recommended order for hls.js: loadSource then attachMedia.
+      hls.loadSource(sourceUrl);
+      hls.attachMedia(video);
+
+      return () => {
+        cancelled = true;
+        hls.destroy();
+        if (hlsRef.current === hls) hlsRef.current = null;
+      };
+    }
+
+    // Safari / iOS: native HLS only when hls.js MSE is unavailable.
     const nativeHls = Boolean(video.canPlayType("application/vnd.apple.mpegurl"));
     if (nativeHls) {
       video.src = sourceUrl;
@@ -250,59 +317,22 @@ export function MediaPlayer({
       };
     }
 
-    if (!Hls.isSupported()) {
-      failPlayback("当前浏览器不支持 HLS 播放");
-      return;
-    }
-
-    // Desktop Chromium / Firefox: wire hls.js into the native <video controls>.
-    const hls = new Hls(createHlsConfig());
-    hlsRef.current = hls;
-    hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      if (!cancelled) {
-        setStatus("ready");
-        setStatusMessage("");
-      }
-    });
-    hls.on(Hls.Events.ERROR, (_event, data) => {
-      if (!data.fatal || cancelled) return;
-      if (data.type === Hls.ErrorTypes.NETWORK_ERROR && hlsNetworkRecoveryRef.current < 3) {
-        hlsNetworkRecoveryRef.current += 1;
-        hls.startLoad();
-        return;
-      }
-      if (data.type === Hls.ErrorTypes.MEDIA_ERROR && hlsMediaRecoveryRef.current < 2) {
-        hlsMediaRecoveryRef.current += 1;
-        hls.recoverMediaError();
-        return;
-      }
-      failPlayback("HLS 播放失败，请刷新后重试");
-    });
-    hls.attachMedia(video);
-    hls.loadSource(sourceUrl);
-
+    failPlayback("当前浏览器不支持 HLS 播放");
     return () => {
       cancelled = true;
-      hls.destroy();
-      if (hlsRef.current === hls) hlsRef.current = null;
     };
   }, [destroyHls, failPlayback, sourceFormat, sourceUrl]);
 
   useEffect(() => {
     if (sourceLoadAttemptedRef.current) return;
-    if (!contentAccessible) {
+    if (!contentAccessible || !playbackAllowed) {
       setStatus("idle");
-      setStatusMessage(authenticated ? "请解锁后播放" : "登录后可以播放此视频");
-      return;
-    }
-    if (!playbackAllowed) {
-      setStatus("idle");
-      setStatusMessage("请先解锁后播放");
+      setStatusMessage("");
       return;
     }
     sourceLoadAttemptedRef.current = true;
     void startPlayback();
-  }, [authenticated, contentAccessible, playbackAllowed, startPlayback]);
+  }, [contentAccessible, playbackAllowed, startPlayback]);
 
   useEffect(() => () => {
     releaseLease();
@@ -358,14 +388,14 @@ export function MediaPlayer({
   }
 
   const poster = posterUrl || `${mediaBasePath}/thumbnail?v=${encodeURIComponent(posterVersion)}`;
-  const showStatus = Boolean(statusMessage) && (status === "error" || status === "loading" || status === "idle");
+  const showStatus = Boolean(statusMessage) && (status === "error" || status === "loading") && !showAccessGate;
 
   return (
-    <div className="mediaVideoPlayerShell">
+    <div className={`mediaVideoPlayerShell${showAccessGate ? " has-access-gate" : ""}`}>
       <video
         ref={videoRef}
         className="mediaVideoPlayer"
-        controls
+        controls={!showAccessGate && Boolean(sourceUrl)}
         playsInline
         poster={poster}
         preload={sourceUrl ? "auto" : "metadata"}
@@ -393,10 +423,52 @@ export function MediaPlayer({
       >
         当前浏览器无法播放这个视频。
       </video>
+
+      {showAccessGate ? (
+        <div className="mediaVideoAccessGate" role="region" aria-label={needsLogin ? "登录后播放" : "解锁后播放"}>
+          <div className="mediaVideoAccessGateBackdrop" style={{ backgroundImage: `url(${poster})` }} aria-hidden="true" />
+          <div className="mediaVideoAccessGateScrim" aria-hidden="true" />
+          <div className="mediaVideoAccessGateCard">
+            <span className="mediaVideoAccessGateIcon" aria-hidden="true">
+              {needsLogin ? <LogIn size={22} strokeWidth={2.1} /> : <CupSoda size={22} strokeWidth={2.1} />}
+            </span>
+            <div className="mediaVideoAccessGateCopy">
+              <strong>{needsLogin ? "登录后即可播放" : "解锁后播放"}</strong>
+              <p>
+                {needsLogin
+                  ? "免费观看完整视频，登录后自动返回此页"
+                  : "使用苏打解锁后可立即播放"}
+              </p>
+            </div>
+            {needsLogin ? (
+              <Link className="mediaVideoAccessGateCta" href={loginHref}>
+                <Play size={16} fill="currentColor" aria-hidden="true" />
+                登录后播放
+              </Link>
+            ) : (
+              <button
+                type="button"
+                className="mediaVideoAccessGateCta"
+                onClick={() => void handleUnlock()}
+                disabled={unlocking}
+              >
+                {unlocking
+                  ? <LoaderCircle className="isSpinning" size={16} aria-hidden="true" />
+                  : <CupSoda size={16} aria-hidden="true" />}
+                {unlocking ? "解锁中…" : "立即解锁"}
+              </button>
+            )}
+          </div>
+        </div>
+      ) : null}
+
       {showStatus ? (
         <div className={`mediaVideoPlayerStatus is-${status}`} role={status === "error" ? "alert" : "status"}>
+          {status === "loading" ? (
+            <LoaderCircle className="isSpinning" size={14} aria-hidden="true" />
+          ) : null}
           <span>{statusMessage}</span>
-          {status === "error" || (status === "idle" && contentAccessible && playbackAllowed) ? (
+          {status === "error" ? (
             <button
               type="button"
               className="mediaVideoPlayerRetry"
