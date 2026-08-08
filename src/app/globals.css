@@ -9470,10 +9470,12 @@ a.analyticsSearchTag:focus-visible {
     justify-self: start;
   }
 
-  /* Reader settings controls stay right-aligned for thumb reach on mobile */
+  /* Reader settings: keep controls right-aligned (override page-settings left bias) */
   .readerSettingsPanel .fontSizeStepper,
-  .readerSettingsPanel .readerLineHeightControl {
+  .readerSettingsPanel .readerLineHeightControl,
+  .readerSettingsPanel .readerSettingRow > :last-child {
     justify-self: end;
+    margin-left: auto;
   }
 
   .settingMetaToggles {

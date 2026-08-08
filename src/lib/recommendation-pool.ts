@@ -4,7 +4,18 @@ import { sampleNovelIdsFromList } from "./novel-id-sampler";
 
 export const RECOMMENDATION_POOL_MAX_NOVELS = 10_000;
 
-export function listRecommendationPoolNovelIds(db: DatabaseSync = getDb()): number[] {
+export function listRecommendationPoolNovelIds(db: DatabaseSync = getDb(), sourceId?: number | null): number[] {
+  if (Number.isInteger(sourceId) && Number(sourceId) > 0) {
+    return (
+      db.prepare(
+        `SELECT p.novel_id AS novel_id
+         FROM novel_recommendation_pool p
+         INNER JOIN novels n ON n.id = p.novel_id
+         WHERE n.source_id = ?
+         ORDER BY p.novel_id ASC`,
+      ).all(sourceId) as Array<{ novel_id: number }>
+    ).map((row) => row.novel_id);
+  }
   return (
     db.prepare("SELECT novel_id FROM novel_recommendation_pool ORDER BY novel_id ASC").all() as Array<{
       novel_id: number;
@@ -56,9 +67,10 @@ export function sampleRecommendationPoolNovelIds(
   count: number,
   seed: string,
   excludedIds: ReadonlySet<number> = new Set(),
+  sourceId?: number | null,
 ): number[] {
   return sampleNovelIdsFromList(
-    listRecommendationPoolNovelIds(db),
+    listRecommendationPoolNovelIds(db, sourceId),
     count,
     seed,
     excludedIds,

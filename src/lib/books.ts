@@ -188,21 +188,33 @@ export function planCatalogPage(promotedIds: readonly number[], pageSize: number
   };
 }
 
-function listCatalogNovels(pageSize: number, offset: number): Novel[] {
+function listCatalogNovels(pageSize: number, offset: number, sourceId?: number | null): Novel[] {
   const db = getDb();
   const settings = getCatalogFeatureSettings();
+  const scopedSourceId = Number.isInteger(sourceId) && Number(sourceId) > 0 ? Number(sourceId) : null;
   const manualIds = settings.manualPinnedEnabled
-    ? (db.prepare("SELECT novel_id FROM pinned_novels ORDER BY sort_order ASC, novel_id ASC").all() as Array<{ novel_id: number }>)
-        .map((row) => row.novel_id)
+    ? (
+        scopedSourceId
+          ? (db.prepare(
+              `SELECT p.novel_id AS novel_id
+               FROM pinned_novels p
+               INNER JOIN novels n ON n.id = p.novel_id
+               WHERE n.source_id = ?
+               ORDER BY p.sort_order ASC, p.novel_id ASC`,
+            ).all(scopedSourceId) as Array<{ novel_id: number }>)
+          : (db.prepare("SELECT novel_id FROM pinned_novels ORDER BY sort_order ASC, novel_id ASC").all() as Array<{ novel_id: number }>)
+      ).map((row) => row.novel_id)
     : [];
   const pinnedIds = new Set(manualIds);
   const intervalMs = settings.randomRecommendationIntervalMinutes * 60_000;
+  const bucket = Math.floor(Date.now() / intervalMs);
   const randomIds = settings.randomRecommendationsEnabled
     ? sampleRecommendationPoolNovelIds(
         db,
         settings.randomRecommendationCount,
-        `catalog-recommendations:${Math.floor(Date.now() / intervalMs)}`,
+        `catalog-recommendations:${scopedSourceId || "all"}:${bucket}`,
         pinnedIds,
+        scopedSourceId,
       )
     : [];
   const promotedIds = settings.promotionOrder === "random-first"
@@ -215,16 +227,26 @@ function listCatalogNovels(pageSize: number, offset: number): Novel[] {
     return promotedBooks;
   }
 
-  const excludedSql = promotedIds.length ? `WHERE id NOT IN (${promotedIds.map(() => "?").join(", ")})` : "";
+  const filters: string[] = [];
+  const values: Array<number> = [];
+  if (scopedSourceId) {
+    filters.push("source_id = ?");
+    values.push(scopedSourceId);
+  }
+  if (promotedIds.length) {
+    filters.push(`id NOT IN (${promotedIds.map(() => "?").join(", ")})`);
+    values.push(...promotedIds);
+  }
+  const whereSql = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
   const baseBooks = db
     .prepare(
       `SELECT ${NOVEL_SELECT_COLUMNS}
        FROM novels
-       ${excludedSql}
+       ${whereSql}
        ORDER BY title COLLATE NOCASE ASC, id ASC
        LIMIT ? OFFSET ?`,
     )
-    .all(...promotedIds, remaining, pagePlan.baseOffset) as Novel[];
+    .all(...values, remaining, pagePlan.baseOffset) as Novel[];
   return [...promotedBooks, ...baseBooks];
 }
 
@@ -300,15 +322,8 @@ export function listNovels(params: { page?: number; q?: string; pageSize?: numbe
   const page = normalizePage(params.page || 1, totalPages);
   const offset = (page - 1) * pageSize;
 
-  const books = params.sourceId
-    ? db.prepare(
-        `SELECT ${NOVEL_SELECT_COLUMNS}
-         FROM novels
-         WHERE source_id = ?
-         ORDER BY title COLLATE NOCASE ASC, id ASC
-         LIMIT ? OFFSET ?`,
-      ).all(params.sourceId, pageSize, offset) as Novel[]
-    : listCatalogNovels(pageSize, offset);
+  // Always run promotion (pinned + timed random pool), including when a library/source is selected.
+  const books = listCatalogNovels(pageSize, offset, params.sourceId || null);
 
   return {
     books,

@@ -850,7 +850,7 @@
   display: grid;
   width: 122px;
   grid-template-columns: 34px 48px 34px;
-  justify-self: start;
+  justify-self: end;
   border-color: var(--reader-border);
   background: color-mix(in srgb, var(--reader-border) 34%, transparent);
 }
@@ -1661,36 +1661,44 @@ nav.accountGrowthTools > a + a {
     padding: 0 18px calc(18px + env(safe-area-inset-bottom));
   }
 
+  /*
+   * iOS Safari: use flex row (not grid) so controls reliably hug the right.
+   * Label left, selection cluster right — one row, thumb-friendly.
+   */
   .readerSettingRow {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
     min-height: 56px;
-    grid-template-columns: auto minmax(0, 1fr);
     gap: 12px;
     border-bottom: 1px solid color-mix(in srgb, var(--reader-border) 72%, transparent);
     padding: 0;
   }
 
   .readerSettingRow > span {
+    flex: 0 0 auto;
     color: var(--reader-text);
     font-size: 13px;
     font-weight: 650;
-    justify-self: start;
+    line-height: 1.3;
   }
 
-  /* Selection controls hug the right edge (thumb-friendly) */
   .readerSettingRow > :last-child {
-    justify-self: end;
-    justify-content: flex-end;
+    flex: 0 0 auto;
     margin-left: auto;
     width: auto;
-    max-width: 100%;
+    max-width: min(72vw, 260px);
   }
 
   .readerSettingRow.isThemes > div {
     display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
     justify-content: flex-end;
-    justify-self: end;
     gap: 6px;
     width: auto;
+    min-width: 0;
     margin-left: auto;
   }
 
@@ -1700,21 +1708,25 @@ nav.accountGrowthTools > a + a {
     flex: 0 0 28px;
   }
 
-  .readerSettingRow.isFontSize > .fontSizeStepper,
-  .readerSettingRow.isLineHeight > .readerLineHeightControl {
-    justify-self: end;
-    margin-left: auto;
-  }
-
   .readerSettingRow.isFontSize > .fontSizeStepper {
+    display: grid;
     width: 120px;
     grid-template-columns: 32px 52px 32px;
     gap: 0;
+    margin-left: auto;
+    justify-self: end;
   }
 
   .readerSettingRow.isFontSize .fontSizeStepper button {
     width: 32px;
     height: 32px;
+  }
+
+  .readerSettingRow.isLineHeight > .readerLineHeightControl {
+    display: block;
+    width: min(210px, calc(100vw - 128px));
+    height: 34px;
+    margin-left: auto;
   }
 
   .readerSettingRow.isWidth {
@@ -1723,11 +1735,6 @@ nav.accountGrowthTools > a + a {
 
   .readerSettingRow.isLineHeight {
     border-bottom: 0;
-  }
-
-  .readerSettingRow.isLineHeight > .readerLineHeightControl {
-    width: min(210px, calc(100vw - 128px));
-    height: 34px;
   }
 
   .readerBookInfo {
