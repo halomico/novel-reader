@@ -426,10 +426,9 @@ export function MediaPlayer({
 
       {showAccessGate ? (
         <div className="mediaVideoAccessGate" role="region" aria-label={needsLogin ? "登录后播放" : "解锁后播放"}>
-          <div className="mediaVideoAccessGateScrim" aria-hidden="true" />
           {needsLogin ? (
             <Link className="mediaVideoAccessGateCta" href={loginHref}>
-              <Play size={15} fill="currentColor" aria-hidden="true" />
+              <Play size={14} strokeWidth={2.2} aria-hidden="true" />
               登录后播放
             </Link>
           ) : (
@@ -440,8 +439,8 @@ export function MediaPlayer({
               disabled={unlocking}
             >
               {unlocking
-                ? <LoaderCircle className="isSpinning" size={15} aria-hidden="true" />
-                : <CupSoda size={15} aria-hidden="true" />}
+                ? <LoaderCircle className="isSpinning" size={14} aria-hidden="true" />
+                : <CupSoda size={14} strokeWidth={2.1} aria-hidden="true" />}
               {unlocking ? "解锁中…" : "立即解锁"}
             </button>
           )}

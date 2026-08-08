@@ -306,9 +306,9 @@
   width: 100%;
   max-width: none;
   min-height: 86px;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
+  gap: 13px;
   border: 0;
   border-bottom: 1px solid var(--border);
   border-radius: 0;
@@ -325,24 +325,24 @@
   transform: none;
 }
 
-/* Lightweight icon only — no box / border; original compact size */
+/* Lightweight icon only — slightly larger for balance with two text lines */
 .homePortalCardIcon {
   display: inline-grid;
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   place-items: center;
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
   color: var(--portal-accent);
-  opacity: 0.92;
+  opacity: 0.94;
 }
 
 .homePortalCardIcon svg {
-  width: 22px;
-  height: 22px;
-  stroke-width: 1.75;
+  width: 26px;
+  height: 26px;
+  stroke-width: 1.7;
 }
 
 .homePortalCard:hover .homePortalCardIcon,

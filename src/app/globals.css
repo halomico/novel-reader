@@ -697,11 +697,11 @@ textarea {
   --portal-accent: var(--accent);
   flex: 1 1 calc(33.333% - 8px);
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
   max-width: calc(33.333% - 8px);
   min-height: 128px;
   align-items: center;
-  gap: 12px;
+  gap: 13px;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 20px;
@@ -742,7 +742,7 @@ textarea {
 }
 
 .homePortalCard.hasNoTrailingIcon {
-  grid-template-columns: 30px minmax(0, 1fr);
+  grid-template-columns: 34px minmax(0, 1fr);
 }
 
 .homePortalCard:hover,
@@ -755,8 +755,8 @@ textarea {
 
 .homePortalCardIcon {
   display: inline-grid;
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   place-items: center;
   border: 0;
   border-radius: 0;
@@ -766,8 +766,8 @@ textarea {
 }
 
 .homePortalCardIcon svg {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
 }
 
 .homePortalCard strong {
@@ -11967,76 +11967,54 @@ a.analyticsSearchTag:focus-visible {
   display: grid;
   place-items: center;
   padding: 16px;
+  pointer-events: none;
 }
 
-/* Soft theme-tinted veil — keeps poster visible, works light/dark */
-.mediaVideoAccessGateScrim {
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(
-      ellipse 70% 60% at 50% 48%,
-      color-mix(in srgb, var(--bg) 18%, transparent) 0%,
-      color-mix(in srgb, var(--bg) 52%, transparent) 100%
-    ),
-    color-mix(in srgb, var(--bg) 22%, rgb(0 0 0 / 28%));
-}
-
-/* Theme-aware glass pill */
+/* Solid theme accent CTA — no scrim; matches site primary buttons */
 .mediaVideoAccessGateCta {
+  pointer-events: auto;
   position: relative;
   z-index: 1;
   display: inline-flex;
   min-height: 40px;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  border: 1px solid color-mix(in srgb, var(--border) 70%, var(--accent) 18%);
-  border-radius: 999px;
-  padding: 0 18px;
-  background: color-mix(in srgb, var(--surface) 82%, transparent);
-  color: var(--accent);
+  gap: 7px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 16px;
+  background: var(--accent);
+  color: #fffaf2;
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 700;
   letter-spacing: 0.01em;
+  line-height: 1.2;
   text-decoration: none;
-  box-shadow:
-    0 8px 22px color-mix(in srgb, var(--bg) 28%, rgb(0 0 0 / 16%)),
-    inset 0 1px 0 color-mix(in srgb, var(--surface) 55%, transparent);
-  backdrop-filter: blur(14px) saturate(1.15);
-  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 28%, rgb(0 0 0 / 18%));
   cursor: pointer;
-  transition:
-    transform 0.14s ease,
-    background 0.14s ease,
-    border-color 0.14s ease,
-    color 0.14s ease,
-    box-shadow 0.14s ease;
+  transition: background 0.14s ease, box-shadow 0.14s ease, transform 0.14s ease;
 }
 
 .mediaVideoAccessGateCta:hover {
-  background: color-mix(in srgb, var(--surface) 88%, var(--accent) 8%);
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
-  color: var(--accent-strong);
+  background: var(--accent-strong);
   transform: translateY(-1px);
-  box-shadow:
-    0 10px 26px color-mix(in srgb, var(--accent) 14%, rgb(0 0 0 / 14%)),
-    inset 0 1px 0 color-mix(in srgb, var(--surface) 65%, transparent);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 34%, rgb(0 0 0 / 18%));
 }
 
 .mediaVideoAccessGateCta:active {
   transform: translateY(0);
+  background: var(--accent-strong);
 }
 
 .mediaVideoAccessGateCta:disabled {
-  opacity: 0.72;
+  opacity: 0.68;
   cursor: wait;
   transform: none;
+  box-shadow: none;
 }
 
 .mediaVideoAccessGateCta svg {
   flex-shrink: 0;
-  opacity: 0.92;
 }
 
 .mediaVideoPlayerStatus .isSpinning,
@@ -12052,8 +12030,8 @@ a.analyticsSearchTag:focus-visible {
   .mediaVideoAccessGateCta {
     min-height: 38px;
     font-size: 13.5px;
-    padding: 0 16px;
-    gap: 7px;
+    padding: 0 14px;
+    border-radius: 7px;
   }
 }
 
