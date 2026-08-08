@@ -114,9 +114,36 @@ textarea {
   font: inherit;
 }
 
+/* Interactive chrome (links, buttons, etc.) keeps a clear outer focus ring. */
 :focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 48%, transparent);
   outline-offset: 2px;
+}
+
+/*
+ * Form fields: one soft halo on the control itself.
+ * Pairing global outline + field border was drawing double rings (messages,
+ * account, station, search, admin, etc.).
+ */
+:where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]):not([type="hidden"]):not([type="color"]),
+  textarea,
+  select
+):focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border, currentColor));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* Borderless fields inside composite shells (header search, etc.) */
+.searchForm input:focus-visible,
+.mediaSearchForm input:focus-visible,
+.tagLibrarySearch input:focus-visible,
+.mediaBrowseTagSearch input:focus-visible,
+.advancedTagFilter input:focus-visible {
+  outline: none;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 ::selection {
@@ -9154,8 +9181,12 @@ a.analyticsSearchTag:focus-visible {
 .adminMediaEditDialog {
   display: grid;
   width: min(540px, 100%);
+  max-height: min(860px, calc(100dvh - 36px));
   gap: 12px;
   padding: 15px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
@@ -9164,8 +9195,9 @@ a.analyticsSearchTag:focus-visible {
 
 .adminMediaBatchDialog {
   width: min(760px, 100%);
-  max-height: min(760px, calc(100vh - 36px));
+  max-height: min(860px, calc(100dvh - 36px));
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .adminMediaBatchTitles {
@@ -9254,8 +9286,13 @@ a.analyticsSearchTag:focus-visible {
 }
 
 .adminMediaEditDialog footer {
+  position: sticky;
+  bottom: -15px;
+  z-index: 2;
   justify-content: flex-end;
-  padding-top: 3px;
+  margin: 0 -15px -15px;
+  padding: 10px 15px 15px;
+  background: linear-gradient(180deg, transparent 0%, var(--surface) 28%);
 }
 
 .adminMediaEditDialog footer button {
@@ -10127,10 +10164,12 @@ a.analyticsSearchTag:focus-visible {
   .adminMediaEditBackdrop {
     align-items: end;
     padding: 10px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
   }
 
   .adminMediaEditDialog {
     width: 100%;
+    max-height: min(92dvh, calc(100dvh - 20px));
   }
 
   .adminMediaBatchTitles {
