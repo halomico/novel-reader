@@ -287,6 +287,7 @@ export function createTag(input: {
        WHERE id = ?`,
     )
     .get(result.lastInsertRowid) as TagRow;
+  invalidateTagCountCache();
   return toTag(created);
 }
 
@@ -337,6 +338,7 @@ export function updateTag(input: {
 
 export function deleteTag(id: number): boolean {
   const result = getDb().prepare("DELETE FROM tags WHERE id = ?").run(id);
+  if (result.changes > 0) invalidateTagCountCache();
   return result.changes > 0;
 }
 
@@ -384,19 +386,47 @@ export function listTagsForNovels(
   return tagsByNovel;
 }
 
+/** Short TTL — /tags was spending ~1s JOINing 840k novel_tags→novels on every hit. */
+const TAG_COUNT_CACHE_TTL_MS = 30_000;
+type TagCountCacheEntry = { at: number; counts: Map<number, number> };
+const tagCountCache = new Map<string, TagCountCacheEntry>();
+
+export function invalidateTagCountCache(): void {
+  tagCountCache.clear();
+}
+
 function getTagCounts(sourceId?: number): Map<number, number> {
-  const sourceFilter = sourceId ? " WHERE n.source_id = ?" : "";
-  const sourceValues = sourceId ? [sourceId] : [];
-  const rows = getDb()
-    .prepare(
-      `SELECT nt.tag_id, COUNT(*) AS count
-       FROM novel_tags nt
-       INNER JOIN novels n ON n.id = nt.novel_id
-       ${sourceFilter}
-       GROUP BY nt.tag_id`,
-    )
-    .all(...sourceValues) as Array<{ tag_id: number; count: number }>;
-  return new Map(rows.map((row) => [row.tag_id, row.count]));
+  const scopedSourceId = Number.isInteger(sourceId) && Number(sourceId) > 0 ? Number(sourceId) : 0;
+  const cacheKey = scopedSourceId ? `source:${scopedSourceId}` : "all";
+  const now = Date.now();
+  const cached = tagCountCache.get(cacheKey);
+  if (cached && now - cached.at < TAG_COUNT_CACHE_TTL_MS) {
+    return cached.counts;
+  }
+
+  // Global counts: covering index on (tag_id) only — no novels join (~70ms vs ~1s).
+  // Source-scoped counts still need the join.
+  const rows = scopedSourceId
+    ? (getDb()
+        .prepare(
+          `SELECT nt.tag_id, COUNT(*) AS count
+           FROM novel_tags nt
+           INNER JOIN novels n ON n.id = nt.novel_id
+           WHERE n.source_id = ?
+           GROUP BY nt.tag_id`,
+        )
+        .all(scopedSourceId) as Array<{ tag_id: number; count: number }>)
+    : (getDb()
+        .prepare(
+          `SELECT tag_id, COUNT(*) AS count
+           FROM novel_tags
+           GROUP BY tag_id`,
+        )
+        .all() as Array<{ tag_id: number; count: number }>);
+
+  const counts = new Map(rows.map((row) => [row.tag_id, row.count]));
+  tagCountCache.set(cacheKey, { at: now, counts });
+  return counts;
 }
 
 function withCounts(tags: Tag[], counts = getTagCounts()): TagWithCount[] {
@@ -451,6 +481,7 @@ export function setNovelTags(novelId: number, tagIds: number[]): number {
     throw error;
   }
 
+  invalidateTagCountCache();
   return validIds.length;
 }
 
