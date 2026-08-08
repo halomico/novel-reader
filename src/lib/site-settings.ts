@@ -492,7 +492,7 @@ function readSiteSettingsFromDisk(): SiteSettings {
         parsed.randomRecommendationCount,
         DEFAULT_SETTINGS.randomRecommendationCount,
         1,
-        100,
+        1000,
       ),
       randomRecommendationIntervalMinutes: cleanInt(
         parsed.randomRecommendationIntervalMinutes,

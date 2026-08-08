@@ -844,7 +844,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
       "randomRecommendationCount",
       previous.randomRecommendationCount || 8,
       1,
-      100,
+      1000,
     ),
     randomRecommendationIntervalMinutes: intField(
       formData,

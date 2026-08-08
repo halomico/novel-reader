@@ -1,6 +1,5 @@
 ﻿import { Settings } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { BookOpen, ChevronRight, Clapperboard, File, Globe2, Headphones, ListFilter, Megaphone, Search, Tags, Trash2, Upload } from "lucide-react";
 import { AdminPaletteField } from "@/components/AdminPaletteField";
 import { AdminSelect } from "@/components/AdminSelect";
@@ -222,28 +221,20 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
           </details>
 
           <details className="adminSettingsSection adminSettingsDisclosure">
-            <summary>站务公告</summary>
-            <p className="adminSettingsHint">公告、首页通知和进站抽屉统一在站务管理中维护，避免重复编辑和展示状态不一致。</p>
-            <div className="adminSettingsLinkGroup">
-              <Link className="adminPrimaryLink" href="/admin/station/announcements">管理全部公告</Link>
-              <Link className="adminSecondaryLink" href="/admin/station/announcements/new?display=drawer">发布进站弹窗</Link>
-            </div>
-          </details>
-
-          <details className="adminSettingsSection adminSettingsDisclosure">
             <summary>后台安全</summary>
             <label>
               <span>后台用户名</span>
-              <input name="adminUsername" defaultValue={adminUsername} />
+              <input name="adminUsername" defaultValue={adminUsername} autoComplete="username" />
             </label>
             <div className="adminFieldGrid">
               <label>
                 <span>后台新密码</span>
-                <input name="newAdminPassword" type="password" minLength={6} maxLength={72} placeholder="留空则不修改" />
+                {/* No minLength: empty means unchanged; length validated server-side when set */}
+                <input name="newAdminPassword" type="password" maxLength={72} autoComplete="new-password" placeholder="留空则不修改" />
               </label>
               <label>
                 <span>确认后台新密码</span>
-                <input name="confirmAdminPassword" type="password" minLength={6} maxLength={72} placeholder="再次输入新密码" />
+                <input name="confirmAdminPassword" type="password" maxLength={72} autoComplete="new-password" placeholder="再次输入新密码" />
               </label>
             </div>
             <label className="adminCompactField isNarrow">
@@ -306,7 +297,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
             <div className="adminFieldGrid">
               <label>
                 <span>每轮随机展示 / 本</span>
-                <input name="randomRecommendationCount" type="number" min="1" max="100" defaultValue={settings.randomRecommendationCount} />
+                <input name="randomRecommendationCount" type="number" min="1" max="1000" defaultValue={settings.randomRecommendationCount} />
               </label>
               <label>
                 <span>推荐切换周期 / 分钟</span>
@@ -488,7 +479,11 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
             </div>
           </details>
 
-          <button type="submit">保存设置</button>
+          <div className="adminSettingsSaveBar">
+            <button className="adminSettingsSaveButton" type="submit">
+              保存设置
+            </button>
+          </div>
         </form>
 
         <div className="adminPaths">

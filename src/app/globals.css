@@ -4528,6 +4528,41 @@ mark {
   font-family: var(--font-ui);
 }
 
+/*
+ * Admin focus: one soft ring on the control itself.
+ * Global :focus-visible outline + native border was drawing double rings.
+ */
+.adminShell :where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+  textarea,
+  select
+):focus,
+.adminShell :where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+  textarea,
+  select
+):focus-visible,
+.adminLoginShell :where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]),
+  textarea,
+  select
+):focus,
+.adminLoginShell :where(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]),
+  textarea,
+  select
+):focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.adminShell :where(button, a.adminPrimaryLink, a.adminSecondaryLink, .adminIconTextButton):focus-visible,
+.adminLoginShell :where(button):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
 .adminLoginShell {
   width: min(1180px, calc(100% - 28px));
   display: grid;
@@ -6404,6 +6439,33 @@ mark {
   border-radius: 5px;
   font-size: 14px;
   line-height: 1.25;
+}
+
+.adminSettingsSaveBar {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.adminSettingsForm .adminSettingsSaveButton {
+  justify-self: end;
+  min-height: 38px;
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 18px;
+  background: var(--accent);
+  color: #fffaf2;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.adminSettingsForm .adminSettingsSaveButton:hover,
+.adminSettingsForm .adminSettingsSaveButton:focus-visible {
+  background: var(--accent-strong, var(--accent));
 }
 
 .adminSettingsForm .adminSecondaryButton {
@@ -13753,10 +13815,12 @@ a.analyticsSearchTag:focus-visible {
 }
 
 .authPanel input:focus,
-.adminLoginForm input:focus {
+.authPanel input:focus-visible,
+.adminLoginForm input:focus,
+.adminLoginForm input:focus-visible {
   border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
-  outline: 0;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .authPanel .authPrimaryButton,

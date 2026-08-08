@@ -240,8 +240,14 @@ test("normalizes palette rotation and random recommendation settings", () => {
     assert.equal(settings.manualPinnedNovelsEnabled, false);
     assert.equal(settings.randomRecommendationsEnabled, true);
     assert.equal(settings.catalogPromotionOrder, "random-first");
-    assert.equal(settings.randomRecommendationCount, 100);
+    assert.equal(settings.randomRecommendationCount, 500);
     assert.equal(settings.randomRecommendationIntervalMinutes, 10_080);
+
+    writeSiteSettings({
+      ...readSiteSettings(),
+      randomRecommendationCount: 5000,
+    });
+    assert.equal(readSiteSettings().randomRecommendationCount, 1000);
   } finally {
     if (previousPath === undefined) {
       delete process.env.ADMIN_SETTINGS_PATH;
