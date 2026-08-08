@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Bell, BookOpenText, Clapperboard, Clock3, File, Headphones, Tags, type LucideIcon } from "lucide-react";
+import { Bell, BookOpen, Clapperboard, Clock3, File, Headphones, Tags, type LucideIcon } from "lucide-react";
 import { redirect } from "next/navigation";
 import Link from "@/components/LocalizedLink";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -102,7 +102,7 @@ export default async function Home({ searchParams }: HomeProps) {
       href: "/novels",
       label: "小说",
       kind: "novels",
-      icon: BookOpenText,
+      icon: BookOpen,
       accessMode: accessModes.novels,
     });
   }
