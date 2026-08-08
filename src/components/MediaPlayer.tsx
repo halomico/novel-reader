@@ -1,7 +1,7 @@
 "use client";
 
 import Hls from "hls.js";
-import { CupSoda, LoaderCircle, LogIn, Play } from "lucide-react";
+import { CupSoda, LoaderCircle, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "@/components/LocalizedLink";
 
@@ -426,39 +426,25 @@ export function MediaPlayer({
 
       {showAccessGate ? (
         <div className="mediaVideoAccessGate" role="region" aria-label={needsLogin ? "登录后播放" : "解锁后播放"}>
-          <div className="mediaVideoAccessGateBackdrop" style={{ backgroundImage: `url(${poster})` }} aria-hidden="true" />
           <div className="mediaVideoAccessGateScrim" aria-hidden="true" />
-          <div className="mediaVideoAccessGateCard">
-            <span className="mediaVideoAccessGateIcon" aria-hidden="true">
-              {needsLogin ? <LogIn size={22} strokeWidth={2.1} /> : <CupSoda size={22} strokeWidth={2.1} />}
-            </span>
-            <div className="mediaVideoAccessGateCopy">
-              <strong>{needsLogin ? "登录后即可播放" : "解锁后播放"}</strong>
-              <p>
-                {needsLogin
-                  ? "免费观看完整视频，登录后自动返回此页"
-                  : "使用苏打解锁后可立即播放"}
-              </p>
-            </div>
-            {needsLogin ? (
-              <Link className="mediaVideoAccessGateCta" href={loginHref}>
-                <Play size={16} fill="currentColor" aria-hidden="true" />
-                登录后播放
-              </Link>
-            ) : (
-              <button
-                type="button"
-                className="mediaVideoAccessGateCta"
-                onClick={() => void handleUnlock()}
-                disabled={unlocking}
-              >
-                {unlocking
-                  ? <LoaderCircle className="isSpinning" size={16} aria-hidden="true" />
-                  : <CupSoda size={16} aria-hidden="true" />}
-                {unlocking ? "解锁中…" : "立即解锁"}
-              </button>
-            )}
-          </div>
+          {needsLogin ? (
+            <Link className="mediaVideoAccessGateCta" href={loginHref}>
+              <Play size={15} fill="currentColor" aria-hidden="true" />
+              登录后播放
+            </Link>
+          ) : (
+            <button
+              type="button"
+              className="mediaVideoAccessGateCta"
+              onClick={() => void handleUnlock()}
+              disabled={unlocking}
+            >
+              {unlocking
+                ? <LoaderCircle className="isSpinning" size={15} aria-hidden="true" />
+                : <CupSoda size={15} aria-hidden="true" />}
+              {unlocking ? "解锁中…" : "立即解锁"}
+            </button>
+          )}
         </div>
       ) : null}
 

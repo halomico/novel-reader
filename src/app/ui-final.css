@@ -306,9 +306,9 @@
   width: 100%;
   max-width: none;
   min-height: 86px;
-  grid-template-columns: 40px minmax(0, 1fr) auto;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   border: 0;
   border-bottom: 1px solid var(--border);
   border-radius: 0;
@@ -325,16 +325,29 @@
   transform: none;
 }
 
+/* Lightweight icon only — no box / border; height matches two text lines */
 .homePortalCardIcon {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--portal-accent) 8%, transparent);
+  display: inline-grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--portal-accent);
+  opacity: 0.92;
 }
 
 .homePortalCardIcon svg {
-  width: 21px;
-  height: 21px;
+  width: 36px;
+  height: 36px;
+  stroke-width: 1.55;
+}
+
+.homePortalCard:hover .homePortalCardIcon,
+.homePortalCard:focus-visible .homePortalCardIcon {
+  opacity: 1;
 }
 
 .homePortalCardCopy {

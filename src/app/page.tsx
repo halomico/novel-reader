@@ -133,7 +133,7 @@ export default async function Home({ searchParams }: HomeProps) {
             const recentOverview = overview.recent;
             return (
               <Link className="homePortalCard is-recent hasNoTrailingIcon" href="/novels/recent" key={key}>
-                <span className="homePortalCardIcon" aria-hidden="true"><Clock3 size={30} /></span>
+                <span className="homePortalCardIcon" aria-hidden="true"><Clock3 size={36} strokeWidth={1.55} /></span>
                 <span className="homePortalCardCopy"><strong>{uiText(locale, "最近更新")}</strong><small>最近更新：{formatHomeUpdateTime(recentOverview?.updatedAt || null)}</small></span>
               </Link>
             );
@@ -149,7 +149,7 @@ export default async function Home({ searchParams }: HomeProps) {
               key={card.kind}
             >
               <span className="homePortalCardIcon" aria-hidden="true">
-                <Icon size={30} />
+                <Icon size={36} strokeWidth={1.55} />
               </span>
               <span className="homePortalCardCopy"><strong>{label}</strong><small>{overview[card.kind]?.count || 0} {card.kind === "announcement" ? "条" : card.kind === "novels" ? "本" : "个"}{label}　最近更新：{formatHomeUpdateTime(overview[card.kind]?.updatedAt || null)}</small></span>
             </Link>
