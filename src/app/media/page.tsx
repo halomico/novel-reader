@@ -1,6 +1,5 @@
-import { Clapperboard, File, Headphones, Search, X } from "lucide-react";
+import { Clapperboard, File, Headphones } from "lucide-react";
 import type { Metadata } from "next";
-import Form from "next/form";
 import Link from "@/components/LocalizedLink";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
@@ -8,6 +7,7 @@ import { MediaFolderRow } from "@/components/MediaFolderRow";
 import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import { MediaConnectionHint } from "@/components/MediaConnectionHint";
 import { MediaPublicSort } from "@/components/MediaPublicSort";
+import { MediaSearchForm } from "@/components/MediaSearchForm";
 import { MediaVideoCard } from "@/components/MediaVideoCard";
 import { Pagination } from "@/components/Pagination";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -313,28 +313,22 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
               sortOrder={sortOrder}
               locale={locale}
             />
-            <Form className="mediaSearchForm" action="/media">
-              <input
-                name="q"
-                defaultValue={result.query}
-                placeholder={searchPlaceholder}
-                aria-label={searchPlaceholder}
-              />
-              <input name="kind" type="hidden" value={kind} />
-              {sortBy !== defaultSortBy ? <input name="sort" type="hidden" value={sortBy} /> : null}
-              {sortOrder !== (sortBy === "name" ? "asc" : "desc") ? <input name="order" type="hidden" value={sortOrder} /> : null}
-              {categoryParam ? <input name="category" type="hidden" value={categoryParam} /> : null}
-              {tagParam ? <input name="tag" type="hidden" value={tagParam} /> : null}
-              {kind !== "video" && result.folder ? <input name="folder" type="hidden" value={result.folder} /> : null}
-              {result.query ? (
-                <Link className="mediaSearchIconButton" href={mediaHref(kind, kind === "video" ? "" : result.folder, "", categoryParam, sortBy, sortOrder, tagParam)} aria-label={uiText(locale, "清除资源搜索")} title={uiText(locale, "清除搜索")}>
-                  <X size={15} aria-hidden="true" />
-                </Link>
-              ) : null}
-              <button className="mediaSearchIconButton" type="submit" aria-label={uiText(locale, "搜索资源")} title={uiText(locale, "搜索资源")}>
-                <Search size={16} aria-hidden="true" />
-              </button>
-            </Form>
+            <MediaSearchForm
+              action="/media"
+              query={result.query}
+              placeholder={searchPlaceholder}
+              clearHref={mediaHref(kind, kind === "video" ? "" : result.folder, "", categoryParam, sortBy, sortOrder, tagParam)}
+              clearLabel={uiText(locale, "清除搜索")}
+              submitLabel={uiText(locale, "搜索资源")}
+              hiddenFields={[
+                { name: "kind", value: kind },
+                ...(sortBy !== defaultSortBy ? [{ name: "sort", value: sortBy }] : []),
+                ...(sortOrder !== (sortBy === "name" ? "asc" : "desc") ? [{ name: "order", value: sortOrder }] : []),
+                ...(categoryParam ? [{ name: "category", value: categoryParam }] : []),
+                ...(tagParam ? [{ name: "tag", value: tagParam }] : []),
+                ...(kind !== "video" && result.folder ? [{ name: "folder", value: result.folder }] : []),
+              ]}
+            />
           </div>
         </header>
 

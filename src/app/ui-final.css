@@ -306,9 +306,9 @@
   width: 100%;
   max-width: none;
   min-height: 86px;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   border: 0;
   border-bottom: 1px solid var(--border);
   border-radius: 0;
@@ -325,11 +325,11 @@
   transform: none;
 }
 
-/* Lightweight icon only — no box / border; height matches two text lines */
+/* Lightweight icon only — no box / border; original compact size */
 .homePortalCardIcon {
   display: inline-grid;
-  width: 42px;
-  height: 42px;
+  width: 30px;
+  height: 30px;
   place-items: center;
   border: 0;
   border-radius: 0;
@@ -340,9 +340,9 @@
 }
 
 .homePortalCardIcon svg {
-  width: 36px;
-  height: 36px;
-  stroke-width: 1.55;
+  width: 22px;
+  height: 22px;
+  stroke-width: 1.75;
 }
 
 .homePortalCard:hover .homePortalCardIcon,
@@ -420,8 +420,8 @@
     grid-row: 1;
   }
 
-  .siteHeader.hasPrimaryNav .headerTools .searchForm.isPinnedOpen > .searchSubmit,
-  .siteHeader.hasPrimaryNav .headerTools .searchForm.isDefaultOpen > .searchSubmit {
+  .siteHeader.hasPrimaryNav .headerTools .searchForm.isPinnedOpen > .searchTrailing,
+  .siteHeader.hasPrimaryNav .headerTools .searchForm.isDefaultOpen > .searchTrailing {
     grid-column: 3;
     grid-row: 1;
   }

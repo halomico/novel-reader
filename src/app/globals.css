@@ -220,38 +220,90 @@ textarea {
 .searchForm {
   position: relative;
   display: grid;
+  /* toggle | input | trailing actions (clear + submit) — no empty reserved slots */
   grid-template-columns: 30px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 6px;
-  height: 42px;
+  gap: 4px;
+  height: 40px;
   min-width: 0;
-  min-height: 42px;
-  padding: 4px 5px 4px 7px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
+  min-height: 40px;
+  padding: 3px 4px 3px 6px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
   box-shadow: none;
   -webkit-tap-highlight-color: transparent;
 }
 
 .searchForm:focus-within {
-  border-color: var(--border);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
   background: var(--surface);
   box-shadow: none;
 }
 
 .searchForm input {
-  height: 32px;
+  height: 30px;
   min-width: 0;
   border: 0;
   outline: 0;
   background: transparent;
   color: var(--text);
   line-height: 1.35;
+  font-size: 14px;
+}
+
+/* Hide native heavy search cancel; use custom light clear control */
+.searchForm input[type="search"]::-webkit-search-decoration,
+.searchForm input[type="search"]::-webkit-search-cancel-button,
+.searchForm input[type="search"]::-webkit-search-results-button,
+.searchForm input[type="search"]::-webkit-search-results-decoration,
+.mediaSearchForm input[type="search"]::-webkit-search-decoration,
+.mediaSearchForm input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
+/* Trailing cluster: clear only when typing, submit icon always flush right */
+.searchTrailing {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0;
+  flex: 0 0 auto;
+  min-width: 30px;
+}
+
+.searchClearButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--muted) 72%, transparent);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.searchClearButton svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.5;
+}
+
+.searchClearButton:hover,
+.searchClearButton:focus-visible {
+  color: var(--text);
+  background: color-mix(in srgb, var(--muted) 10%, transparent);
 }
 
 .searchSubmitIcon {
-  display: none;
+  display: block;
+  flex-shrink: 0;
 }
 
 .segmentedControl button,
@@ -295,28 +347,29 @@ textarea {
 }
 
 .searchForm .searchSubmit {
-  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
   border: 0;
-  border-radius: 6px;
-  padding: 0 9px;
+  border-radius: 7px;
+  padding: 0;
   background: transparent;
-  color: color-mix(in srgb, var(--accent) 84%, var(--text));
+  color: color-mix(in srgb, var(--muted) 82%, var(--text));
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.015em;
   transition: background-color 140ms ease, color 140ms ease;
 }
 
 .searchForm .searchSubmit:focus-visible {
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
-  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .searchForm .searchSubmit:hover {
-    background: color-mix(in srgb, var(--accent) 7%, transparent);
-    color: var(--accent-strong);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    color: var(--accent);
   }
 }
 
@@ -436,6 +489,7 @@ textarea {
 }
 
 .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) input,
+.searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .searchTrailing,
 .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .searchSubmit,
 .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .searchModeMenu,
 .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .currentFindControls,
@@ -643,11 +697,11 @@ textarea {
   --portal-accent: var(--accent);
   flex: 1 1 calc(33.333% - 8px);
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
   max-width: calc(33.333% - 8px);
   min-height: 128px;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 20px;
@@ -688,7 +742,7 @@ textarea {
 }
 
 .homePortalCard.hasNoTrailingIcon {
-  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-columns: 30px minmax(0, 1fr);
 }
 
 .homePortalCard:hover,
@@ -701,8 +755,8 @@ textarea {
 
 .homePortalCardIcon {
   display: inline-grid;
-  width: 42px;
-  height: 42px;
+  width: 30px;
+  height: 30px;
   place-items: center;
   border: 0;
   border-radius: 0;
@@ -712,8 +766,8 @@ textarea {
 }
 
 .homePortalCardIcon svg {
-  width: 36px;
-  height: 36px;
+  width: 22px;
+  height: 22px;
 }
 
 .homePortalCard strong {
@@ -3285,8 +3339,8 @@ mark {
   align-items: center;
   gap: 0;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 8px;
   background: var(--bg-soft);
   color: var(--muted);
 }
@@ -3309,8 +3363,15 @@ mark {
 }
 
 .mediaSearchForm:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.mediaSearchTrailing {
+  display: inline-flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  min-height: 32px;
 }
 
 .mediaDownloadButton {
@@ -3334,17 +3395,33 @@ mark {
   flex: 0 0 32px;
   place-items: center;
   border: 0;
-  border-left: 1px solid var(--border);
+  border-left: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
   border-radius: 0;
   padding: 0;
   background: transparent;
-  color: var(--muted);
+  color: color-mix(in srgb, var(--muted) 78%, transparent);
   cursor: pointer;
 }
 
-.mediaSearchForm button.mediaSearchIconButton {
+.mediaSearchForm .mediaSearchClearButton {
+  background: transparent;
+  color: color-mix(in srgb, var(--muted) 76%, transparent);
+}
+
+.mediaSearchForm .mediaSearchClearButton:hover,
+.mediaSearchForm .mediaSearchClearButton:focus-visible {
+  color: var(--text);
+  background: color-mix(in srgb, var(--muted) 9%, transparent);
+}
+
+.mediaSearchForm .mediaSearchSubmitButton {
   background: color-mix(in srgb, var(--accent) 9%, transparent);
   color: var(--accent);
+}
+
+.mediaSearchForm .mediaSearchSubmitButton:hover,
+.mediaSearchForm .mediaSearchSubmitButton:focus-visible {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .mediaFolderTree {
@@ -9330,6 +9407,7 @@ a.analyticsSearchTag:focus-visible {
   }
 
   .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) input,
+  .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .searchTrailing,
   .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .searchSubmit,
   .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .searchModeMenu,
   .siteHeader.hasPrimaryNav .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .currentFindControls {
@@ -9343,7 +9421,7 @@ a.analyticsSearchTag:focus-visible {
     z-index: 80;
     grid-template-columns: 30px minmax(0, 1fr) auto;
     width: calc(100vw - 16px);
-    gap: 6px;
+    gap: 4px;
     padding: 4px 5px 4px 7px;
     box-shadow: none;
   }
@@ -9436,6 +9514,7 @@ a.analyticsSearchTag:focus-visible {
   }
 
   .readerShell .readerSearchForm:not(.isPinnedOpen) input,
+  .readerShell .readerSearchForm:not(.isPinnedOpen) .searchTrailing,
   .readerShell .readerSearchForm:not(.isPinnedOpen) .searchSubmit,
   .readerShell .readerSearchForm:not(.isPinnedOpen) .searchModeMenu,
   .readerShell .readerSearchForm:not(.isPinnedOpen) .currentFindControls {

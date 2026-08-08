@@ -1,11 +1,10 @@
-import { Search, X } from "lucide-react";
 import type { Metadata } from "next";
-import Form from "next/form";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import Link from "@/components/LocalizedLink";
+import { MediaSearchForm } from "@/components/MediaSearchForm";
 import { Pagination } from "@/components/Pagination";
 import { SiteHeader } from "@/components/SiteHeader";
 import { checkContentAccess } from "@/lib/content-access";
@@ -87,17 +86,15 @@ export default async function VideoTagsPage({ searchParams }: VideoTagsPageProps
               <span>{uiText(locale, "个")}</span>
             </span>
           </div>
-          <Form className="mediaSearchForm mediaTagSearch" action="/media/tags">
-            <input name="q" defaultValue={queryInput} placeholder={uiText(locale, "搜索标签")} aria-label={uiText(locale, "搜索标签")} />
-            {queryInput ? (
-              <Link className="mediaSearchIconButton" href="/media/tags" aria-label={uiText(locale, "清除搜索")} title={uiText(locale, "清除搜索")}>
-                <X size={15} aria-hidden="true" />
-              </Link>
-            ) : null}
-            <button className="mediaSearchIconButton" type="submit" aria-label={uiText(locale, "搜索标签")} title={uiText(locale, "搜索标签")}>
-              <Search size={16} aria-hidden="true" />
-            </button>
-          </Form>
+          <MediaSearchForm
+            className="mediaSearchForm mediaTagSearch"
+            action="/media/tags"
+            query={queryInput}
+            placeholder={uiText(locale, "搜索标签")}
+            clearHref="/media/tags"
+            clearLabel={uiText(locale, "清除搜索")}
+            submitLabel={uiText(locale, "搜索标签")}
+          />
         </header>
 
         {tags.length ? (

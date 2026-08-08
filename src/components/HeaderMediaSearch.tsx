@@ -1,9 +1,9 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 import Form from "next/form";
 import { usePathname } from "next/navigation";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { localeFromPathname, uiText, withLocalePath } from "@/lib/locale";
 import type { MediaKind } from "@/lib/media";
 import { beginNavigationProgress } from "./NavigationProgress";
@@ -22,6 +22,11 @@ export function HeaderMediaSearch({ kind, query = "" }: { kind: MediaKind; query
   const [keyword, setKeyword] = useState(query);
   const [expanded, setExpanded] = useState(Boolean(query.trim()));
   const label = uiText(locale, SEARCH_LABELS[kind]);
+
+  useEffect(() => {
+    setKeyword(query);
+    if (query.trim()) setExpanded(true);
+  }, [query]);
 
   return (
     <Form
@@ -54,13 +59,30 @@ export function HeaderMediaSearch({ kind, query = "" }: { kind: MediaKind; query
         value={keyword}
         placeholder={label}
         aria-label={label}
+        autoComplete="off"
         onChange={(event) => setKeyword(event.target.value)}
       />
       <input name="kind" type="hidden" value={kind} />
-      <button className="searchSubmit" type="submit" aria-label={label} title={label}>
-        <Search className="searchSubmitIcon" size={16} aria-hidden="true" />
-        <span>{uiText(locale, "搜索")}</span>
-      </button>
+      <div className="searchTrailing">
+        {keyword.trim() ? (
+          <button
+            className="searchClearButton"
+            type="button"
+            aria-label={uiText(locale, "清除搜索")}
+            title={uiText(locale, "清除搜索")}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => {
+              setKeyword("");
+              window.requestAnimationFrame(() => inputRef.current?.focus());
+            }}
+          >
+            <X size={14} strokeWidth={1.5} aria-hidden="true" />
+          </button>
+        ) : null}
+        <button className="searchSubmit" type="submit" aria-label={label} title={label}>
+          <Search className="searchSubmitIcon" size={16} strokeWidth={1.85} aria-hidden="true" />
+        </button>
+      </div>
     </Form>
   );
 }

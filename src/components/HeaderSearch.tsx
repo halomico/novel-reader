@@ -415,6 +415,7 @@ export function HeaderSearch({
         value={keyword}
         placeholder={tr(activeOption.placeholder)}
         aria-label={tr(activeOption.ariaLabel || activeOption.placeholder)}
+        autoComplete="off"
         onChange={(event) => {
           setKeyword(event.target.value);
           if (mode === "current" && currentMatchesRef.current.length) {
@@ -427,10 +428,35 @@ export function HeaderSearch({
       <input name="source" type="hidden" value={searchSource} />
       {library && library !== "default" ? <input name="library" type="hidden" value={library} /> : null}
       {originNovelId ? <input name="origin" type="hidden" value={originNovelId} /> : null}
-      <button className="searchSubmit" type="submit" aria-label={`按${tr(activeOption.label)}${tr("搜索")}`} title={`按${tr(activeOption.label)}${tr("搜索")}`} disabled={isCurrentSearching}>
-        <Search className="searchSubmitIcon" size={16} aria-hidden="true" />
-        <span>{tr("搜索")}</span>
-      </button>
+      <div className="searchTrailing">
+        {keyword.trim() ? (
+          <button
+            className="searchClearButton"
+            type="button"
+            aria-label={tr("清除搜索")}
+            title={tr("清除搜索")}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => {
+              setKeyword("");
+              if (mode === "current" && currentMatchesRef.current.length) {
+                resetCurrentMatches();
+                setIsMessageVisible(false);
+              }
+            }}
+          >
+            <X size={14} strokeWidth={1.5} aria-hidden="true" />
+          </button>
+        ) : null}
+        <button
+          className="searchSubmit"
+          type="submit"
+          aria-label={`${tr(activeOption.label)}${tr("搜索")}`}
+          title={`${tr(activeOption.label)}${tr("搜索")}`}
+          disabled={isCurrentSearching}
+        >
+          <Search className="searchSubmitIcon" size={16} strokeWidth={1.85} aria-hidden="true" />
+        </button>
+      </div>
       {mode === "current" && currentMatchCount > 0 ? (
         <div className="currentFindControls" role="group" aria-label={tr("本文查找结果")}>
           <output aria-live="polite">
@@ -461,7 +487,7 @@ export function HeaderSearch({
             onMouseDown={(event) => event.preventDefault()}
             onClick={(event) => closeCurrentFind(event.currentTarget.form)}
           >
-            <X size={16} aria-hidden="true" />
+            <X size={14} strokeWidth={1.5} aria-hidden="true" />
           </button>
         </div>
       ) : null}
