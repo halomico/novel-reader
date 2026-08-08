@@ -11969,12 +11969,20 @@ a.analyticsSearchTag:focus-visible {
   padding: 16px;
 }
 
+/* Soft theme-tinted veil — keeps poster visible, works light/dark */
 .mediaVideoAccessGateScrim {
   position: absolute;
   inset: 0;
-  background: rgb(0 0 0 / 42%);
+  background:
+    radial-gradient(
+      ellipse 70% 60% at 50% 48%,
+      color-mix(in srgb, var(--bg) 18%, transparent) 0%,
+      color-mix(in srgb, var(--bg) 52%, transparent) 100%
+    ),
+    color-mix(in srgb, var(--bg) 22%, rgb(0 0 0 / 28%));
 }
 
+/* Theme-aware glass pill */
 .mediaVideoAccessGateCta {
   position: relative;
   z-index: 1;
@@ -11982,25 +11990,38 @@ a.analyticsSearchTag:focus-visible {
   min-height: 40px;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  border: 0;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, var(--accent) 18%);
   border-radius: 999px;
   padding: 0 18px;
-  background: rgb(255 255 255 / 94%);
-  color: #111;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  color: var(--accent);
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 650;
   letter-spacing: 0.01em;
   text-decoration: none;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+  box-shadow:
+    0 8px 22px color-mix(in srgb, var(--bg) 28%, rgb(0 0 0 / 16%)),
+    inset 0 1px 0 color-mix(in srgb, var(--surface) 55%, transparent);
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
   cursor: pointer;
-  transition: transform 0.14s ease, background 0.14s ease, box-shadow 0.14s ease;
+  transition:
+    transform 0.14s ease,
+    background 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease,
+    box-shadow 0.14s ease;
 }
 
 .mediaVideoAccessGateCta:hover {
-  background: #fff;
+  background: color-mix(in srgb, var(--surface) 88%, var(--accent) 8%);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  color: var(--accent-strong);
   transform: translateY(-1px);
-  box-shadow: 0 10px 28px rgb(0 0 0 / 32%);
+  box-shadow:
+    0 10px 26px color-mix(in srgb, var(--accent) 14%, rgb(0 0 0 / 14%)),
+    inset 0 1px 0 color-mix(in srgb, var(--surface) 65%, transparent);
 }
 
 .mediaVideoAccessGateCta:active {
@@ -12013,16 +12034,26 @@ a.analyticsSearchTag:focus-visible {
   transform: none;
 }
 
+.mediaVideoAccessGateCta svg {
+  flex-shrink: 0;
+  opacity: 0.92;
+}
+
 .mediaVideoPlayerStatus .isSpinning,
 .mediaVideoAccessGateCta .isSpinning {
   flex-shrink: 0;
 }
 
 @media (max-width: 520px) {
+  .mediaVideoAccessGate {
+    padding: 14px 12px;
+  }
+
   .mediaVideoAccessGateCta {
     min-height: 38px;
     font-size: 13.5px;
     padding: 0 16px;
+    gap: 7px;
   }
 }
 
