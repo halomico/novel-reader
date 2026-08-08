@@ -331,9 +331,9 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: 8px;
-  background: var(--surface);
+  background: transparent;
   color: var(--text);
   box-shadow: none;
 }
@@ -1545,7 +1545,7 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
   margin-top: 28px;
 }
 
@@ -1553,8 +1553,16 @@ textarea {
   width: 34px;
   height: 34px;
   padding: 0;
+  border: 0;
+  background: transparent;
   box-shadow: none;
   cursor: pointer;
+}
+
+.pageButton:hover,
+.pageButton:focus-visible {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .pageButton:disabled {
@@ -1570,11 +1578,11 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 3px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
 }
 
@@ -1585,12 +1593,14 @@ textarea {
   justify-content: center;
   min-width: 32px;
   height: 32px;
-  border-radius: 7px;
+  border: 0;
+  border-radius: 8px;
   padding: 0 9px;
   color: var(--muted);
   font-size: 14px;
   font-weight: 700;
   text-decoration: none;
+  background: transparent;
 }
 
 button.pageNumber {
@@ -1631,44 +1641,53 @@ button.pageNumber {
   display: inline-flex;
 }
 
+/* Lightweight jump sheet — single surface, no stacked frames */
 .pageJumpPanel {
   position: absolute;
   left: 50%;
-  top: calc(100% + 7px);
+  top: calc(100% + 6px);
   z-index: 40;
-  display: grid;
-  grid-template-columns: 58px auto;
-  gap: 4px;
-  min-width: 116px;
-  padding: 5px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--surface) 98%, transparent);
-  box-shadow: 0 8px 18px rgb(84 54 31 / 12%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 18%);
   transform: translateX(-50%);
 }
 
 .pageJumpPanel input {
-  width: 100%;
+  width: 4.5em;
   min-width: 0;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 4px 6px;
-  background: var(--bg-soft);
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--bg-soft, var(--bg)) 92%, transparent);
   color: var(--text);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.2;
+  outline: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.pageJumpPanel input:focus {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 .pageJumpPanel button {
   border: 0;
-  border-radius: 7px;
-  padding: 4px 7px;
+  border-radius: 6px;
+  padding: 6px 10px;
   background: var(--accent);
   color: #fffaf2;
   cursor: pointer;
   font-size: 12px;
+  font-weight: 650;
   line-height: 1.2;
+  white-space: nowrap;
 }
 
 .readerPage {
@@ -11815,6 +11834,42 @@ a.analyticsSearchTag:focus-visible {
   height: 100%;
   max-height: none;
   object-fit: contain;
+}
+
+.mediaVideoPlayerStatus {
+  position: absolute;
+  left: 50%;
+  bottom: 18%;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(92%, 420px);
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 72%);
+  color: #f3f3f3;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.mediaVideoPlayerStatus.is-error {
+  pointer-events: auto;
+}
+
+.mediaVideoPlayerRetry {
+  border: 0;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #fff;
+  color: #111;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  pointer-events: auto;
 }
 
 .mediaTextDocument {

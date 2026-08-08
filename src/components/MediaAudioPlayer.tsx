@@ -70,7 +70,34 @@ export function MediaAudioPlayer({
   const [queueScrollTop, setQueueScrollTop] = useState(0);
   const [audioStatus, setAudioStatus] = useState<AudioStatus>("ready");
   const [audioStatusMessage, setAudioStatusMessage] = useState("");
+  const waitingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   activeTrackIdRef.current = activeTrack.id;
+
+  function clearWaitingTimer() {
+    if (waitingTimerRef.current) {
+      clearTimeout(waitingTimerRef.current);
+      waitingTimerRef.current = null;
+    }
+  }
+
+  function markReady() {
+    clearWaitingTimer();
+    setAudioStatus("ready");
+    setAudioStatusMessage("");
+  }
+
+  /** Only show “loading…” if buffering lasts a moment — avoid flicker when nearly ready. */
+  function markBuffering(message: string) {
+    clearWaitingTimer();
+    waitingTimerRef.current = setTimeout(() => {
+      const audio = audioRef.current;
+      if (!audio || audio.paused || audio.ended) return;
+      // HAVE_FUTURE_DATA / HAVE_ENOUGH_DATA → already playable
+      if (audio.readyState >= 3) return;
+      setAudioStatus("loading");
+      setAudioStatusMessage(message);
+    }, 450);
+  }
   const activeIndex = tracks.findIndex((track) => track.id === activeTrack.id);
   const visibleStart = Math.max(0, Math.floor(queueScrollTop / QUEUE_ROW_HEIGHT) - QUEUE_OVERSCAN);
   const visibleEnd = Math.min(tracks.length, Math.ceil((queueScrollTop + QUEUE_VIEWPORT_HEIGHT) / QUEUE_ROW_HEIGHT) + QUEUE_OVERSCAN);
@@ -89,10 +116,17 @@ export function MediaAudioPlayer({
     audio.pause();
     loadedTrackIdRef.current = activeTrack.id;
     pendingAutoPlayTrackIdRef.current = shouldAutoPlay ? activeTrack.id : null;
-    setAudioStatus("loading");
-    setAudioStatusMessage(uiText(locale, "正在加载音频…"));
+    // Switching tracks: soft loading only if metadata not already available.
+    if (audio.readyState < 1) {
+      setAudioStatus("loading");
+      setAudioStatusMessage(uiText(locale, "正在加载音频…"));
+    } else {
+      markReady();
+    }
     audio.load();
   }, [activeTrack.id, locale]);
+
+  useEffect(() => () => clearWaitingTimer(), []);
 
   useEffect(() => {
     const queue = queueRef.current;
@@ -133,8 +167,7 @@ export function MediaAudioPlayer({
   function handleCanPlay() {
     const audio = audioRef.current;
     if (!audio) return;
-    setAudioStatus("ready");
-    setAudioStatusMessage("");
+    markReady();
     if (pendingAutoPlayTrackIdRef.current !== activeTrack.id) return;
     pendingAutoPlayTrackIdRef.current = null;
     playWhenReady(audio, activeTrack.id);
@@ -142,6 +175,7 @@ export function MediaAudioPlayer({
 
   function handleAudioError() {
     pendingAutoPlayTrackIdRef.current = null;
+    clearWaitingTimer();
     setAudioStatus("error");
     setAudioStatusMessage(audioErrorMessage(audioRef.current?.error || null, locale));
   }
@@ -184,27 +218,28 @@ export function MediaAudioPlayer({
           preload="metadata"
           src={`${basePathPrefix}/${activeTrack.id}/stream?v=${Math.floor(activeTrack.version)}`}
           onLoadStart={() => {
+            const audio = audioRef.current;
+            // Initial load only — avoid sticky “loading” after canplay has already fired.
+            if (audio && audio.readyState >= 2) return;
             setAudioStatus("loading");
             setAudioStatusMessage(uiText(locale, "正在加载音频…"));
           }}
+          onLoadedMetadata={markReady}
           onCanPlay={handleCanPlay}
-          onPlaying={() => {
-            setAudioStatus("ready");
-            setAudioStatusMessage("");
-          }}
+          onCanPlayThrough={markReady}
+          onPlaying={markReady}
           onWaiting={() => {
-            setAudioStatus("loading");
-            setAudioStatusMessage(uiText(locale, "网络较慢，音频仍在加载…"));
+            markBuffering(uiText(locale, "网络较慢，音频仍在加载…"));
           }}
           onStalled={() => {
-            setAudioStatus("notice");
-            setAudioStatusMessage(uiText(locale, "音频加载较慢，正在继续尝试…"));
+            markBuffering(uiText(locale, "音频加载较慢，正在继续尝试…"));
           }}
           onError={handleAudioError}
           onPlay={recordPlay}
           onPause={() => {
             autoPlayRef.current = false;
             pendingAutoPlayTrackIdRef.current = null;
+            clearWaitingTimer();
           }}
           onEnded={handleEnded}
           aria-label={`${uiText(locale, "播放")} ${activeTrack.title}`}
