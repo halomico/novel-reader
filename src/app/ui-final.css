@@ -1282,10 +1282,6 @@
   flex-wrap: wrap;
 }
 
-.stationChatWorkspace .stationConversation .stationReplyForm {
-  align-items: end;
-}
-
 .stationChatWorkspace {
   height: clamp(520px, calc(100dvh - 190px), 680px);
   min-height: 0;
@@ -1295,17 +1291,18 @@
   height: 100%;
 }
 
+.stationChatWorkspace .stationConversation .stationReplyForm,
+.adminInboxWorkspace .adminStationConversation .stationReplyForm {
+  align-items: end;
+}
+
 .stationChatWorkspace .stationConversation .stationReplyForm textarea,
 .adminInboxWorkspace .adminStationConversation .stationReplyForm textarea {
   height: auto;
-  min-height: 36px;
+  min-height: 32px;
   max-height: 120px;
-  overflow-y: hidden;
+  overflow-y: auto;
   resize: none;
-}
-
-.stationChatWorkspace .stationConversation .stationReplyForm button {
-  align-self: end;
 }
 
 .accountGrowthTools {
@@ -1920,30 +1917,31 @@ nav.accountGrowthTools > a + a {
     height: 38px;
   }
 
-  .stationChatWorkspace .stationConversation .stationReplyForm {
+  .stationChatWorkspace .stationConversation .stationReplyForm,
+  .adminInboxWorkspace .adminStationConversation .stationReplyForm {
     position: sticky;
     z-index: 4;
     bottom: 0;
-    grid-template-columns: minmax(0, 1fr) 36px;
+    grid-template-columns: minmax(0, 1fr) 34px;
     align-items: end;
-    gap: 4px;
-    min-height: 44px;
+    gap: 6px;
+    min-height: 42px;
     margin: 8px 8px calc(8px + env(safe-area-inset-bottom));
-    border-radius: 22px;
-    padding: 3px 4px 3px 12px;
-    box-shadow: 0 5px 18px rgb(31 35 41 / 8%);
+    border-radius: 8px;
+    padding: 4px 4px 4px 10px;
+    box-shadow: none;
   }
 
   .stationChatWorkspace .stationConversation .stationReplyForm textarea,
   .adminInboxWorkspace .adminStationConversation .stationReplyForm textarea {
     height: auto;
-    min-height: 36px;
+    min-height: 32px;
     max-height: 120px;
     resize: none;
-    overflow-y: hidden;
-    padding: 8px 2px;
-    font-size: 16px;
-    line-height: 20px;
+    overflow-y: auto;
+    padding: 7px 2px;
+    font-size: 16px; /* avoid iOS zoom */
+    line-height: 1.4;
   }
 
   .stationChatWorkspace.hasSelection {
@@ -1953,27 +1951,11 @@ nav.accountGrowthTools > a + a {
 
   .stationChatWorkspace .stationConversation .stationReplyForm button,
   .adminInboxWorkspace .adminStationConversation .stationReplyForm button {
-    display: grid;
-    width: 36px;
-    min-width: 36px;
-    height: 36px;
-    min-height: 36px;
-    place-items: center;
-    align-self: end;
-    justify-self: end;
-    border: 0;
-    border-radius: 50%;
-    padding: 0;
-  }
-
-  .stationChatWorkspace .stationConversation .stationReplyForm button svg,
-  .adminInboxWorkspace .adminStationConversation .stationReplyForm button svg {
-    display: block;
-  }
-
-  .stationChatWorkspace .stationConversation .stationReplyForm button .stationSendLabel,
-  .adminInboxWorkspace .adminStationConversation .stationReplyForm button .stationSendLabel {
-    display: none;
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
+    border-radius: 6px;
   }
 
   .accountGrowthHeader {
