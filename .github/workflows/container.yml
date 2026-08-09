@@ -1,0 +1,114 @@
+name: Build container
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: container-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=long,prefix=sha-
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: runner
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: ${{ !contains(github.event.head_commit.message, '[prune-ghcr-once]') }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Remove older container versions
+        if: contains(github.event.head_commit.message, '[prune-ghcr-once]')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE_OWNER: ${{ github.repository_owner }}
+          PACKAGE_NAME: ${{ github.event.repository.name }}
+          CURRENT_SHA_TAG: sha-${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          package_url="https://api.github.com/users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions"
+
+          request() {
+            curl --fail-with-body --silent --show-error \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$@"
+          }
+
+          current_id=""
+          for attempt in 1 2 3 4 5 6; do
+            versions="$(request "${package_url}?per_page=100")"
+            current_id="$(jq -r --arg tag "${CURRENT_SHA_TAG}" \
+              '.[] | select((.metadata.container.tags // []) | index($tag)) | .id' \
+              <<<"${versions}" | head -n 1)"
+            if [[ -n "${current_id}" ]]; then
+              break
+            fi
+            sleep 5
+          done
+
+          if [[ -z "${current_id}" ]]; then
+            echo "Current container version ${CURRENT_SHA_TAG} was not found; refusing to delete anything." >&2
+            exit 1
+          fi
+
+          deleted=0
+          while true; do
+            versions="$(request "${package_url}?per_page=100")"
+            old_ids="$(jq -r --arg current "${current_id}" \
+              '.[] | select((.id | tostring) != $current) | .id' \
+              <<<"${versions}")"
+            if [[ -z "${old_ids}" ]]; then
+              break
+            fi
+
+            while IFS= read -r version_id; do
+              request -X DELETE "${package_url}/${version_id}" >/dev/null
+              deleted=$((deleted + 1))
+            done <<<"${old_ids}"
+          done
+
+          echo "Removed ${deleted} older container version(s); kept ${CURRENT_SHA_TAG}."

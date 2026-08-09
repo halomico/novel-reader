@@ -1,0 +1,1951 @@
+/* Small final cascade for interaction-critical responsive layouts. */
+.bookCardSubline {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Entry notice */
+.siteEntryNoticeLayer {
+  position: fixed;
+  z-index: 220;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+}
+
+.siteEntryNoticeBackdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: rgb(20 24 32 / 42%);
+  backdrop-filter: blur(3px);
+  animation: siteEntryNoticeFade 180ms ease-out both;
+}
+
+.siteEntryNoticeDrawer {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: min(460px, calc(100vw - 44px));
+  max-height: min(76dvh, 680px);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  border-radius: 18px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 24px 70px rgb(20 24 32 / 24%);
+  animation: siteEntryNoticeSlide 220ms cubic-bezier(.22, .8, .24, 1) both;
+}
+
+.siteEntryNoticeHandle {
+  display: none;
+}
+
+.siteEntryNoticeDrawer > header {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 10px;
+  padding: 17px 18px 13px;
+}
+
+.siteEntryNoticeHeadingIcon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  color: var(--accent);
+}
+
+.siteEntryNoticeDrawer > header strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.siteEntryNoticeDrawer > header button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+}
+
+.siteEntryNoticeDrawer > header button:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.siteEntryNoticeMarkdown {
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 22px 20px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.siteEntryNoticeMarkdown > :first-child {
+  margin-top: 0;
+}
+
+.siteEntryNoticeMarkdown > :last-child {
+  margin-bottom: 0;
+}
+
+.siteEntryNoticeMarkdown h1,
+.siteEntryNoticeMarkdown h2,
+.siteEntryNoticeMarkdown h3 {
+  margin: 1.2em 0 .55em;
+  font-size: 1.05em;
+  line-height: 1.45;
+}
+
+.siteEntryNoticeMarkdown p,
+.siteEntryNoticeMarkdown ul,
+.siteEntryNoticeMarkdown ol,
+.siteEntryNoticeMarkdown blockquote,
+.siteEntryNoticeMarkdown pre {
+  margin: .65em 0;
+}
+
+.siteEntryNoticeMarkdown a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.siteEntryNoticeMarkdown blockquote {
+  border-left: 3px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  padding-left: 12px;
+  color: var(--muted);
+}
+
+.siteEntryNoticeMarkdown pre {
+  overflow: auto;
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--surface-2);
+}
+
+.siteEntryNoticeMarkdown img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+}
+
+.siteEntryNoticeDrawer > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-top: 1px solid var(--border);
+  padding: 13px 18px 16px;
+  background: color-mix(in srgb, var(--surface-2) 54%, var(--surface));
+}
+
+.siteEntryNoticeDrawer > footer label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.siteEntryNoticeDrawer > footer input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.siteEntryNoticeConfirm {
+  min-height: 36px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 17px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+@keyframes siteEntryNoticeFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes siteEntryNoticeSlide {
+  from { opacity: 0; transform: translateY(18px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 620px) {
+  .siteEntryNoticeLayer {
+    padding: 16px;
+  }
+
+  .siteEntryNoticeDrawer {
+    width: min(100%, 460px);
+    max-height: calc(100dvh - 32px);
+    border-radius: 18px;
+  }
+
+  .siteEntryNoticeHandle {
+    display: none;
+  }
+
+  .siteEntryNoticeDrawer > header {
+    padding-top: 17px;
+  }
+
+  .siteEntryNoticeMarkdown {
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+
+  .siteEntryNoticeDrawer > footer {
+    padding-bottom: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .siteEntryNoticeBackdrop,
+  .siteEntryNoticeDrawer {
+    animation: none;
+  }
+}
+
+.userMenuPanel.hasIdentity {
+  width: min(152px, calc(100vw - 24px));
+  max-width: min(152px, calc(100vw - 24px));
+}
+
+.userMenuPanel a,
+.userMenuPanel button {
+  min-height: 36px;
+  gap: 9px;
+  padding: 7px 9px;
+  font-family: var(--font-ui);
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.userMenuIdentity strong {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.userMenuIdentity small {
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.novelSourceFilterMenu a.isAllLibraries {
+  margin-top: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 0 0 7px 7px;
+  padding-top: 9px;
+}
+
+.homePortalGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 0 30px;
+  border-top: 1px solid var(--border);
+  padding: 28px 0 76px;
+}
+
+@media (min-width: 821px) {
+  .homePortalShell > .homePortalGrid {
+    width: min(980px, 100%);
+  }
+}
+
+.homePortalCard {
+  display: grid;
+  width: 100%;
+  max-width: none;
+  min-height: 86px;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  padding: 13px 6px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.homePortalCard:hover,
+.homePortalCard:focus-visible {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--portal-accent) 3%, transparent);
+  box-shadow: none;
+  transform: none;
+}
+
+/* Lightweight icon only — slightly larger for balance with two text lines */
+.homePortalCardIcon {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--portal-accent);
+  opacity: 0.94;
+}
+
+.homePortalCardIcon svg {
+  width: 26px;
+  height: 26px;
+  stroke-width: 1.7;
+}
+
+.homePortalCard:hover .homePortalCardIcon,
+.homePortalCard:focus-visible .homePortalCardIcon {
+  opacity: 1;
+}
+
+.homePortalCardCopy {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.homePortalCardCopy strong {
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.homePortalCardCopy small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (min-width: 821px) {
+  .siteHeader {
+    width: 100vw;
+    max-width: none;
+    margin-inline: calc(50% - 50vw);
+    padding-inline: 12px;
+  }
+
+  .siteHeader.hasPrimaryNav .headerTools:not(.hasNoSearch) {
+    --header-action-width: 42px;
+    position: relative;
+    display: flex;
+    width: 94px;
+    min-width: 94px;
+    justify-content: flex-end;
+    gap: 2px;
+  }
+
+  .siteHeader.hasPrimaryNav .headerTools:not(.hasNoSearch):has(.themeToggle) {
+    --header-action-width: 86px;
+    width: 130px;
+    min-width: 130px;
+  }
+
+  .siteHeader.hasPrimaryNav .headerTools .searchForm.isPinnedOpen,
+  .siteHeader.hasPrimaryNav .headerTools .searchForm.isDefaultOpen {
+    position: absolute;
+    top: 50%;
+    right: calc(var(--header-action-width) + 10px);
+    width: min(420px, calc(100vw - 520px));
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    transform: translateY(-50%);
+  }
+
+  .siteHeader.hasPrimaryNav .headerTools .searchForm.isPinnedOpen .searchIconButton,
+  .siteHeader.hasPrimaryNav .headerTools .searchForm.isDefaultOpen .searchIconButton {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .siteHeader.hasPrimaryNav .headerTools .searchForm.isPinnedOpen > input[type="search"],
+  .siteHeader.hasPrimaryNav .headerTools .searchForm.isDefaultOpen > input[type="search"] {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .siteHeader.hasPrimaryNav .headerTools .searchForm.isPinnedOpen > .searchClearButton,
+  .siteHeader.hasPrimaryNav .headerTools .searchForm.isDefaultOpen > .searchClearButton {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
+
+.readerShell {
+  --reader-paper-width: 800px;
+  --reader-bg: var(--bg);
+  --reader-paper: var(--surface);
+  --reader-text: var(--text);
+  --reader-muted: var(--muted);
+  --reader-border: var(--border);
+  --reader-panel: var(--surface);
+  --reader-accent: var(--accent);
+}
+
+.readerShell[data-reader-width="auto"] > .readerPage {
+  width: min(1000px, calc(100vw - 180px));
+}
+
+:root[data-reader-viewport="true"],
+:root[data-reader-viewport="true"] body {
+  background-color: var(--reader-viewport-bg);
+}
+
+:root .readerShell[data-reader-theme="gray"],
+:root[data-reader-theme="gray"] .readerShell:not([data-reader-theme]) {
+  --reader-bg: #ebebeb;
+  --reader-paper: #f5f5f5;
+  --reader-text: #191919;
+  --reader-muted: rgb(25 25 25 / 52%);
+  --reader-border: rgb(0 0 0 / 8%);
+  --reader-panel: #f8f8f8;
+  --reader-accent: var(--palette-light-accent);
+}
+
+:root .readerShell[data-reader-theme="warm"],
+:root[data-reader-theme="warm"] .readerShell:not([data-reader-theme]) {
+  --reader-bg: #ebe6da;
+  --reader-paper: #f5f1e8;
+  --reader-text: rgb(0 0 0 / 90%);
+  --reader-muted: rgb(0 0 0 / 48%);
+  --reader-border: rgb(0 0 0 / 8%);
+  --reader-panel: #faf9f4;
+  --reader-accent: var(--palette-light-accent);
+}
+
+:root .readerShell[data-reader-theme="sepia"],
+:root[data-reader-theme="sepia"] .readerShell:not([data-reader-theme]) {
+  --reader-bg: #e3d0a1;
+  --reader-paper: #efe2c0;
+  --reader-text: rgb(0 0 0 / 90%);
+  --reader-muted: rgb(0 0 0 / 48%);
+  --reader-border: rgb(0 0 0 / 8%);
+  --reader-panel: #f5e9c8;
+  --reader-accent: var(--palette-light-accent);
+}
+
+:root .readerShell[data-reader-theme="green"],
+:root[data-reader-theme="green"] .readerShell:not([data-reader-theme]) {
+  --reader-bg: #c9e0cb;
+  --reader-paper: #e0eee1;
+  --reader-text: rgb(0 0 0 / 90%);
+  --reader-muted: rgb(0 0 0 / 48%);
+  --reader-border: rgb(0 0 0 / 8%);
+  --reader-panel: #e8f3e8;
+  --reader-accent: var(--palette-light-accent);
+}
+
+:root .readerShell[data-reader-theme="blue"],
+:root[data-reader-theme="blue"] .readerShell:not([data-reader-theme]) {
+  --reader-bg: #cedde1;
+  --reader-paper: #dcebef;
+  --reader-text: rgb(0 0 0 / 90%);
+  --reader-muted: rgb(0 0 0 / 48%);
+  --reader-border: rgb(0 0 0 / 8%);
+  --reader-panel: #e5f0f2;
+  --reader-accent: var(--palette-light-accent);
+}
+
+:root .readerShell[data-reader-theme="night"],
+:root[data-reader-theme="night"] .readerShell:not([data-reader-theme]) {
+  --reader-bg: #0a0a0a;
+  --reader-paper: #111;
+  --reader-text: rgb(255 255 255 / 60%);
+  --reader-muted: rgb(255 255 255 / 42%);
+  --reader-border: rgb(255 255 255 / 8%);
+  --reader-panel: #1f1f1f;
+  --reader-accent: var(--palette-dark-accent);
+}
+
+.readerShell > .readerPage {
+  box-sizing: border-box;
+  transition: width 180ms ease, background-color 180ms ease, color 180ms ease;
+}
+
+.readerShell .readerTitle h1 {
+  color: var(--reader-text);
+  font-family: var(--font-content-title);
+  font-size: clamp(23px, 2vw, 26px);
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.readerShell .readerTitle > div > p {
+  margin-top: 7px;
+  color: var(--reader-muted);
+  font-family: var(--font-content-title);
+  font-size: 13.5px;
+  font-weight: 400;
+}
+
+.readerShell .readerText {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  color: var(--reader-text);
+}
+
+.bookTitle,
+.mediaCardCopy strong,
+.mediaVideoTitleLink,
+.mediaDetailHeader h1,
+.mediaVideoHeading h1,
+.mediaAudioNowPlaying strong,
+.mediaAudioQueue button strong,
+.novelChapterCardMain > span {
+  font-family: var(--font-content-title);
+  font-weight: 500;
+}
+
+.readerShell .readerTagsBlock {
+  margin: -4px 0 34px;
+}
+
+.readerShell .readerTagLinks {
+  gap: 5px 8px;
+}
+
+.readerShell .readerTagLinks a {
+  min-height: 29px;
+  border: 0;
+  border-radius: 5px;
+  padding: 3px 7px;
+  background: transparent;
+  color: var(--reader-muted);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.readerShell .readerTagLinks a:hover,
+.readerShell .readerTagLinks a:focus-visible {
+  background: color-mix(in srgb, var(--reader-accent) 8%, transparent);
+  color: var(--reader-accent);
+}
+
+.readerShell .readerTagsCountToggle,
+.readerShell .readerTagsInlineToggle,
+.readerShell .readerTagsCountToggle:hover,
+.readerShell .readerTagsInlineToggle:hover,
+.readerShell .readerTagsCountToggle:focus-visible,
+.readerShell .readerTagsInlineToggle:focus-visible {
+  border: 0;
+  border-radius: 0;
+  padding: 4px;
+  background: transparent;
+  color: var(--reader-muted);
+  box-shadow: none;
+}
+
+.readerToolRail {
+  right: auto;
+  left: min(
+    calc(50% + min(var(--reader-paper-width), calc(100vw - 40px)) / 2 + 14px),
+    calc(100vw - 68px)
+  );
+  width: 58px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.readerToolItem {
+  height: 56px;
+  border: 0;
+  background: transparent;
+  color: var(--reader-muted);
+}
+
+.readerToolItem:hover,
+.readerToolItem:focus-visible,
+.readerToolItem:has(button.isActive) {
+  outline: 0;
+  background: transparent;
+  color: var(--reader-accent);
+}
+
+.readerToolAction .novelRecommendationControl,
+.readerToolAction .novelFavoriteControl,
+.readerToolAction .readerReportAction {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.readerToolAction .novelRecommendationControl > button,
+.readerToolAction .novelFavoriteControl > button,
+.readerToolAction .readerReportAction > button {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 5px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+
+.readerToolAction .novelRecommendationControl > button.isActive,
+.readerToolAction .novelFavoriteControl > button.isActive {
+  color: var(--reader-accent);
+}
+
+.readerToolAction .novelRecommendationControl > button.isActive svg {
+  fill: currentColor;
+}
+
+.readerToolItem.isBackTop {
+  margin-top: 0;
+  border: 0;
+}
+
+.readerPanelBackdrop {
+  background: transparent;
+}
+
+.readerSidePanel {
+  position: fixed;
+  top: 120px;
+  right: max(76px, calc((100vw - var(--reader-paper-width)) / 2 - 14px));
+  bottom: auto;
+  left: auto;
+  width: min(480px, calc(100vw - 96px));
+  max-height: calc(100dvh - 144px);
+  border-radius: 2px;
+  background: var(--reader-panel);
+  box-shadow: 0 16px 48px rgb(20 18 15 / 16%);
+}
+
+.readerSidePanel.is-directory,
+.readerSidePanel.is-info {
+  width: min(420px, calc(100vw - 96px));
+}
+
+.readerSidePanel > header {
+  min-height: 70px;
+  border-bottom: 0;
+  padding: 0 32px;
+}
+
+.readerSidePanel > header strong {
+  font-family: var(--font-content-title);
+  font-size: 23px;
+  font-weight: 500;
+}
+
+.readerSidePanel > header button {
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--reader-muted) 16%, transparent);
+}
+
+.readerBookInfo {
+  display: grid;
+  gap: 0;
+  overflow-y: auto;
+  padding: 4px 28px 30px;
+}
+
+.readerBookInfo h2 {
+  color: var(--reader-text);
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.readerBookInfo .readerBookChapterTitle {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.readerBookInfo .readerBookDescription {
+  margin-top: 15px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.readerBookInfo dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 18px 0 6px;
+}
+
+.readerBookInfo dl > div {
+  display: grid;
+  justify-content: initial;
+  gap: 4px;
+  border: 1px solid var(--reader-border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  background: color-mix(in srgb, var(--reader-border) 24%, transparent);
+}
+
+.readerBookInfo dt {
+  font-size: 11px;
+}
+
+.readerBookInfo dd {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.readerBookInfo > a {
+  width: fit-content;
+  margin-top: 12px;
+}
+
+.readerSettingsPanel {
+  display: grid;
+  gap: 20px;
+  padding: 8px 32px 36px;
+}
+
+.readerSettingRow {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.readerSettingRow > span {
+  color: var(--reader-muted);
+  font-size: 12px;
+}
+
+.readerSettingRow > div {
+  display: flex;
+  min-width: 0;
+  gap: 8px;
+}
+
+.readerSettingRow button {
+  min-width: 0;
+  height: 38px;
+  flex: 1 1 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--reader-border) 52%, transparent);
+  color: var(--reader-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.readerSettingRow button:hover,
+.readerSettingRow button:focus-visible,
+.readerSettingRow button.isActive {
+  border-color: var(--reader-accent);
+  background: color-mix(in srgb, var(--reader-accent) 8%, var(--reader-panel));
+  color: var(--reader-accent);
+}
+
+.readerSettingRow.isThemes > div {
+  align-items: center;
+  gap: 10px;
+}
+
+.readerSettingRow.isThemes button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border-color: color-mix(in srgb, #000 10%, transparent);
+  border-radius: 50%;
+  padding: 0;
+  background: var(--reader-theme-swatch);
+  color: var(--reader-accent);
+}
+
+.readerSettingRow.isThemes button.isActive {
+  border-color: var(--reader-accent);
+  background: var(--reader-theme-swatch);
+}
+
+.readerSettingRow.isFontSize > .fontSizeStepper {
+  display: grid;
+  width: 122px;
+  grid-template-columns: 34px 48px 34px;
+  justify-self: end;
+  border-color: var(--reader-border);
+  background: color-mix(in srgb, var(--reader-border) 34%, transparent);
+}
+
+.readerSettingRow.isFontSize .fontSizeStepper button {
+  width: 34px;
+  height: 32px;
+  border: 0;
+  background: transparent;
+}
+
+.readerSettingRow.isFontSize .fontSizeStepper output {
+  border: 0;
+  color: var(--reader-text);
+}
+
+.readerSettingRow.isWidth > div {
+  gap: 6px;
+}
+
+.readerSettingRow.isWidth button {
+  padding-inline: 6px;
+}
+
+.readerLineHeightControl {
+  display: block;
+  width: min(220px, 100%);
+  height: 38px;
+}
+
+.readerSettingRow.isLineHeight > .readerLineHeightControl {
+  display: block;
+  width: min(220px, 100%);
+  height: 38px;
+}
+
+@media (min-width: 761px) {
+  .readerSettingRow.isThemes > div {
+    justify-content: flex-end;
+  }
+
+  .readerSettingRow.isFontSize > .fontSizeStepper,
+  .readerSettingRow.isLineHeight > .readerLineHeightControl {
+    justify-self: end;
+  }
+}
+
+.readerLineHeightSlider {
+  position: relative;
+  height: 38px;
+  border-radius: 19px;
+  background: color-mix(in srgb, var(--reader-border, var(--border)) 62%, transparent);
+}
+
+.readerLineHeightEdge {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  color: var(--reader-muted, var(--muted));
+  font-size: 13px;
+  line-height: 1;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.readerLineHeightEdge.isSmall { left: 14px; }
+.readerLineHeightEdge.isLarge { right: 14px; }
+
+.readerLineHeightTrack {
+  top: 18px;
+  right: 44px;
+  left: 44px;
+  height: 2px;
+  background: color-mix(in srgb, var(--reader-muted, var(--muted)) 32%, transparent);
+}
+
+.readerLineHeightTrack::before {
+  background: var(--reader-accent, var(--accent));
+}
+
+.readerLineHeightSlider input {
+  inset: 0 36px;
+  width: auto;
+  height: 38px;
+}
+
+.readerLineHeightSlider input::-webkit-slider-runnable-track {
+  height: 2px;
+}
+
+.readerLineHeightSlider input::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -6px;
+  border: 2px solid var(--reader-panel, var(--surface));
+  background: var(--reader-accent, var(--accent));
+  box-shadow: 0 1px 3px rgb(0 0 0 / 14%);
+}
+
+.readerLineHeightSlider input::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--reader-panel, var(--surface));
+  background: var(--reader-accent, var(--accent));
+  box-shadow: 0 1px 3px rgb(0 0 0 / 14%);
+}
+
+.advancedTagSearchToolbar {
+  grid-template-columns: minmax(150px, .7fr) minmax(180px, 1fr) minmax(220px, 1.35fr) auto;
+  align-items: end;
+}
+
+.advancedLibraryField {
+  min-width: 0;
+}
+
+.advancedLibrarySelect {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.advancedLibrarySelect select {
+  width: 100%;
+  min-height: 36px;
+  appearance: none;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 32px 7px 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.advancedLibrarySelect > svg {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  color: var(--muted);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.adminSelectControl select,
+.adminShell select:not([multiple]) {
+  min-height: 36px;
+  appearance: none;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 32px 7px 10px !important;
+  background-color: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.adminShell select:not([multiple]) {
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 50%, calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 4px 4px, 4px 4px;
+}
+
+.adminShell .adminSelectControl select {
+  background-image: none;
+}
+
+.adminSelectControl > svg {
+  right: 10px;
+}
+
+.mediaFeedbackRail {
+  position: static;
+  display: flex;
+  width: auto;
+  height: 38px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.mediaFeedbackRail > span {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 0;
+  color: var(--muted);
+}
+
+.mediaFeedbackRail button,
+.mediaFeedbackRail .readerReportAction {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.mediaFeedbackRail button:hover,
+.mediaFeedbackRail button:focus-visible,
+.mediaFeedbackRail button.isActive {
+  outline: 0;
+  color: var(--accent);
+}
+
+.mediaFeedbackRail .readerReportDialog footer button {
+  display: inline-flex;
+  width: auto;
+  min-width: 72px;
+  height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 0 14px;
+  background: var(--accent);
+  color: #fff;
+  white-space: nowrap;
+}
+
+.mediaDownloadBackdrop {
+  position: fixed;
+  z-index: 135;
+  inset: 0;
+  display: grid;
+  place-items: end center;
+  background: rgb(15 18 24 / 44%);
+  backdrop-filter: blur(3px);
+}
+
+.mediaDownloadDrawer {
+  display: grid;
+  width: min(420px, 100%);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 16px 16px 0 0;
+  background: var(--surface);
+  box-shadow: 0 -18px 46px rgb(18 22 28 / 18%);
+  color: var(--text);
+}
+
+.mediaDownloadHandle {
+  width: 38px;
+  height: 4px;
+  margin: 9px auto 1px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 32%, transparent);
+}
+
+.mediaDownloadDrawer > header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 18px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mediaDownloadDrawer > header > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.mediaDownloadDrawer > header strong,
+.mediaDownloadDrawer > header small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mediaDownloadDrawer > header strong {
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.mediaDownloadDrawer > header small {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.mediaFeedbackRail .mediaDownloadDrawer > header button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.mediaDownloadBody {
+  display: grid;
+  gap: 10px;
+  padding: 15px 18px;
+}
+
+.mediaDownloadBody dl {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+}
+
+.mediaDownloadBody dl > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.mediaDownloadBody dt,
+.mediaDownloadBody dd {
+  margin: 0;
+  font-size: 13px;
+}
+
+.mediaDownloadBody dt {
+  color: var(--muted);
+}
+
+.mediaDownloadBody dd {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text);
+  font-weight: 620;
+}
+
+.mediaDownloadBody .mediaDownloadError {
+  margin: 0;
+  color: #b34138;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.mediaDownloadDrawer > footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding: 11px 18px calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.mediaFeedbackRail .mediaDownloadDrawer > footer button {
+  display: inline-flex;
+  width: auto;
+  min-width: 76px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 0 14px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.mediaFeedbackRail .mediaDownloadDrawer > footer button.isSecondary {
+  background: transparent;
+  color: var(--muted);
+}
+
+.mediaFeedbackRail .mediaDownloadDrawer > footer button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+@media (min-width: 821px) {
+  .mediaDownloadBackdrop {
+    place-items: center;
+    padding: 24px;
+  }
+
+  .mediaDownloadDrawer {
+    border-bottom: 1px solid var(--border);
+    border-radius: 13px;
+    box-shadow: 0 22px 70px rgb(18 22 28 / 22%);
+  }
+
+  .mediaDownloadHandle {
+    display: none;
+  }
+
+  .mediaDownloadDrawer > header {
+    padding-top: 16px;
+  }
+}
+
+.mediaVideoTags .contentTagLink {
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: color-mix(in srgb, var(--tag-color) 8%, transparent);
+  color: var(--tag-color);
+  font-size: 12.5px;
+  text-decoration: none;
+}
+
+.mediaVideoTags .contentTagLink:hover,
+.mediaVideoTags .contentTagLink:focus-visible {
+  background: color-mix(in srgb, var(--tag-color) 14%, transparent);
+  text-decoration: none;
+}
+
+.mediaVideoInfoBar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px 14px;
+}
+
+.mediaVideoTags {
+  align-self: center;
+  flex-wrap: wrap;
+}
+
+.stationChatWorkspace {
+  height: clamp(520px, calc(100dvh - 190px), 680px);
+  min-height: 0;
+}
+
+.stationChatWorkspace .stationConversation {
+  height: 100%;
+}
+
+.stationChatWorkspace .stationConversation .stationReplyForm,
+.adminInboxWorkspace .adminStationConversation .stationReplyForm {
+  align-items: end;
+}
+
+.stationChatWorkspace .stationConversation .stationReplyForm textarea,
+.adminInboxWorkspace .adminStationConversation .stationReplyForm textarea {
+  height: auto;
+  min-height: 32px;
+  max-height: 120px;
+  overflow-y: auto;
+  resize: none;
+}
+
+.accountGrowthTools {
+  gap: 18px;
+  margin-top: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.accountGrowth {
+  gap: 14px;
+}
+
+.accountGrowthTools > a {
+  position: relative;
+  height: 42px;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+  padding-inline: 2px;
+}
+
+nav.accountGrowthTools > a + a {
+  border-left: 0;
+}
+
+.accountGrowthTools > a:hover,
+.accountGrowthTools > a:focus-visible,
+.accountGrowthTools > a.isActive {
+  outline: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  box-shadow: none;
+}
+
+.accountGrowthTools > a.isActive::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--accent);
+  content: "";
+}
+
+.accountGrowthDetail {
+  min-height: 0;
+  margin-top: 0;
+  border-top: 0;
+  padding-top: 14px;
+}
+
+.accountRightsDetail .accountPermissionList {
+  gap: 5px 14px;
+  margin: 0 0 12px;
+}
+
+.accountRightsDetail .accountPermissionList > span {
+  min-height: 24px;
+  border: 0;
+  border-radius: 0;
+  padding: 2px 0;
+  background: transparent;
+  font-size: 11.5px;
+}
+
+.accountEntitlementList article {
+  min-height: 50px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 7px 0;
+}
+
+.accountEntitlementCopy strong {
+  font-weight: 600;
+}
+
+.accountSodaHistory article {
+  min-height: 50px;
+  padding-inline: 0;
+}
+
+.novelChapterCard {
+  min-height: 68px;
+  grid-template-columns: 1fr;
+  align-content: center;
+  gap: 7px;
+  border-radius: 0;
+  padding: 9px;
+}
+
+.novelChapterCardMain,
+.novelChapterCardMeta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.novelChapterCardMain > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.novelChapterCardMeta {
+  justify-content: flex-start;
+  gap: 0;
+  color: var(--muted);
+}
+
+.novelChapterCardMeta small {
+  font-size: 10.5px;
+}
+
+@media (min-width: 821px) and (max-width: 1100px) {
+  .readerToolRail {
+    right: 10px;
+    left: auto;
+  }
+}
+
+@media (max-width: 820px) {
+  .bookTitle,
+  .searchResultBody strong,
+  .readingHistoryCopy strong,
+  .novelChapterCatalogHeader h1,
+  .novelChapterCardMain > span,
+  .readerShell .readerTitle h1,
+  .readerShell .readerTitle > div > p,
+  .readerBookInfo h2,
+  .mediaCardCopy strong,
+  .mediaVideoTitleLink,
+  .mediaDetailHeader h1,
+  .mediaVideoHeading h1,
+  .mediaAudioNowPlaying strong,
+  .mediaAudioQueue button strong {
+    font-family: inherit;
+  }
+
+  .homePortalGrid {
+    grid-template-columns: 1fr;
+    gap: 0;
+    padding: 18px 0 68px;
+  }
+
+  .homePortalCard {
+    min-height: 78px;
+    padding: 11px 4px;
+  }
+
+  .siteHeader.hasPrimaryNav .headerTools .searchForm.isDefaultOpen {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: calc((100% - 100vw) / 2 + 8px);
+    z-index: 80;
+    display: grid;
+    width: calc(100vw - 16px);
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    gap: 2px;
+    padding: 3px 4px;
+    box-shadow: none;
+  }
+
+  .siteHeader.hasPrimaryNav:has(.searchForm.isDefaultOpen) {
+    margin-bottom: 56px;
+  }
+
+  .siteHeader.hasMobileContext {
+    grid-template-columns: 44px minmax(0, 1fr) !important;
+    gap: 0;
+    min-height: 48px;
+    padding-top: 2px;
+    padding-right: max(8px, env(safe-area-inset-right));
+    padding-bottom: 2px;
+    padding-left: max(2px, env(safe-area-inset-left));
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    background: color-mix(in srgb, var(--bg) 96%, transparent);
+    backdrop-filter: blur(12px);
+  }
+
+  .siteHeader.hasMobileContext > .brand,
+  .siteHeader.hasMobileContext > .headerPrimaryNav {
+    display: none !important;
+  }
+
+  .siteHeader.hasMobileContext > .headerTools {
+    display: grid !important;
+    width: auto;
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+    justify-self: end;
+    gap: 4px;
+  }
+
+  /* Kill the generic mobile rule that parks tools on row 2 full-width */
+  .siteHeader.hasMobileContext.hasPrimaryNav > .headerTools,
+  .siteHeader.hasMobileContext .headerTools {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+    width: auto !important;
+  }
+
+  .mobileContextHeader {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    width: 44px;
+    grid-template-columns: 44px;
+    align-items: center;
+    justify-self: start;
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .mobileContextBackLink {
+    display: grid;
+    width: 44px;
+    height: 44px;
+    place-items: center;
+    border-radius: 50%;
+    color: var(--text);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .mobileContextBackLink:active {
+    background: color-mix(in srgb, var(--text) 7%, transparent);
+  }
+
+  .readerShell[data-reader-width="auto"] > .readerPage,
+  .readerShell > .readerPage {
+    width: 100%;
+    padding: 38px 22px 152px;
+  }
+
+  .readerShell,
+  .readerShell::before {
+    background: var(--reader-paper);
+  }
+
+  .readerShell .readerSiteHeader {
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 0;
+    z-index: 60;
+    width: 100%;
+    margin: 0;
+    padding-inline: 10px;
+    background: var(--reader-paper);
+    box-shadow: none;
+  }
+
+  .readerShell .readerSiteHeader.hasMobileContext {
+    min-height: 48px;
+    padding-top: 4px;
+    padding-right: max(6px, env(safe-area-inset-right));
+    padding-bottom: 4px;
+    padding-left: max(6px, env(safe-area-inset-left));
+    border-color: var(--reader-border);
+    background: var(--reader-paper);
+  }
+
+  .readerShell .siteHeader.hasMobileContext > .headerTools {
+    grid-template-columns: 40px auto;
+    gap: 2px;
+  }
+
+  .readerShell .mobileContextBackLink {
+    color: var(--reader-text);
+  }
+
+  .readerShell .readerSiteHeader.isReaderHeaderOverlay {
+    padding: 7px 10px;
+    background: color-mix(in srgb, var(--reader-paper) 96%, transparent);
+    box-shadow: 0 1px 0 var(--reader-border);
+    backdrop-filter: blur(12px);
+  }
+
+  .readerShell .readerSiteHeader.hasMobileContext.isReaderHeaderOverlay {
+    padding-top: 4px;
+    padding-right: max(6px, env(safe-area-inset-right));
+    padding-bottom: 4px;
+    padding-left: max(6px, env(safe-area-inset-left));
+  }
+
+  .readerShell:not(.isReaderChromeReady) .readerSiteHeader,
+  .isReaderChromeHidden .readerShell .readerSiteHeader {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-100%);
+  }
+
+  .readerShell .readerSiteHeader.isReaderHeaderOverlay .headerPrimaryNav {
+    display: none;
+  }
+
+  .readerToolRail {
+    right: 0;
+    left: 0;
+    width: 100%;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    background: color-mix(in srgb, var(--reader-paper) 97%, transparent);
+    box-shadow: 0 -8px 26px rgb(20 18 15 / 8%);
+  }
+
+  .readerToolItem.isPrevious { order: 1; }
+  .readerToolItem.isNext { order: 2; }
+  .readerToolItem.isDirectory { order: 3; }
+  .readerToolItem.isTheme { order: 4; }
+  .readerToolItem.isSettings { order: 5; }
+  .readerToolItem.isInfo { order: 6; }
+  .readerToolItem.isRecommendation { order: 7; }
+  .readerToolItem.isFavorite { order: 8; }
+  .readerToolItem.isReport { order: 9; }
+
+  .readerToolItem.isBackTop {
+    position: static;
+    order: 10;
+    right: auto;
+    bottom: auto;
+    width: auto;
+    height: 54px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .readerToolItem.isBackTop > span {
+    display: block;
+  }
+
+  .readerSidePanel,
+  .readerSidePanel.is-directory,
+  .readerSidePanel.is-info {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: min(82dvh, 700px);
+    border-radius: 14px 14px 0 0;
+  }
+
+  .readerSidePanel > header {
+    min-height: 62px;
+    padding-inline: 20px;
+  }
+
+  .readerSidePanel > header strong {
+    font-size: 17px;
+  }
+
+  .readerSettingsPanel {
+    gap: 0;
+    overflow-y: auto;
+    padding: 0 18px calc(18px + env(safe-area-inset-bottom));
+  }
+
+  /*
+   * iOS Safari: use flex row (not grid) so controls reliably hug the right.
+   * Label left, selection cluster right — one row, thumb-friendly.
+   */
+  .readerSettingRow {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 56px;
+    gap: 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--reader-border) 72%, transparent);
+    padding: 0;
+  }
+
+  .readerSettingRow > span {
+    flex: 0 0 auto;
+    color: var(--reader-text);
+    font-size: 13px;
+    font-weight: 650;
+    line-height: 1.3;
+  }
+
+  .readerSettingRow > :last-child {
+    flex: 0 0 auto;
+    margin-left: auto;
+    width: auto;
+    max-width: min(72vw, 260px);
+  }
+
+  .readerSettingRow.isThemes > div {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    width: auto;
+    min-width: 0;
+    margin-left: auto;
+  }
+
+  .readerSettingRow.isThemes button {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+  }
+
+  .readerSettingRow.isFontSize > .fontSizeStepper {
+    display: grid;
+    width: 120px;
+    grid-template-columns: 32px 52px 32px;
+    gap: 0;
+    margin-left: auto;
+    justify-self: end;
+  }
+
+  .readerSettingRow.isFontSize .fontSizeStepper button {
+    width: 32px;
+    height: 32px;
+  }
+
+  .readerSettingRow.isLineHeight > .readerLineHeightControl {
+    display: block;
+    width: min(210px, calc(100vw - 128px));
+    height: 34px;
+    margin-left: auto;
+  }
+
+  .readerSettingRow.isWidth {
+    display: none;
+  }
+
+  .readerSettingRow.isLineHeight {
+    border-bottom: 0;
+  }
+
+  .readerBookInfo {
+    padding: 2px 20px 28px;
+  }
+
+  .readerBookInfo h2 {
+    font-size: 18px;
+  }
+
+  .readerBookInfo .readerBookDescription {
+    font-size: 13.5px;
+    line-height: 1.68;
+  }
+
+  .advancedTagSearchToolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .mediaAudioStage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mediaAudioNowPlaying {
+    grid-template-columns: 72px minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .mediaAudioDetailCover {
+    width: 72px;
+  }
+
+  .mediaAudioControls {
+    gap: 8px;
+  }
+
+  .mediaAudioPlaybackControls {
+    gap: 6px;
+  }
+
+  /*
+   * Video detail mobile: full-bleed player without 100vw breakout hacks.
+   * Parent appShell is widened to 100% so stage + header align to screen edges.
+   */
+  .appShell:has(.mediaDetail.is-video) {
+    width: 100%;
+    max-width: none;
+    margin-inline: 0;
+    padding-inline: 0;
+    padding-top: 0;
+    overflow-x: clip;
+  }
+
+  .appShell:has(.mediaDetail.is-video) > .siteHeader.hasMobileContext {
+    width: 100%;
+    margin-inline: 0;
+    padding-top: max(2px, env(safe-area-inset-top));
+    padding-right: max(8px, env(safe-area-inset-right));
+    padding-bottom: 2px;
+    padding-left: max(2px, env(safe-area-inset-left));
+    border-bottom-color: color-mix(in srgb, var(--border) 80%, transparent);
+  }
+
+  /* Pin back control to the true left edge */
+  .appShell:has(.mediaDetail.is-video) .siteHeader.hasMobileContext {
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .appShell:has(.mediaDetail.is-video) .mobileContextHeader {
+    width: 44px;
+    justify-self: start;
+  }
+
+  .appShell:has(.mediaDetail.is-video) .mobileContextBackLink {
+    width: 44px;
+    height: 44px;
+  }
+
+  .appShell:has(.mediaDetail.is-video) .siteHeader.hasMobileContext > .headerTools {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    padding-right: 2px;
+  }
+
+  .mediaDetail.is-video {
+    width: 100%;
+    max-width: none;
+    gap: 0;
+    margin-inline: 0;
+    padding-bottom: 0;
+  }
+
+  .mediaDetail.is-video > .breadcrumbs {
+    display: none;
+  }
+
+  .mediaVideoWatch {
+    display: grid;
+    gap: 10px;
+    scroll-margin-top: 52px;
+  }
+
+  .mediaDetail.is-video .mediaVideoStage {
+    order: -1;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: #0c0f11;
+  }
+
+  .mediaDetail.is-video .mediaVideoPlayerShell {
+    width: 100%;
+    border-radius: 0;
+  }
+
+  .mediaVideoHeading {
+    gap: 5px;
+    padding: 8px 14px 0;
+  }
+
+  .mediaVideoHeading h1 {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 16px;
+    font-weight: 650;
+    line-height: 1.42;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .mediaVideoStats {
+    gap: 12px;
+    font-size: 11.5px;
+  }
+
+  .mediaVideoInfo {
+    gap: 10px;
+    padding: 0 14px 13px;
+  }
+
+  .mediaVideoInfo .mediaDescription {
+    font-size: 12.5px;
+    line-height: 1.65;
+  }
+
+  .mediaRelatedVideos {
+    gap: 10px;
+    padding: 14px 14px 0;
+  }
+
+  .mediaRelatedVideos h2 {
+    font-size: 16px;
+  }
+
+  .mediaFeedbackRail {
+    position: static;
+    width: auto;
+    height: 38px;
+    justify-content: flex-end;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .mediaFeedbackRail > span {
+    width: 38px;
+    height: 38px;
+  }
+
+  .stationChatWorkspace .stationConversation .stationReplyForm,
+  .adminInboxWorkspace .adminStationConversation .stationReplyForm {
+    position: sticky;
+    z-index: 4;
+    bottom: 0;
+    grid-template-columns: minmax(0, 1fr) 34px;
+    align-items: end;
+    gap: 6px;
+    min-height: 42px;
+    margin: 8px 8px calc(8px + env(safe-area-inset-bottom));
+    border-radius: 8px;
+    padding: 4px 4px 4px 10px;
+    box-shadow: none;
+  }
+
+  .stationChatWorkspace .stationConversation .stationReplyForm textarea,
+  .adminInboxWorkspace .adminStationConversation .stationReplyForm textarea {
+    height: auto;
+    min-height: 32px;
+    max-height: 120px;
+    resize: none;
+    overflow-y: auto;
+    padding: 7px 2px;
+    font-size: 16px; /* avoid iOS zoom */
+    line-height: 1.4;
+  }
+
+  .stationChatWorkspace.hasSelection {
+    height: clamp(300px, calc(100dvh - 248px), 620px);
+    min-height: 0;
+  }
+
+  .stationChatWorkspace .stationConversation .stationReplyForm button,
+  .adminInboxWorkspace .adminStationConversation .stationReplyForm button {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
+    border-radius: 6px;
+  }
+
+  .stationChatWorkspace .stationConversation .stationReplyForm button .stationSendLabel {
+    display: none;
+  }
+
+  .stationChatWorkspace .stationConversation .stationReplyForm button .stationSendIcon {
+    display: block;
+  }
+
+  .accountGrowthHeader {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .accountGrowthBalance {
+    flex: 0 0 auto;
+    margin-left: auto;
+  }
+
+  .accountGrowthDetail {
+    min-height: 0;
+  }
+}
