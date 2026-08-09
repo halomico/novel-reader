@@ -295,7 +295,7 @@ export function HeaderSearch({
     }
     setMode(value);
     setIsMessageVisible(false);
-    if (window.matchMedia("(max-width: 820px)").matches) {
+    if (window.matchMedia("(max-width: 820px), (pointer: coarse)").matches) {
       const input = searchInputRef.current;
       input?.focus({ preventScroll: true });
       window.requestAnimationFrame(() => {
@@ -395,10 +395,18 @@ export function HeaderSearch({
       role="search"
       onSubmit={handleSubmit}
       onBlur={(event) => {
+        const form = event.currentTarget;
         const nextTarget = event.relatedTarget as Node | null;
-        if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
-          setIsModeMenuOpen(false);
-        }
+        if (nextTarget && form.contains(nextTarget)) return;
+
+        // Mobile Safari often reports a null relatedTarget while moving focus
+        // between the input and a mode button. Let the click finish before
+        // deciding whether focus actually left the search form.
+        window.requestAnimationFrame(() => {
+          if (!form.contains(document.activeElement)) {
+            setIsModeMenuOpen(false);
+          }
+        });
       }}
     >
       <button
@@ -509,9 +517,7 @@ export function HeaderSearch({
               key={option.value}
               type="button"
               aria-pressed={mode === option.value}
-              onPointerDown={(event) => {
-                event.preventDefault();
-              }}
+              onMouseDown={(event) => event.preventDefault()}
               onClick={() => chooseMode(option.value)}
             >
               {tr(option.label)}

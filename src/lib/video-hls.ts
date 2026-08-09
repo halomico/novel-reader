@@ -422,7 +422,16 @@ export function resolvePlaybackHlsFile(
   }
 }
 
-export async function readPlaybackHlsManifest(root: string, manifestPath: string): Promise<string> {
+type PlaybackHlsManifestInspection = {
+  manifest: string;
+  resourceNames: Set<string>;
+  requiredBundleSizes: Map<string, number>;
+};
+
+async function inspectPlaybackHlsManifest(
+  root: string,
+  manifestPath: string,
+): Promise<PlaybackHlsManifestInspection> {
   const filePath = resolvePlaybackHlsFile(root, manifestPath, PLAYBACK_HLS_MANIFEST_FILE);
   if (!filePath) throw new Error("HLS 播放清单路径无效");
   const stat = await fs.promises.stat(filePath);
@@ -474,19 +483,37 @@ export async function readPlaybackHlsManifest(root: string, manifestPath: string
   ) {
     throw new Error("HLS 播放清单无效");
   }
-  for (const resourceName of resourceNames) {
+  return { manifest, resourceNames, requiredBundleSizes };
+}
+
+/**
+ * Read an immutable manifest that already passed publish-time verification.
+ * Runtime playback validates the playlist structure but does not re-stat every
+ * fragment before returning it to the player.
+ */
+export async function readPublishedPlaybackHlsManifest(
+  root: string,
+  manifestPath: string,
+): Promise<string> {
+  return (await inspectPlaybackHlsManifest(root, manifestPath)).manifest;
+}
+
+/** Full package verification used by packaging, maintenance, and explicit audits. */
+export async function readPlaybackHlsManifest(root: string, manifestPath: string): Promise<string> {
+  const inspected = await inspectPlaybackHlsManifest(root, manifestPath);
+  for (const resourceName of inspected.resourceNames) {
     const resourcePath = resolvePlaybackHlsFile(root, manifestPath, resourceName);
     if (!resourcePath) throw new Error("HLS 播放资源不完整");
     const resourceStat = await fs.promises.stat(resourcePath);
     if (
       !resourceStat.isFile() ||
       resourceStat.size <= 0 ||
-      resourceStat.size < (requiredBundleSizes.get(resourceName) || 1)
+      resourceStat.size < (inspected.requiredBundleSizes.get(resourceName) || 1)
     ) {
       throw new Error("HLS 播放资源不完整");
     }
   }
-  return manifest;
+  return inspected.manifest;
 }
 
 export async function verifyPlaybackHls(

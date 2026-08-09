@@ -8,6 +8,7 @@ import {
   estimatePlaybackHlsTemporaryBytes,
   planSingleFileHlsBundles,
   readPlaybackHlsManifest,
+  readPublishedPlaybackHlsManifest,
   type PlaybackHlsFileSet,
 } from "./video-hls";
 
@@ -111,6 +112,29 @@ bundle-0000.m4s
 `);
 
   assert.match(await readPlaybackHlsManifest(root, relativeManifest), /#EXT-X-ENDLIST/u);
+});
+
+test("published manifest reads trust publish-time fragment verification", async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "video-hls-published-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const relativeManifest = "video/.hls/1/10-100/index.m3u8";
+  const directory = path.join(root, "video", ".hls", "1", "10-100");
+  fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(path.join(directory, "init.mp4"), Buffer.from("init"));
+  fs.writeFileSync(path.join(directory, "bundle-0000.m4s"), Buffer.from("segment"));
+  fs.writeFileSync(path.join(directory, "index.m3u8"), `#EXTM3U
+#EXT-X-VERSION:7
+#EXT-X-TARGETDURATION:6
+#EXT-X-MAP:URI="init.mp4"
+#EXTINF:6.000000,
+bundle-0000.m4s
+#EXT-X-ENDLIST
+`);
+
+  assert.match(await readPlaybackHlsManifest(root, relativeManifest), /#EXT-X-ENDLIST/u);
+  fs.rmSync(path.join(directory, "bundle-0000.m4s"));
+  assert.match(await readPublishedPlaybackHlsManifest(root, relativeManifest), /#EXT-X-ENDLIST/u);
+  await assert.rejects(readPlaybackHlsManifest(root, relativeManifest));
 });
 
 test("rejects an HLS bundle truncated below a declared byte range", async (t) => {

@@ -11,6 +11,7 @@ type PlaybackLease = {
   expiresAt: number;
   mediaUrl: string;
   format: "mp4" | "hls";
+  manifest: string | null;
 };
 
 type PlayerStatus = "idle" | "loading" | "ready" | "error";
@@ -20,11 +21,11 @@ function createHlsConfig() {
   return {
     enableWorker: true,
     lowLatencyMode: false,
-    startFragPrefetch: true,
+    startFragPrefetch: false,
     testBandwidth: true,
     backBufferLength: 30,
-    maxBufferLength: 60,
-    maxMaxBufferLength: 120,
+    maxBufferLength: 30,
+    maxMaxBufferLength: 60,
     maxBufferSize: 60 * 1000 * 1000,
     maxBufferHole: 0.5,
     highBufferWatchdogPeriod: 2,
@@ -35,6 +36,18 @@ function createHlsConfig() {
     // Single rendition playlists: avoid odd sizing edge cases on desktop.
     capLevelToPlayerSize: false,
   };
+}
+
+function resolveInlineHlsUris(manifest: string, baseUrl: string): string {
+  const resolveUri = (value: string) => new URL(value, baseUrl).toString();
+  return manifest
+    .split(/\r?\n/u)
+    .map((line) => {
+      if (!line) return line;
+      if (!line.startsWith("#")) return resolveUri(line.trim());
+      return line.replace(/URI="([^"]+)"/gu, (_match, uri: string) => `URI="${resolveUri(uri)}"`);
+    })
+    .join("\n");
 }
 
 function mediaErrorMessage(error: MediaError | null): string {
@@ -72,6 +85,7 @@ export function MediaPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const countedRef = useRef(false);
   const leaseRef = useRef<PlaybackLease | null>(null);
+  const inlineManifestRef = useRef<string | null>(null);
   const heartbeatRef = useRef<number | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const hlsNetworkRecoveryRef = useRef(0);
@@ -120,6 +134,7 @@ export function MediaPlayer({
 
   const clearSource = useCallback(() => {
     destroyHls();
+    inlineManifestRef.current = null;
     setSourceUrl("");
     setSourceFormat("mp4");
   }, [destroyHls]);
@@ -141,7 +156,11 @@ export function MediaPlayer({
     const response = await fetch("/api/media-playback", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mediaId: id, clientId: clientId() }),
+      body: JSON.stringify({
+        mediaId: id,
+        clientId: clientId(),
+        inlineHls: Hls.isSupported(),
+      }),
     });
     const body = await response.json().catch(() => ({})) as {
       ok?: boolean;
@@ -151,6 +170,7 @@ export function MediaPlayer({
       expiresAt?: number;
       mediaUrl?: string;
       format?: "mp4" | "hls";
+      manifest?: unknown;
     };
     if (!response.ok || !body.sessionId || !body.token || !body.expiresAt || !body.mediaUrl) {
       throw new Error(body.message || "暂时无法开始播放");
@@ -161,6 +181,9 @@ export function MediaPlayer({
       expiresAt: body.expiresAt,
       mediaUrl: body.mediaUrl,
       format: body.format === "hls" ? "hls" : "mp4",
+      manifest: typeof body.manifest === "string" && body.manifest.startsWith("#EXTM3U")
+        ? body.manifest
+        : null,
     };
   }, [clientId, id]);
 
@@ -209,7 +232,7 @@ export function MediaPlayer({
       }
       const lease = await acquireLease();
       leaseRef.current = lease;
-      // Prefer same-origin ticket playlist URL (like a normal native/hls.js pipeline).
+      inlineManifestRef.current = lease.format === "hls" ? lease.manifest : null;
       setSourceFormat(lease.format);
       setSourceUrl(lease.mediaUrl);
       setStatus("ready");
@@ -275,6 +298,13 @@ export function MediaPlayer({
     // cannot play m3u8 natively (MEDIA_ERR_SRC_NOT_SUPPORTED). Prefer MSE.
     if (Hls.isSupported()) {
       const hls = new Hls(createHlsConfig());
+      const inlineManifest = inlineManifestRef.current;
+      const hlsSource = inlineManifest
+        ? URL.createObjectURL(new Blob(
+          [resolveInlineHlsUris(inlineManifest, window.location.href)],
+          { type: "application/vnd.apple.mpegurl" },
+        ))
+        : sourceUrl;
       hlsRef.current = hls;
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         if (!cancelled) {
@@ -297,12 +327,13 @@ export function MediaPlayer({
         failPlayback("HLS 播放失败，请刷新后重试");
       });
       // Recommended order for hls.js: loadSource then attachMedia.
-      hls.loadSource(sourceUrl);
+      hls.loadSource(hlsSource);
       hls.attachMedia(video);
 
       return () => {
         cancelled = true;
         hls.destroy();
+        if (inlineManifest) URL.revokeObjectURL(hlsSource);
         if (hlsRef.current === hls) hlsRef.current = null;
       };
     }

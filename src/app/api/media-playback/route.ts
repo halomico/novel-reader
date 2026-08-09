@@ -13,7 +13,10 @@ import {
   refreshVideoPlaybackLease,
   releaseVideoPlaybackLease,
 } from "@/lib/video-playback";
-import { buildAuthorizedPlaybackHlsManifest } from "@/lib/video-hls-delivery";
+import {
+  buildAuthorizedPlaybackHlsManifest,
+  hlsSegmentsPubliclyCacheable,
+} from "@/lib/video-hls-delivery";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,6 +26,7 @@ async function body(request: NextRequest): Promise<{
   clientId: string;
   sessionId: string;
   token: string;
+  inlineHls: boolean;
 }> {
   try {
     const value = await request.json() as Record<string, unknown>;
@@ -31,17 +35,18 @@ async function body(request: NextRequest): Promise<{
       clientId: String(value.clientId || ""),
       sessionId: String(value.sessionId || ""),
       token: String(value.token || ""),
+      inlineHls: value.inlineHls === true,
     };
   } catch {
-    return { mediaId: 0, clientId: "", sessionId: "", token: "" };
+    return { mediaId: 0, clientId: "", sessionId: "", token: "", inlineHls: false };
   }
 }
 
 /**
  * Mint a playback ticket.
- * HLS responses include the fully rewritten playlist (`manifest`) so the client
- * can start without a second manifest round-trip. Segment URLs for free videos
- * are time-bucketed public signatures (CDN-friendly); paid stay private.
+ * hls.js clients can request the fully rewritten playlist inline and avoid a
+ * second manifest round-trip. Native HLS clients receive the protected
+ * playlist URL instead, so the manifest is only built once in either path.
  */
 export async function POST(request: NextRequest) {
   const user = getCurrentUserFromRequest(request);
@@ -96,13 +101,14 @@ export async function POST(request: NextRequest) {
     const playbackMode = getVideoPlaybackMode();
     const hlsReady = hasPublishedMediaHls(asset);
     if (playbackMode !== "mp4" && hlsReady) {
-      const built = await buildAuthorizedPlaybackHlsManifest(asset, {
-        sessionId: result.lease.id,
-        token: result.lease.token,
-      });
-      manifest = built.manifest;
-      segmentsPubliclyCacheable = built.segmentsPubliclyCacheable;
-      // Fallback URL for clients that cannot feed a Blob playlist (rare Safari cases).
+      segmentsPubliclyCacheable = hlsSegmentsPubliclyCacheable(asset);
+      if (input.inlineHls) {
+        const built = await buildAuthorizedPlaybackHlsManifest(asset, {
+          sessionId: result.lease.id,
+          token: result.lease.token,
+        });
+        manifest = built.manifest;
+      }
       const query = new URLSearchParams({
         v: asset.playbackVersion,
         ps: result.lease.id,
@@ -150,6 +156,8 @@ export async function POST(request: NextRequest) {
     manifest,
     format,
     segmentsPubliclyCacheable,
+  }, {
+    headers: { "Cache-Control": "private, no-store" },
   });
   attachPlaybackViewerCookie(response, viewer);
   return response;

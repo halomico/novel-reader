@@ -19,7 +19,7 @@ import {
   getPlaybackHlsFileSet,
   packageVideoHls,
   prunePlaybackHlsVersions,
-  readPlaybackHlsManifest,
+  readPublishedPlaybackHlsManifest,
   removePlaybackHlsVersions,
   verifyPlaybackHls,
   type VideoHlsPackageResult,
@@ -759,7 +759,7 @@ export class MediaNodeStore {
   }
 
   async readPlaybackManifest(manifestPath: string): Promise<string> {
-    return readPlaybackHlsManifest(this.root, manifestPath);
+    return readPublishedPlaybackHlsManifest(this.root, manifestPath);
   }
 
   async playbackFileInfo(manifestPath: string): Promise<{ sizeBytes: number; fileCount: number }> {

@@ -16,14 +16,15 @@ import { hasPublishedMediaHls } from "./media";
 import { readRemoteMediaPlaybackManifest } from "./media-node-client";
 import { createSignedMediaHlsUrl } from "./media-signing";
 import { isRemoteMediaStorage, resolveRemoteMediaNodeForAsset } from "./media-storage-config";
-import { readPlaybackHlsManifest } from "./video-hls";
+import { readPublishedPlaybackHlsManifest } from "./video-hls";
 
 const PLAYBACK_HLS_RESOURCE = /^(?:index\.m3u8|init\.mp4|bundle-[0-9]{4}\.m4s)$/u;
 
 /** In-process raw manifest cache (path + version). Avoids control-plane RTT on warm leases. */
-const RAW_MANIFEST_TTL_MS = 60_000;
-const RAW_MANIFEST_MAX_ENTRIES = 256;
+const RAW_MANIFEST_TTL_MS = 5 * 60_000;
+const RAW_MANIFEST_MAX_ENTRIES = 512;
 const rawManifestCache = new Map<string, { expiresAt: number; text: string }>();
+const rawManifestLoads = new Map<string, Promise<string>>();
 
 export type HlsManifestRewriteInput = {
   mediaId: number;
@@ -136,29 +137,45 @@ function writeRawManifestCache(manifestPath: string, playbackVersion: string, te
 /** Test helper / maintenance. */
 export function clearPlaybackHlsManifestCache(): void {
   rawManifestCache.clear();
+  rawManifestLoads.clear();
 }
 
 export async function loadRawPlaybackHlsManifest(
   asset: Pick<MediaAsset, "storageNodeId" | "playbackManifestPath" | "playbackVersion" | "kind">,
 ): Promise<string> {
-  if (!asset.playbackManifestPath) {
+  const manifestPath = asset.playbackManifestPath;
+  if (!manifestPath) {
     throw new Error("HLS 播放成品不存在");
   }
-  const cached = readRawManifestCache(asset.playbackManifestPath, asset.playbackVersion);
+  const cached = readRawManifestCache(manifestPath, asset.playbackVersion);
   if (cached) return cached;
 
-  const text = isRemoteMediaStorage()
-    ? await readRemoteMediaPlaybackManifest(
-      resolveRemoteMediaNodeForAsset(asset.storageNodeId, asset.kind).id,
-      asset.playbackManifestPath,
-    )
-    : await readPlaybackHlsManifest(getMediaDir(), asset.playbackManifestPath);
+  const key = rawManifestCacheKey(manifestPath, asset.playbackVersion);
+  const existing = rawManifestLoads.get(key);
+  if (existing) return existing;
 
-  if (!text.startsWith("#EXTM3U")) {
-    throw new Error("HLS 播放清单无效");
+  const load = (async () => {
+    const text = isRemoteMediaStorage()
+      ? await readRemoteMediaPlaybackManifest(
+        resolveRemoteMediaNodeForAsset(asset.storageNodeId, asset.kind).id,
+        manifestPath,
+      )
+      : await readPublishedPlaybackHlsManifest(getMediaDir(), manifestPath);
+
+    if (!text.startsWith("#EXTM3U")) {
+      throw new Error("HLS 播放清单无效");
+    }
+    writeRawManifestCache(manifestPath, asset.playbackVersion, text);
+    return text;
+  })();
+  rawManifestLoads.set(key, load);
+  try {
+    return await load;
+  } finally {
+    if (rawManifestLoads.get(key) === load) {
+      rawManifestLoads.delete(key);
+    }
   }
-  writeRawManifestCache(asset.playbackManifestPath, asset.playbackVersion, text);
-  return text;
 }
 
 /**
