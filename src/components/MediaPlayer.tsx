@@ -1,6 +1,6 @@
 "use client";
 
-import Hls from "hls.js";
+import Hls, { type HlsConfig } from "hls.js";
 import { CupSoda, LoaderCircle, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "@/components/LocalizedLink";
@@ -16,23 +16,41 @@ type PlaybackLease = {
 
 type PlayerStatus = "idle" | "loading" | "ready" | "error";
 
+export const HLS_STALL_RECOVERY_MS = 30_000;
+
 /** Single-bitrate VOD buffers. */
-function createHlsConfig() {
+export function createHlsConfig(): Partial<HlsConfig> {
   return {
     enableWorker: true,
     lowLatencyMode: false,
     startFragPrefetch: false,
     testBandwidth: true,
     backBufferLength: 30,
-    maxBufferLength: 30,
-    maxMaxBufferLength: 60,
+    maxBufferLength: 45,
+    maxMaxBufferLength: 90,
     maxBufferSize: 60 * 1000 * 1000,
     maxBufferHole: 0.5,
     highBufferWatchdogPeriod: 2,
     manifestLoadingMaxRetry: 2,
     levelLoadingMaxRetry: 2,
-    fragLoadingMaxRetry: 4,
-    fragLoadingRetryDelay: 500,
+    fragLoadPolicy: {
+      default: {
+        maxTimeToFirstByteMs: 25_000,
+        maxLoadTimeMs: 120_000,
+        timeoutRetry: {
+          maxNumRetry: 4,
+          retryDelayMs: 500,
+          maxRetryDelayMs: 4_000,
+          backoff: "linear",
+        },
+        errorRetry: {
+          maxNumRetry: 6,
+          retryDelayMs: 1_000,
+          maxRetryDelayMs: 8_000,
+          backoff: "exponential",
+        },
+      },
+    },
     // Single rendition playlists: avoid odd sizing edge cases on desktop.
     capLevelToPlayerSize: false,
   };
@@ -88,6 +106,8 @@ export function MediaPlayer({
   const inlineManifestRef = useRef<string | null>(null);
   const heartbeatRef = useRef<number | null>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const hlsStallTimerRef = useRef<number | null>(null);
+  const hlsStallRecoveryRef = useRef(0);
   const hlsNetworkRecoveryRef = useRef(0);
   const hlsMediaRecoveryRef = useRef(0);
   const sourceLoadAttemptedRef = useRef(false);
@@ -125,12 +145,49 @@ export function MediaPlayer({
     }
   }, []);
 
+  const clearHlsStallRecovery = useCallback(() => {
+    if (hlsStallTimerRef.current != null) {
+      window.clearTimeout(hlsStallTimerRef.current);
+      hlsStallTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleHlsStallRecovery = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || sourceFormat !== "hls" || video.paused || video.ended || hlsStallTimerRef.current != null) {
+      return;
+    }
+    const stalledAt = video.currentTime;
+    hlsStallTimerRef.current = window.setTimeout(() => {
+      hlsStallTimerRef.current = null;
+      const currentVideo = videoRef.current;
+      if (
+        !currentVideo ||
+        currentVideo.paused ||
+        currentVideo.ended ||
+        currentVideo.currentTime > stalledAt + 0.25 ||
+        hlsStallRecoveryRef.current >= 2
+      ) {
+        return;
+      }
+      hlsStallRecoveryRef.current += 1;
+      const hls = hlsRef.current;
+      if (hls) {
+        hls.startLoad(Math.max(0, currentVideo.currentTime), true);
+      } else {
+        currentVideo.pause();
+      }
+      void currentVideo.play().catch(() => undefined);
+    }, HLS_STALL_RECOVERY_MS);
+  }, [sourceFormat]);
+
   const destroyHls = useCallback(() => {
+    clearHlsStallRecovery();
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
-  }, []);
+  }, [clearHlsStallRecovery]);
 
   const clearSource = useCallback(() => {
     destroyHls();
@@ -218,6 +275,7 @@ export function MediaPlayer({
     clearSource();
     hlsNetworkRecoveryRef.current = 0;
     hlsMediaRecoveryRef.current = 0;
+    hlsStallRecoveryRef.current = 0;
     setStatus("loading");
     setStatusMessage("正在准备播放…");
     try {
@@ -312,11 +370,26 @@ export function MediaPlayer({
           setStatusMessage("");
         }
       });
+      hls.on(Hls.Events.FRAG_BUFFERED, () => {
+        hlsNetworkRecoveryRef.current = 0;
+        hlsMediaRecoveryRef.current = 0;
+      });
+      hls.on(Hls.Events.STALL_RESOLVED, () => {
+        hlsStallRecoveryRef.current = 0;
+        clearHlsStallRecovery();
+      });
       hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (!data.fatal || cancelled) return;
+        if (cancelled) return;
+        if (!data.fatal) {
+          if (data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {
+            scheduleHlsStallRecovery();
+          }
+          return;
+        }
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR && hlsNetworkRecoveryRef.current < 3) {
           hlsNetworkRecoveryRef.current += 1;
-          hls.startLoad();
+          hls.startLoad(Math.max(0, video.currentTime), true);
+          void video.play().catch(() => undefined);
           return;
         }
         if (data.type === Hls.ErrorTypes.MEDIA_ERROR && hlsMediaRecoveryRef.current < 2) {
@@ -352,7 +425,7 @@ export function MediaPlayer({
     return () => {
       cancelled = true;
     };
-  }, [destroyHls, failPlayback, sourceFormat, sourceUrl]);
+  }, [clearHlsStallRecovery, destroyHls, failPlayback, scheduleHlsStallRecovery, sourceFormat, sourceUrl]);
 
   useEffect(() => {
     if (sourceLoadAttemptedRef.current) return;
@@ -433,8 +506,22 @@ export function MediaPlayer({
         // hls.js owns src via attachMedia; only set attribute for mp4 / native HLS.
         src={sourceFormat === "mp4" && sourceUrl ? sourceUrl : undefined}
         onPlay={recordPlay}
-        onPause={stopHeartbeat}
+        onPlaying={() => {
+          hlsStallRecoveryRef.current = 0;
+          clearHlsStallRecovery();
+        }}
+        onTimeUpdate={() => {
+          hlsStallRecoveryRef.current = 0;
+          clearHlsStallRecovery();
+        }}
+        onWaiting={scheduleHlsStallRecovery}
+        onStalled={scheduleHlsStallRecovery}
+        onPause={() => {
+          clearHlsStallRecovery();
+          stopHeartbeat();
+        }}
         onEnded={() => {
+          clearHlsStallRecovery();
           releaseLease();
         }}
         onLoadedData={() => {
