@@ -1,5 +1,6 @@
 import type { Novel } from "./books";
 import { getDb } from "./db";
+import { recordNovelGroveVisit } from "./grove";
 import { getNovelChapter, novelChapterContentVersion } from "./novel-library";
 
 export type ReadingProgress = {
@@ -158,6 +159,7 @@ export function recordReadingOpen(
          resume_count = user_read_daily_stats.resume_count + excluded.resume_count,
          updated_at = CURRENT_TIMESTAMP`,
     ).run(userId, resumed ? 1 : 0);
+    recordNovelGroveVisit(userId, book.id);
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");

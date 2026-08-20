@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { isMediaFavorite } from "@/lib/favorites";
+import { getMediaGroveState } from "@/lib/grove";
 import { getMediaAsset, isFeedbackMediaKind, isMediaKindConsumable } from "@/lib/media";
 import { getMediaRecommendationState } from "@/lib/recommendations";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
@@ -25,6 +26,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     {
       ok: true,
       favorite: isMediaFavorite(user.id, mediaId),
+      inGrove: getMediaGroveState(user.id, mediaId).planted,
       recommended: canRecommend ? getMediaRecommendationState(user.id, mediaId).recommended : false,
     },
     { headers: { "Cache-Control": "private, no-store" } },

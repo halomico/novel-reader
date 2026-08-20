@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { GroveButton } from "@/components/GroveButton";
 import { MediaFavoriteButton } from "@/components/MediaFavoriteButton";
-import { MediaRecommendationButton } from "@/components/MediaRecommendationButton";
 import { ReportMediaButton } from "@/components/ReportMediaButton";
 
 type FeedbackState = {
   mediaId: number;
   favorite: boolean;
+  inGrove: boolean;
   recommended: boolean;
 };
 
@@ -16,7 +17,7 @@ export function MediaAudioFeedbackActions({
   initialMediaId,
   initialFavorite,
   initialRecommended,
-  canRecommend,
+  initialInGrove,
   canReport,
   title,
 }: {
@@ -24,6 +25,7 @@ export function MediaAudioFeedbackActions({
   initialMediaId: number;
   initialFavorite: boolean;
   initialRecommended: boolean;
+  initialInGrove: boolean;
   canRecommend: boolean;
   canReport: boolean;
   title: string;
@@ -32,6 +34,7 @@ export function MediaAudioFeedbackActions({
   const [feedback, setFeedback] = useState<FeedbackState>({
     mediaId: initialMediaId,
     favorite: initialFavorite,
+    inGrove: initialInGrove,
     recommended: initialRecommended,
   });
 
@@ -45,6 +48,7 @@ export function MediaAudioFeedbackActions({
     setFeedback((current) => current.mediaId === mediaId ? current : {
       mediaId: 0,
       favorite: false,
+      inGrove: false,
       recommended: false,
     });
     void fetch(`/api/media/${mediaId}/feedback`, { cache: "no-store", signal: controller.signal })
@@ -52,12 +56,14 @@ export function MediaAudioFeedbackActions({
         const result = await response.json() as {
           ok?: boolean;
           favorite?: boolean;
+          inGrove?: boolean;
           recommended?: boolean;
         };
         if (!response.ok || !result.ok) return;
         setFeedback({
           mediaId,
           favorite: Boolean(result.favorite),
+          inGrove: Boolean(result.inGrove),
           recommended: Boolean(result.recommended),
         });
       })
@@ -72,11 +78,12 @@ export function MediaAudioFeedbackActions({
   const ready = feedback.mediaId === mediaId;
   return (
     <div className="readerFeedbackActions feedbackActionTrio mediaAudioActions" aria-label="音频操作" aria-busy={!ready}>
-      {canRecommend && ready ? (
-        <MediaRecommendationButton
-          mediaId={mediaId}
-          initialRecommended={feedback.recommended}
-          key={`recommend-${mediaId}`}
+      {ready ? (
+        <GroveButton
+          contentType="media"
+          contentId={mediaId}
+          initialPlanted={feedback.inGrove}
+          key={`grove-${mediaId}`}
         />
       ) : null}
       {ready ? (

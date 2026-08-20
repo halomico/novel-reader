@@ -22,6 +22,419 @@
   padding: 22px;
 }
 
+/* Echo Grove */
+.readerToolAction .novelGroveControl > button:hover,
+.readerToolAction .novelGroveControl > button:focus-visible,
+.mediaFeedbackRail .novelGroveControl > button:hover,
+.mediaFeedbackRail .novelGroveControl > button:focus-visible,
+.mediaAudioActions .novelGroveControl > button:hover,
+.mediaAudioActions .novelGroveControl > button:focus-visible {
+  color: #4f8d62;
+}
+
+.groveOverview {
+  display: grid;
+  gap: 17px;
+  padding-top: 4px;
+}
+
+.groveIntro {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.groveIntroIcon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 11px;
+  background: color-mix(in srgb, #4f8d62 12%, var(--surface));
+  color: #4f8d62;
+}
+
+.groveIntro > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.groveIntro h2,
+.groveIntro p {
+  margin: 0;
+}
+
+.groveIntro h2 {
+  font-family: var(--font-title);
+  font-size: 19px;
+  line-height: 1.35;
+}
+
+.groveIntro p {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.groveStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.groveStatCard {
+  display: grid;
+  min-width: 0;
+  min-height: 82px;
+  align-content: space-between;
+  gap: 9px;
+  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  border-radius: 12px;
+  padding: 12px 13px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.groveStatCard dt {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.groveStatCard dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 25px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 680;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.groveStatIcon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--border) 42%, transparent);
+  color: var(--muted);
+}
+
+.groveStatCard.is-all .groveStatIcon {
+  background: color-mix(in srgb, #64748b 10%, var(--surface));
+  color: #64748b;
+}
+
+.groveStatCard.is-seed .groveStatIcon {
+  background: color-mix(in srgb, #9a7650 12%, var(--surface));
+  color: #876540;
+}
+
+.groveStatCard.is-sprout .groveStatIcon {
+  background: color-mix(in srgb, #5e9b68 12%, var(--surface));
+  color: #4f865b;
+}
+
+.groveStatCard.is-tree .groveStatIcon {
+  background: color-mix(in srgb, #33715a 13%, var(--surface));
+  color: #33715a;
+}
+
+.groveStageTabs {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 22px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: none;
+}
+
+.groveStageTabs::-webkit-scrollbar {
+  display: none;
+}
+
+.groveStageTabs a {
+  display: inline-flex;
+  min-height: 42px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  transition: border-color 150ms ease, color 150ms ease;
+}
+
+.groveStageTabs a:hover,
+.groveStageTabs a:focus-visible,
+.groveStageTabs a.isActive {
+  border-bottom-color: #4f8d62;
+  color: #4f8d62;
+  outline: 0;
+}
+
+.groveStageTabs small {
+  color: color-mix(in srgb, currentColor 78%, var(--muted));
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 580;
+}
+
+.groveGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.groveCard {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 106px;
+  align-items: flex-start;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--surface);
+  box-shadow: 0 6px 20px rgb(24 42 30 / 3%);
+  color: var(--text);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.groveCard::after {
+  position: absolute;
+  top: -42px;
+  right: -42px;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: color-mix(in srgb, #4f8d62 7%, transparent);
+  content: "";
+  pointer-events: none;
+}
+
+.groveCard:hover,
+.groveCard:focus-visible {
+  border-color: color-mix(in srgb, #4f8d62 46%, var(--border));
+  box-shadow: 0 12px 30px rgb(24 42 30 / 8%);
+  color: var(--text);
+  outline: 0;
+  transform: translateY(-2px);
+}
+
+.groveCardBody {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 78px;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.groveStageBadge {
+  display: inline-flex;
+  min-height: 23px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 3px 8px 3px 7px;
+  background: color-mix(in srgb, var(--border) 46%, transparent);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 680;
+  line-height: 1;
+}
+
+.groveStageBadge.is-seed {
+  background: color-mix(in srgb, #9a7650 11%, var(--surface));
+  color: #876540;
+}
+
+.groveStageBadge.is-sprout {
+  background: color-mix(in srgb, #5e9b68 11%, var(--surface));
+  color: #4f865b;
+}
+
+.groveStageBadge.is-tree {
+  background: color-mix(in srgb, #33715a 13%, var(--surface));
+  color: #33715a;
+}
+
+.groveCardTitleLine {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.groveCardTitleLine > strong {
+  display: -webkit-box;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  font-family: var(--font-title);
+  font-size: 14px;
+  font-weight: 610;
+  line-height: 1.42;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.groveCardBottomLine {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.groveCardFacts {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  overflow: hidden;
+}
+
+.groveCardMeta,
+.groveVisitCount {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groveVisitCount {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--muted) 88%, var(--text));
+}
+
+.groveCardMeta + .groveVisitCount::before {
+  margin: 0 6px;
+  color: color-mix(in srgb, var(--muted) 48%, transparent);
+  content: "·";
+}
+
+.grovePlantedTime {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  color: color-mix(in srgb, var(--muted) 78%, var(--text));
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.groveTimeTypeIcon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+}
+
+.groveTimeTypeIcon.is-novel {
+  color: #4f8d62;
+}
+
+.groveTimeTypeIcon.is-video {
+  color: #557da8;
+}
+
+.groveTimeTypeIcon.is-audio {
+  color: #8a668f;
+}
+
+.groveEmpty {
+  display: grid;
+  min-height: 190px;
+  place-content: center;
+  justify-items: center;
+  gap: 7px;
+  border: 1px dashed color-mix(in srgb, #4f8d62 35%, var(--border));
+  border-radius: 14px;
+  background: color-mix(in srgb, #4f8d62 3%, var(--surface));
+  color: #4f8d62;
+  text-align: center;
+}
+
+.groveEmpty strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.groveEmpty span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 980px) {
+  .groveGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .groveStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .groveStatCard {
+    min-height: 70px;
+    border-radius: 10px;
+    padding: 10px 11px;
+  }
+
+  .groveStatCard dd {
+    font-size: 22px;
+  }
+
+  .groveStageTabs {
+    gap: 18px;
+  }
+
+  .groveGrid {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+
+  .groveCard {
+    min-height: 102px;
+    border-radius: 12px;
+    padding: 12px;
+  }
+
+  .groveCardBody {
+    min-height: 76px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .groveStageTabs a,
+  .groveCard {
+    transition: none;
+  }
+}
+
 .siteEntryNoticeBackdrop {
   position: absolute;
   inset: 0;
@@ -611,6 +1024,7 @@
 }
 
 .readerToolAction .novelRecommendationControl,
+.readerToolAction .novelGroveControl,
 .readerToolAction .novelFavoriteControl,
 .readerToolAction .readerReportAction {
   display: block;
@@ -619,6 +1033,7 @@
 }
 
 .readerToolAction .novelRecommendationControl > button,
+.readerToolAction .novelGroveControl > button,
 .readerToolAction .novelFavoriteControl > button,
 .readerToolAction .readerReportAction > button {
   display: flex;
@@ -640,6 +1055,10 @@
 .readerToolAction .novelRecommendationControl > button.isActive,
 .readerToolAction .novelFavoriteControl > button.isActive {
   color: var(--reader-accent);
+}
+
+.readerToolAction .novelGroveControl > button.isActive {
+  color: #4f8d62;
 }
 
 .readerToolAction .novelRecommendationControl > button.isActive svg {
@@ -1034,6 +1453,10 @@
 .mediaFeedbackRail button.isActive {
   outline: 0;
   color: var(--accent);
+}
+
+.mediaFeedbackRail .novelGroveControl > button.isActive {
+  color: #4f8d62;
 }
 
 .mediaFeedbackRail .readerReportDialog footer button {
@@ -1590,7 +2013,8 @@ nav.accountGrowthTools > a + a {
   .readerToolItem.isTheme { order: 4; }
   .readerToolItem.isSettings { order: 5; }
   .readerToolItem.isInfo { order: 6; }
-  .readerToolItem.isRecommendation { order: 7; }
+  .readerToolItem.isRecommendation,
+  .readerToolItem.isGrove { order: 7; }
   .readerToolItem.isFavorite { order: 8; }
   .readerToolItem.isReport { order: 9; }
 

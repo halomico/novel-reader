@@ -18,6 +18,7 @@ export type AudioQueueTrack = {
 export type AudioFeedbackOptions = {
   initialFavorite: boolean;
   initialRecommended: boolean;
+  initialInGrove: boolean;
   canRecommend: boolean;
   canReport: boolean;
 };
@@ -268,6 +269,7 @@ export function MediaAudioPlayer({
                 initialMediaId={initialId}
                 initialFavorite={feedback.initialFavorite}
                 initialRecommended={feedback.initialRecommended}
+                initialInGrove={feedback.initialInGrove}
                 canRecommend={feedback.canRecommend}
                 canReport={feedback.canReport}
                 title={activeTrack.title}

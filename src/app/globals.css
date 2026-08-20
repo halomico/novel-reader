@@ -4067,6 +4067,10 @@ mark {
   grid-column: 1;
 }
 
+.feedbackActionTrio .novelGroveControl {
+  grid-column: 1;
+}
+
 .feedbackActionTrio .novelFavoriteControl {
   grid-column: 2;
 }
@@ -4167,6 +4171,7 @@ mark {
 }
 
 .mediaAudioActions .novelRecommendationControl > button,
+.mediaAudioActions .novelGroveControl > button,
 .mediaAudioActions .novelFavoriteControl > button,
 .mediaAudioActions .readerReportAction > button {
   width: 31px;
@@ -13148,12 +13153,14 @@ a.analyticsSearchTag:focus-visible {
 }
 
 .novelRecommendationControl,
+.novelGroveControl,
 .readerReportAction {
   position: relative;
   display: inline-flex;
 }
 
-.novelRecommendationControl > button {
+.novelRecommendationControl > button,
+.novelGroveControl > button {
   display: inline-flex;
   width: 34px;
   height: 34px;
@@ -13174,7 +13181,15 @@ a.analyticsSearchTag:focus-visible {
   color: var(--accent);
 }
 
-.novelRecommendationControl > button:disabled {
+.novelGroveControl > button:hover,
+.novelGroveControl > button:focus-visible,
+.novelGroveControl > button.isActive {
+  background: color-mix(in srgb, #4f8d62 10%, transparent);
+  color: #4f8d62;
+}
+
+.novelRecommendationControl > button:disabled,
+.novelGroveControl > button:disabled {
   cursor: default;
 }
 
@@ -18329,11 +18344,13 @@ a.analyticsSearchTag:focus-visible {
 }
 
 .readerToolAction .novelRecommendationControl,
+.readerToolAction .novelGroveControl,
 .readerToolAction .novelFavoriteControl {
   display: contents;
 }
 
 .readerToolAction .novelRecommendationControl > button,
+.readerToolAction .novelGroveControl > button,
 .readerToolAction .novelFavoriteControl > button {
   display: grid;
   width: 28px;
@@ -18685,7 +18702,8 @@ a.analyticsSearchTag:focus-visible {
   .readerToolItem.isTheme { order: 4; }
   .readerToolItem.isSettings { order: 5; }
   .readerToolItem.isInfo { order: 6; }
-  .readerToolItem.isRecommendation { order: 7; }
+  .readerToolItem.isRecommendation,
+  .readerToolItem.isGrove { order: 7; }
   .readerToolItem.isFavorite { order: 8; }
 
   .readerToolItem.isBackTop {

@@ -1,14 +1,13 @@
+import { GroveButton } from "./GroveButton";
 import { MediaFavoriteButton } from "./MediaFavoriteButton";
 import { MediaDownloadButton } from "./MediaDownloadButton";
-import { MediaRecommendationButton } from "./MediaRecommendationButton";
 import { ReportMediaButton } from "./ReportMediaButton";
 
 export function MediaFeedbackRail({
   mediaId,
   title,
   initialFavorite,
-  initialRecommended,
-  canRecommend,
+  initialInGrove,
   canReport,
   download,
 }: {
@@ -16,6 +15,7 @@ export function MediaFeedbackRail({
   title: string;
   initialFavorite: boolean;
   initialRecommended: boolean;
+  initialInGrove: boolean;
   canRecommend: boolean;
   canReport: boolean;
   download?: {
@@ -28,8 +28,8 @@ export function MediaFeedbackRail({
   };
 }) {
   return (
-    <aside className="mediaFeedbackRail" aria-label="视频反馈">
-      {canRecommend ? <span><MediaRecommendationButton mediaId={mediaId} initialRecommended={initialRecommended} /></span> : null}
+    <aside className="mediaFeedbackRail" aria-label="视频操作">
+      <span><GroveButton contentType="media" contentId={mediaId} initialPlanted={initialInGrove} /></span>
       <span><MediaFavoriteButton mediaId={mediaId} initialFavorite={initialFavorite} /></span>
       {canReport ? <span><ReportMediaButton mediaId={mediaId} title={title} kind="video" /></span> : null}
       {download ? (

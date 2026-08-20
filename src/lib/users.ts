@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Novel } from "./books";
 import { getDb } from "./db";
+import { recordMediaGroveVisit } from "./grove";
 import type { MediaAsset, MediaKind } from "./media";
 import { DEFAULT_LOCALE, normalizeLocale, type AppLocale } from "./locale";
 import { recordReadingOpen } from "./reading-progress";
@@ -462,6 +463,7 @@ export function recordMediaHistory(userId: number, asset: Pick<MediaAsset, "id" 
          last_accessed_at = CURRENT_TIMESTAMP`,
     )
     .run(userId, asset.id, asset.kind, asset.title);
+  recordMediaGroveVisit(userId, asset.id);
 }
 
 export function listBrowseHistoryPage(

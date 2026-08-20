@@ -19,6 +19,7 @@ import { recordAnalyticsEvent } from "@/lib/analytics";
 import { getAudioDefaultPlaybackMode, getRelatedVideoSettings, getVideoThumbnailSettings } from "@/lib/config";
 import { checkContentAccess, hasScopedContentAccessRules } from "@/lib/content-access";
 import { isMediaFavorite } from "@/lib/favorites";
+import { getMediaGroveState } from "@/lib/grove";
 import { getVideoDownloadAccess, getVideoPlaybackAccess } from "@/lib/media-access";
 import { mediaCoverVersion } from "@/lib/media-cover-version";
 import {
@@ -198,6 +199,7 @@ export default async function MediaDetailPage({
   })));
   const feedbackMedia = isFeedbackMediaKind(asset.kind);
   const favorite = user && feedbackMedia ? isMediaFavorite(user.id, asset.id) : false;
+  const grove = user && feedbackMedia ? getMediaGroveState(user.id, asset.id) : null;
   const recommendation = user && feedbackMedia ? getMediaRecommendationState(user.id, asset.id) : null;
   const canRecommend = feedbackMedia && hasUserPermission(user, "novel_feedback");
   const canReport = Boolean(feedbackMedia && user?.role === "user" && hasUserPermission(user, "content_report"));
@@ -280,6 +282,7 @@ export default async function MediaDetailPage({
                     title={title}
                     initialFavorite={favorite}
                     initialRecommended={Boolean(recommendation?.recommended)}
+                    initialInGrove={Boolean(grove?.planted)}
                     canRecommend={canRecommend}
                     canReport={canReport}
                     download={showVideoDownload && user ? {
@@ -307,6 +310,7 @@ export default async function MediaDetailPage({
             feedback={user ? {
               initialFavorite: favorite,
               initialRecommended: recommendation?.recommended ?? false,
+              initialInGrove: grove?.planted ?? false,
               canRecommend,
               canReport,
             } : undefined}

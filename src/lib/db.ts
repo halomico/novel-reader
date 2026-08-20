@@ -1451,6 +1451,19 @@ function initialize(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_user_novel_favorites_user_time
       ON user_novel_favorites(user_id, created_at DESC, novel_id DESC);
 
+    CREATE TABLE IF NOT EXISTS user_novel_grove (
+      user_id INTEGER NOT NULL,
+      novel_id INTEGER NOT NULL,
+      visit_count INTEGER NOT NULL DEFAULT 0 CHECK(visit_count >= 0),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(user_id, novel_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_user_novel_grove_user_time
+      ON user_novel_grove(user_id, created_at DESC, novel_id DESC);
+
     CREATE TABLE IF NOT EXISTS user_hidden_tags (
       user_id INTEGER NOT NULL,
       tag_id INTEGER NOT NULL,
@@ -1739,6 +1752,19 @@ function initialize(db: DatabaseSync) {
 
     CREATE INDEX IF NOT EXISTS idx_user_media_favorites_user_time
       ON user_media_favorites(user_id, created_at DESC, media_id DESC);
+
+    CREATE TABLE IF NOT EXISTS user_media_grove (
+      user_id INTEGER NOT NULL,
+      media_id INTEGER NOT NULL,
+      visit_count INTEGER NOT NULL DEFAULT 0 CHECK(visit_count >= 0),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(user_id, media_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_user_media_grove_user_time
+      ON user_media_grove(user_id, created_at DESC, media_id DESC);
 
     CREATE TABLE IF NOT EXISTS media_recommendations (
       media_id INTEGER NOT NULL,

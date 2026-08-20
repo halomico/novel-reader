@@ -19,6 +19,7 @@ import {
   isTagLibraryEnabled,
 } from "@/lib/config";
 import { isNovelFavorite } from "@/lib/favorites";
+import { getNovelGroveState } from "@/lib/grove";
 import type { AppLocale } from "@/lib/locale";
 import { localizeNovelSegments, localizeText, localizeTexts } from "@/lib/locale-server";
 import { getNovelReadAccess, getSodaNovelPreviewSegments, type NovelReadAccess } from "@/lib/novel-access";
@@ -217,6 +218,7 @@ export async function NovelReaderView({
   const [homeLabel, novelsLabel] = await localizeTexts(["首页", "小说"] as const, locale);
   const initialProgress = user ? getReadingProgress(user.id, book.id) : null;
   const recommendation = user ? getNovelRecommendationState(user.id, book.id) : null;
+  const grove = user ? getNovelGroveState(user.id, book.id) : null;
   const favorite = user ? isNovelFavorite(user.id, book.id) : false;
   const canRecommend = hasUserPermission(user, "novel_feedback");
   const canReport = user?.role === "user" && hasUserPermission(user, "content_report");
@@ -264,6 +266,7 @@ export async function NovelReaderView({
         authenticated={authenticated}
         canRecommend={canRecommend}
         initialRecommended={Boolean(recommendation?.recommended)}
+        initialInGrove={Boolean(grove?.planted)}
         initialFavorite={favorite}
         canReport={canReport}
       />

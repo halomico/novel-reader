@@ -27,8 +27,8 @@ import {
 } from "@/lib/ui-preferences";
 import { clearReaderPaperPreference } from "@/lib/reader-theme-client";
 import { formatNovelWordCount } from "./CatalogBookGrid";
+import { GroveButton } from "./GroveButton";
 import { NovelFavoriteButton } from "./NovelFavoriteButton";
-import { NovelRecommendationButton } from "./NovelRecommendationButton";
 import { ReaderFontSizeStepper, ReaderLineHeightSlider } from "./ReaderTypographyControls";
 import { ReportNovelButton } from "./ReportNovelButton";
 
@@ -68,8 +68,7 @@ export function ReaderExperienceControls({
   next,
   from,
   authenticated,
-  canRecommend,
-  initialRecommended,
+  initialInGrove,
   initialFavorite,
   canReport,
 }: {
@@ -87,6 +86,7 @@ export function ReaderExperienceControls({
   authenticated: boolean;
   canRecommend: boolean;
   initialRecommended: boolean;
+  initialInGrove: boolean;
   initialFavorite: boolean;
   canReport: boolean;
 }) {
@@ -287,8 +287,8 @@ export function ReaderExperienceControls({
           {readerIsDark ? <Sun size={20} aria-hidden="true" /> : <Moon size={20} aria-hidden="true" />}
           <span>{readerIsDark ? "日间" : "夜间"}</span>
         </button>
-        {authenticated && canRecommend ? (
-          <span className="readerToolItem readerToolAction isRecommendation"><NovelRecommendationButton novelId={bookId} initialRecommended={initialRecommended} showLabel /></span>
+        {authenticated ? (
+          <span className="readerToolItem readerToolAction isGrove"><GroveButton contentType="novel" contentId={bookId} initialPlanted={initialInGrove} showLabel /></span>
         ) : null}
         {authenticated ? (
           <span className="readerToolItem readerToolAction isFavorite"><NovelFavoriteButton novelId={bookId} initialFavorite={initialFavorite} showLabel /></span>
