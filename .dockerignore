@@ -21,6 +21,7 @@ backups
 public/avatars
 scripts/*.sh
 scripts/import-source-hls.py
+scripts/prune-source-hls-videos.ts
 scripts/reset-video-library.mjs
 *.db
 *.db-*

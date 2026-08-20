@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import type { ReadingProgress } from "@/lib/reading-progress";
 import { uiText, type AppLocale } from "@/lib/locale";
 import Link from "./LocalizedLink";
+import { ContextNavigationLink } from "./ContextNavigationLink";
 import { LocalDateTime } from "./LocalDateTime";
 import { Pagination } from "./Pagination";
 
@@ -188,11 +189,12 @@ export function ReadingHistoryList({
                     <span aria-hidden="true"><Check size={13} /></span>
                   </label>
                 ) : null}
-                <Link
+                <ContextNavigationLink
                   className="readingHistoryMain"
                   href={item.chapterId
                     ? `/books/${item.novelId}/chapters/${item.chapterId}?resume=1`
                     : `/books/${item.novelId}?resume=1`}
+                  prefetch={false}
                 >
                   <span className="readingHistoryCopy">
                     <strong>{item.title}</strong>
@@ -207,7 +209,7 @@ export function ReadingHistoryList({
                   <span className="readingHistoryProgress" aria-label={`${tr("阅读进度")} ${progress}%`}>
                     <span style={{ width: `${Math.max(progress, item.progressPercent > 0 ? 1 : 0)}%` }} />
                   </span>
-                </Link>
+                </ContextNavigationLink>
               </article>
             );
           })}

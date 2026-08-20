@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
-import Link from "@/components/LocalizedLink";
+import { ContextNavigationLink } from "@/components/ContextNavigationLink";
 import { Pagination } from "@/components/Pagination";
 import { ResultCount } from "@/components/ResultCount";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -106,17 +106,19 @@ export default async function BookSearchPage({ params, searchParams }: BookSearc
           {localizedResults.map((result) => {
             const from = `${basePath}?q=${encodeURIComponent(originalQuery)}&page=${page}`;
             return (
-              <Link
+              <ContextNavigationLink
                 className="searchResultCard"
+                contextReturnHref={from}
                 href={`/books/${book.id}/chapters/${result.chapterId}?from=${encodeURIComponent(from)}&hit=${result.segmentIndex}#seg-${result.segmentIndex}`}
                 key={`${result.chapterId}-${result.segmentIndex}`}
+                prefetch={false}
               >
                 <span className="bookMark" aria-hidden="true"><BookText size={20} /></span>
                 <span className="searchResultBody">
                   <strong>{result.title}</strong>
                   <span>{validation.ok ? highlightSnippet(result.snippet, validation.query.highlightTerms) : result.snippet}</span>
                 </span>
-              </Link>
+              </ContextNavigationLink>
             );
           })}
         </section>

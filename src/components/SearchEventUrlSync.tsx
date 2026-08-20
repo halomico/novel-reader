@@ -10,7 +10,7 @@ export function SearchEventUrlSync({ eventKey }: { eventKey: string | null }) {
     if (url.searchParams.get("searchEvent") === eventKey) return;
 
     url.searchParams.set("searchEvent", eventKey);
-    window.history.replaceState(window.history.state, "", url.toString());
+    window.history.replaceState({}, "", url.toString());
   }, [eventKey]);
 
   return null;

@@ -3,7 +3,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "@/components/LocalizedLink";
 import { usePathname, useRouter } from "next/navigation";
-import { FormEvent, MouseEvent, useEffect, useRef, useState, useTransition } from "react";
+import { FormEvent, useEffect, useRef, useState, useTransition } from "react";
 import { localeFromPathname, withLocalePath } from "@/lib/locale";
 import { beginNavigationProgress } from "./NavigationProgress";
 
@@ -40,13 +40,6 @@ function scrollAfterPageChange(scrollTargetId?: string) {
     return;
   }
   window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-}
-
-function scrollOnPaginationClick(event: MouseEvent<HTMLAnchorElement>, scrollTargetId?: string) {
-  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-    return;
-  }
-  scrollAfterPageChange(scrollTargetId);
 }
 
 function pageHrefWithTarget(href: string, scrollTargetId?: string): string {
@@ -141,7 +134,6 @@ function PageJump({
       localeFromPathname(pathname),
     );
     beginNavigationProgress();
-    scrollAfterPageChange(scrollTargetId);
     startTransition(() => router.push(href, { scroll: true }));
     setIsOpen(false);
     setValue("");
@@ -227,7 +219,7 @@ export function Pagination({
             <ChevronLeft size={18} aria-hidden="true" />
           </button>
         ) : (
-          <Link className="pageButton" href={pageHrefWithTarget(pageHrefWithParams(page - 1, query, basePath, extraParams, pageParam), scrollTargetId)} scroll onClick={(event) => scrollOnPaginationClick(event, scrollTargetId)} aria-label="上一页">
+          <Link className="pageButton" href={pageHrefWithTarget(pageHrefWithParams(page - 1, query, basePath, extraParams, pageParam), scrollTargetId)} scroll aria-label="上一页">
             <ChevronLeft size={18} aria-hidden="true" />
           </Link>
         )
@@ -260,7 +252,7 @@ export function Pagination({
               {item}
             </button>
           ) : (
-            <Link className="pageNumber" href={pageHrefWithTarget(pageHrefWithParams(item, query, basePath, extraParams, pageParam), scrollTargetId)} scroll onClick={(event) => scrollOnPaginationClick(event, scrollTargetId)} key={item} aria-label={`第 ${item} 页`}>
+            <Link className="pageNumber" href={pageHrefWithTarget(pageHrefWithParams(item, query, basePath, extraParams, pageParam), scrollTargetId)} scroll key={item} aria-label={`第 ${item} 页`}>
               {item}
             </Link>
           ),
@@ -273,7 +265,7 @@ export function Pagination({
             <ChevronRight size={18} aria-hidden="true" />
           </button>
         ) : (
-          <Link className="pageButton" href={pageHrefWithTarget(pageHrefWithParams(page + 1, query, basePath, extraParams, pageParam), scrollTargetId)} scroll onClick={(event) => scrollOnPaginationClick(event, scrollTargetId)} aria-label="下一页">
+          <Link className="pageButton" href={pageHrefWithTarget(pageHrefWithParams(page + 1, query, basePath, extraParams, pageParam), scrollTargetId)} scroll aria-label="下一页">
             <ChevronRight size={18} aria-hidden="true" />
           </Link>
         )

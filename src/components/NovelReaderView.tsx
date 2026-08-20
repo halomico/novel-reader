@@ -32,6 +32,7 @@ import {
 } from "@/lib/novel-library";
 import { getReadingProgress, novelContentVersion, type ReadingProgress } from "@/lib/reading-progress";
 import { getNovelRecommendationState } from "@/lib/recommendations";
+import type { NovelSegment } from "@/lib/segments";
 import { isNovelPinned } from "@/lib/pinned-novels";
 import { filterTagsForUser } from "@/lib/tag-preferences";
 import { listHotwordsForNovel, listTagsForNovel } from "@/lib/tags";
@@ -53,6 +54,9 @@ type ChapterContext = {
   next: NovelChapter | null;
 };
 
+const INITIAL_READER_SEGMENTS = 4;
+const READER_STREAM_THRESHOLD = 8;
+
 function safeReturnHref(value: string | undefined, fallback = "/novels"): string {
   return value?.startsWith("/") && !value.startsWith("//") && !value.includes("\\") ? value : fallback;
 }
@@ -63,6 +67,31 @@ function ReaderContentLoading() {
       {Array.from({ length: 7 }, (_, index) => <span key={index} />)}
     </div>
   );
+}
+
+function ReaderSegments({ segments, hitSegment }: { segments: NovelSegment[]; hitSegment: number }) {
+  return segments.map((segment) => (
+    <section
+      className="readerSegment"
+      data-segment-index={segment.segmentIndex}
+      data-search-target={segment.segmentIndex === hitSegment ? "true" : undefined}
+      id={`seg-${segment.segmentIndex}`}
+      key={segment.segmentIndex}
+    >
+      {segment.content}
+    </section>
+  ));
+}
+
+async function DeferredReaderSegments({
+  segments,
+  hitSegment,
+}: {
+  segments: NovelSegment[];
+  hitSegment: number;
+}) {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  return <ReaderSegments segments={segments} hitSegment={hitSegment} />;
 }
 
 function ReaderHotwordLinks({ hotwords, novelId, library }: { hotwords: string[]; novelId: number; library: string }) {
@@ -135,6 +164,9 @@ async function ReaderContent({
     locale,
     preview && !chapter ? `${contentVersion}:soda-preview-30` : contentVersion,
   );
+  const streamInitialSegments = !Number.isInteger(hitSegment) && !resume && segments.length > READER_STREAM_THRESHOLD;
+  const initialSegments = streamInitialSegments ? segments.slice(0, INITIAL_READER_SEGMENTS) : segments;
+  const deferredSegments = streamInitialSegments ? segments.slice(INITIAL_READER_SEGMENTS) : [];
   const path = chapter ? `/books/${book.id}/chapters/${chapter.id}` : `/books/${book.id}`;
   if (user) {
     after(() => {
@@ -154,17 +186,12 @@ async function ReaderContent({
   return (
     <>
       <div className="readerText">
-        {segments.map((segment) => (
-          <section
-            className="readerSegment"
-            data-segment-index={segment.segmentIndex}
-            data-search-target={segment.segmentIndex === hitSegment ? "true" : undefined}
-            id={`seg-${segment.segmentIndex}`}
-            key={segment.segmentIndex}
-          >
-            {segment.content}
-          </section>
-        ))}
+        <ReaderSegments segments={initialSegments} hitSegment={hitSegment} />
+        {deferredSegments.length ? (
+          <Suspense fallback={null}>
+            <DeferredReaderSegments segments={deferredSegments} hitSegment={hitSegment} />
+          </Suspense>
+        ) : null}
       </div>
       {user && !preview ? (
         <ReadingProgressTracker

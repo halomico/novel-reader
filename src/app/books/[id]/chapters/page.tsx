@@ -3,9 +3,9 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { ContextNavigationLink } from "@/components/ContextNavigationLink";
 import { formatNovelUpdateTime, formatNovelWordCount } from "@/components/CatalogBookGrid";
 import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
-import Link from "@/components/LocalizedLink";
 import { Pagination } from "@/components/Pagination";
 import { ResultCount } from "@/components/ResultCount";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -91,9 +91,11 @@ export default async function NovelChaptersPage({
           {displayChapters.map((chapter) => {
             const locked = !fullAccess && !(previewAvailable && chapter.sortOrder < previewChapterCount);
             return (
-              <Link
+              <ContextNavigationLink
                 className={locked ? "novelChapterCard isLocked" : "novelChapterCard"}
+                contextReturnHref={`/books/${book.id}/chapters${returnQuery}`}
                 href={`/books/${book.id}/chapters/${chapter.id}${returnQuery}`}
+                prefetch={false}
                 key={chapter.id}
               >
                 <span className="novelChapterCardMain">
@@ -107,7 +109,7 @@ export default async function NovelChaptersPage({
                   {"\u00A0\u00A0"}
                   <small>更新于 {formatNovelUpdateTime({ mtime_ms: chapter.mtimeMs, updated_at: chapter.updatedAt })}</small>
                 </span>
-              </Link>
+              </ContextNavigationLink>
             );
           })}
         </section>

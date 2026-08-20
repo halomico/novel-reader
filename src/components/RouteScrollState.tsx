@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useMemo } from "react";
+import { useLayoutEffect, useMemo } from "react";
 import { stripLocalePath } from "@/lib/locale";
 
 const SCROLL_KEY_PREFIX = "novel-route-scroll:";
@@ -42,7 +42,7 @@ export function RouteScrollState() {
     [pathname, searchParams],
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const scrollStorageKey = `${SCROLL_KEY_PREFIX}${currentRouteKey}`;
     const restoreStorageKey = `${RESTORE_KEY_PREFIX}${currentRouteKey}`;
     let saveFrame = 0;
@@ -68,8 +68,9 @@ export function RouteScrollState() {
       const requestedAt = Number(window.sessionStorage.getItem(restoreStorageKey) || 0);
       window.sessionStorage.removeItem(restoreStorageKey);
       if (requestedAt > 0 && Date.now() - requestedAt <= RESTORE_REQUEST_TTL_MS) {
-        const savedTop = Number(window.sessionStorage.getItem(scrollStorageKey));
-        if (Number.isFinite(savedTop) && savedTop > 0) {
+        const storedTop = window.sessionStorage.getItem(scrollStorageKey);
+        const savedTop = storedTop === null ? 0 : Number(storedTop);
+        if (Number.isFinite(savedTop) && savedTop >= 0) {
           const startedAt = window.performance.now();
           const restorePosition = () => {
             window.scrollTo({ top: savedTop, left: 0, behavior: "auto" });
@@ -77,7 +78,9 @@ export function RouteScrollState() {
               restoreFrame = window.requestAnimationFrame(restorePosition);
             }
           };
-          restoreFrame = window.requestAnimationFrame(restorePosition);
+          // The first correction runs in a layout effect, before the destination
+          // is painted. The frame retry only handles late streamed layout growth.
+          restorePosition();
         }
       }
     } catch {
@@ -87,7 +90,6 @@ export function RouteScrollState() {
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("pagehide", savePosition);
     return () => {
-      savePosition();
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("pagehide", savePosition);
       if (saveFrame) window.cancelAnimationFrame(saveFrame);

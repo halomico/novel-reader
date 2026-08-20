@@ -1,5 +1,5 @@
 import { Eye, Play } from "lucide-react";
-import Link from "@/components/LocalizedLink";
+import { ContextNavigationLink } from "./ContextNavigationLink";
 import { mediaCoverVersion } from "@/lib/media-cover-version";
 import { formatMediaDuration } from "@/lib/media-format";
 import type { MediaAsset } from "@/lib/media";
@@ -36,7 +36,7 @@ export function MediaVideoCard({
   const isNew = Boolean(asset.newUntil && Date.parse(asset.newUntil) > Date.now());
   return (
     <article className="mediaVideoCard">
-      <Link className="mediaVideoPreview" href={watchHref} aria-label={`播放 ${title}`}>
+      <ContextNavigationLink className="mediaVideoPreview" contextReturnHref={returnHref} href={watchHref} prefetch={false} aria-label={`播放 ${title}`}>
         <MediaVideoPreview
           id={asset.id}
           singlePercent={thumbnail.singlePercent}
@@ -50,9 +50,9 @@ export function MediaVideoCard({
         {isNew ? <span className="mediaVideoNewBadge">新</span> : null}
         <span className="mediaVideoViews"><Eye size={12} aria-hidden="true" />{formatCompactCount(asset.playCount)}</span>
         <span className="mediaVideoMeta">{formatMediaDuration(asset.durationSeconds)}</span>
-      </Link>
+      </ContextNavigationLink>
       <span className="mediaCardCopy">
-        <Link className="mediaVideoTitleLink" href={watchHref} title={title}>{title}</Link>
+        <ContextNavigationLink className="mediaVideoTitleLink" contextReturnHref={returnHref} href={watchHref} prefetch={false} title={title}>{title}</ContextNavigationLink>
       </span>
     </article>
   );

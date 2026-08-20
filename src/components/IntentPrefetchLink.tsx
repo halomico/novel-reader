@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, type ComponentProps, type FocusEvent, type PointerEvent } from "react";
+import { useEffect, useRef, type ComponentProps, type FocusEvent, type PointerEvent, type TouchEvent } from "react";
 import { localeFromPathname, withLocalePath } from "@/lib/locale";
 import LocalizedLink from "./LocalizedLink";
 
@@ -9,13 +9,16 @@ const INTENT_PREFETCH_DELAY_MS = 80;
 
 type IntentPrefetchLinkProps = Omit<ComponentProps<typeof LocalizedLink>, "href"> & {
   href: string;
+  intentPrefetch?: boolean;
 };
 
 export function IntentPrefetchLink({
   href,
+  intentPrefetch = true,
   onPointerEnter,
   onPointerLeave,
   onFocus,
+  onTouchStart,
   ...props
 }: IntentPrefetchLinkProps) {
   const pathname = usePathname();
@@ -32,6 +35,7 @@ export function IntentPrefetchLink({
 
   function prefetch() {
     clearPrefetchTimer();
+    if (!intentPrefetch) return;
     if (prefetchedHrefRef.current === localizedHref) return;
     prefetchedHrefRef.current = localizedHref;
     router.prefetch(localizedHref);
@@ -43,7 +47,7 @@ export function IntentPrefetchLink({
 
   function handlePointerEnter(event: PointerEvent<HTMLAnchorElement>) {
     onPointerEnter?.(event);
-    if (!event.defaultPrevented && event.pointerType !== "touch") {
+    if (intentPrefetch && !event.defaultPrevented && event.pointerType !== "touch") {
       clearPrefetchTimer();
       prefetchTimerRef.current = setTimeout(prefetch, INTENT_PREFETCH_DELAY_MS);
     }
@@ -56,7 +60,12 @@ export function IntentPrefetchLink({
 
   function handleFocus(event: FocusEvent<HTMLAnchorElement>) {
     onFocus?.(event);
-    if (!event.defaultPrevented) prefetch();
+    if (intentPrefetch && !event.defaultPrevented) prefetch();
+  }
+
+  function handleTouchStart(event: TouchEvent<HTMLAnchorElement>) {
+    onTouchStart?.(event);
+    if (intentPrefetch && !event.defaultPrevented) prefetch();
   }
 
   return (
@@ -65,6 +74,7 @@ export function IntentPrefetchLink({
       onPointerEnter={handlePointerEnter}
       onPointerLeave={handlePointerLeave}
       onFocus={handleFocus}
+      onTouchStart={handleTouchStart}
       {...props}
     />
   );

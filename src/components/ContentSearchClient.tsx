@@ -2,7 +2,7 @@
 
 import { BookText } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Pagination } from "@/components/Pagination";
 import { ResultCount } from "@/components/ResultCount";
 import { SearchTrackedLink } from "@/components/SearchTrackedLink";
@@ -49,6 +49,12 @@ type CachedContentSearch = {
 };
 
 const CONTENT_SEARCH_CACHE_TTL_MS = 30 * 60 * 1000;
+const CONTENT_SEARCH_HISTORY_KEY = "__novelContentSearch";
+
+type ContentSearchHistoryState = {
+  searchIdentity: string;
+  page: number;
+};
 
 function removeSessionValue(key: string) {
   try {
@@ -246,6 +252,10 @@ export function ContentSearchClient({
   }
 
   function restoreInitialPage() {
+    const browserPage = Number(new URL(window.location.href).searchParams.get("page"));
+    if (Number.isFinite(browserPage) && browserPage > 0) {
+      return Math.floor(browserPage);
+    }
     if (hasExplicitPage) {
       return initialPage;
     }
@@ -310,11 +320,15 @@ export function ContentSearchClient({
         url.searchParams.set("searchEvent", searchEventKey);
         replaceUrl = true;
       }
-      if (replaceUrl) window.history.replaceState(window.history.state, "", url.toString());
+      window.history.replaceState(
+        { [CONTENT_SEARCH_HISTORY_KEY]: { searchIdentity, page: nextPage } satisfies ContentSearchHistoryState },
+        "",
+        replaceUrl ? url.toString() : undefined,
+      );
 
       if (cached?.job) {
         const cachedResultCount = cached.job.results?.length || 0;
-        const cachedPage = hasExplicitPage
+        const cachedPage = url.searchParams.has("page")
           ? nextPage
           : normalizePage(cached.page || nextPage, Math.max(1, Math.ceil(cachedResultCount / pageSize)));
         currentPageRef.current = cachedPage;
@@ -418,24 +432,33 @@ export function ContentSearchClient({
 
   function changePage(nextPage: number) {
     const normalized = normalizePage(nextPage, totalPages);
+    const url = new URL(window.location.href);
+    if (normalized > 1) url.searchParams.set("page", String(normalized));
+    else url.searchParams.delete("page");
+    window.history.pushState(
+      { [CONTENT_SEARCH_HISTORY_KEY]: { searchIdentity, page: normalized } satisfies ContentSearchHistoryState },
+      "",
+      url.toString(),
+    );
     setPage(normalized);
     rememberPage(normalized);
     if (job) {
       writeCachedSearch(resultCacheKey, job, normalized, displayProgress);
     }
-    const url = new URL(window.location.href);
-    url.searchParams.set("page", String(normalized));
-    window.history.replaceState(window.history.state, "", url.toString());
-    const scrollTarget = scrollTargetId ? document.getElementById(scrollTargetId) : null;
-    if (scrollTarget) {
-      const header = document.querySelector<HTMLElement>(".siteHeader");
-      const offset = (header?.getBoundingClientRect().height || 0) + 12;
-      const top = scrollTarget.getBoundingClientRect().top + window.scrollY - offset;
-      window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
-    } else {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
   }
+
+  useEffect(() => {
+    function restoreHistoryPage(event: PopStateEvent) {
+      const state = event.state?.[CONTENT_SEARCH_HISTORY_KEY] as ContentSearchHistoryState | undefined;
+      if (!state || state.searchIdentity !== searchIdentity) return;
+      const restoredPage = normalizePage(state.page, totalPages);
+      currentPageRef.current = restoredPage;
+      writeSessionValue(pageStateKey, String(restoredPage));
+      setPage(restoredPage);
+    }
+    window.addEventListener("popstate", restoreHistoryPage);
+    return () => window.removeEventListener("popstate", restoreHistoryPage);
+  }, [pageStateKey, searchIdentity, totalPages]);
 
   const done = job?.status === "done";
   const failed = job?.status === "error";
@@ -471,6 +494,7 @@ export function ContentSearchClient({
                   ? `/books/${result.novelId}/chapters/${result.chapterId}`
                   : `/books/${result.novelId}`}?from=${encodeURIComponent(from)}&hit=${result.segmentIndex}#seg-${result.segmentIndex}`}
                 novelId={result.novelId}
+                returnHref={from}
                 segmentIndex={result.segmentIndex}
                 key={`${result.novelId}-${result.chapterId || 0}-${result.segmentIndex}`}
                 onClick={() => {
@@ -495,7 +519,7 @@ export function ContentSearchClient({
       ) : null}
 
       {results.length > pageSize ? (
-        <Pagination page={currentPage} totalPages={totalPages} query={keyword} basePath={resultReturnPath} onPageChange={changePage} />
+        <Pagination page={currentPage} totalPages={totalPages} query={keyword} basePath={resultReturnPath} onPageChange={changePage} scrollTargetId={scrollTargetId} />
       ) : null}
     </>
   );

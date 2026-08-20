@@ -38,9 +38,11 @@ export function CatalogBookCard({
   return (
     <SearchTrackedLink
       className="bookCard"
+      documentNavigation
       eventKey={searchEventKey}
       href={`${bookPath}?from=${encodeURIComponent(returnHref)}`}
       novelId={book.id}
+      returnHref={returnHref}
     >
       <span className="bookCardBody">
         <span className="bookCardMain">

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Script from "next/script";
 import { Suspense } from "react";
+import { BfcacheHeaderScript } from "@/components/BfcacheHeaderScript";
 import { DefaultPaletteRotation } from "@/components/DefaultPaletteRotation";
 import { LocalePreferenceSync } from "@/components/LocalePreferenceSync";
 import { NavigationProgress } from "@/components/NavigationProgress";
@@ -72,6 +73,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           defaultPalette={defaultPalette}
           defaultReaderTagsMode={settings.readerDefaultTagsMode}
         />
+        <BfcacheHeaderScript />
       </head>
       <body>
         <LocalePreferenceSync />

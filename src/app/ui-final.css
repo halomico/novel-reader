@@ -943,6 +943,11 @@
   color: var(--reader-text);
 }
 
+.readerShell .readerSegment {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1200px;
+}
+
 .bookTitle,
 .mediaCardCopy strong,
 .mediaVideoTitleLink,
@@ -1824,6 +1829,17 @@ nav.accountGrowthTools > a + a {
 }
 
 @media (max-width: 820px) {
+  .siteHeader[data-bfcache-header-snapshot] {
+    pointer-events: none !important;
+    user-select: none;
+  }
+
+  .siteHeader[data-bfcache-header-snapshot],
+  .siteHeader[data-bfcache-header-snapshot] * {
+    animation: none !important;
+    transition: none !important;
+  }
+
   .bookTitle,
   .searchResultBody strong,
   .readingHistoryCopy strong,
