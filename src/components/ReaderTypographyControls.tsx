@@ -1,7 +1,5 @@
 import { Minus, Plus } from "lucide-react";
-import type { CSSProperties } from "react";
 import {
-  DEFAULT_READER_LINE_HEIGHT,
   READER_LINE_HEIGHTS,
   type ReaderLineHeight,
 } from "@/lib/ui-preferences";
@@ -30,7 +28,7 @@ export function ReaderFontSizeStepper({
   );
 }
 
-export function ReaderLineHeightSlider({
+export function ReaderLineHeightStepper({
   value,
   onChange,
 }: {
@@ -39,25 +37,26 @@ export function ReaderLineHeightSlider({
 }) {
   const activeIndex = Math.max(0, READER_LINE_HEIGHTS.indexOf(value));
   return (
-    <div
-      className="readerLineHeightControl"
-      style={{ "--reader-line-height-progress": `${(activeIndex / (READER_LINE_HEIGHTS.length - 1)) * 100}%` } as CSSProperties}
-    >
-      <div className="readerLineHeightSlider">
-        <span className="readerLineHeightEdge isSmall" aria-hidden="true">小</span>
-        <span className="readerLineHeightTrack" aria-hidden="true" />
-        <input
-          aria-label="正文行距"
-          aria-valuetext={`${value.toFixed(1)} 倍`}
-          type="range"
-          min="1"
-          max={READER_LINE_HEIGHTS.length}
-          step="1"
-          value={activeIndex + 1}
-          onChange={(event) => onChange(READER_LINE_HEIGHTS[Number(event.target.value) - 1] || DEFAULT_READER_LINE_HEIGHT)}
-        />
-        <span className="readerLineHeightEdge isLarge" aria-hidden="true">大</span>
-      </div>
+    <div className="fontSizeStepper readerLineHeightStepper" role="group" aria-label="正文行距">
+      <button
+        type="button"
+        onClick={() => onChange(READER_LINE_HEIGHTS[activeIndex - 1] || READER_LINE_HEIGHTS[0])}
+        disabled={activeIndex <= 0}
+        aria-label="减小行距"
+        title="减小行距"
+      >
+        <Minus size={17} aria-hidden="true" />
+      </button>
+      <output aria-live="polite">{value.toFixed(1)}</output>
+      <button
+        type="button"
+        onClick={() => onChange(READER_LINE_HEIGHTS[activeIndex + 1] || READER_LINE_HEIGHTS[READER_LINE_HEIGHTS.length - 1])}
+        disabled={activeIndex >= READER_LINE_HEIGHTS.length - 1}
+        aria-label="增大行距"
+        title="增大行距"
+      >
+        <Plus size={17} aria-hidden="true" />
+      </button>
     </div>
   );
 }

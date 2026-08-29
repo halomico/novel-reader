@@ -64,7 +64,7 @@ export function AdminVideoTagManager({ tags, returnPath }: { tags: VideoTag[]; r
       <header className="adminTaxonomyHeader">
         <div>
           <h3><Tag size={17} aria-hidden="true" />视频标签</h3>
-          <p>用于筛选与内容关联，不显示作者或头像。</p>
+          <p>用于筛选与内容关联，独立于作者信息。</p>
         </div>
         <label className="adminTaxonomySearch">
           <Search size={15} aria-hidden="true" />

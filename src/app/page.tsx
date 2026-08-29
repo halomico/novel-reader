@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Bell, BookOpen, Clapperboard, Clock3, File, Headphones, Tags, type LucideIcon } from "lucide-react";
+import { Bell, BookOpen, Clapperboard, File, Headphones, Tags, type LucideIcon } from "lucide-react";
 import { redirect } from "next/navigation";
 import { IntentPrefetchLink as Link } from "@/components/IntentPrefetchLink";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -35,7 +35,7 @@ type HomeProps = {
 type PortalCard = {
   href: string;
   label: string;
-  kind: Exclude<HomePortalCardKey, "recent">;
+  kind: HomePortalCardKey;
   icon: LucideIcon;
   accessMode: HomePortalAccessMode;
 };
@@ -86,7 +86,7 @@ export default async function Home({ searchParams }: HomeProps) {
     ? getHomeAnnouncement(authenticated)
     : null;
   const showNovels = isHomePortalCardVisible(accessModes.novels, authenticated);
-  const cards = new Map<Exclude<HomePortalCardKey, "recent">, PortalCard>();
+  const cards = new Map<HomePortalCardKey, PortalCard>();
 
   if (showAnnouncement) {
     cards.set("announcement", {
@@ -128,16 +128,6 @@ export default async function Home({ searchParams }: HomeProps) {
       <SiteHeader isHomePage showPrimaryNavigation={false} showSearch={false} currentUser={user} />
       <section className="homePortalGrid" aria-label="内容导航">
         {homePortalOrder.map((key) => {
-          if (key === "recent") {
-            if (!showNovels) return null;
-            const recentOverview = overview.recent;
-            return (
-              <Link className="homePortalCard is-recent hasNoTrailingIcon" href="/novels/recent" key={key}>
-                <span className="homePortalCardIcon" aria-hidden="true"><Clock3 size={26} strokeWidth={1.7} /></span>
-                <span className="homePortalCardCopy"><strong>{uiText(locale, "最近更新")}</strong><small>最近更新：{formatHomeUpdateTime(recentOverview?.updatedAt || null)}</small></span>
-              </Link>
-            );
-          }
           const card = cards.get(key);
           if (!card) return null;
           const Icon = card.icon;

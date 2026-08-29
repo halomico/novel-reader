@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { CatalogBookGrid } from "@/components/CatalogBookGrid";
 import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
+import { PageContextBar } from "@/components/PageContextBar";
 import { Pagination } from "@/components/Pagination";
 import { ResultCount } from "@/components/ResultCount";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -37,13 +37,10 @@ export default async function RecentNovelsPage({ searchParams }: { searchParams:
 
   return (
     <main className="appShell catalogShell recentNovelsShell">
-      <SiteHeader currentUser={user} library={ALL_NOVEL_LIBRARIES_SLUG} />
-      <section className="catalogToolbar">
-        <Breadcrumbs items={[{ label: homeLabel, href: "/" }, { label: novelsLabel, href: "/novels" }, { label: recentLabel }]} />
-        <div className="catalogSummary">
-          <ResultCount count={result.totalBooks} />
-        </div>
-      </section>
+      <SiteHeader currentUser={user} library={ALL_NOVEL_LIBRARIES_SLUG} novelCatalogSearch />
+      <PageContextBar items={[{ label: homeLabel, href: "/" }, { label: novelsLabel, href: "/novels" }, { label: recentLabel }]}>
+        <ResultCount count={result.totalBooks} />
+      </PageContextBar>
       {books.length ? <CatalogBookGrid books={books} returnHref={returnHref} ariaLabel="最近更新小说" /> : <section className="emptyState"><h2>暂无小说</h2></section>}
       <Pagination
         page={result.page}

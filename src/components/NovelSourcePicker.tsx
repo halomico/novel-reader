@@ -4,6 +4,8 @@ import { Check, ListFilter } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import type { NovelAccessFilter } from "@/lib/books";
+import { uiText, type AppLocale } from "@/lib/locale";
 import {
   ALL_NOVEL_LIBRARIES_SLUG,
   DEFAULT_NOVEL_LIBRARY_SLUG,
@@ -15,20 +17,26 @@ import type { NovelSource } from "@/lib/novel-library";
 export function NovelSourcePicker({
   sources,
   activeSlug,
+  access,
+  locale,
   rememberForUserId,
 }: {
   sources: NovelSource[];
   activeSlug: string;
+  access: NovelAccessFilter;
+  locale: AppLocale;
   rememberForUserId?: number;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
+  const tr = (text: string) => uiText(locale, text);
   const activeSource = sources.find((source) => source.slug === activeSlug);
   const activeLabel = activeSlug === ALL_NOVEL_LIBRARIES_SLUG
-    ? "全部"
-    : activeSource ? novelLibraryDisplayName(activeSource) : "默认";
+    ? tr("全部")
+    : activeSource ? novelLibraryDisplayName(activeSource) : tr("默认");
+  const accessLabel = access === "free" ? tr("免费") : access === "soda" ? tr("苏打") : tr("全部");
 
   useEffect(() => {
     if (!open) return;
@@ -61,21 +69,31 @@ export function NovelSourcePicker({
     document.cookie = `${novelLibraryPreferenceCookieName(rememberForUserId)}=${slug}; Path=/; Max-Age=31536000; SameSite=Lax`;
   }
 
+  function accessHref(value: NovelAccessFilter): string {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value === "all") params.delete("access");
+    else params.set("access", value);
+    params.delete("page");
+    params.delete("random");
+    return `${pathname}${params.size ? `?${params.toString()}` : ""}`;
+  }
+
   return (
     <div className="novelSourceFilter" ref={pickerRef}>
       <button
-        className="novelSourceFilterButton"
+        className={`novelSourceFilterButton${activeSlug !== DEFAULT_NOVEL_LIBRARY_SLUG || access !== "all" ? " isActive" : ""}`}
         type="button"
-        aria-label={`当前书库：${activeLabel}，点击更换`}
+        aria-label={`${tr("筛选")}：${activeLabel} · ${accessLabel}`}
         aria-expanded={open}
         aria-haspopup="menu"
-        title={`当前书库：${activeLabel}`}
+        title={`${tr("筛选")}：${activeLabel} · ${accessLabel}`}
         onClick={() => setOpen((current) => !current)}
       >
         <ListFilter size={16} aria-hidden="true" />
       </button>
       {open ? (
-        <div className="novelSourceFilterMenu" role="menu" aria-label="选择书库">
+        <div className="novelSourceFilterMenu" role="menu" aria-label={tr("筛选小说")}>
+          <span className="novelFilterSectionLabel" role="presentation">{tr("来源")}</span>
           {sources.map((source) => (
             <Link
               className={source.slug === activeSlug ? "isActive" : ""}
@@ -101,9 +119,25 @@ export function NovelSourcePicker({
               setOpen(false);
             }}
           >
-            <span>全部</span>
+            <span>{tr("全部")}</span>
             {activeSlug === ALL_NOVEL_LIBRARIES_SLUG ? <Check size={14} aria-hidden="true" /> : null}
           </Link>
+          <span className="novelFilterSectionLabel" role="presentation">{tr("内容")}</span>
+          {(["all", "free", "soda"] as const).map((value) => {
+            const label = value === "free" ? tr("免费") : value === "soda" ? tr("苏打") : tr("全部");
+            return (
+              <Link
+                className={access === value ? "isActive" : ""}
+                href={accessHref(value)}
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                key={value}
+              >
+                <span>{label}</span>
+                {access === value ? <Check size={14} aria-hidden="true" /> : null}
+              </Link>
+            );
+          })}
         </div>
       ) : null}
     </div>

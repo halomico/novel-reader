@@ -6,7 +6,6 @@ import { rememberContextNavigation } from "@/lib/context-navigation";
 
 type ContextNavigationLinkProps = ComponentProps<typeof Link> & {
   contextReturnHref?: string;
-  documentNavigation?: boolean;
 };
 
 function isPlainPrimaryClick(event: MouseEvent<HTMLAnchorElement>): boolean {
@@ -22,27 +21,19 @@ function isPlainPrimaryClick(event: MouseEvent<HTMLAnchorElement>): boolean {
 
 export function ContextNavigationLink({
   contextReturnHref,
-  documentNavigation = false,
   onClick,
-  prefetch,
   ...props
 }: ContextNavigationLinkProps) {
   function handleClick(event: MouseEvent<HTMLAnchorElement>) {
     onClick?.(event);
     if (!isPlainPrimaryClick(event)) return;
     rememberContextNavigation(event.currentTarget.href, contextReturnHref);
-    if (documentNavigation) {
-      event.preventDefault();
-      window.location.assign(event.currentTarget.href);
-    }
   }
 
   return (
     <Link
       {...props}
-      intentPrefetch={!documentNavigation && prefetch !== false}
       onClick={handleClick}
-      prefetch={documentNavigation ? false : prefetch}
     />
   );
 }

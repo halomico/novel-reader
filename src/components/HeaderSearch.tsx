@@ -6,6 +6,7 @@ import Link from "@/components/LocalizedLink";
 import { usePathname } from "next/navigation";
 import { FormEvent, useEffect, useId, useRef, useState } from "react";
 import { localeFromPathname, stripLocalePath, uiText, withLocalePath } from "@/lib/locale";
+import { NOVEL_CATALOG_SEARCH_COOKIE } from "@/lib/ui-preferences";
 import { beginNavigationProgress } from "./NavigationProgress";
 
 type SearchMode = "title" | "content" | "current";
@@ -99,6 +100,7 @@ export function HeaderSearch({
   library = "default",
   contentSearchEnabled = true,
   currentSearchBookId,
+  persistCatalogPreference = false,
 }: {
   query?: string;
   defaultMode?: SearchMode;
@@ -109,6 +111,7 @@ export function HeaderSearch({
   library?: string;
   contentSearchEnabled?: boolean;
   currentSearchBookId?: number;
+  persistCatalogPreference?: boolean;
 }) {
   const pathname = usePathname();
   const normalizedPathname = stripLocalePath(pathname);
@@ -370,6 +373,9 @@ export function HeaderSearch({
     const input = form?.querySelector<HTMLInputElement>('input[name="q"]') || null;
     const nextPinnedOpen = !isPinnedOpen;
     setVisibility(nextPinnedOpen ? "open" : "closed");
+    if (persistCatalogPreference) {
+      document.cookie = `${NOVEL_CATALOG_SEARCH_COOKIE}=${nextPinnedOpen ? "expanded" : "collapsed"}; Path=/; Max-Age=31536000; SameSite=Lax`;
+    }
     setIsModeMenuOpen(false);
     if (nextPinnedOpen) {
       window.requestAnimationFrame(() => input?.focus());

@@ -3,9 +3,13 @@ export const READER_TAGS_STORAGE_KEY = "novel-reader-tags";
 export const READER_HOTWORDS_STORAGE_KEY = "novel-reader-hotwords";
 export const READER_LINE_HEIGHT_STORAGE_KEY = "novel-reader-line-height";
 export const READER_PAPER_STORAGE_KEY = "novel-reader-paper-v2";
+export const NOVEL_CATALOG_SEARCH_COOKIE = "novel-catalog-search";
 export const LEGACY_READER_THEME_STORAGE_KEYS = ["novel-reader-theme", "novel-reader-light-theme"] as const;
 export const ADMIN_SIDEBAR_STORAGE_KEY = "novel-reader-admin-sidebar-collapsed";
-export const READER_LINE_HEIGHTS = [1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2] as const;
+export const READER_LINE_HEIGHTS = [
+  0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6,
+  1.7, 1.8, 1.9, 2, 2.1, 2.2, 2.3, 2.4, 2.5,
+] as const;
 export const DEFAULT_READER_LINE_HEIGHT = 1.7;
 export const READER_THEME_OPTIONS = [
   { value: "gray", label: "灰白", swatch: "#f5f5f5", paper: "#f5f5f5", outer: "#ebebeb" },
@@ -60,12 +64,21 @@ export function normalizeReaderLineHeight(
   fallback: ReaderLineHeight = DEFAULT_READER_LINE_HEIGHT,
 ): ReaderLineHeight {
   const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric < 1.2 || numeric > 2.3) {
+  if (!Number.isFinite(numeric) || numeric < 0.8 || numeric > 2.5) {
     return fallback;
   }
   return READER_LINE_HEIGHTS.reduce((nearest, item) => (
     Math.abs(item - numeric) < Math.abs(nearest - numeric) ? item : nearest
   ));
+}
+
+export function normalizeNovelCatalogSearchExpanded(
+  value: string | null | undefined,
+  fallback: boolean,
+): boolean {
+  if (value === "expanded") return true;
+  if (value === "collapsed") return false;
+  return fallback;
 }
 
 export function normalizeReaderTagsMode(

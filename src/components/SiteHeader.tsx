@@ -15,6 +15,7 @@ import {
   isGuestTagLibraryNavEnabled,
   isMarketEnabled,
   isNovelLibraryEnabled,
+  isNovelCatalogSearchExpandedByDefault,
   isUserLoginEnabled,
   isUserRegistrationEnabled,
   isTagLibraryEnabled,
@@ -27,6 +28,10 @@ import { getRequestLocale, localizeText, localizeTexts } from "@/lib/locale-serv
 import { countUserUnreadMessages } from "@/lib/station";
 import { novelLibraryPreferenceCookieName } from "@/lib/novel-library-scope";
 import { isNovelSourceFullTextSearchEnabled } from "@/lib/novel-search-policy";
+import {
+  NOVEL_CATALOG_SEARCH_COOKIE,
+  normalizeNovelCatalogSearchExpanded,
+} from "@/lib/ui-preferences";
 import { HeaderSearch } from "./HeaderSearch";
 import { HeaderMediaSearch } from "./HeaderMediaSearch";
 import { HeaderPrimaryNav } from "./HeaderPrimaryNav";
@@ -39,6 +44,7 @@ export async function SiteHeader({
   query = "",
   defaultSearchMode = "title",
   defaultSearchExpanded = false,
+  novelCatalogSearch = false,
   showCurrentSearch = false,
   showPrimaryNavigation = true,
   showTools = true,
@@ -57,6 +63,7 @@ export async function SiteHeader({
   query?: string;
   defaultSearchMode?: "title" | "content" | "current";
   defaultSearchExpanded?: boolean;
+  novelCatalogSearch?: boolean;
   showCurrentSearch?: boolean;
   showPrimaryNavigation?: boolean;
   showTools?: boolean;
@@ -80,8 +87,9 @@ export async function SiteHeader({
   );
   const brandHref = getSiteBrandHref();
   const user = currentUser === undefined ? await getCurrentUser() : currentUser;
+  const cookieStore = (library === undefined && user) || novelCatalogSearch ? await cookies() : null;
   const rememberedLibrary = library === undefined && user
-    ? (await cookies()).get(novelLibraryPreferenceCookieName(user.id))?.value
+    ? cookieStore?.get(novelLibraryPreferenceCookieName(user.id))?.value
     : undefined;
   const activeLibrary = library || rememberedLibrary || getDefaultNovelLibrarySlug();
   const loginEnabled = isUserLoginEnabled();
@@ -107,6 +115,12 @@ export async function SiteHeader({
   const canShowNovelSearch = showSearch && !authMode && (readerMode || showLibraryNav);
   const canShowSearch = Boolean(mediaSearchKind) || canShowNovelSearch;
   const contentSearchEnabled = activeLibrary === "all" || isNovelSourceFullTextSearchEnabled(activeLibrary);
+  const resolvedSearchExpanded = novelCatalogSearch
+    ? normalizeNovelCatalogSearchExpanded(
+        cookieStore?.get(NOVEL_CATALOG_SEARCH_COOKIE)?.value,
+        isNovelCatalogSearchExpandedByDefault(),
+      )
+    : defaultSearchExpanded;
 
   const headerClassName = [
     "siteHeader",
@@ -139,13 +153,14 @@ export async function SiteHeader({
               <HeaderSearch
                 query={query}
                 defaultMode={defaultSearchMode}
-                defaultExpanded={defaultSearchExpanded}
+                defaultExpanded={resolvedSearchExpanded}
                 showCurrentSearch={showCurrentSearch}
                 showAdvancedSearch={showAdvancedSearch}
                 noticeDisplaySeconds={noticeDisplaySeconds}
                 library={activeLibrary}
                 contentSearchEnabled={contentSearchEnabled}
                 currentSearchBookId={currentSearchBookId}
+                persistCatalogPreference={novelCatalogSearch}
               />
             ) : null}
             <div className="headerActions">

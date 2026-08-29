@@ -282,7 +282,7 @@ export function AdminMediaManager({
               kind,
               categoryId: kind === "video" ? uploadCategoryId : undefined,
               title: uploadFiles.length === 1 ? title : "",
-              artist: kind === "audio" ? artist : "",
+              artist: kind === "file" ? "" : artist,
               description,
               folder,
               fileName: file.name,
@@ -505,7 +505,7 @@ export function AdminMediaManager({
                 disabled={isUploading || files.length > 1}
               />
             </label>
-            {kind === "audio" ? (
+            {kind !== "file" ? (
               <label>
                 <span>作者</span>
                 <input value={artist} onChange={(event) => setArtist(event.target.value)} maxLength={80} placeholder="可选，本批次共用" disabled={isUploading} />
@@ -678,7 +678,7 @@ export function AdminMediaManager({
                     </label>
                   ))}
                 </div>
-                {selectedKind === "audio" ? (
+                {selectedKind && selectedKind !== "file" ? (
                   <label className="adminMediaBatchApplyField">
                     <span><input name="applyArtist" type="checkbox" />统一作者</span>
                     <input name="artist" maxLength={80} placeholder="勾选后应用；留空可清除" />
@@ -771,7 +771,7 @@ export function AdminMediaManager({
               <span>名称</span>
               <input name="title" defaultValue={editingAsset.title} maxLength={120} required autoFocus />
             </label>
-            {editingAsset.kind === "audio" ? (
+            {editingAsset.kind !== "file" ? (
               <label>
                 <span>作者</span>
                 <input name="artist" defaultValue={editingAsset.artist} maxLength={80} placeholder="可选" />

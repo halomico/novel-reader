@@ -63,6 +63,7 @@ export type SiteSettings = {
   readerDefaultFontSize: number;
   readerDefaultLineHeight: ReaderLineHeight;
   readerDefaultTagsMode: ReaderTagsMode;
+  novelCatalogSearchExpanded: boolean;
   defaultPalette: ColorPalette;
   defaultPaletteRandomEnabled: boolean;
   defaultPaletteRotationMinutes: number;
@@ -129,7 +130,7 @@ type SiteSettingsGlobal = typeof globalThis & {
   siteSettingsCache?: SiteSettingsCache;
 };
 
-const SITE_SETTINGS_CACHE_SCHEMA_VERSION = 13;
+const SITE_SETTINGS_CACHE_SCHEMA_VERSION = 14;
 
 const DEFAULT_SETTINGS_PREVIEW_TEXT =
   process.env.SETTINGS_PREVIEW_TEXT?.trim() ||
@@ -176,6 +177,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   readerDefaultFontSize: 18,
   readerDefaultLineHeight: 1.7,
   readerDefaultTagsMode: "collapsed",
+  novelCatalogSearchExpanded: true,
   defaultPalette: "default",
   defaultPaletteRandomEnabled: false,
   defaultPaletteRotationMinutes: 1_440,
@@ -463,6 +465,10 @@ function readSiteSettingsFromDisk(): SiteSettings {
       readerDefaultTagsMode: normalizeReaderTagsMode(
         typeof parsed.readerDefaultTagsMode === "string" ? parsed.readerDefaultTagsMode : undefined,
         DEFAULT_SETTINGS.readerDefaultTagsMode,
+      ),
+      novelCatalogSearchExpanded: cleanBool(
+        parsed.novelCatalogSearchExpanded,
+        DEFAULT_SETTINGS.novelCatalogSearchExpanded,
       ),
       defaultPalette: cleanColorPalette(parsed.defaultPalette),
       defaultPaletteRandomEnabled: cleanBool(parsed.defaultPaletteRandomEnabled, DEFAULT_SETTINGS.defaultPaletteRandomEnabled),

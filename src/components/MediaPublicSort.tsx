@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Check, ListFilter, Tags } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Check, Tags } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { MediaKind, MediaSortBy, MediaSortOrder, VideoTag } from "@/lib/media";
@@ -94,7 +94,7 @@ export function MediaPublicSort({
         title={uiText(locale, "筛选与排序")}
         onClick={() => setOpen((value) => !value)}
       >
-        <ListFilter size={17} aria-hidden="true" />
+        <ArrowUpDown size={17} aria-hidden="true" />
       </button>
       {open ? (
         <div className={kind === "video" ? "mediaBrowsePopover" : "mediaBrowsePopover isCompact"} role="dialog" aria-label={uiText(locale, "筛选与排序")}>

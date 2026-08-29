@@ -1,13 +1,12 @@
 import fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { getContentSearchDatabasePath, getContentSearchIndexDirectory } from "./config";
+import { getContentSearchIndexDirectory } from "./config";
 import {
   getContentSearchDatabaseDiskUsage,
   getContentSearchDatabasePathForSource,
   getContentSearchDb,
   getExistingContentSearchDb,
   closeContentSearchDb,
-  closeLegacyContentSearchDb,
   initializeContentSearchDb,
 } from "./content-search-db";
 import {
@@ -117,28 +116,6 @@ export function getContentSearchCombinedSummary(mainDb: DatabaseSync = getDb()):
   };
 }
 
-export function getLegacyContentSearchDiskUsage(): number {
-  const databasePath = getContentSearchDatabasePath();
-  return [databasePath, `${databasePath}-wal`, `${databasePath}-shm`].reduce((total, filePath) => {
-    try {
-      return total + fs.statSync(filePath).size;
-    } catch {
-      return total;
-    }
-  }, 0);
-}
-
-export function deleteLegacyContentSearchDatabase() {
-  const legacyGlobal = globalThis as typeof globalThis & { novelReaderContentSearchDb?: DatabaseSync };
-  legacyGlobal.novelReaderContentSearchDb?.close();
-  delete legacyGlobal.novelReaderContentSearchDb;
-  closeLegacyContentSearchDb();
-  const databasePath = getContentSearchDatabasePath();
-  for (const filePath of [databasePath, `${databasePath}-wal`, `${databasePath}-shm`]) {
-    fs.rmSync(filePath, { force: true });
-  }
-}
-
 function removeBuildFiles(databasePath: string) {
   for (const filePath of [databasePath, `${databasePath}-wal`, `${databasePath}-shm`]) {
     fs.rmSync(filePath, { force: true });
@@ -152,21 +129,28 @@ export async function buildContentSearchSourceIndex(
   options: Omit<ContentSearchIndexBuildOptions, "sourceId" | "novelIds"> = {},
 ): Promise<ContentSearchIndexResult> {
   const targetPath = getContentSearchDatabasePathForSource(sourceId);
-  const useShadowBuild = options.force === true || !fs.existsSync(targetPath);
-  if (!useShadowBuild) {
-    return buildContentSearchIndex(mainDb, getContentSearchDb(sourceId), onProgress, { ...options, sourceId });
-  }
-
+  const rebuildFromScratch = options.force === true || !fs.existsSync(targetPath);
   fs.mkdirSync(getContentSearchIndexDirectory(), { recursive: true });
   const buildPath = `${targetPath}.building-${process.pid}-${Date.now()}`;
   const backupPath = `${targetPath}.previous`;
+  if (!rebuildFromScratch) {
+    try {
+      const currentDb = getContentSearchDb(sourceId);
+      currentDb.exec("PRAGMA wal_checkpoint(TRUNCATE);");
+      closeContentSearchDb(sourceId);
+      fs.copyFileSync(targetPath, buildPath);
+    } catch (error) {
+      removeBuildFiles(buildPath);
+      throw error;
+    }
+  }
   const buildDb = new DatabaseSync(buildPath);
   initializeContentSearchDb(buildDb);
   let buildClosed = false;
   try {
     const result = await buildContentSearchIndex(mainDb, buildDb, onProgress, {
       ...options,
-      force: true,
+      force: rebuildFromScratch,
       sourceId,
     });
     buildDb.close();

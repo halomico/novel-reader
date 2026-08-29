@@ -22,3 +22,10 @@ export async function setTagPreferenceAction(formData: FormData) {
   revalidatePath(returnPath.split("?", 1)[0]);
   redirect(returnPath);
 }
+
+export async function updateTagPreferenceInlineAction(tagId: number, hidden: boolean): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!user || !Number.isInteger(tagId) || tagId <= 0) return false;
+  setUserTagHidden(user.id, tagId, hidden);
+  return true;
+}

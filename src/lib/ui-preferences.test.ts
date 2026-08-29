@@ -8,6 +8,7 @@ import {
   getColorPalette,
   isColorPalette,
   normalizeReaderLineHeight,
+  normalizeNovelCatalogSearchExpanded,
   normalizeReaderTagsMode,
   isReaderTheme,
   READER_THEME_OPTIONS,
@@ -54,14 +55,22 @@ test("normalizes current and legacy reader tag preferences", () => {
   assert.equal(normalizeReaderTagsMode("unknown", "expanded"), "expanded");
 });
 
-test("provides seven practical reader line heights and migrates old loose values", () => {
-  assert.deepEqual(READER_LINE_HEIGHTS, [1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2]);
+test("provides 0.8 through 2.5 reader line heights in 0.1 steps", () => {
+  assert.deepEqual(READER_LINE_HEIGHTS, [0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2, 2.1, 2.2, 2.3, 2.4, 2.5]);
   assert.equal(DEFAULT_READER_LINE_HEIGHT, 1.7);
-  assert.equal(normalizeReaderLineHeight("1.4"), 1.4);
+  assert.equal(normalizeReaderLineHeight("0.8"), 0.8);
   assert.equal(normalizeReaderLineHeight("1.76"), 1.8);
-  assert.equal(normalizeReaderLineHeight("2.2"), 2);
+  assert.equal(normalizeReaderLineHeight("2.2"), 2.2);
+  assert.equal(normalizeReaderLineHeight("2.5"), 2.5);
   assert.equal(normalizeReaderLineHeight("invalid"), 1.7);
   assert.equal(normalizeReaderLineHeight("invalid", 1.4), 1.4);
+});
+
+test("uses a browser catalog-search preference only when it is valid", () => {
+  assert.equal(normalizeNovelCatalogSearchExpanded("expanded", false), true);
+  assert.equal(normalizeNovelCatalogSearchExpanded("collapsed", true), false);
+  assert.equal(normalizeNovelCatalogSearchExpanded("unknown", true), true);
+  assert.equal(normalizeNovelCatalogSearchExpanded(null, false), false);
 });
 
 test("keeps the six measured reader paper themes in one shared preference model", () => {

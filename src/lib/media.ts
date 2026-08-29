@@ -1279,7 +1279,7 @@ export function createMediaAsset(params: {
       params.storageNodeId || null,
       categoryId,
       params.title,
-      params.kind === "audio" ? params.artist || "" : "",
+      params.kind === "file" ? "" : params.artist || "",
       params.description || "",
       params.fileName,
       params.storedName,
@@ -1792,7 +1792,7 @@ export async function updateMediaAsset(
     const result = db
       .prepare(
         `UPDATE media_assets
-         SET title = ?, artist = CASE WHEN kind = 'audio' THEN ? ELSE '' END, description = ?,
+         SET title = ?, artist = CASE WHEN kind IN ('audio', 'video') THEN ? ELSE '' END, description = ?,
              file_name = ?, stored_name = ?, updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`,
       )

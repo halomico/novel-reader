@@ -1,5 +1,6 @@
 import type { Novel } from "@/lib/books";
 import type { Tag } from "@/lib/tags";
+import { CupSoda } from "lucide-react";
 import { formatCompactUpdateDate, parseAppDateTime } from "@/lib/date-time";
 import { SearchTrackedLink } from "@/components/SearchTrackedLink";
 
@@ -38,7 +39,6 @@ export function CatalogBookCard({
   return (
     <SearchTrackedLink
       className="bookCard"
-      documentNavigation
       eventKey={searchEventKey}
       href={`${bookPath}?from=${encodeURIComponent(returnHref)}`}
       novelId={book.id}
@@ -50,7 +50,12 @@ export function CatalogBookCard({
           {showMetadata ? (
             <span className="bookCardMeta" aria-label="小说信息">
               {book.storage_mode === "chapters" ? <span>{book.chapter_count}章</span> : null}
-              {showSodaPrice ? <span className="bookCardSoda">{book.soda_price}苏打</span> : null}
+              {showSodaPrice ? (
+                <span className="bookCardSoda" aria-label={`${book.soda_price} 苏打`} title={`${book.soda_price} 苏打`}>
+                  <CupSoda size={13} strokeWidth={1.9} aria-hidden="true" />
+                  <span>{book.soda_price}</span>
+                </span>
+              ) : null}
             </span>
           ) : null}
         </span>

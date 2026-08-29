@@ -42,10 +42,8 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
         />
       ) : null}
       <section className="marketOverview">
-        <header className="marketPageHeader">
-          <div>
-            <h1>集市</h1>
-          </div>
+        <header className="marketPageHeader userContentHeader">
+          <span><ShoppingBag size={19} aria-hidden="true" /><h1>集市</h1></span>
           <div className="marketBalances" aria-label="账户余额">
             <span><Cookie size={16} aria-hidden="true" /><strong>{user.cookieBalance}</strong> 曲奇</span>
             <span><CupSoda size={16} aria-hidden="true" /><strong>{user.sodaBalance}</strong> 苏打</span>

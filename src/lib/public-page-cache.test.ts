@@ -13,6 +13,7 @@ function request(
     searchParams: new URLSearchParams(search),
     accept: "text/html,application/xhtml+xml",
     hasUserSession: false,
+    hasBrowserLayoutPreference: false,
     isRscRequest: false,
     isRouterPrefetch: false,
     allowPublicNovelPages: true,
@@ -46,6 +47,7 @@ test("keeps personalized and behavior-changing pages private", () => {
     false,
   );
   assert.equal(isPublicPageCacheCandidate(request("/novels", "", { hasUserSession: true })), false);
+  assert.equal(isPublicPageCacheCandidate(request("/novels", "", { hasBrowserLayoutPreference: true })), false);
 });
 
 test("does not cache RSC, prefetch, non-document, or mutation requests", () => {

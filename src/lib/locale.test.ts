@@ -26,9 +26,12 @@ test("keeps simplified URLs canonical and prefixes traditional public pages", ()
 
 test("uses explicit Chinese language preferences before the country hint", () => {
   assert.equal(prefersTraditionalLanguage("zh-Hant-TW,zh;q=0.9", null), true);
-  assert.equal(prefersTraditionalLanguage("zh-CN,zh;q=0.9", "TW"), true);
+  assert.equal(prefersTraditionalLanguage("zh-CN,zh;q=0.9", "TW"), false);
+  assert.equal(prefersTraditionalLanguage("zh-TW;q=0.8,zh-CN;q=0.9", "TW"), false);
+  assert.equal(prefersTraditionalLanguage("zh-TW;q=0,zh-CN;q=0.9", "TW"), false);
   assert.equal(prefersTraditionalLanguage("en-US,en;q=0.9", "HK"), true);
   assert.equal(prefersTraditionalLanguage("zh-CN,zh;q=0.9", "SG"), false);
+  assert.equal(prefersTraditionalLanguage("en-US,en;q=0.9", "US"), false);
 });
 
 test("converts display text and normalizes traditional search input on demand", async () => {

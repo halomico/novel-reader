@@ -8,12 +8,10 @@ export function NovelAccessGate({
   novelId,
   price,
   loginRequired,
-  preview = false,
 }: {
   novelId: number;
   price: number;
   loginRequired: boolean;
-  preview?: boolean;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -41,13 +39,6 @@ export function NovelAccessGate({
     <section className="novelAccessGate" aria-live="polite">
       <div>
         <strong>{loginRequired ? "登录后继续阅读" : "解锁完整内容"}</strong>
-        <p>{preview
-          ? loginRequired
-            ? "已展示约 30% 试读内容，登录后可解锁全文。"
-            : "已展示约 30% 试读内容，一次解锁后可随时阅读全文。"
-          : loginRequired
-            ? "登录后可同步阅读进度与已解锁内容。"
-            : "一次解锁，之后可随时阅读。"}</p>
       </div>
       {loginRequired ? (
         <button type="button" onClick={() => router.push(`/login?returnTo=${encodeURIComponent(returnTo)}`)}>

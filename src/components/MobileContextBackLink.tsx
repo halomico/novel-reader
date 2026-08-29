@@ -4,7 +4,6 @@ import { ChevronLeft } from "lucide-react";
 import type { MouseEvent } from "react";
 import Link from "@/components/LocalizedLink";
 import { shouldUseContextHistoryBack } from "@/lib/context-navigation";
-import { requestRouteScrollRestore } from "./RouteScrollState";
 
 export function MobileContextBackLink({ href, label }: { href: string; label: string }) {
   function handleClick(event: MouseEvent<HTMLAnchorElement>) {
@@ -20,7 +19,6 @@ export function MobileContextBackLink({ href, label }: { href: string; label: st
       window.history.back();
       return;
     }
-    requestRouteScrollRestore(href);
   }
 
   return (
@@ -28,7 +26,6 @@ export function MobileContextBackLink({ href, label }: { href: string; label: st
       className="mobileContextBackLink"
       href={href}
       prefetch={false}
-      scroll={false}
       aria-label={label}
       title={label}
       onClick={handleClick}

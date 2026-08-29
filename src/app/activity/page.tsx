@@ -422,6 +422,7 @@ export default async function ActivityPage({
                           : null}
                         priority={index === 0}
                         eager={index < 6}
+                        locale={locale}
                       />
                     </FavoriteSelectableItem>
                   ))}

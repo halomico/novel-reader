@@ -4,7 +4,18 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
-import { buildTitleSearchSql, clearNovelSegmentCache, normalizePageSize, planCatalogPage, readNovelSegments, type Novel } from "./books";
+import {
+  buildTitleSearchSql,
+  clearNovelSegmentCache,
+  defaultNovelCatalogSortOrder,
+  normalizeNovelAccessFilter,
+  normalizeNovelCatalogSort,
+  normalizeNovelCatalogSortOrder,
+  normalizePageSize,
+  planCatalogPage,
+  readNovelSegments,
+  type Novel,
+} from "./books";
 import { sampleNovelIdsFromList } from "./novel-id-sampler";
 import { parseSearchQuery } from "./search-query";
 
@@ -12,6 +23,23 @@ test("honors the configured catalog range up to 100 books", () => {
   assert.equal(normalizePageSize(75), 75);
   assert.equal(normalizePageSize(100), 100);
   assert.equal(normalizePageSize(101), 100);
+});
+
+test("keeps catalog sorting and access filters on their supported values", () => {
+  assert.equal(normalizeNovelCatalogSort(undefined), "updated");
+  assert.equal(normalizeNovelCatalogSort("name"), "name");
+  assert.equal(normalizeNovelCatalogSort("words"), "words");
+  assert.equal(normalizeNovelCatalogSort("random"), "updated");
+  assert.equal(defaultNovelCatalogSortOrder("updated"), "desc");
+  assert.equal(defaultNovelCatalogSortOrder("name"), "asc");
+  assert.equal(defaultNovelCatalogSortOrder("words"), "desc");
+  assert.equal(normalizeNovelCatalogSortOrder("asc", "updated"), "asc");
+  assert.equal(normalizeNovelCatalogSortOrder("desc", "name"), "desc");
+  assert.equal(normalizeNovelCatalogSortOrder("sideways", "words"), "desc");
+  assert.equal(normalizeNovelAccessFilter(undefined), "all");
+  assert.equal(normalizeNovelAccessFilter("free"), "free");
+  assert.equal(normalizeNovelAccessFilter("soda"), "soda");
+  assert.equal(normalizeNovelAccessFilter("paid"), "all");
 });
 
 test("pushes compound title matching into SQLite", () => {

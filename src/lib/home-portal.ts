@@ -5,18 +5,15 @@ export const HOME_PORTAL_CARD_KEYS = [
   "video",
   "audio",
   "file",
-  "recent",
 ] as const;
 
 export type HomePortalCardKey = (typeof HOME_PORTAL_CARD_KEYS)[number];
-export type HomePortalContentCardKey = Exclude<HomePortalCardKey, "recent">;
+export type HomePortalContentCardKey = HomePortalCardKey;
 export type HomePortalAccessMode = "off" | "member" | "browse" | "public";
 export type HomePortalAccessModes = Record<HomePortalContentCardKey, HomePortalAccessMode>;
 
 export const DEFAULT_HOME_PORTAL_ORDER: HomePortalCardKey[] = [...HOME_PORTAL_CARD_KEYS];
-export const HOME_PORTAL_CONTENT_CARD_KEYS = HOME_PORTAL_CARD_KEYS.filter(
-  (key): key is HomePortalContentCardKey => key !== "recent",
-);
+export const HOME_PORTAL_CONTENT_CARD_KEYS = HOME_PORTAL_CARD_KEYS;
 
 export const DEFAULT_HOME_PORTAL_ACCESS_MODES: HomePortalAccessModes = {
   announcement: "public",
@@ -32,7 +29,7 @@ export function normalizeHomePortalOrder(value: unknown): HomePortalCardKey[] {
     ? value
     : typeof value === "string"
       ? value.split(",")
-      : []).map((key) => key === "random" ? "recent" : key);
+      : []);
   const validKeys = new Set<string>(HOME_PORTAL_CARD_KEYS);
   const order = requested.filter(
     (key, index): key is HomePortalCardKey =>

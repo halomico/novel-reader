@@ -31,7 +31,7 @@ ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 ENV NOVEL_LIBRARY_DIR=/app/library/books
 ENV DATABASE_PATH=/app/data/novels.db
-ENV CONTENT_SEARCH_DB_PATH=/app/data/content-search.db
+ENV CONTENT_SEARCH_INDEX_DIR=/app/data/content-search
 ENV MEDIA_DIR=/app/data/media
 
 RUN apt-get update \

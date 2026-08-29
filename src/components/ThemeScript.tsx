@@ -53,7 +53,7 @@ export function ThemeScript({
           fontSize = ${JSON.stringify(defaultFontSize)};
         }
         if (readerLineHeights.indexOf(readerLineHeight) === -1) {
-          readerLineHeight = Number.isFinite(readerLineHeight) && readerLineHeight >= 1.2 && readerLineHeight <= 2.3
+          readerLineHeight = Number.isFinite(readerLineHeight) && readerLineHeight >= 0.8 && readerLineHeight <= 2.5
             ? readerLineHeights.reduce(function(nearest, item) {
                 return Math.abs(item - readerLineHeight) < Math.abs(nearest - readerLineHeight) ? item : nearest;
               })

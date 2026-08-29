@@ -130,7 +130,7 @@ function cleanDescription(value: string): string {
 }
 
 function cleanArtist(value: string, kind: MediaKind): string {
-  if (kind !== "audio") {
+  if (kind === "file") {
     return "";
   }
   const artist = value.trim();

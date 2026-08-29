@@ -198,7 +198,7 @@ textarea {
 .readerShell {
   width: min(1360px, calc(100% - 40px));
   margin: 0 auto;
-  padding: 22px 0 56px;
+  padding: 0 0 56px;
 }
 
 .catalogShell {
@@ -614,8 +614,8 @@ textarea {
   width: max-content;
   min-width: 88px;
   max-width: min(144px, calc(100vw - 24px));
-  gap: 3px;
-  padding: 6px;
+  gap: 2px;
+  padding: 5px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: color-mix(in srgb, var(--surface) 98%, transparent);
@@ -623,25 +623,25 @@ textarea {
 }
 
 .userMenuPanel.hasIdentity {
-  width: min(120px, calc(100vw - 24px));
-  max-width: min(120px, calc(100vw - 24px));
+  width: min(104px, calc(100vw - 24px));
+  max-width: min(104px, calc(100vw - 24px));
 }
 
 .userMenuPanel.hasIdentity .userMenuIdentity {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr);
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   margin-bottom: 2px;
   border-radius: 5px;
-  padding: 6px 6px 8px;
+  padding: 5px 5px 7px;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
 }
 
 .userMenuAvatar {
   display: grid;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   place-items: center;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -684,10 +684,10 @@ textarea {
   display: flex;
   width: 100%;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   border: 0;
   border-radius: 7px;
-  padding: 7px 8px;
+  padding: 6px 7px;
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -765,10 +765,6 @@ textarea {
   --portal-accent: color-mix(in srgb, #b56b25 84%, var(--text));
 }
 
-.homePortalCard.is-recent {
-  --portal-accent: color-mix(in srgb, #4f8a45 84%, var(--text));
-}
-
 .homePortalCard.is-video {
   --portal-accent: color-mix(in srgb, #3279a8 84%, var(--text));
 }
@@ -831,25 +827,34 @@ textarea {
   color: var(--muted);
 }
 
-.catalogToolbar {
-  display: flex;
+.pageContextBar {
+  display: grid;
+  box-sizing: border-box;
+  min-height: 68px;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin: 18px 0 22px;
+  gap: 12px;
+  margin: 0;
+  padding: 12px 0 16px;
 }
 
-.catalogToolbar .breadcrumbs {
+.pageContextBar > .breadcrumbs {
+  align-self: center;
   margin: 0;
 }
 
-.catalogSummary {
+.pageContextActions {
   display: flex;
+  min-width: 0;
   align-items: center;
   justify-content: flex-end;
   gap: 7px;
-  flex: 0 0 auto;
   color: var(--muted);
+}
+
+.pageContextBar + .tagLibrary,
+.pageContextBar + .mediaLibrary {
+  margin-top: 0;
 }
 
 .resultCount {
@@ -1006,7 +1011,14 @@ textarea {
 }
 
 .bookCardSoda {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   color: color-mix(in srgb, var(--accent) 72%, var(--muted));
+}
+
+.bookCardSoda > svg {
+  flex: 0 0 auto;
 }
 
 .bookCardWords {
@@ -1060,8 +1072,7 @@ textarea {
   color: var(--muted);
 }
 
-.tagLibrary,
-.tagDetailHeader {
+.tagLibrary {
   display: grid;
   gap: 20px;
 }
@@ -1071,11 +1082,12 @@ textarea {
 }
 
 .tagDetailHeader {
-  margin: 26px 0 32px;
+  display: grid;
+  gap: 8px;
+  margin: 0 0 28px;
 }
 
-.tagLibraryHeader,
-.tagDetailHeader {
+.tagLibraryHeader {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1093,8 +1105,7 @@ textarea {
   color: var(--accent);
 }
 
-.tagLibraryHeader h1,
-.tagDetailHeader h1 {
+.tagLibraryHeader h1 {
   margin: 0;
   font-size: 28px;
   line-height: 1.25;
@@ -1535,10 +1546,32 @@ textarea {
   border-bottom: 1px solid var(--border);
 }
 
-.tagDetailHeader > div {
-  display: grid;
-  gap: 7px;
+.tagDetailHeadingRow {
+  display: flex;
   min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.tagDetailHeadingRow h1 {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 760;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tagDetailActions {
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
 }
 
 .tagDetailDescription {
@@ -2679,108 +2712,6 @@ mark {
   text-align: center;
 }
 
-.readerLineHeightControl {
-  display: grid;
-  grid-template-columns: minmax(150px, 1fr) 32px;
-  align-items: center;
-  gap: 10px;
-  width: min(220px, 100%);
-  height: 36px;
-  justify-self: end;
-}
-
-.readerLineHeightSlider {
-  position: relative;
-  height: 36px;
-}
-
-.readerLineHeightTrack {
-  position: absolute;
-  top: 12px;
-  right: 8px;
-  left: 8px;
-  height: 3px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--border);
-}
-
-.readerLineHeightTrack::before {
-  display: block;
-  width: var(--reader-line-height-progress);
-  height: 100%;
-  border-radius: inherit;
-  background: var(--accent);
-  content: "";
-}
-
-.readerLineHeightSlider input {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  width: 100%;
-  height: 26px;
-  margin: 0;
-  appearance: none;
-  background: transparent;
-  cursor: pointer;
-}
-
-.readerLineHeightSlider input::-webkit-slider-runnable-track {
-  height: 3px;
-  background: transparent;
-}
-
-.readerLineHeightSlider input::-webkit-slider-thumb {
-  width: 16px;
-  height: 16px;
-  margin-top: -6px;
-  appearance: none;
-  border: 3px solid var(--surface);
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 34%, var(--border));
-}
-
-.readerLineHeightSlider input::-moz-range-track {
-  height: 3px;
-  background: transparent;
-}
-
-.readerLineHeightSlider input::-moz-range-thumb {
-  width: 10px;
-  height: 10px;
-  border: 3px solid var(--surface);
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 34%, var(--border));
-}
-
-.readerLineHeightTicks {
-  position: absolute;
-  right: 8px;
-  bottom: 6px;
-  left: 8px;
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  place-items: center;
-}
-
-.readerLineHeightTicks i {
-  width: 2px;
-  height: 2px;
-  border-radius: 50%;
-  background: var(--muted);
-}
-
-.readerLineHeightControl output {
-  color: var(--text);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  font-weight: 650;
-  text-align: right;
-}
-
 .settingMetaToggles {
   display: flex;
   flex-wrap: wrap;
@@ -2829,38 +2760,37 @@ mark {
 
 .settingToggleTrack {
   position: relative;
-  width: 30px;
-  height: 18px;
+  width: 32px;
+  height: 19px;
   flex: 0 0 auto;
-  border: 1px solid color-mix(in srgb, var(--muted) 55%, var(--border));
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--muted) 9%, var(--surface));
-  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+  border: 0;
+  border-radius: 999px;
+  background: var(--border);
+  transition: background-color 140ms ease;
 }
 
 .settingToggleTrack > span {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--muted) 76%, var(--surface));
+  top: 3px;
+  left: 3px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 16%);
   transition: transform 140ms ease, background-color 140ms ease;
 }
 
 .settingToggle input:checked ~ .settingToggleTrack {
-  border-color: var(--accent);
   background: var(--accent);
 }
 
 .settingToggle input:checked ~ .settingToggleTrack > span {
-  background: #fff;
-  transform: translateX(12px);
+  transform: translateX(13px);
 }
 
 .settingToggle input:focus-visible ~ .settingToggleTrack {
-  outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--accent) 28%, transparent);
   outline-offset: 2px;
 }
 
@@ -3129,16 +3059,6 @@ mark {
   line-height: 1.25;
 }
 
-.mediaLibraryActions {
-  display: flex;
-  width: min(330px, 48%);
-  min-width: 0;
-  flex: 0 1 330px;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 7px;
-}
-
 .mediaSortMenu,
 .mediaBrowseMenu {
   position: relative;
@@ -3389,10 +3309,16 @@ mark {
   color: var(--muted);
 }
 
-.mediaLibraryActions .mediaSearchForm {
+.pageContextActions .mediaSearchForm {
   width: min(280px, 100%);
+  height: 38px;
   min-width: 0;
   flex: 0 1 280px;
+}
+
+.pageContextActions .mediaSearchForm input {
+  height: 36px;
+  padding-block: 0;
 }
 
 .mediaSearchForm input {
@@ -3578,6 +3504,7 @@ mark {
   min-width: 0;
   align-content: start;
   gap: 13px;
+  scroll-margin-top: 76px;
 }
 
 .mediaSearchSummary {
@@ -3814,6 +3741,30 @@ mark {
 .mediaVideoCard .mediaCardCopy {
   gap: 4px;
   padding: 10px 11px 11px;
+}
+
+.mediaVideoByline {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.mediaVideoAuthor {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mediaVideoPublishedAt {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .mediaVideoTitleLink {
@@ -7395,7 +7346,7 @@ mark {
 .analyticsMetricPanel {
   padding: 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 9px;
   background: var(--surface);
   box-shadow: var(--shadow);
 }
@@ -9622,7 +9573,6 @@ a.analyticsSearchTag:focus-visible {
 
   .segmentedControl,
   .fontSizeStepper,
-  .readerLineHeightControl,
   .settingPalettePicker {
     justify-self: end;
     margin-left: auto;
@@ -9635,7 +9585,6 @@ a.analyticsSearchTag:focus-visible {
 
   /* In-reader bottom sheet settings */
   .readerSettingsPanel .fontSizeStepper,
-  .readerSettingsPanel .readerLineHeightControl,
   .readerSettingsPanel .readerSettingRow > :last-child {
     justify-self: end;
     margin-left: auto;
@@ -9721,10 +9670,6 @@ a.analyticsSearchTag:focus-visible {
     margin-bottom: 100px;
   }
 
-  .readerLineHeightControl {
-    width: min(280px, 100%);
-  }
-
   .settingsGrid {
     grid-template-columns: 1fr;
   }
@@ -9745,16 +9690,6 @@ a.analyticsSearchTag:focus-visible {
     width: min(60%, 360px);
     min-width: 0;
     flex: 1 1 220px;
-  }
-
-  .mediaLibraryActions {
-    width: min(220px, 65%);
-    flex: 0 1 220px;
-  }
-
-  .mediaLibraryActions .mediaSearchForm {
-    width: min(180px, 100%);
-    flex-basis: 180px;
   }
 
   .mediaExplorer {
@@ -12569,7 +12504,7 @@ a.analyticsSearchTag:focus-visible {
   grid-template-columns: 210px minmax(0, 1fr);
   align-items: start;
   gap: 30px;
-  margin: 16px 0 64px;
+  margin: 0 0 64px;
 }
 
 .userWorkspaceSidebar {
@@ -12795,20 +12730,29 @@ a.analyticsSearchTag:focus-visible {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  padding: 0 11px;
+  border: 0;
+  border-radius: 7px;
+  padding: 0 9px;
   background: var(--accent);
-  color: #fff;
+  color: #fffaf2;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 22%, transparent);
   cursor: pointer;
   font-size: 12px;
   font-weight: 650;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.userPanel .accountCheckinButton:hover:not(:disabled),
+.userPanel .accountCheckinButton:focus-visible:not(:disabled) {
+  background: var(--accent-strong);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
 .userPanel .accountCheckinButton:disabled {
-  border-color: var(--border);
-  background: color-mix(in srgb, var(--surface) 88%, var(--bg-soft));
+  border: 0;
+  background: transparent;
   color: var(--muted);
+  box-shadow: none;
   cursor: default;
 }
 
@@ -12818,18 +12762,18 @@ a.analyticsSearchTag:focus-visible {
   height: 32px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid var(--border);
-  border-radius: 5px;
+  border: 0;
+  border-radius: 50%;
   padding: 0;
-  background: color-mix(in srgb, var(--surface) 88%, var(--bg-soft));
+  background: transparent;
   color: var(--muted);
   cursor: pointer;
 }
 
 .userPanel .accountLeaderboardButton:hover,
 .userPanel .accountLeaderboardButton:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 36%, var(--border));
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  border: 0;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--accent);
 }
 
@@ -13606,12 +13550,6 @@ a.analyticsSearchTag:focus-visible {
   height: 14px;
 }
 
-@media (min-width: 821px) {
-  .userWorkspaceShell .userMenu {
-    display: none;
-  }
-}
-
 @media (max-width: 820px) {
   .userWorkspaceShell {
     width: min(100% - 24px, 1180px);
@@ -13619,7 +13557,6 @@ a.analyticsSearchTag:focus-visible {
 
   .userWorkspaceLayout {
     display: block;
-    margin-top: 8px;
   }
 
   .userWorkspaceSidebar {
@@ -14316,15 +14253,6 @@ a.analyticsSearchTag:focus-visible {
 
 .stationConversation .stationReplyForm button .stationSendLabel,
 .adminStationConversation .stationReplyForm button .stationSendLabel {
-  display: none;
-}
-
-.stationConversation .stationReplyForm button .stationSendLabel {
-  display: inline;
-  white-space: nowrap;
-}
-
-.stationConversation .stationReplyForm button .stationSendIcon {
   display: none;
 }
 
@@ -15565,34 +15493,33 @@ a.analyticsSearchTag:focus-visible {
 .tagVisibilitySlider {
   position: relative;
   display: block;
-  width: 30px;
-  height: 18px;
+  width: 32px;
+  height: 19px;
   flex: 0 0 auto;
-  border: 1px solid color-mix(in srgb, var(--muted) 55%, var(--border));
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--muted) 9%, var(--surface));
-  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+  border: 0;
+  border-radius: 999px;
+  background: var(--border);
+  transition: background-color 140ms ease;
 }
 
 .tagVisibilitySlider > span {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--muted) 76%, var(--surface));
+  top: 3px;
+  left: 3px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 16%);
   transition: transform 140ms ease, background-color 140ms ease;
 }
 
 .tagVisibilityControl[aria-checked="true"] .tagVisibilitySlider {
-  border-color: var(--accent);
   background: var(--accent);
 }
 
 .tagVisibilityControl[aria-checked="true"] .tagVisibilitySlider > span {
-  background: #fff;
-  transform: translateX(12px);
+  transform: translateX(13px);
 }
 
 .tagPreferenceAction {
@@ -17162,7 +17089,8 @@ a.analyticsSearchTag:focus-visible {
 }
 
 .novelSourceFilterButton:hover,
-.novelSourceFilterButton:focus-visible {
+.novelSourceFilterButton:focus-visible,
+.novelSourceFilterButton.isActive {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent);
 }
@@ -17212,6 +17140,28 @@ a.analyticsSearchTag:focus-visible {
   color: var(--muted);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+
+.novelSourceFilterMenu .novelFilterSectionLabel {
+  padding: 7px 9px 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.novelSourceFilterMenu .novelFilterSectionLabel:not(:first-child) {
+  margin-top: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  padding-top: 9px;
+}
+
+.novelSourceFilterMenu a > svg {
+  grid-column: 3;
+}
+
+.novelSortMenu {
+  width: 156px;
 }
 
 .readerTitle > div {
@@ -17291,7 +17241,6 @@ a.analyticsSearchTag:focus-visible {
 }
 
 .novelAccessGate strong,
-.novelAccessGate p,
 .novelAccessGate small {
   display: block;
   margin: 0;
@@ -17302,7 +17251,6 @@ a.analyticsSearchTag:focus-visible {
   font-weight: 650;
 }
 
-.novelAccessGate p,
 .novelAccessGate small {
   margin-top: 4px;
   color: var(--muted);
@@ -19285,22 +19233,6 @@ a.analyticsSearchTag:focus-visible {
 
 .adminNovelUploadForm .adminNovelFileField {
   min-width: 220px;
-}
-
-.stationChatWorkspace .stationConversation .stationReplyForm button,
-.adminInboxWorkspace .adminStationConversation .stationReplyForm button {
-  display: inline-flex;
-  width: auto;
-  min-width: 72px;
-  height: 36px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 0;
-  border-radius: 5px;
-  padding: 0 13px;
-  background: var(--accent);
-  color: #fff;
 }
 
 .stationNewThread.isCompact > summary,

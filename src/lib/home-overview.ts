@@ -38,7 +38,6 @@ export function getHomeOverview(authenticated: boolean): Partial<Record<HomePort
   ).get() as { count: number; updated: string | null };
   const overview: Partial<Record<HomePortalCardKey, HomeOverviewItem>> = {
     novels: { count: novel.count, updatedAt: novel.updated },
-    recent: { count: novel.count, updatedAt: novel.updated },
     announcement: { count: announcement.count, updatedAt: parseSqliteTime(announcement.updated) },
     tags: { count: tags.count, updatedAt: parseSqliteTime(tags.updated) },
   };

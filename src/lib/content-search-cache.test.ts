@@ -8,11 +8,9 @@ import test from "node:test";
 test("bounds, expires, clones, and invalidates cached content search results", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-search-cache-"));
   const previousDatabasePath = process.env.DATABASE_PATH;
-  const previousSearchPath = process.env.CONTENT_SEARCH_DB_PATH;
   const previousSettingsPath = process.env.ADMIN_SETTINGS_PATH;
   const databasePath = path.join(root, "novels.db");
   process.env.DATABASE_PATH = databasePath;
-  process.env.CONTENT_SEARCH_DB_PATH = path.join(root, "content-search.db");
   process.env.ADMIN_SETTINGS_PATH = path.join(root, "settings.json");
 
   let db: DatabaseSync | undefined;
@@ -93,8 +91,6 @@ test("bounds, expires, clones, and invalidates cached content search results", a
     delete (globalThis as typeof globalThis & { novelReaderSearchResultCache?: unknown }).novelReaderSearchResultCache;
     if (previousDatabasePath === undefined) delete process.env.DATABASE_PATH;
     else process.env.DATABASE_PATH = previousDatabasePath;
-    if (previousSearchPath === undefined) delete process.env.CONTENT_SEARCH_DB_PATH;
-    else process.env.CONTENT_SEARCH_DB_PATH = previousSearchPath;
     if (previousSettingsPath === undefined) delete process.env.ADMIN_SETTINGS_PATH;
     else process.env.ADMIN_SETTINGS_PATH = previousSettingsPath;
     fs.rmSync(root, { recursive: true, force: true });

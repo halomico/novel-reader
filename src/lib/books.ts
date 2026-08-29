@@ -48,6 +48,10 @@ export type NovelListResult = {
   message?: string;
 };
 
+export type NovelCatalogSort = "updated" | "name" | "words";
+export type NovelCatalogSortOrder = "asc" | "desc";
+export type NovelAccessFilter = "all" | "free" | "soda";
+
 const DEFAULT_PAGE_SIZE = 15;
 const MIN_PAGE_SIZE = 1;
 const MAX_PAGE_SIZE = 100;
@@ -125,6 +129,38 @@ export function normalizePageSize(value: number | string | undefined): number {
   return Math.min(Math.max(Math.floor(pageSize), MIN_PAGE_SIZE), MAX_PAGE_SIZE);
 }
 
+export function normalizeNovelCatalogSort(value: string | undefined): NovelCatalogSort {
+  return value === "name" || value === "words" ? value : "updated";
+}
+
+export function defaultNovelCatalogSortOrder(sortBy: NovelCatalogSort): NovelCatalogSortOrder {
+  return sortBy === "name" ? "asc" : "desc";
+}
+
+export function normalizeNovelCatalogSortOrder(
+  value: string | undefined,
+  sortBy: NovelCatalogSort,
+): NovelCatalogSortOrder {
+  return value === "asc" || value === "desc" ? value : defaultNovelCatalogSortOrder(sortBy);
+}
+
+export function normalizeNovelAccessFilter(value: string | undefined): NovelAccessFilter {
+  return value === "free" || value === "soda" ? value : "all";
+}
+
+function novelAccessCondition(access: NovelAccessFilter): string {
+  if (access === "soda") return "access_mode = 'soda' AND soda_price > 0";
+  if (access === "free") return "(access_mode <> 'soda' OR soda_price <= 0)";
+  return "";
+}
+
+function novelCatalogOrder(sortBy: NovelCatalogSort, sortOrder: NovelCatalogSortOrder): string {
+  const direction = sortOrder === "asc" ? "ASC" : "DESC";
+  if (sortBy === "name") return `title COLLATE NOCASE ${direction}, id ${direction}`;
+  if (sortBy === "words") return `word_count ${direction}, id ${direction}`;
+  return `mtime_ms ${direction}, id ${direction}`;
+}
+
 function normalizePage(page: number, totalPages: number): number {
   if (!Number.isFinite(page) || page < 1) {
     return 1;
@@ -173,10 +209,23 @@ export function listNovelsByIds(novelIds: number[]): Novel[] {
   });
 }
 
-function listRandomNovels(pageSize: number, seed: string, sourceId?: number): Novel[] {
+function listRandomNovels(
+  pageSize: number,
+  seed: string,
+  sourceId: number | undefined,
+  access: NovelAccessFilter,
+): Novel[] {
   const db = getDb();
-  if (!sourceId) return listNovelsByIds(sampleNovelIds(db, pageSize, seed));
-  const sourceIds = (db.prepare("SELECT id FROM novels WHERE source_id = ? ORDER BY id ASC").all(sourceId) as Array<{ id: number }>)
+  if (!sourceId && access === "all") return listNovelsByIds(sampleNovelIds(db, pageSize, seed));
+  const filters: string[] = [];
+  const values: number[] = [];
+  if (sourceId) {
+    filters.push("source_id = ?");
+    values.push(sourceId);
+  }
+  const accessCondition = novelAccessCondition(access);
+  if (accessCondition) filters.push(accessCondition);
+  const sourceIds = (db.prepare(`SELECT id FROM novels WHERE ${filters.join(" AND ")} ORDER BY id ASC`).all(...values) as Array<{ id: number }>)
     .map((row) => row.id);
   return listNovelsByIds(sampleNovelIdsFromList(sourceIds, pageSize, seed));
 }
@@ -188,11 +237,19 @@ export function planCatalogPage(promotedIds: readonly number[], pageSize: number
   };
 }
 
-function listCatalogNovels(pageSize: number, offset: number, sourceId?: number | null): Novel[] {
+function listCatalogNovels(
+  pageSize: number,
+  offset: number,
+  sourceId: number | null,
+  sortBy: NovelCatalogSort,
+  sortOrder: NovelCatalogSortOrder,
+  access: NovelAccessFilter,
+): Novel[] {
   const db = getDb();
   const settings = getCatalogFeatureSettings();
   const scopedSourceId = Number.isInteger(sourceId) && Number(sourceId) > 0 ? Number(sourceId) : null;
-  const manualIds = settings.manualPinnedEnabled
+  const usePromotions = sortBy === "updated" && sortOrder === "desc" && access === "all";
+  const manualIds = usePromotions && settings.manualPinnedEnabled
     ? (
         scopedSourceId
           ? (db.prepare(
@@ -208,7 +265,7 @@ function listCatalogNovels(pageSize: number, offset: number, sourceId?: number |
   const pinnedIds = new Set(manualIds);
   const intervalMs = settings.randomRecommendationIntervalMinutes * 60_000;
   const bucket = Math.floor(Date.now() / intervalMs);
-  const randomIds = settings.randomRecommendationsEnabled
+  const randomIds = usePromotions && settings.randomRecommendationsEnabled
     ? sampleRecommendationPoolNovelIds(
         db,
         settings.randomRecommendationCount,
@@ -233,6 +290,8 @@ function listCatalogNovels(pageSize: number, offset: number, sourceId?: number |
     filters.push("source_id = ?");
     values.push(scopedSourceId);
   }
+  const accessCondition = novelAccessCondition(access);
+  if (accessCondition) filters.push(accessCondition);
   if (promotedIds.length) {
     filters.push(`id NOT IN (${promotedIds.map(() => "?").join(", ")})`);
     values.push(...promotedIds);
@@ -243,17 +302,29 @@ function listCatalogNovels(pageSize: number, offset: number, sourceId?: number |
       `SELECT ${NOVEL_SELECT_COLUMNS}
        FROM novels
        ${whereSql}
-       ORDER BY title COLLATE NOCASE ASC, id ASC
+       ORDER BY ${novelCatalogOrder(sortBy, sortOrder)}
        LIMIT ? OFFSET ?`,
     )
     .all(...values, remaining, pagePlan.baseOffset) as Novel[];
   return [...promotedBooks, ...baseBooks];
 }
 
-export function listNovels(params: { page?: number; q?: string; pageSize?: number; randomSeed?: string; sourceId?: number }): NovelListResult {
+export function listNovels(params: {
+  page?: number;
+  q?: string;
+  pageSize?: number;
+  randomSeed?: string;
+  sourceId?: number;
+  sortBy?: NovelCatalogSort;
+  sortOrder?: NovelCatalogSortOrder;
+  access?: NovelAccessFilter;
+}): NovelListResult {
   const db = getDb();
   const pageSize = normalizePageSize(params.pageSize);
   const query = (params.q || "").trim();
+  const sortBy = normalizeNovelCatalogSort(params.sortBy);
+  const sortOrder = normalizeNovelCatalogSortOrder(params.sortOrder, sortBy);
+  const access = normalizeNovelAccessFilter(params.access);
 
   if (query) {
     const validation = parseSearchQuery(query, { mode: "title" });
@@ -270,27 +341,34 @@ export function listNovels(params: { page?: number; q?: string; pageSize?: numbe
     }
 
     const search = buildTitleSearchSql(validation.query);
-    const sourceClause = params.sourceId ? " AND source_id = ?" : "";
-    const sourceValues = params.sourceId ? [params.sourceId] : [];
+    const filters = [search.whereSql];
+    const values: Array<string | number> = [...search.values];
+    if (params.sourceId) {
+      filters.push("source_id = ?");
+      values.push(params.sourceId);
+    }
+    const accessCondition = novelAccessCondition(access);
+    if (accessCondition) filters.push(accessCondition);
+    const whereSql = filters.join(" AND ");
     const totalBooks = db
       .prepare(
         `SELECT COUNT(*) AS count
          FROM novels
-         WHERE ${search.whereSql}${sourceClause}`,
+         WHERE ${whereSql}`,
       )
-      .get(...search.values, ...sourceValues) as { count: number };
+      .get(...values) as { count: number };
     const totalPages = Math.ceil(totalBooks.count / pageSize);
     const page = normalizePage(params.page || 1, totalPages);
     const offset = (page - 1) * pageSize;
     const books = db
       .prepare(
-        `SELECT ${NOVEL_SELECT_COLUMNS}
+         `SELECT ${NOVEL_SELECT_COLUMNS}
          FROM novels
-         WHERE ${search.whereSql}${sourceClause}
-         ORDER BY title COLLATE NOCASE ASC, id ASC
+         WHERE ${whereSql}
+         ORDER BY ${novelCatalogOrder(sortBy, sortOrder)}
          LIMIT ? OFFSET ?`,
       )
-      .all(...search.values, ...sourceValues, pageSize, offset) as Novel[];
+      .all(...values, pageSize, offset) as Novel[];
 
     return {
       books,
@@ -302,15 +380,22 @@ export function listNovels(params: { page?: number; q?: string; pageSize?: numbe
     };
   }
 
-  const sourceFilter = params.sourceId ? " WHERE source_id = ?" : "";
-  const sourceValues = params.sourceId ? [params.sourceId] : [];
+  const filters: string[] = [];
+  const values: number[] = [];
+  if (params.sourceId) {
+    filters.push("source_id = ?");
+    values.push(params.sourceId);
+  }
+  const accessCondition = novelAccessCondition(access);
+  if (accessCondition) filters.push(accessCondition);
+  const whereSql = filters.length ? ` WHERE ${filters.join(" AND ")}` : "";
   const totalBooks = db
-    .prepare(`SELECT COUNT(*) AS count FROM novels${sourceFilter}`)
-    .get(...sourceValues) as { count: number };
+    .prepare(`SELECT COUNT(*) AS count FROM novels${whereSql}`)
+    .get(...values) as { count: number };
   const randomSeed = (params.randomSeed || "").trim().slice(0, 64);
   if (randomSeed) {
     return {
-      books: listRandomNovels(pageSize, randomSeed, params.sourceId),
+      books: listRandomNovels(pageSize, randomSeed, params.sourceId, access),
       page: 1,
       pageSize,
       totalBooks: totalBooks.count,
@@ -323,7 +408,7 @@ export function listNovels(params: { page?: number; q?: string; pageSize?: numbe
   const offset = (page - 1) * pageSize;
 
   // Always run promotion (pinned + timed random pool), including when a library/source is selected.
-  const books = listCatalogNovels(pageSize, offset, params.sourceId || null);
+  const books = listCatalogNovels(pageSize, offset, params.sourceId || null, sortBy, sortOrder, access);
 
   return {
     books,
@@ -364,6 +449,32 @@ export function getNovelById(id: number): Novel | null {
     .get(id) as Novel | undefined;
 
   return book || null;
+}
+
+export function getAdjacentNovels(book: Pick<Novel, "id" | "mtime_ms" | "source_id">): {
+  previous: Novel | null;
+  next: Novel | null;
+} {
+  const db = getDb();
+  const sourceCondition = book.source_id ? "AND source_id = ?" : "AND source_id IS NULL";
+  const sourceValues = book.source_id ? [book.source_id] : [];
+  const previous = db.prepare(
+    `SELECT ${NOVEL_SELECT_COLUMNS}
+     FROM novels
+     WHERE (mtime_ms > ? OR (mtime_ms = ? AND id > ?))
+       ${sourceCondition}
+     ORDER BY mtime_ms ASC, id ASC
+     LIMIT 1`,
+  ).get(book.mtime_ms, book.mtime_ms, book.id, ...sourceValues) as Novel | undefined;
+  const next = db.prepare(
+    `SELECT ${NOVEL_SELECT_COLUMNS}
+     FROM novels
+     WHERE (mtime_ms < ? OR (mtime_ms = ? AND id < ?))
+       ${sourceCondition}
+     ORDER BY mtime_ms DESC, id DESC
+     LIMIT 1`,
+  ).get(book.mtime_ms, book.mtime_ms, book.id, ...sourceValues) as Novel | undefined;
+  return { previous: previous || null, next: next || null };
 }
 
 export async function readNovelContent(book: Pick<Novel, "relative_path"> & Partial<Pick<Novel, "id" | "storage_mode">>): Promise<string> {

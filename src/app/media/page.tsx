@@ -9,6 +9,7 @@ import { MediaConnectionHint } from "@/components/MediaConnectionHint";
 import { MediaPublicSort } from "@/components/MediaPublicSort";
 import { MediaSearchForm } from "@/components/MediaSearchForm";
 import { MediaVideoCard } from "@/components/MediaVideoCard";
+import { PageContextBar } from "@/components/PageContextBar";
 import { Pagination } from "@/components/Pagination";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getVideoThumbnailSettings } from "@/lib/config";
@@ -33,7 +34,7 @@ import { formatMediaDuration } from "@/lib/media-format";
 import { getMediaPublicUrlForKind } from "@/lib/media-storage-config";
 import { getCurrentUser } from "@/lib/user-auth";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
-import { Breadcrumbs, type BreadcrumbItem } from "@/components/Breadcrumbs";
+import type { BreadcrumbItem } from "@/components/Breadcrumbs";
 import { checkContentAccess, hasScopedContentAccessRules } from "@/lib/content-access";
 import { directMediaThumbnailUrl } from "@/lib/media-thumbnail-url";
 import { getRequestLocale, localizeText, normalizeSearchText } from "@/lib/locale-server";
@@ -222,6 +223,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
   const displayAssets = await Promise.all(result.assets.map(async (asset) => ({
     ...asset,
     title: await localizeText(asset.title, locale),
+    artist: asset.artist ? await localizeText(asset.artist, locale) : asset.artist,
     description: await localizeText(asset.description, locale),
   })));
   const displayCategories = await Promise.all(videoCategories.map(async (category) => ({
@@ -298,40 +300,36 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
       <MediaConnectionHint origin={mediaPublicOrigin} />
       <main className="appShell">
       <SiteHeader currentUser={user} />
+      <PageContextBar items={breadcrumbItems}>
+        <MediaPublicSort
+          kind={kind}
+          folder={kind === "video" ? "" : result.folder}
+          query={result.query}
+          category={categoryParam}
+          tag={tagParam}
+          tags={displayVideoTags}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          locale={locale}
+        />
+        <MediaSearchForm
+          action="/media"
+          query={result.query}
+          placeholder={searchPlaceholder}
+          clearHref={mediaHref(kind, kind === "video" ? "" : result.folder, "", categoryParam, sortBy, sortOrder, tagParam)}
+          clearLabel={uiText(locale, "清除搜索")}
+          submitLabel={uiText(locale, "搜索资源")}
+          hiddenFields={[
+            { name: "kind", value: kind },
+            ...(sortBy !== defaultSortBy ? [{ name: "sort", value: sortBy }] : []),
+            ...(sortOrder !== (sortBy === "name" ? "asc" : "desc") ? [{ name: "order", value: sortOrder }] : []),
+            ...(categoryParam ? [{ name: "category", value: categoryParam }] : []),
+            ...(tagParam ? [{ name: "tag", value: tagParam }] : []),
+            ...(kind !== "video" && result.folder ? [{ name: "folder", value: result.folder }] : []),
+          ]}
+        />
+      </PageContextBar>
       <section className="mediaLibrary">
-        <header className="mediaLibraryHeader">
-          <Breadcrumbs items={breadcrumbItems} />
-          <div className="mediaLibraryActions">
-            <MediaPublicSort
-              kind={kind}
-              folder={kind === "video" ? "" : result.folder}
-              query={result.query}
-              category={categoryParam}
-              tag={tagParam}
-              tags={displayVideoTags}
-              sortBy={sortBy}
-              sortOrder={sortOrder}
-              locale={locale}
-            />
-            <MediaSearchForm
-              action="/media"
-              query={result.query}
-              placeholder={searchPlaceholder}
-              clearHref={mediaHref(kind, kind === "video" ? "" : result.folder, "", categoryParam, sortBy, sortOrder, tagParam)}
-              clearLabel={uiText(locale, "清除搜索")}
-              submitLabel={uiText(locale, "搜索资源")}
-              hiddenFields={[
-                { name: "kind", value: kind },
-                ...(sortBy !== defaultSortBy ? [{ name: "sort", value: sortBy }] : []),
-                ...(sortOrder !== (sortBy === "name" ? "asc" : "desc") ? [{ name: "order", value: sortOrder }] : []),
-                ...(categoryParam ? [{ name: "category", value: categoryParam }] : []),
-                ...(tagParam ? [{ name: "tag", value: tagParam }] : []),
-                ...(kind !== "video" && result.folder ? [{ name: "folder", value: result.folder }] : []),
-              ]}
-            />
-          </div>
-        </header>
-
         {kind === "video" ? (
           <nav className="mediaVideoChannels" aria-label={uiText(locale, "视频分类")}>
             <Link className={!categoryParam ? "isActive" : ""} href={mediaHref(kind, "", result.query, "", sortBy, sortOrder, tagParam)}>{uiText(locale, "全部")}</Link>
@@ -347,7 +345,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
           </nav>
         ) : null}
 
-        <div className="mediaExplorerContent">
+        <div className="mediaExplorerContent" id="media-results">
             {result.query ? (
               <p className="mediaSearchSummary">
                 “{result.query}” · {kind === "video"
@@ -369,6 +367,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
                       priority={index === 0}
                       eager={index < 8}
                       returnHref={videoListReturnHref}
+                      locale={locale}
                       key={asset.id}
                     />
                   ))}
@@ -410,6 +409,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
                 sort: sortBy === defaultSortBy ? undefined : sortBy,
                 order: sortOrder === (sortBy === "name" ? "asc" : "desc") ? undefined : sortOrder,
               }}
+              scrollTargetId={kind === "video" ? "media-results" : undefined}
             />
             <Pagination
               page={folderPage}

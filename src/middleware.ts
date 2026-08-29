@@ -26,6 +26,7 @@ import {
   type AppLocale,
 } from "@/lib/locale";
 import { getCurrentUserFromRequest, USER_SESSION_COOKIE } from "@/lib/user-auth";
+import { NOVEL_CATALOG_SEARCH_COOKIE } from "@/lib/ui-preferences";
 
 function bypassGlobalAccess(pathname: string): boolean {
   return (
@@ -77,11 +78,6 @@ function localeRedirect(request: NextRequest, locale: AppLocale): NextResponse |
     url.pathname = `${TRADITIONAL_PATH_PREFIX}${normalizedPath === "/" ? "" : normalizedPath}`;
     const response = NextResponse.redirect(url, 307);
     response.headers.set("Cache-Control", "private, no-store");
-    response.cookies.set(LOCALE_COOKIE, TRADITIONAL_LOCALE, {
-      maxAge: 365 * 24 * 60 * 60,
-      path: "/",
-      sameSite: "lax",
-    });
     return response;
   }
   return null;
@@ -127,6 +123,9 @@ function applyDocumentCachePolicy(
   pathname = stripLocalePath(request.nextUrl.pathname),
 ): NextResponse {
   const hasUserSession = request.cookies.has(USER_SESSION_COOKIE);
+  const usesNovelCatalogSearchPreference = pathname === "/novels" || pathname === "/novels/recent";
+  const hasBrowserLayoutPreference =
+    usesNovelCatalogSearchPreference && request.cookies.has(NOVEL_CATALOG_SEARCH_COOKIE);
   const isNovelPage = /^\/books\/[1-9]\d*(?:\/chapters\/[1-9]\d*)?$/.test(pathname);
   const cacheable = isPublicPageCacheCandidate({
     method: request.method,
@@ -134,6 +133,7 @@ function applyDocumentCachePolicy(
     searchParams: request.nextUrl.searchParams,
     accept: request.headers.get("accept"),
     hasUserSession,
+    hasBrowserLayoutPreference,
     isRscRequest: request.headers.has("rsc"),
     isRouterPrefetch:
       request.headers.has("next-router-prefetch") ||
@@ -152,7 +152,7 @@ function applyDocumentCachePolicy(
     response.headers.set("CDN-Cache-Control", cdnCacheControl);
     response.headers.set("Cloudflare-CDN-Cache-Control", cdnCacheControl);
     response.headers.set("X-Public-Cache", "guest");
-  } else if (hasUserSession) {
+  } else if (hasUserSession || hasBrowserLayoutPreference) {
     response.headers.set("CDN-Cache-Control", "no-store");
     response.headers.set("Cloudflare-CDN-Cache-Control", "no-store");
   }

@@ -1,47 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { getContentSearchDatabasePath, getDatabasePath } from "./config";
+import { getDatabasePath } from "./config";
 import { naturalSortKey } from "./natural-sort";
 
 type DbGlobal = typeof globalThis & {
   novelReaderDb?: DatabaseSync;
 };
-
-const LEGACY_SEARCH_TABLES = [
-  "novel_segments_fts",
-  "novel_segments",
-  "content_index_staging_terms",
-  "content_index_jobs",
-  "content_index_novel_state",
-  "content_search_terms",
-  "content_search_term_stats",
-  "search_index_state",
-] as const;
-
-function cleanupLegacySearchTables(db: DatabaseSync) {
-  db.exec("BEGIN");
-  try {
-    for (const tableName of LEGACY_SEARCH_TABLES) {
-      db.exec(`DROP TABLE IF EXISTS ${tableName};`);
-    }
-    db.exec("COMMIT");
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
-  }
-}
-
-function cleanupLegacyContentIndexFiles(databasePath: string) {
-  const legacyPath = path.join(path.dirname(databasePath), "content-index.db");
-  const protectedPaths = new Set([databasePath, getContentSearchDatabasePath()].map((filePath) => path.resolve(filePath)));
-  if (protectedPaths.has(path.resolve(legacyPath))) {
-    return;
-  }
-  for (const filePath of [legacyPath, `${legacyPath}-wal`, `${legacyPath}-shm`]) {
-    fs.rmSync(filePath, { force: true });
-  }
-}
 
 function migrateNovelsAllowDuplicateTitles(db: DatabaseSync) {
   const table = db
@@ -1066,7 +1031,6 @@ function initialize(db: DatabaseSync) {
   db.exec("PRAGMA foreign_keys = ON;");
   db.exec("PRAGMA busy_timeout = 5000;");
   db.exec("PRAGMA journal_mode = WAL;");
-  cleanupLegacySearchTables(db);
   migrateNovelsAllowDuplicateTitles(db);
   db.exec(`
     CREATE TABLE IF NOT EXISTS app_metadata (
@@ -1988,7 +1952,6 @@ export function getDb(): DatabaseSync {
 
   const databasePath = getDatabasePath();
   fs.mkdirSync(path.dirname(databasePath), { recursive: true });
-  cleanupLegacyContentIndexFiles(databasePath);
 
   const db = new DatabaseSync(databasePath);
   db.function("natural_sort_key", { deterministic: true }, naturalSortKey);

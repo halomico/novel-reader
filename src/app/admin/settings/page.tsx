@@ -193,6 +193,12 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 <option value="hidden">关闭</option>
               </AdminSelect>
             </label>
+            <AdminSwitchRow
+              name="novelCatalogSearchExpanded"
+              title="小说搜索框默认展开"
+              description="只影响尚未在浏览器里选择个人布局的访客。"
+              defaultChecked={settings.novelCatalogSearchExpanded}
+            />
             <label className="adminCompactField">
               <span>默认明暗模式</span>
               <AdminSelect name="adminTheme" defaultValue={settings.adminTheme}>

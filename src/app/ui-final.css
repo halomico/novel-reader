@@ -657,15 +657,15 @@
 }
 
 .userMenuPanel.hasIdentity {
-  width: min(152px, calc(100vw - 24px));
-  max-width: min(152px, calc(100vw - 24px));
+  width: min(104px, calc(100vw - 24px));
+  max-width: min(104px, calc(100vw - 24px));
 }
 
 .userMenuPanel a,
 .userMenuPanel button {
-  min-height: 36px;
-  gap: 9px;
-  padding: 7px 9px;
+  min-height: 34px;
+  gap: 8px;
+  padding: 6px 7px;
   font-family: var(--font-ui);
   font-size: 13.5px;
   font-weight: 500;
@@ -684,10 +684,7 @@
 }
 
 .novelSourceFilterMenu a.isAllLibraries {
-  margin-top: 4px;
-  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  border-radius: 0 0 7px 7px;
-  padding-top: 9px;
+  border-radius: 7px;
 }
 
 .homePortalGrid {
@@ -1239,7 +1236,8 @@
   background: var(--reader-theme-swatch);
 }
 
-.readerSettingRow.isFontSize > .fontSizeStepper {
+.readerSettingRow.isFontSize > .fontSizeStepper,
+.readerSettingRow.isLineHeight > .fontSizeStepper {
   display: grid;
   width: 122px;
   grid-template-columns: 34px 48px 34px;
@@ -1248,14 +1246,16 @@
   background: color-mix(in srgb, var(--reader-border) 34%, transparent);
 }
 
-.readerSettingRow.isFontSize .fontSizeStepper button {
+.readerSettingRow.isFontSize .fontSizeStepper button,
+.readerSettingRow.isLineHeight .fontSizeStepper button {
   width: 34px;
   height: 32px;
   border: 0;
   background: transparent;
 }
 
-.readerSettingRow.isFontSize .fontSizeStepper output {
+.readerSettingRow.isFontSize .fontSizeStepper output,
+.readerSettingRow.isLineHeight .fontSizeStepper output {
   border: 0;
   color: var(--reader-text);
 }
@@ -1268,87 +1268,15 @@
   padding-inline: 6px;
 }
 
-.readerLineHeightControl {
-  display: block;
-  width: min(220px, 100%);
-  height: 38px;
-}
-
-.readerSettingRow.isLineHeight > .readerLineHeightControl {
-  display: block;
-  width: min(220px, 100%);
-  height: 38px;
-}
-
 @media (min-width: 761px) {
   .readerSettingRow.isThemes > div {
     justify-content: flex-end;
   }
 
   .readerSettingRow.isFontSize > .fontSizeStepper,
-  .readerSettingRow.isLineHeight > .readerLineHeightControl {
+  .readerSettingRow.isLineHeight > .fontSizeStepper {
     justify-self: end;
   }
-}
-
-.readerLineHeightSlider {
-  position: relative;
-  height: 38px;
-  border-radius: 19px;
-  background: color-mix(in srgb, var(--reader-border, var(--border)) 62%, transparent);
-}
-
-.readerLineHeightEdge {
-  position: absolute;
-  z-index: 2;
-  top: 50%;
-  color: var(--reader-muted, var(--muted));
-  font-size: 13px;
-  line-height: 1;
-  pointer-events: none;
-  transform: translateY(-50%);
-}
-
-.readerLineHeightEdge.isSmall { left: 14px; }
-.readerLineHeightEdge.isLarge { right: 14px; }
-
-.readerLineHeightTrack {
-  top: 18px;
-  right: 44px;
-  left: 44px;
-  height: 2px;
-  background: color-mix(in srgb, var(--reader-muted, var(--muted)) 32%, transparent);
-}
-
-.readerLineHeightTrack::before {
-  background: var(--reader-accent, var(--accent));
-}
-
-.readerLineHeightSlider input {
-  inset: 0 36px;
-  width: auto;
-  height: 38px;
-}
-
-.readerLineHeightSlider input::-webkit-slider-runnable-track {
-  height: 2px;
-}
-
-.readerLineHeightSlider input::-webkit-slider-thumb {
-  width: 14px;
-  height: 14px;
-  margin-top: -6px;
-  border: 2px solid var(--reader-panel, var(--surface));
-  background: var(--reader-accent, var(--accent));
-  box-shadow: 0 1px 3px rgb(0 0 0 / 14%);
-}
-
-.readerLineHeightSlider input::-moz-range-thumb {
-  width: 10px;
-  height: 10px;
-  border: 2px solid var(--reader-panel, var(--surface));
-  background: var(--reader-accent, var(--accent));
-  box-shadow: 0 1px 3px rgb(0 0 0 / 14%);
 }
 
 .advancedTagSearchToolbar {
@@ -1680,8 +1608,11 @@
 }
 
 .stationChatWorkspace {
-  height: clamp(520px, calc(100dvh - 190px), 680px);
+  height: clamp(520px, calc(100dvh - 216px), 700px);
   min-height: 0;
+  grid-template-columns: minmax(232px, 276px) minmax(0, 1fr);
+  border-radius: 14px;
+  box-shadow: 0 10px 34px rgb(20 24 28 / 4%);
 }
 
 .stationChatWorkspace .stationConversation {
@@ -1691,6 +1622,11 @@
 .stationChatWorkspace .stationConversation .stationReplyForm,
 .adminInboxWorkspace .adminStationConversation .stationReplyForm {
   align-items: end;
+  grid-template-columns: minmax(0, 1fr) 40px;
+  gap: 7px;
+  min-height: 48px;
+  border-radius: 16px;
+  padding: 4px 5px 4px 13px;
 }
 
 .stationChatWorkspace .stationConversation .stationReplyForm textarea,
@@ -1700,6 +1636,43 @@
   max-height: 120px;
   overflow-y: auto;
   resize: none;
+}
+
+.stationChatWorkspace .stationConversation .stationReplyForm button,
+.adminInboxWorkspace .adminStationConversation .stationReplyForm button {
+  display: grid;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  place-items: center;
+  border-radius: 12px;
+  padding: 0;
+}
+
+.stationChatWorkspace .stationConversation .stationReplyForm button .stationSendLabel,
+.adminInboxWorkspace .adminStationConversation .stationReplyForm button .stationSendLabel {
+  display: none;
+}
+
+.stationChatWorkspace .stationConversation .stationReplyForm button .stationSendIcon,
+.adminInboxWorkspace .adminStationConversation .stationReplyForm button .stationSendIcon {
+  display: block;
+}
+
+.stationChatWorkspace .stationConversation .stationMessageList {
+  gap: 9px;
+  padding: 20px;
+}
+
+.stationChatWorkspace .stationConversation .stationMessageList article {
+  max-width: min(76%, 620px);
+  border-radius: 16px 16px 16px 5px;
+  padding: 10px 13px;
+}
+
+.stationChatWorkspace .stationConversation .stationMessageList article.isUser {
+  border-radius: 16px 16px 5px 16px;
 }
 
 .accountGrowthTools {
@@ -1829,17 +1802,6 @@ nav.accountGrowthTools > a + a {
 }
 
 @media (max-width: 820px) {
-  .siteHeader[data-bfcache-header-snapshot] {
-    pointer-events: none !important;
-    user-select: none;
-  }
-
-  .siteHeader[data-bfcache-header-snapshot],
-  .siteHeader[data-bfcache-header-snapshot] * {
-    animation: none !important;
-    transition: none !important;
-  }
-
   .bookTitle,
   .searchResultBody strong,
   .readingHistoryCopy strong,
@@ -1878,7 +1840,12 @@ nav.accountGrowthTools > a + a {
     grid-template-columns: 28px minmax(0, 1fr) auto;
     gap: 2px;
     padding: 3px 4px;
+    background: var(--surface);
     box-shadow: none;
+  }
+
+  .siteHeader.hasPrimaryNav .headerTools .searchForm.isPinnedOpen {
+    background: var(--surface);
   }
 
   .siteHeader.hasPrimaryNav:has(.searchForm.isDefaultOpen) {
@@ -2124,7 +2091,8 @@ nav.accountGrowthTools > a + a {
     flex: 0 0 28px;
   }
 
-  .readerSettingRow.isFontSize > .fontSizeStepper {
+  .readerSettingRow.isFontSize > .fontSizeStepper,
+  .readerSettingRow.isLineHeight > .fontSizeStepper {
     display: grid;
     width: 120px;
     grid-template-columns: 32px 52px 32px;
@@ -2133,16 +2101,10 @@ nav.accountGrowthTools > a + a {
     justify-self: end;
   }
 
-  .readerSettingRow.isFontSize .fontSizeStepper button {
+  .readerSettingRow.isFontSize .fontSizeStepper button,
+  .readerSettingRow.isLineHeight .fontSizeStepper button {
     width: 32px;
     height: 32px;
-  }
-
-  .readerSettingRow.isLineHeight > .readerLineHeightControl {
-    display: block;
-    width: min(210px, calc(100vw - 128px));
-    height: 34px;
-    margin-left: auto;
   }
 
   .readerSettingRow.isWidth {
@@ -2331,13 +2293,13 @@ nav.accountGrowthTools > a + a {
     position: sticky;
     z-index: 4;
     bottom: 0;
-    grid-template-columns: minmax(0, 1fr) 34px;
+    grid-template-columns: minmax(0, 1fr) 40px;
     align-items: end;
     gap: 6px;
-    min-height: 42px;
+    min-height: 48px;
     margin: 8px 8px calc(8px + env(safe-area-inset-bottom));
-    border-radius: 8px;
-    padding: 4px 4px 4px 10px;
+    border-radius: 16px;
+    padding: 4px 5px 4px 13px;
     box-shadow: none;
   }
 
@@ -2360,11 +2322,11 @@ nav.accountGrowthTools > a + a {
 
   .stationChatWorkspace .stationConversation .stationReplyForm button,
   .adminInboxWorkspace .adminStationConversation .stationReplyForm button {
-    width: 34px;
-    min-width: 34px;
-    height: 34px;
-    min-height: 34px;
-    border-radius: 6px;
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    min-height: 40px;
+    border-radius: 12px;
   }
 
   .stationChatWorkspace .stationConversation .stationReplyForm button .stationSendLabel {
@@ -2387,5 +2349,468 @@ nav.accountGrowthTools > a + a {
 
   .accountGrowthDetail {
     min-height: 0;
+  }
+}
+
+/* Shared layout rhythm and current interaction surfaces. */
+.searchModeMenu {
+  left: 0;
+}
+
+.messagesHeader {
+  min-height: 60px;
+  align-items: center;
+}
+
+.messagesHeader > span {
+  display: flex;
+  min-height: 60px;
+  align-items: center;
+}
+
+.messagesHeader .messagesTabs {
+  align-self: stretch;
+}
+
+.messagesTabs a {
+  position: relative;
+  min-height: 0;
+  border-bottom: 0;
+  padding: 8px 1px;
+}
+
+.messagesTabs a::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: transparent;
+  content: "";
+}
+
+.messagesTabs a:hover,
+.messagesTabs a:focus-visible,
+.messagesTabs a.isActive {
+  border-bottom-color: transparent;
+}
+
+.messagesTabs a.isActive::after {
+  background: var(--accent);
+}
+
+.messagesHeader.userContentHeader,
+.marketPageHeader.userContentHeader,
+.settingsHero.userContentHeader {
+  min-height: 48px;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  padding: 0;
+}
+
+.messagesHeader.userContentHeader > span,
+.marketPageHeader.userContentHeader > span,
+.settingsHero.userContentHeader > span {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 8px;
+}
+
+.messagesHeader.userContentHeader h1,
+.marketPageHeader.userContentHeader h1,
+.settingsHero.userContentHeader h1 {
+  margin: 0;
+  font-family: var(--font-title);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.userWorkspaceContent .messagesPage {
+  border-top: 0;
+}
+
+.marketPageHeader.userContentHeader {
+  display: flex;
+}
+
+.marketPageHeader.userContentHeader .marketBalances {
+  width: auto;
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
+.settingsPanel {
+  max-width: none;
+  gap: 0;
+}
+
+.settingsGrid {
+  gap: 0;
+}
+
+.settingBlock,
+.previewReader {
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.settingBlockHeader {
+  min-height: 42px;
+  padding: 14px 2px 8px;
+  border-bottom: 0;
+}
+
+.settingBlock h2 {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 680;
+}
+
+.settingRow {
+  padding-inline: 2px;
+}
+
+.previewReader {
+  padding: 16px 2px;
+}
+
+.activityLibrary {
+  gap: 10px;
+}
+
+.activityTabs,
+.favoriteTabs {
+  align-self: auto;
+  gap: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.activityTabs a,
+.favoriteTabs a {
+  padding: 6px 1px 8px;
+}
+
+.mediaVideoByline {
+  opacity: 0.82;
+}
+
+.readerNovelNavigation {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+  margin-top: 46px;
+  border-top: 1px solid var(--reader-border);
+  padding-top: 20px;
+}
+
+.readerNovelNavigation > a,
+.readerNovelNavigation > span {
+  display: flex;
+  min-width: 0;
+  min-height: 48px;
+  align-items: center;
+  gap: 8px;
+  color: var(--reader-muted);
+}
+
+.readerNovelNavigation > :last-child {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.readerNovelNavigation > a > span {
+  display: block;
+  min-width: 0;
+}
+
+.readerNovelNavigation strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.readerNovelNavigation strong {
+  color: var(--reader-text);
+  font-size: 14px;
+  font-weight: 620;
+}
+
+.readerNovelNavigation > a:hover strong,
+.readerNovelNavigation > a:focus-visible strong {
+  color: var(--reader-accent);
+}
+
+.readerNovelNavigation .isDisabled {
+  opacity: 0.38;
+}
+
+@media (max-width: 820px) {
+  .appShell,
+  .siteShell,
+  .userWorkspaceShell {
+    padding-top: 0;
+  }
+
+  .siteHeader.isHomeHeader,
+  .siteHeader.hasPrimaryNav:not(.hasMobileContext) {
+    min-height: 0;
+    gap: 4px 12px;
+    padding: max(4px, env(safe-area-inset-top)) 0 2px;
+  }
+
+  .siteHeader.hasPrimaryNav:not(.hasMobileContext) .headerPrimaryNav {
+    gap: 20px;
+    padding: 0;
+  }
+
+  .siteHeader.hasPrimaryNav:not(.hasMobileContext) .headerPrimaryNav a {
+    padding: 6px 1px 8px;
+  }
+
+  .siteHeader.hasPrimaryNav:not(.hasMobileContext) .headerPrimaryNav a::after {
+    bottom: 2px;
+  }
+
+  .siteHeader.hasPrimaryNav .headerTools .searchForm.isPinnedOpen,
+  .siteHeader.hasPrimaryNav .headerTools .searchForm.isDefaultOpen {
+    top: calc(100% + 9px);
+  }
+
+  .siteHeader.hasPrimaryNav:has(.searchForm.isPinnedOpen),
+  .siteHeader.hasPrimaryNav:has(.searchForm.isDefaultOpen) {
+    margin-bottom: 52px;
+  }
+
+  .breadcrumbs {
+    margin: 10px 0 14px;
+  }
+
+  .tagLibrary {
+    gap: 16px;
+  }
+
+  .tagLibraryHeader {
+    gap: 10px;
+  }
+
+  .tagGroupBlock {
+    padding-block: 14px;
+  }
+
+  .messagesHeader,
+  .messagesHeader > span {
+    min-height: 48px;
+  }
+
+  .messagesHeader {
+    align-items: center;
+  }
+
+  .messagesHeader .messagesTabs {
+    min-height: 48px;
+  }
+
+  .messagesHeader .messagesTabs a {
+    min-height: 0;
+    padding-block: 7px;
+  }
+
+  .publicAnnouncementsPage .messagesHeader h1 {
+    align-self: center;
+  }
+
+  .marketPageHeader.userContentHeader {
+    display: flex;
+    gap: 12px;
+  }
+
+  .marketPageHeader.userContentHeader .marketBalances {
+    width: auto;
+  }
+
+  .settingRow {
+    padding: 13px 2px;
+  }
+
+  .mediaExplorerContent {
+    scroll-margin-top: 92px;
+  }
+
+  .readerNovelNavigation {
+    gap: 14px;
+    margin-top: 40px;
+    padding-top: 16px;
+  }
+
+  .readerNovelNavigation > a,
+  .readerNovelNavigation > span {
+    min-height: 44px;
+    gap: 5px;
+  }
+
+  .readerNovelNavigation strong {
+    font-size: 13px;
+  }
+
+  .stationChatWorkspace {
+    border-radius: 12px;
+    box-shadow: none;
+  }
+
+  .stationChatWorkspace .stationConversation .stationMessageList {
+    gap: 8px;
+    padding: 14px 12px;
+  }
+
+  .stationChatWorkspace .stationConversation .stationMessageList article {
+    max-width: 86%;
+  }
+}
+
+/* Final shell and surface corrections: stable sticky geometry, lighter content framing. */
+.settingToggleOnly {
+  justify-self: end;
+}
+
+.tagTrackedLink {
+  position: relative;
+}
+
+.tagLinkPendingState {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  opacity: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 22%,
+    color-mix(in srgb, var(--accent) 15%, transparent) 48%,
+    transparent 74%
+  );
+  background-size: 220% 100%;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 34%, transparent);
+  pointer-events: none;
+  transition: opacity 100ms ease;
+}
+
+.tagLinkPendingState[data-pending="true"] {
+  opacity: 1;
+  animation: tagLinkPendingSweep 900ms linear infinite;
+}
+
+@keyframes tagLinkPendingSweep {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tagLinkPendingState[data-pending="true"] {
+    animation: none;
+  }
+}
+
+.userWorkspaceContent > .accountPanel {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.readingProgressSetting,
+.marketWalletTools {
+  border-width: 1px 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.readingProgressSetting {
+  padding-inline: 2px;
+}
+
+.stationChatWorkspace {
+  border-right: 0;
+  border-left: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.mediaVideoCard,
+.mediaVideoCard:hover,
+.mediaVideoCard:focus-within {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transition: none;
+}
+
+.mediaVideoPreview {
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.mediaVideoCard .mediaCardCopy {
+  gap: 5px;
+  padding: 8px 1px 3px;
+}
+
+@media (max-width: 820px) {
+  .pageContextBar {
+    min-height: 56px;
+    gap: 8px;
+    margin: 0;
+    padding: 8px 0 10px;
+  }
+
+  .pageContextActions {
+    max-width: 220px;
+    gap: 6px;
+  }
+
+  .pageContextActions .mediaSearchForm {
+    width: clamp(132px, 46vw, 180px);
+    flex-basis: auto;
+  }
+
+  .breadcrumbs {
+    margin: 9px 0 12px;
+  }
+
+  .tagLibrary {
+    gap: 14px;
+  }
+
+  .tagPreferenceTabs {
+    margin-bottom: 0;
+  }
+
+  .tagGroupBlock {
+    padding-block: 12px;
+  }
+
+  .stationChatWorkspace {
+    grid-template-columns: minmax(0, 1fr);
+    border-radius: 0;
+  }
+
+  .stationChatWorkspace:not(.hasSelection) {
+    height: auto;
+    min-height: 0;
+  }
+
+  .stationChatWorkspace.hasSelection .stationConversation {
+    width: 100%;
+    grid-column: 1;
   }
 }

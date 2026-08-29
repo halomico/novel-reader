@@ -41,7 +41,22 @@ const TRADITIONAL_UI_TEXT: Readonly<Record<string, string>> = {
   "按标签浏览站内视频。": "按標籤瀏覽站內視頻。",
   "标签与简介": "標籤與簡介",
   "筛选与排序": "篩選與排序",
+  "筛选": "篩選",
+  "筛选小说": "篩選小說",
+  "书库": "書庫",
+  "来源": "來源",
+  "默认": "預設",
+  "免费": "免費",
   "排序": "排序",
+  "小说排序": "小說排序",
+  "最近更新": "最近更新",
+  "最新": "最新",
+  "时间": "時間",
+  "字数": "字數",
+  "升序": "升序",
+  "降序": "降序",
+  "切换为升序": "切換為升序",
+  "切换为降序": "切換為降序",
   "播放量": "播放量",
   "全部标签": "全部標籤",
   "不限标签": "不限標籤",
@@ -167,6 +182,8 @@ const TRADITIONAL_UI_TEXT: Readonly<Record<string, string>> = {
   "外观": "外觀",
   "阅读": "閱讀",
   "布局": "版面",
+  "小说搜索": "小說搜尋",
+  "小说搜索框默认状态": "小說搜尋框預設狀態",
   "界面": "介面",
   "标准": "標準",
   "明暗": "明暗",
@@ -256,6 +273,7 @@ const TRADITIONAL_UI_TEXT: Readonly<Record<string, string>> = {
   "没有隐藏标签": "沒有隱藏標籤",
   "暂无标签": "暫無標籤",
   "没有匹配的标签": "沒有符合的標籤",
+  "显示更多": "顯示更多",
   "标签不存在": "標籤不存在",
   "别名": "別名",
   "随分组隐藏": "隨分組隱藏",
@@ -360,9 +378,20 @@ export function uiText(locale: AppLocale, text: string): string {
 }
 
 export function prefersTraditionalLanguage(acceptLanguage: string | null, country: string | null): boolean {
-  const normalized = acceptLanguage?.toLowerCase() || "";
-  if (/(^|,|\s)zh-(?:hant|tw|hk|mo)(?:[,;\s-]|$)/.test(normalized)) {
-    return true;
+  const preferredChinese = (acceptLanguage || "")
+    .split(",")
+    .map((entry, index) => {
+      const [rawTag, ...params] = entry.trim().toLowerCase().split(";");
+      const qualityParam = params.find((param) => param.trim().startsWith("q="));
+      const quality = qualityParam ? Number(qualityParam.trim().slice(2)) : 1;
+      return { tag: rawTag, quality: Number.isFinite(quality) ? quality : 0, index };
+    })
+    .filter((entry) => entry.quality > 0 && (entry.tag === "zh" || entry.tag.startsWith("zh-")))
+    .sort((left, right) => right.quality - left.quality || left.index - right.index)[0]?.tag;
+
+  if (preferredChinese) {
+    if (/^zh-(?:hant|tw|hk|mo)(?:-|$)/.test(preferredChinese)) return true;
+    if (/^zh-(?:hans|cn|sg)(?:-|$)/.test(preferredChinese)) return false;
   }
   return country === "TW" || country === "HK" || country === "MO";
 }

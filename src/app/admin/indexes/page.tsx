@@ -5,7 +5,6 @@ import { LocalDateTime } from "@/components/LocalDateTime";
 import { shouldShowProgressBars } from "@/lib/config";
 import {
   getContentSearchCombinedSummary,
-  getLegacyContentSearchDiskUsage,
   listContentSearchSourceSummaries,
 } from "@/lib/content-search-sources";
 import { getDb } from "@/lib/db";
@@ -42,7 +41,6 @@ export default async function AdminIndexesPage({ searchParams }: AdminIndexesPag
   const db = getDb();
   const sources = listContentSearchSourceSummaries(db);
   const summary = getContentSearchCombinedSummary(db);
-  const legacyBytes = getLegacyContentSearchDiskUsage();
 
   return (
     <AdminFrame active="indexes" notice={params.notice} tone={params.tone}>
@@ -88,11 +86,7 @@ export default async function AdminIndexesPage({ searchParams }: AdminIndexesPag
           <span>最近完成：<LocalDateTime value={summary.lastIndexedAt} /></span>
         </div>
 
-        {legacyBytes > 0 ? (
-          <p className="adminIndexLegacyNotice">检测到旧版共享索引 {formatBytes(legacyBytes)}。缺少新分片的书库会临时只读使用它；所有分片构建完成后即可安全删除并释放空间。</p>
-        ) : null}
-
-        <AdminSearchIndexManager showProgressBars={shouldShowProgressBars()} sources={sources} legacyBytes={legacyBytes} />
+        <AdminSearchIndexManager showProgressBars={shouldShowProgressBars()} sources={sources} />
       </article>
     </AdminFrame>
   );

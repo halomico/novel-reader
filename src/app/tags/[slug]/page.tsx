@@ -1,15 +1,16 @@
-import { Tags } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "@/components/LocalizedLink";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { CatalogRandomButton } from "@/components/CatalogRandomButton";
 import { CatalogBookGrid } from "@/components/CatalogBookGrid";
 import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
+import { NovelCatalogSort } from "@/components/NovelCatalogSort";
+import { PageContextBar } from "@/components/PageContextBar";
 import { Pagination } from "@/components/Pagination";
 import { ResultCount } from "@/components/ResultCount";
 import { SiteHeader } from "@/components/SiteHeader";
-import { TagVisibilityControl } from "@/components/TagVisibilityControl";
+import { TagPreferenceToggle } from "@/components/TagPreferenceToggle";
 import {
   canAccessTagLibrary,
   getCatalogPageSize,
@@ -26,7 +27,11 @@ import {
 } from "@/lib/tag-preferences";
 import { getCurrentUser } from "@/lib/user-auth";
 import { checkContentAccess } from "@/lib/content-access";
-import { setTagPreferenceAction } from "../actions";
+import {
+  defaultNovelCatalogSortOrder,
+  normalizeNovelCatalogSort,
+  normalizeNovelCatalogSortOrder,
+} from "@/lib/books";
 import { getRequestLocale, localizeText, localizeTexts } from "@/lib/locale-server";
 import { languageAlternates, uiText, withLocalePath } from "@/lib/locale";
 
@@ -38,6 +43,9 @@ type TagPageProps = {
   }>;
   searchParams: Promise<{
     page?: string;
+    sort?: string;
+    order?: string;
+    random?: string;
   }>;
 };
 
@@ -52,9 +60,13 @@ export async function generateMetadata({ params, searchParams }: TagPageProps): 
   if (!tag) {
     return { title: uiText(locale, "标签不存在"), robots: NO_INDEX_ROBOTS };
   }
-  const pageValue = Number((await searchParams).page || 1);
+  const query = await searchParams;
+  const pageValue = Number(query.page || 1);
   const page = Number.isInteger(pageValue) && pageValue > 1 ? pageValue : 1;
-  const canonicalPath = canonicalPagePath(`/tags/${tag.slug}`, page);
+  const sortBy = normalizeNovelCatalogSort(query.sort);
+  const sortOrder = normalizeNovelCatalogSortOrder(query.order, sortBy);
+  const isVariant = sortBy !== "updated" || sortOrder !== "desc" || Boolean(query.random?.trim());
+  const canonicalPath = isVariant ? `/tags/${tag.slug}` : canonicalPagePath(`/tags/${tag.slug}`, page);
   const canonical = withLocalePath(canonicalPath, locale);
   const isPublic = tag.visibility === "public" && isTagLibraryEnabled() && isTagLibraryPublic();
   const displayName = await localizeText(tag.name, locale);
@@ -69,7 +81,7 @@ export async function generateMetadata({ params, searchParams }: TagPageProps): 
       : displayName,
     description,
     alternates: { canonical, languages: languageAlternates(canonicalPath) },
-    robots: isPublic ? { index: true, follow: true } : NO_INDEX_ROBOTS,
+    robots: isPublic && !isVariant ? { index: true, follow: true } : NO_INDEX_ROBOTS,
     openGraph: { title: displayName, description, url: canonical },
   };
 }
@@ -100,16 +112,25 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
   if (!tag) {
     notFound();
   }
+  const sortBy = normalizeNovelCatalogSort(query.sort);
+  const sortOrder = normalizeNovelCatalogSortOrder(query.order, sortBy);
+  const randomSeed = query.random?.trim().slice(0, 64) || "";
   const result = listNovelsByTag(tag.id, {
     page: Number(query.page || "1"),
     pageSize: getCatalogPageSize(),
     audience,
+    sortBy,
+    sortOrder,
+    randomSeed,
   });
   const tagsByNovel = filterTagsByNovelForUser(
     listTagsForNovels(result.books.map((book) => book.id), { audience }),
     user?.id,
   );
   const returnParams = new URLSearchParams({ page: String(result.page) });
+  if (sortBy !== "updated") returnParams.set("sort", sortBy);
+  if (sortOrder !== defaultNovelCatalogSortOrder(sortBy)) returnParams.set("order", sortOrder);
+  if (randomSeed) returnParams.set("random", randomSeed);
   const returnHref = `/tags/${tag.slug}?${returnParams}`;
   const effectiveHidden = user ? listEffectivelyHiddenTagIds(user.id) : new Set<number>();
   const explicitHidden = user ? listExplicitlyHiddenTagIds(user.id) : new Set<number>();
@@ -139,41 +160,39 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
   return (
     <main className="appShell catalogShell">
       <SiteHeader currentUser={user} />
-      <Breadcrumbs items={[{ label: homeLabel, href: "/" }, { label: tagsLabel, href: "/tags" }, { label: displayTag.name }]} />
+      <PageContextBar items={[{ label: homeLabel, href: "/" }, { label: tagsLabel, href: "/tags" }, { label: displayTag.name }]} />
       <section className="tagDetailHeader">
-        <span className="tagLibraryIcon" aria-hidden="true">
-          <Tags size={23} />
-        </span>
-        <div>
+        <div className="tagDetailHeadingRow">
           <h1>{displayTag.name}</h1>
-          {displayTag.description ? <p className="tagDetailDescription">{displayTag.description}</p> : null}
-          <div className="tagDetailMeta">
-            {displayTag.aliases.length ? (
-              <span>
-                <small>{uiText(locale, "别名")}</small>
-                <strong>{displayTag.aliases.join("、")}</strong>
-              </span>
+          <div className="tagDetailActions">
+            {user ? (
+              isHiddenByGroup ? (
+                <Link className="tagInheritedVisibility" href="/tags?hidden=1" title={uiText(locale, "前往已隐藏标签")}>
+                  {uiText(locale, "随分组隐藏")}
+                </Link>
+              ) : (
+                <TagPreferenceToggle
+                  tagId={tag.id}
+                  initialVisible={!isExplicitlyHidden}
+                  showLabel={uiText(locale, "显示此标签")}
+                  hideLabel={uiText(locale, "隐藏此标签")}
+                />
+              )
             ) : null}
-            <ResultCount count={result.totalBooks} />
+            <NovelCatalogSort sortBy={sortBy} sortOrder={sortOrder} locale={locale} />
+            {result.totalBooks > 1 ? <CatalogRandomButton basePath={`/tags/${tag.slug}`} /> : null}
           </div>
         </div>
-        {user ? (
-          <form className="tagPreferenceAction" action={setTagPreferenceAction}>
-            <input name="tagId" type="hidden" value={tag.id} />
-            <input name="hidden" type="hidden" value={isExplicitlyHidden ? "0" : "1"} />
-            <input name="returnPath" type="hidden" value={`/tags/${tag.slug}`} />
-            {isHiddenByGroup ? (
-              <Link className="tagInheritedVisibility" href="/tags?hidden=1" title={uiText(locale, "前往已隐藏标签")}>
-                {uiText(locale, "随分组隐藏")}
-              </Link>
-            ) : (
-              <TagVisibilityControl
-                visible={!isExplicitlyHidden}
-                label={uiText(locale, isExplicitlyHidden ? "显示此标签" : "隐藏此标签")}
-              />
-            )}
-          </form>
-        ) : null}
+        {displayTag.description ? <p className="tagDetailDescription">{displayTag.description}</p> : null}
+        <div className="tagDetailMeta">
+          {displayTag.aliases.length ? (
+            <span>
+              <small>{uiText(locale, "别名")}</small>
+              <strong>{displayTag.aliases.join("、")}</strong>
+            </span>
+          ) : null}
+          <ResultCount count={result.totalBooks} />
+        </div>
       </section>
 
       {result.books.length > 0 ? (
@@ -194,6 +213,11 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
         totalPages={result.totalPages}
         query=""
         basePath={`/tags/${tag.slug}`}
+        extraParams={{
+          sort: sortBy === "updated" ? undefined : sortBy,
+          order: sortOrder === defaultNovelCatalogSortOrder(sortBy) ? undefined : sortOrder,
+          random: randomSeed || undefined,
+        }}
       />
     </main>
   );

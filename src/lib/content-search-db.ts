@@ -1,11 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { getContentSearchDatabasePath, getContentSearchIndexDirectory } from "./config";
+import { getContentSearchIndexDirectory } from "./config";
 
 type ContentSearchDbGlobal = typeof globalThis & {
   novelReaderContentSearchDbs?: Map<number, DatabaseSync>;
-  novelReaderLegacyContentSearchDb?: DatabaseSync;
 };
 
 function normalizeSourceId(sourceId: number): number {
@@ -72,13 +71,17 @@ export function initializeContentSearchDb(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_content_search_failures_attempted
       ON content_search_failures(attempted_at DESC, novel_id);
 
-    CREATE VIRTUAL TABLE IF NOT EXISTS content_trigram_fts USING fts5(
-      body,
-      content='',
-      contentless_delete=1,
-      detail=none,
-      tokenize='trigram'
+    CREATE TABLE IF NOT EXISTS content_search_segments (
+      id INTEGER PRIMARY KEY,
+      novel_id INTEGER NOT NULL,
+      chapter_id INTEGER,
+      chapter_title TEXT,
+      segment_index INTEGER NOT NULL,
+      body BLOB NOT NULL
     );
+
+    CREATE INDEX IF NOT EXISTS idx_content_search_segments_novel
+      ON content_search_segments(novel_id, segment_index);
 
     CREATE VIRTUAL TABLE IF NOT EXISTS content_bigram_fts USING fts5(
       tokens,
@@ -115,27 +118,6 @@ export function getExistingContentSearchDb(sourceId: number): DatabaseSync | nul
   return getContentSearchDb(normalizedSourceId);
 }
 
-export function getLegacyContentSearchDb(): DatabaseSync | null {
-  const globalForDb = globalThis as ContentSearchDbGlobal;
-  if (globalForDb.novelReaderLegacyContentSearchDb) return globalForDb.novelReaderLegacyContentSearchDb;
-  const databasePath = getContentSearchDatabasePath();
-  if (!fs.existsSync(databasePath)) return null;
-  try {
-    const db = new DatabaseSync(databasePath, { readOnly: true });
-    db.exec("PRAGMA busy_timeout = 5000;");
-    globalForDb.novelReaderLegacyContentSearchDb = db;
-    return db;
-  } catch {
-    return null;
-  }
-}
-
-export function closeLegacyContentSearchDb() {
-  const globalForDb = globalThis as ContentSearchDbGlobal;
-  globalForDb.novelReaderLegacyContentSearchDb?.close();
-  delete globalForDb.novelReaderLegacyContentSearchDb;
-}
-
 export function closeContentSearchDb(sourceId: number) {
   const normalizedSourceId = normalizeSourceId(sourceId);
   const databases = getContentSearchDbMap();
@@ -155,5 +137,4 @@ export function closeAllContentSearchDbs() {
   const databases = getContentSearchDbMap();
   for (const database of databases.values()) database.close();
   databases.clear();
-  closeLegacyContentSearchDb();
 }

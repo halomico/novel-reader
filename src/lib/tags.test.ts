@@ -28,17 +28,13 @@ function resetDb() {
 
 function withTempDatabase(t: TestContext) {
   const previousDatabasePath = process.env.DATABASE_PATH;
-  const previousSearchPath = process.env.CONTENT_SEARCH_DB_PATH;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-tags-"));
   process.env.DATABASE_PATH = path.join(root, "novels.db");
-  process.env.CONTENT_SEARCH_DB_PATH = path.join(root, "content-search.db");
   resetDb();
   t.after(() => {
     resetDb();
     if (previousDatabasePath === undefined) delete process.env.DATABASE_PATH;
     else process.env.DATABASE_PATH = previousDatabasePath;
-    if (previousSearchPath === undefined) delete process.env.CONTENT_SEARCH_DB_PATH;
-    else process.env.CONTENT_SEARCH_DB_PATH = previousSearchPath;
     fs.rmSync(root, { recursive: true, force: true });
   });
 }
@@ -78,6 +74,73 @@ test("stores grouped tags and lists novels by tag", (t) => {
   const tagged = listNovelsByTag(child.id);
   assert.equal(tagged.totalBooks, 1);
   assert.equal(tagged.books[0].id, novelId);
+});
+
+test("sorts and samples a tag through its compound index", (t) => {
+  withTempDatabase(t);
+  const zuluId = seedNovel("Zulu Story");
+  const alphaId = seedNovel("Alpha Story");
+  const middleId = seedNovel("Middle Story");
+  getDb().prepare("UPDATE novels SET mtime_ms = ?, word_count = ? WHERE id = ?").run(30, 100, zuluId);
+  getDb().prepare("UPDATE novels SET mtime_ms = ?, word_count = ? WHERE id = ?").run(10, 300, alphaId);
+  getDb().prepare("UPDATE novels SET mtime_ms = ?, word_count = ? WHERE id = ?").run(20, 200, middleId);
+  const tag = createTag({ name: "排序测试", slug: "sorted-tag" });
+  setNovelTags(zuluId, [tag.id]);
+  setNovelTags(alphaId, [tag.id]);
+  setNovelTags(middleId, [tag.id]);
+
+  assert.deepEqual(
+    listNovelsByTag(tag.id, { sortBy: "updated" }).books.map((book) => book.id),
+    [zuluId, middleId, alphaId],
+  );
+  assert.deepEqual(
+    listNovelsByTag(tag.id, { sortBy: "updated", sortOrder: "asc" }).books.map((book) => book.id),
+    [alphaId, middleId, zuluId],
+  );
+  assert.deepEqual(
+    listNovelsByTag(tag.id, { sortBy: "name" }).books.map((book) => book.id),
+    [alphaId, middleId, zuluId],
+  );
+  assert.deepEqual(
+    listNovelsByTag(tag.id, { sortBy: "name", sortOrder: "desc" }).books.map((book) => book.id),
+    [zuluId, middleId, alphaId],
+  );
+  assert.deepEqual(
+    listNovelsByTag(tag.id, { sortBy: "words" }).books.map((book) => book.id),
+    [alphaId, middleId, zuluId],
+  );
+  assert.deepEqual(
+    listNovelsByTag(tag.id, { sortBy: "words", sortOrder: "asc" }).books.map((book) => book.id),
+    [zuluId, middleId, alphaId],
+  );
+
+  const firstRandom = listNovelsByTag(tag.id, { randomSeed: "stable-seed", pageSize: 2 });
+  const secondRandom = listNovelsByTag(tag.id, { randomSeed: "stable-seed", pageSize: 2 });
+  assert.equal(firstRandom.totalBooks, 3);
+  assert.equal(firstRandom.totalPages, 1);
+  assert.equal(new Set(firstRandom.books.map((book) => book.id)).size, 2);
+  assert.deepEqual(firstRandom.books.map((book) => book.id), secondRandom.books.map((book) => book.id));
+
+  const randomQueryPlan = getDb().prepare(
+    `EXPLAIN QUERY PLAN
+     SELECT n.id
+     FROM novel_tags nt
+     INNER JOIN novels n ON n.id = nt.novel_id
+     WHERE nt.tag_id = ? AND nt.novel_id >= ?
+     ORDER BY nt.novel_id ASC
+     LIMIT ?`,
+  ).all(tag.id, 0, 2) as Array<{ detail: string }>;
+  const sortedQueryPlan = getDb().prepare(
+    `EXPLAIN QUERY PLAN
+     SELECT n.id
+     FROM novels n
+     INNER JOIN novel_tags nt ON nt.novel_id = n.id
+     WHERE nt.tag_id = ?
+     ORDER BY n.mtime_ms DESC, n.id DESC
+     LIMIT ? OFFSET ?`,
+  ).all(tag.id, 2, 0) as Array<{ detail: string }>;
+  assert.match(randomQueryPlan.map((row) => row.detail).join("\n"), /idx_novel_tags_tag/);
+  assert.match(sortedQueryPlan.map((row) => row.detail).join("\n"), /idx_novel_tags_tag/);
 });
 
 test("deduplicates and stores manual hotwords", (t) => {

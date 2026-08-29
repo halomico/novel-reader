@@ -30,17 +30,9 @@ export function getDatabasePath(): string {
   return resolveFromProject(process.env.DATABASE_PATH || "./data/novels.db");
 }
 
-export function getContentSearchDatabasePath(): string {
-  return resolveFromProject(process.env.CONTENT_SEARCH_DB_PATH || "./data/content-search.db");
-}
-
 export function getContentSearchIndexDirectory(): string {
   const configured = process.env.CONTENT_SEARCH_INDEX_DIR?.trim();
-  if (configured) {
-    return resolveFromProject(configured);
-  }
-  const legacyPath = getContentSearchDatabasePath();
-  return path.join(path.dirname(legacyPath), path.basename(legacyPath, path.extname(legacyPath)));
+  return resolveFromProject(configured || "./data/content-search");
 }
 
 export function getMediaDir(): string {
@@ -69,6 +61,10 @@ export function getDefaultNovelLibrarySlug(): string {
 
 export function getReaderDefaultFontSize(): number {
   return readSiteSettings().readerDefaultFontSize;
+}
+
+export function isNovelCatalogSearchExpandedByDefault(): boolean {
+  return readSiteSettings().novelCatalogSearchExpanded;
 }
 
 function readIntConfig(name: string, fallback: number, min: number, max: number): number {
@@ -414,7 +410,6 @@ export function getConfiguredPaths() {
   return {
     libraryDir: getLibraryDir(),
     databasePath: getDatabasePath(),
-    contentSearchDatabasePath: process.env.CONTENT_SEARCH_DB_PATH || "./data/content-search.db",
     contentSearchIndexDirectory: getContentSearchIndexDirectory(),
     adminSettingsPath: process.env.ADMIN_SETTINGS_PATH || "./data/admin-settings.json",
   };

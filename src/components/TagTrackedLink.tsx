@@ -1,7 +1,13 @@
 "use client";
 
-import Link from "@/components/LocalizedLink";
+import { IntentPrefetchLink as Link } from "@/components/IntentPrefetchLink";
+import { useLinkStatus } from "next/link";
 import type { ReactNode } from "react";
+
+function TagLinkPendingState() {
+  const { pending } = useLinkStatus();
+  return <span className="tagLinkPendingState" data-pending={pending ? "true" : "false"} aria-hidden="true" />;
+}
 
 function recordTagClick(slug: string) {
   const body = JSON.stringify({ slug });
@@ -34,7 +40,7 @@ export function TagTrackedLink({
 }) {
   return (
     <Link
-      className={className}
+      className={["tagTrackedLink", className].filter(Boolean).join(" ")}
       href={`/tags/${slug}${library && library !== "default" ? `?library=${encodeURIComponent(library)}` : ""}`}
       title={title}
       prefetch={false}
@@ -42,6 +48,7 @@ export function TagTrackedLink({
       data-tag-search={tagSearchText}
     >
       {children}
+      <TagLinkPendingState />
     </Link>
   );
 }

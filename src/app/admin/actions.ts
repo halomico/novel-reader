@@ -816,6 +816,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
       String(formData.get("readerDefaultTagsMode") || ""),
       previous.readerDefaultTagsMode,
     ),
+    novelCatalogSearchExpanded: formData.get("novelCatalogSearchExpanded") === "on",
     defaultPalette: isColorPalette(defaultPalette) ? defaultPalette : "default",
     defaultPaletteRandomEnabled: formData.get("defaultPaletteRandomEnabled") === "on",
     defaultPaletteRotationMinutes: intField(
@@ -958,7 +959,7 @@ export async function updateAdminMediaAction(
   if (!asset) {
     return mutationResult(false, "资源不存在", "warning");
   }
-  const artist = asset.kind === "audio" ? String(formData.get("artist") || "").trim() : "";
+  const artist = asset.kind === "file" ? "" : String(formData.get("artist") || "").trim();
   if (!title || title.length > 120) {
     return mutationResult(false, "标题应为 1 到 120 个字符", "warning");
   }
@@ -1053,7 +1054,7 @@ export async function batchUpdateAdminMediaAction(
       await updateMediaAsset(
         id,
         title,
-        asset.kind === "audio" && applyArtist ? artist : asset.kind === "audio" ? asset.artist : "",
+        asset.kind !== "file" && applyArtist ? artist : asset.kind !== "file" ? asset.artist : "",
         applyDescription ? description : asset.description,
         targetFolder === "__keep__" ? undefined : targetFolder,
         asset.kind === "video" && categoryId !== "__keep__" ? categoryId : undefined,

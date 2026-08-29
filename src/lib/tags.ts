@@ -1,5 +1,11 @@
 import { getDb } from "./db";
-import type { Novel } from "./books";
+import {
+  normalizeNovelCatalogSort,
+  normalizeNovelCatalogSortOrder,
+  type Novel,
+  type NovelCatalogSort,
+  type NovelCatalogSortOrder,
+} from "./books";
 
 export type TagVisibility = "public" | "member" | "hidden";
 export type TagAudience = "public" | "member" | "admin";
@@ -540,13 +546,40 @@ function normalizePage(page: number, totalPages: number): number {
   return Math.min(Math.floor(page), Math.max(totalPages, 1));
 }
 
+function randomTagAnchor(seed: string, minId: number, maxId: number): number {
+  let hash = 2166136261;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return minId + ((hash >>> 0) % (maxId - minId + 1));
+}
+
+const TAGGED_NOVEL_COLUMNS = `n.id, n.title, n.description, n.file_name, n.relative_path, n.source_id, n.storage_mode, n.chapter_count,
+  n.access_mode, n.soda_price, n.preview_chapter_count, n.content_hash, n.size_bytes, n.mtime_ms, n.word_count, n.visit_count,
+  n.last_accessed_at, n.last_accessed_ip, n.last_accessed_user_agent, n.created_at, n.updated_at`;
+
 export function listNovelsByTag(
   tagId: number,
-  params: { page?: number; pageSize?: number; audience?: TagAudience; sourceId?: number } = {},
+  params: {
+    page?: number;
+    pageSize?: number;
+    audience?: TagAudience;
+    sourceId?: number;
+    sortBy?: NovelCatalogSort;
+    sortOrder?: NovelCatalogSortOrder;
+    randomSeed?: string;
+  } = {},
 ): TaggedNovelListResult {
   const db = getDb();
   const audience = resolveAudience(params);
   const pageSize = Math.min(Math.max(Math.floor(params.pageSize || 15), 1), 100);
+  const emptyResult = { books: [], page: 1, pageSize, totalBooks: 0, totalPages: 1 };
+  const visibleTag = db
+    .prepare(`SELECT id FROM tags t WHERE t.id = ? AND ${visibilityCondition("t", audience)}`)
+    .get(tagId);
+  if (!visibleTag) return emptyResult;
+
   const sourceId = Number.isInteger(params.sourceId) && Number(params.sourceId) > 0 ? Number(params.sourceId) : 0;
   const sourceFilter = sourceId ? " AND n.source_id = ?" : "";
   const sourceValues = sourceId ? [sourceId] : [];
@@ -555,22 +588,56 @@ export function listNovelsByTag(
       `SELECT COUNT(*) AS count
        FROM novels n
        INNER JOIN novel_tags nt ON nt.novel_id = n.id
-       INNER JOIN tags t ON t.id = nt.tag_id
-       WHERE t.id = ? AND ${visibilityCondition("t", audience)}${sourceFilter}`,
+       WHERE nt.tag_id = ?${sourceFilter}`,
     )
     .get(tagId, ...sourceValues) as { count: number };
+  if (!totalBooks.count) return emptyResult;
+
+  const randomSeed = (params.randomSeed || "").trim().slice(0, 64);
+  if (randomSeed) {
+    const rangeJoin = sourceId ? "INNER JOIN novels n ON n.id = nt.novel_id" : "";
+    const range = db
+      .prepare(
+        `SELECT MIN(nt.novel_id) AS minId, MAX(nt.novel_id) AS maxId
+         FROM novel_tags nt
+         ${rangeJoin}
+         WHERE nt.tag_id = ?${sourceFilter}`,
+      )
+      .get(tagId, ...sourceValues) as { minId: number | null; maxId: number | null };
+    if (range.minId == null || range.maxId == null) return emptyResult;
+    const anchor = randomTagAnchor(randomSeed, range.minId, range.maxId);
+    const selectRandom = (comparison: ">=" | "<", limit: number) => db
+      .prepare(
+        `SELECT ${TAGGED_NOVEL_COLUMNS}
+         FROM novel_tags nt
+         INNER JOIN novels n ON n.id = nt.novel_id
+         WHERE nt.tag_id = ? AND nt.novel_id ${comparison} ?${sourceFilter}
+         ORDER BY nt.novel_id ASC
+         LIMIT ?`,
+      )
+      .all(tagId, anchor, ...sourceValues, limit) as Novel[];
+    const books = selectRandom(">=", pageSize);
+    if (books.length < pageSize) books.push(...selectRandom("<", pageSize - books.length));
+    return { books, page: 1, pageSize, totalBooks: totalBooks.count, totalPages: 1 };
+  }
+
   const totalPages = Math.max(1, Math.ceil(totalBooks.count / pageSize));
   const page = normalizePage(params.page || 1, totalPages);
+  const sortBy = normalizeNovelCatalogSort(params.sortBy);
+  const sortOrder = normalizeNovelCatalogSortOrder(params.sortOrder, sortBy);
+  const direction = sortOrder === "asc" ? "ASC" : "DESC";
+  const orderBy = sortBy === "name"
+    ? `n.title COLLATE NOCASE ${direction}, n.id ${direction}`
+    : sortBy === "words"
+      ? `n.word_count ${direction}, n.id ${direction}`
+      : `n.mtime_ms ${direction}, n.id ${direction}`;
   const books = db
     .prepare(
-      `SELECT n.id, n.title, n.file_name, n.relative_path, n.source_id, n.storage_mode, n.chapter_count,
-              n.access_mode, n.soda_price, n.preview_chapter_count, n.content_hash, n.size_bytes, n.mtime_ms, n.word_count, n.visit_count,
-              n.last_accessed_at, n.last_accessed_ip, n.last_accessed_user_agent, n.created_at, n.updated_at
+      `SELECT ${TAGGED_NOVEL_COLUMNS}
        FROM novels n
        INNER JOIN novel_tags nt ON nt.novel_id = n.id
-       INNER JOIN tags t ON t.id = nt.tag_id
-       WHERE t.id = ? AND ${visibilityCondition("t", audience)}${sourceFilter}
-       ORDER BY n.title COLLATE NOCASE ASC, n.id ASC
+       WHERE nt.tag_id = ?${sourceFilter}
+       ORDER BY ${orderBy}
        LIMIT ? OFFSET ?`,
     )
     .all(tagId, ...sourceValues, pageSize, (page - 1) * pageSize) as Novel[];

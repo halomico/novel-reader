@@ -48,6 +48,7 @@ test("atomically replaces an existing settings file", () => {
     assert.equal(defaults.readerDefaultFontSize, 18);
     assert.equal(defaults.readerDefaultLineHeight, 1.7);
     assert.equal(defaults.readerDefaultTagsMode, "collapsed");
+    assert.equal(defaults.novelCatalogSearchExpanded, true);
     assert.equal(defaults.defaultNovelLibrarySlug, "default");
     assert.equal(defaults.siteEntryNoticeEnabled, false);
     assert.equal(defaults.siteEntryNoticeTitle, "重要通知");
@@ -140,12 +141,12 @@ test("preserves an empty settings preview and normalizes home portal settings", 
       announcementCardTarget: "latest",
       adminIpAllowlistEnabled: true,
       adminAllowedNetworks: ["203.0.113.8", "203.0.113.0/24", "203.0.113.8"],
-      homePortalOrder: ["random", "novels", "random"] as HomePortalCardKey[],
+      homePortalOrder: ["recent", "novels", "recent"] as unknown as HomePortalCardKey[],
     });
     const settings = readSiteSettings();
     assert.equal(getSettingsPreviewText(), "");
     assert.equal(getDefaultNovelLibrarySlug(), "all");
-    assert.deepEqual(settings.homePortalOrder.slice(0, 3), ["recent", "novels", "announcement"]);
+    assert.deepEqual(settings.homePortalOrder.slice(0, 3), ["novels", "announcement", "tags"]);
     assert.equal(canAccessHomeAnnouncementCard(false), false);
     assert.equal(canAccessHomeAnnouncementCard(true), true);
     assert.equal(settings.announcementCardTarget, "latest");
@@ -205,7 +206,7 @@ test("normalizes the configured reader line height", () => {
     fs.writeFileSync(process.env.ADMIN_SETTINGS_PATH, JSON.stringify({ readerDefaultLineHeight: 1.4 }), "utf8");
     assert.equal(readSiteSettings().readerDefaultLineHeight, 1.4);
     fs.writeFileSync(process.env.ADMIN_SETTINGS_PATH, JSON.stringify({ readerDefaultLineHeight: 2.2, legacy: true }), "utf8");
-    assert.equal(readSiteSettings().readerDefaultLineHeight, 2);
+    assert.equal(readSiteSettings().readerDefaultLineHeight, 2.2);
     fs.writeFileSync(process.env.ADMIN_SETTINGS_PATH, JSON.stringify({ readerDefaultLineHeight: "invalid" }), "utf8");
     assert.equal(readSiteSettings().readerDefaultLineHeight, 1.7);
   } finally {

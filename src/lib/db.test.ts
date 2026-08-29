@@ -5,21 +5,16 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
-test("removes legacy search tables and the retired content index database", async () => {
+test("migrates supported application data and discards retired access records", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-search-migration-"));
   const databasePath = path.join(root, "novels.db");
-  const legacyPath = path.join(root, "content-index.db");
   const previousDatabasePath = process.env.DATABASE_PATH;
-  const previousSearchPath = process.env.CONTENT_SEARCH_DB_PATH;
   const previousSettingsPath = process.env.ADMIN_SETTINGS_PATH;
   process.env.DATABASE_PATH = databasePath;
   process.env.ADMIN_SETTINGS_PATH = path.join(root, "admin-settings.json");
 
   const seed = new DatabaseSync(databasePath);
   seed.exec(`
-    CREATE TABLE search_index_state (novel_id INTEGER PRIMARY KEY);
-    CREATE TABLE content_search_terms (term TEXT NOT NULL, novel_id INTEGER NOT NULL);
-    CREATE TABLE content_index_jobs (id TEXT PRIMARY KEY);
     CREATE TABLE search_rate_limit_bans (
       ip TEXT PRIMARY KEY,
       rule_id TEXT NOT NULL,
@@ -196,19 +191,11 @@ test("removes legacy search tables and the retired content index database", asyn
     VALUES ('旧策略', 'media', 60, 10, 300);
   `);
   seed.close();
-  fs.writeFileSync(legacyPath, "retired derived database", "utf8");
 
   let db: DatabaseSync | undefined;
   try {
     const { getDb } = await import("./db");
     db = getDb();
-    const legacyTables = db
-      .prepare(
-        `SELECT name FROM sqlite_master
-         WHERE type = 'table' AND name IN ('search_index_state', 'content_search_terms', 'content_index_jobs')`,
-      )
-      .all();
-    assert.deepEqual(legacyTables, []);
     const legacyRateLimitTable = db
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'search_rate_limit_bans'")
       .get();
@@ -238,7 +225,6 @@ test("removes legacy search tables and the retired content index database", asyn
       (db.prepare("SELECT COUNT(*) AS count FROM content_access_policies").get() as { count: number }).count,
       0,
     );
-    assert.equal(fs.existsSync(legacyPath), false);
     const obsoleteColumns = [
       ["users", "history_visible"],
       ["user_reading_history", "hidden_by_user"],
@@ -422,11 +408,8 @@ test("removes legacy search tables and the retired content index database", asyn
     assert.equal(listRecommendationPoolNovelIds().includes(1), false);
 
     db.close();
+    db = undefined;
     delete (globalThis as typeof globalThis & { novelReaderDb?: DatabaseSync }).novelReaderDb;
-    fs.writeFileSync(legacyPath, "configured current search database", "utf8");
-    process.env.CONTENT_SEARCH_DB_PATH = legacyPath;
-    db = getDb();
-    assert.equal(fs.existsSync(legacyPath), true);
   } finally {
     db?.close();
     delete (globalThis as typeof globalThis & { novelReaderDb?: DatabaseSync }).novelReaderDb;
@@ -434,11 +417,6 @@ test("removes legacy search tables and the retired content index database", asyn
       delete process.env.DATABASE_PATH;
     } else {
       process.env.DATABASE_PATH = previousDatabasePath;
-    }
-    if (previousSearchPath === undefined) {
-      delete process.env.CONTENT_SEARCH_DB_PATH;
-    } else {
-      process.env.CONTENT_SEARCH_DB_PATH = previousSearchPath;
     }
     if (previousSettingsPath === undefined) {
       delete process.env.ADMIN_SETTINGS_PATH;

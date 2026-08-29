@@ -18,6 +18,7 @@ import {
   isColorPalette,
   normalizeReaderLineHeight,
   normalizeReaderTagsMode,
+  NOVEL_CATALOG_SEARCH_COOKIE,
   PALETTE_STORAGE_KEY,
   READER_HOTWORDS_STORAGE_KEY,
   READER_LINE_HEIGHT_STORAGE_KEY,
@@ -27,7 +28,7 @@ import {
   type ReaderTagsMode,
 } from "@/lib/ui-preferences";
 import { clearReaderPaperPreference } from "@/lib/reader-theme-client";
-import { ReaderFontSizeStepper, ReaderLineHeightSlider } from "./ReaderTypographyControls";
+import { ReaderFontSizeStepper, ReaderLineHeightStepper } from "./ReaderTypographyControls";
 
 type ThemeChoice = "system" | "light" | "dark";
 
@@ -109,6 +110,7 @@ export function SettingsPanel({
   canConfigureReaderTags,
   canConfigureReaderHotwords,
   currentLocale,
+  novelCatalogSearchExpanded,
 }: {
   previewText: string;
   defaultFontSize: number;
@@ -119,6 +121,7 @@ export function SettingsPanel({
   canConfigureReaderTags: boolean;
   canConfigureReaderHotwords: boolean;
   currentLocale: AppLocale;
+  novelCatalogSearchExpanded: boolean;
 }) {
   const [theme, setTheme] = useState<ThemeChoice>(defaultTheme);
   const [palette, setPalette] = useState<ColorPalette>(defaultPalette);
@@ -126,6 +129,7 @@ export function SettingsPanel({
   const [lineHeight, setLineHeight] = useState<ReaderLineHeight>(defaultLineHeight);
   const [readerTagsMode, setReaderTagsMode] = useState<ReaderTagsMode>(defaultReaderTagsMode);
   const [showReaderHotwords, setShowReaderHotwords] = useState(true);
+  const [catalogSearchExpanded, setCatalogSearchExpanded] = useState(novelCatalogSearchExpanded);
   const [hasHotwordPreference, setHasHotwordPreference] = useState(false);
   const [locale, setLocale] = useState<AppLocale>(currentLocale);
   const [preferencePending, setPreferencePending] = useState(false);
@@ -152,6 +156,7 @@ export function SettingsPanel({
     setLineHeight(nextLineHeight);
     setReaderTagsMode(nextReaderTagsMode);
     setShowReaderHotwords(nextShowHotwords);
+    setCatalogSearchExpanded(novelCatalogSearchExpanded);
     setHasHotwordPreference(nextHasHotwordPreference);
     removeLocalSetting("novel-palette");
     removeLocalSetting("novel-page-size");
@@ -161,7 +166,7 @@ export function SettingsPanel({
     document.documentElement.removeAttribute("data-ui-mode");
     document.documentElement.removeAttribute("data-top-menu");
     applySettings(nextTheme, nextFontSize, nextLineHeight, nextPalette, nextReaderTagsMode, nextShowHotwords, false);
-  }, [defaultFontSize, defaultLineHeight, defaultPalette, defaultReaderTagsMode, defaultTheme]);
+  }, [defaultFontSize, defaultLineHeight, defaultPalette, defaultReaderTagsMode, defaultTheme, novelCatalogSearchExpanded]);
 
   function changeTheme(value: ThemeChoice) {
     setTheme(value);
@@ -214,6 +219,11 @@ export function SettingsPanel({
     writeLocalSetting(READER_HOTWORDS_STORAGE_KEY, visible ? "show" : "hide");
   }
 
+  function changeCatalogSearchExpanded(expanded: boolean) {
+    setCatalogSearchExpanded(expanded);
+    document.cookie = `${NOVEL_CATALOG_SEARCH_COOKIE}=${expanded ? "expanded" : "collapsed"}; Path=/; Max-Age=31536000; SameSite=Lax`;
+  }
+
   async function changeLanguage(nextLocale: AppLocale) {
     if (nextLocale === locale || preferencePending) return;
     setPreferencePending(true);
@@ -236,7 +246,7 @@ export function SettingsPanel({
   }
 
   return (
-    <section className="settingsPanel" aria-label={tr("阅读设置")}>
+    <section className="settingsPanel" aria-label={tr("设置")}>
       <div className="settingsGrid">
         <section className="settingBlock">
           <div className="settingBlockHeader">
@@ -329,45 +339,65 @@ export function SettingsPanel({
               <div className="settingRowTitle">
                 <span>{tr("行距")}</span>
               </div>
-              <ReaderLineHeightSlider value={lineHeight} onChange={changeLineHeight} />
+              <ReaderLineHeightStepper value={lineHeight} onChange={changeLineHeight} />
             </div>
+          </div>
+        </section>
 
+        <section className="settingBlock">
+          <div className="settingBlockHeader">
+            <h2>{tr("布局")}</h2>
+          </div>
+          <div className="settingRows">
             <div className="settingRow">
               <div className="settingRowTitle">
-                <span>{tr("布局")}</span>
+                <span>{tr("小说搜索")}</span>
               </div>
-              <div className="settingMetaToggles">
-                {canConfigureReaderTags ? (
-                  <div className="settingReaderTagsMode">
-                    <span>{tr("文章标签")}</span>
-                    <div className="segmentedControl settingCompactSegments" role="group" aria-label="文章标签显示方式">
-                      {([
-                        ["expanded", "展开"],
-                        ["collapsed", "收起"],
-                        ["hidden", "关闭"],
-                      ] as const).map(([value, label]) => (
-                        <button
-                          className={readerTagsMode === value ? "isActive" : ""}
-                          type="button"
-                          aria-pressed={readerTagsMode === value}
-                          key={value}
-                          onClick={() => changeReaderTags(value)}
-                        >
-                          {tr(label)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                {canConfigureReaderHotwords ? (
-                  <label className="settingToggle">
-                    <input type="checkbox" checked={showReaderHotwords} onChange={(event) => changeReaderHotwords(event.target.checked)} />
-                    <span>{tr("文末热词")}</span>
-                    <span className="settingToggleTrack" aria-hidden="true"><span /></span>
-                  </label>
-                ) : null}
+              <div className="segmentedControl settingCompactSegments" role="group" aria-label={tr("小说搜索框默认状态")}>
+                {([true, false] as const).map((expanded) => (
+                  <button
+                    className={catalogSearchExpanded === expanded ? "isActive" : ""}
+                    type="button"
+                    aria-pressed={catalogSearchExpanded === expanded}
+                    key={String(expanded)}
+                    onClick={() => changeCatalogSearchExpanded(expanded)}
+                  >
+                    {tr(expanded ? "展开" : "收起")}
+                  </button>
+                ))}
               </div>
             </div>
+            {canConfigureReaderTags ? (
+              <div className="settingRow">
+                <div className="settingRowTitle"><span>{tr("文章标签")}</span></div>
+                <div className="segmentedControl settingCompactSegments" role="group" aria-label="文章标签显示方式">
+                  {([
+                    ["expanded", "展开"],
+                    ["collapsed", "收起"],
+                    ["hidden", "关闭"],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      className={readerTagsMode === value ? "isActive" : ""}
+                      type="button"
+                      aria-pressed={readerTagsMode === value}
+                      key={value}
+                      onClick={() => changeReaderTags(value)}
+                    >
+                      {tr(label)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {canConfigureReaderHotwords ? (
+              <div className="settingRow">
+                <div className="settingRowTitle"><span>{tr("文末热词")}</span></div>
+                <label className="settingToggle settingToggleOnly">
+                  <input aria-label={tr("文末热词")} type="checkbox" checked={showReaderHotwords} onChange={(event) => changeReaderHotwords(event.target.checked)} />
+                  <span className="settingToggleTrack" aria-hidden="true"><span /></span>
+                </label>
+              </div>
+            ) : null}
           </div>
         </section>
       </div>

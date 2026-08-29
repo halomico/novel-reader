@@ -10,7 +10,6 @@ import type { ContentSearchSourceSummary } from "@/lib/content-search-sources";
 type AdminSearchIndexManagerProps = {
   showProgressBars: boolean;
   sources: ContentSearchSourceSummary[];
-  legacyBytes: number;
 };
 
 type IndexApiResponse = {
@@ -66,7 +65,7 @@ const stateLabels: Record<ContentSearchSourceSummary["state"], string> = {
   failed: "存在失败",
 };
 
-export function AdminSearchIndexManager({ showProgressBars, sources, legacyBytes }: AdminSearchIndexManagerProps) {
+export function AdminSearchIndexManager({ showProgressBars, sources }: AdminSearchIndexManagerProps) {
   const router = useRouter();
   const [job, setJob] = useState<ContentJobSnapshot | null>(null);
   const [message, setMessage] = useState("");
@@ -183,27 +182,6 @@ export function AdminSearchIndexManager({ showProgressBars, sources, legacyBytes
     }
   }
 
-  async function clearLegacyIndex() {
-    if (isRunning || clearingSourceId || !window.confirm(`确认删除旧版共享索引（${formatBytes(legacyBytes)}）吗？新分片不会受影响。`)) return;
-    setClearingSourceId(-1);
-    setMessage("");
-    try {
-      const response = await fetch("/admin/indexes/manage", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "deleteLegacy" }),
-      });
-      const data = (await response.json()) as IndexApiResponse;
-      if (!response.ok || !data.ok) throw new Error(data.message || "旧版共享索引删除失败");
-      setMessage(data.message || "旧版共享索引已删除");
-      router.refresh();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "旧版共享索引删除失败");
-    } finally {
-      setClearingSourceId(0);
-    }
-  }
-
   const canCancel = job?.status === "running" || job?.status === "queued";
   const fullTextSources = sources.filter((source) => source.mode === "full");
 
@@ -219,11 +197,6 @@ export function AdminSearchIndexManager({ showProgressBars, sources, legacyBytes
         {canCancel ? (
           <button className="adminIconTextButton adminIndexCommand" type="button" onClick={cancelJob}>
             <Square size={14} aria-hidden="true" />取消
-          </button>
-        ) : null}
-        {legacyBytes > 0 ? (
-          <button className="adminIconTextButton adminIndexCommand isDanger" type="button" disabled={isRunning || Boolean(clearingSourceId) || fullTextSources.some((source) => source.state !== "ready")} onClick={clearLegacyIndex}>
-            <DatabaseZap size={15} aria-hidden="true" />删除旧版索引
           </button>
         ) : null}
       </div>

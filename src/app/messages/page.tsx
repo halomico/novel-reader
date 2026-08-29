@@ -77,10 +77,8 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
         />
       ) : null}
       <section className="messagesPage">
-        <header className="messagesHeader">
-          <div>
-            <h1>{tr("消息")}</h1>
-          </div>
+        <header className="messagesHeader userContentHeader">
+          <span><MessageSquareText size={19} aria-hidden="true" /><h1>{tr("消息")}</h1></span>
           <nav className="messagesTabs" aria-label={tr("消息分类")}>
             <Link className={tab === "announcements" ? "isActive" : ""} href="/messages">
               <Bell size={16} aria-hidden="true" />{tr("公告")}

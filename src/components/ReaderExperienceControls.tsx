@@ -29,7 +29,7 @@ import { clearReaderPaperPreference } from "@/lib/reader-theme-client";
 import { formatNovelWordCount } from "./CatalogBookGrid";
 import { GroveButton } from "./GroveButton";
 import { NovelFavoriteButton } from "./NovelFavoriteButton";
-import { ReaderFontSizeStepper, ReaderLineHeightSlider } from "./ReaderTypographyControls";
+import { ReaderFontSizeStepper, ReaderLineHeightStepper } from "./ReaderTypographyControls";
 import { ReportNovelButton } from "./ReportNovelButton";
 
 type ChapterItem = { id: number; title: string; wordCount: number };
@@ -84,8 +84,6 @@ export function ReaderExperienceControls({
   next?: ChapterItem | null;
   from?: string;
   authenticated: boolean;
-  canRecommend: boolean;
-  initialRecommended: boolean;
   initialInGrove: boolean;
   initialFavorite: boolean;
   canReport: boolean;
@@ -352,7 +350,7 @@ export function ReaderExperienceControls({
                 </div>
                 <div className="readerSettingRow isLineHeight">
                   <span>行距</span>
-                  <ReaderLineHeightSlider value={lineHeight} onChange={changeLineHeight} />
+                  <ReaderLineHeightStepper value={lineHeight} onChange={changeLineHeight} />
                 </div>
                 <div className="readerSettingRow isWidth">
                   <span>页面宽度</span>

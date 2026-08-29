@@ -8,6 +8,7 @@ export type PublicPageCacheRequest = {
   searchParams: URLSearchParams;
   accept: string | null;
   hasUserSession: boolean;
+  hasBrowserLayoutPreference: boolean;
   isRscRequest: boolean;
   isRouterPrefetch: boolean;
   allowPublicNovelPages: boolean;
@@ -51,6 +52,7 @@ export function isPublicPageCacheCandidate(request: PublicPageCacheRequest): boo
   if (
     request.method !== "GET" ||
     request.hasUserSession ||
+    request.hasBrowserLayoutPreference ||
     request.isRscRequest ||
     request.isRouterPrefetch ||
     request.searchParams.has("_rsc")

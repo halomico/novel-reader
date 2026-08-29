@@ -152,7 +152,7 @@ export function UserStationConversation({
             />
           </label>
           <button type="submit" disabled={mutation.pending || !reply.trim()} aria-label={sendLabel} title={sendLabel}>
-            <Send className="stationSendIcon" size={17} aria-hidden="true" />
+            <Send className="stationSendIcon" size={21} strokeWidth={1.8} aria-hidden="true" />
             <span className="stationSendLabel">{sendLabel}</span>
           </button>
         </form>

@@ -5,7 +5,6 @@ import { getAdminSession } from "@/lib/admin-auth";
 import { countActiveContentJobs } from "@/lib/content-jobs";
 import { invalidateContentSearchResultCache } from "@/lib/content-search-cache";
 import { deleteContentSearchDatabase } from "@/lib/content-search-db";
-import { deleteLegacyContentSearchDatabase, listContentSearchSourceSummaries } from "@/lib/content-search-sources";
 import { getNovelSourceById } from "@/lib/novel-library";
 
 export const dynamic = "force-dynamic";
@@ -41,25 +40,11 @@ export async function POST(request: NextRequest) {
   } catch {
     return jsonError("索引管理请求格式有误", 400);
   }
-  if (body.action !== "clear" && body.action !== "deleteLegacy") {
+  if (body.action !== "clear") {
     return jsonError("不支持的索引管理操作", 400);
   }
   if (countActiveContentJobs("index") > 0) {
     return jsonError("索引任务运行期间不能清空索引", 409);
-  }
-
-  if (body.action === "deleteLegacy") {
-    const incomplete = listContentSearchSourceSummaries().filter(
-      (source) => source.mode === "full" && source.state !== "ready",
-    );
-    if (incomplete.length) {
-      return jsonError("所有普通书库索引就绪后才能删除旧版共享索引", 409);
-    }
-    deleteLegacyContentSearchDatabase();
-    invalidateContentSearchResultCache();
-    revalidatePath("/admin/indexes");
-    revalidatePath("/admin");
-    return NextResponse.json({ ok: true, message: "旧版共享索引已删除，磁盘空间已释放" });
   }
 
   const sourceId = Number(body.sourceId || 0);

@@ -1,9 +1,9 @@
-import { ListFilter, Tags } from "lucide-react";
+import { ListFilter } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "@/components/LocalizedLink";
 import { notFound } from "next/navigation";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
+import { PageContextBar } from "@/components/PageContextBar";
 import { SiteHeader } from "@/components/SiteHeader";
 import { TagLibrarySearch } from "@/components/TagLibrarySearch";
 import { TagTrackedLink } from "@/components/TagTrackedLink";
@@ -85,7 +85,7 @@ export default async function TagsPage({ searchParams }: { searchParams: Promise
     const tags = group.tags.filter((tag) => !effectiveHidden.has(tag.id));
     return tags.length || (group.group && !group.tags.length) ? [{ ...group, tags }] : [];
   });
-  const groups = await Promise.all(sourceGroups.map(async (group) => ({
+  const localizedGroups = await Promise.all(sourceGroups.map(async (group) => ({
     ...group,
     group: group.group
       ? {
@@ -102,32 +102,30 @@ export default async function TagsPage({ searchParams }: { searchParams: Promise
       description: await localizeText(tag.description, locale),
     }))),
   })));
+  const standaloneTags = showHidden
+    ? []
+    : localizedGroups.flatMap((group) => group.group && !group.tags.length ? [group.group] : []);
+  const groups = showHidden
+    ? localizedGroups
+    : localizedGroups.filter((group) => !group.group || group.tags.length > 0);
   const showAdvancedSearch = canAccessAdvancedTagSearch(false) ||
     (canAccessAdvancedTagSearch(Boolean(user)) && hasUserPermission(user, "advanced_search"));
 
   return (
     <main className="appShell">
       <SiteHeader currentUser={user} />
-      <Breadcrumbs items={[{ label: uiText(locale, "首页"), href: "/" }, { label: uiText(locale, "标签") }]} />
+      <PageContextBar items={[{ label: uiText(locale, "首页"), href: "/" }, { label: uiText(locale, "标签") }]}>
+        <div className="tagLibraryTools">
+          <TagLibrarySearch locale={locale} />
+          {showAdvancedSearch ? (
+            <Link className="tagAdvancedSearchLink" href="/tags/search">
+              <ListFilter size={16} aria-hidden="true" />
+              {uiText(locale, "高级搜索")}
+            </Link>
+          ) : null}
+        </div>
+      </PageContextBar>
       <section className={`tagLibrary${showHidden ? " isManagingHidden" : ""}`}>
-        <header className="tagLibraryHeader">
-          <span className="tagLibraryIcon" aria-hidden="true">
-            <Tags size={23} />
-          </span>
-          <div>
-            <h1>{uiText(locale, "所有标签")}</h1>
-            <p>{uiText(locale, "按分组浏览已打标签的小说。")}</p>
-          </div>
-          <div className="tagLibraryTools">
-            <TagLibrarySearch locale={locale} />
-            {showAdvancedSearch ? (
-              <Link className="tagAdvancedSearchLink" href="/tags/search">
-                <ListFilter size={16} aria-hidden="true" />
-                {uiText(locale, "高级搜索")}
-              </Link>
-            ) : null}
-          </div>
-        </header>
 
         {user ? (
           <nav className="tagPreferenceTabs" aria-label={uiText(locale, "标签显示状态")}>
@@ -139,8 +137,32 @@ export default async function TagsPage({ searchParams }: { searchParams: Promise
           </nav>
         ) : null}
 
-        {groups.length ? (
+        {groups.length || standaloneTags.length ? (
           <div className="tagGroupStack" id="tag-library-groups">
+            {standaloneTags.length ? (
+              <section
+                className="tagGroupBlock tagStandaloneGroup"
+                data-tag-group-search={uiText(locale, "标签")}
+              >
+                <div className="tagGroupHeader">
+                  <h2>{uiText(locale, "标签")}</h2>
+                  <small>{standaloneTags.length}</small>
+                </div>
+                <div className="tagChipCloud">
+                  {standaloneTags.map((tag) => (
+                    <TagTrackedLink
+                      className="tagChip"
+                      slug={tag.slug}
+                      data-tag-search={tagSearchText(tag)}
+                      key={tag.id}
+                    >
+                      <span>{tag.name}</span>
+                      <small>{tag.directCount}</small>
+                    </TagTrackedLink>
+                  ))}
+                </div>
+              </section>
+            ) : null}
             {groups.map((group) => {
               const tags = showHidden ? group.tags : visibleGroupTags(group);
               const groupIsExplicitlyHidden = Boolean(group.group && explicitHidden.has(group.group.id));
@@ -152,7 +174,7 @@ export default async function TagsPage({ searchParams }: { searchParams: Promise
                 >
                   <div className="tagGroupHeader">
                     <h2>{group.group?.name || uiText(locale, "未分组")}</h2>
-                    {user && group.group && (!showHidden || groupIsExplicitlyHidden) ? (
+                    {user && showHidden && group.group && groupIsExplicitlyHidden ? (
                       <form action={setTagPreferenceAction}>
                         <input name="tagId" type="hidden" value={group.group.id} />
                         <input name="hidden" type="hidden" value={groupIsExplicitlyHidden ? "0" : "1"} />
@@ -207,7 +229,7 @@ export default async function TagsPage({ searchParams }: { searchParams: Promise
             <h2>{uiText(locale, showHidden ? "没有隐藏标签" : "暂无标签")}</h2>
           </section>
         )}
-        {groups.length ? <p className="tagLibraryFilterEmpty" role="status" hidden>{uiText(locale, "没有匹配的标签")}</p> : null}
+        {groups.length || standaloneTags.length ? <p className="tagLibraryFilterEmpty" role="status" hidden>{uiText(locale, "没有匹配的标签")}</p> : null}
       </section>
     </main>
   );

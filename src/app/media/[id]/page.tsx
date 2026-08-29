@@ -190,6 +190,7 @@ export default async function MediaDetailPage({
   const displayRelatedVideos = await Promise.all(relatedVideos.map(async (item) => ({
     ...item,
     title: await localizeText(item.title, locale),
+    artist: item.artist ? await localizeText(item.artist, locale) : item.artist,
     description: await localizeText(item.description, locale),
   })));
   const videoTags = asset.kind === "video" ? listVideoTagsForAsset(asset.id).filter((tag) => tag.visible) : [];
@@ -338,6 +339,7 @@ export default async function MediaDetailPage({
                     ? directMediaThumbnailUrl(item, thumbnailSettings.singlePercent, publiclyAccessibleThumbnails)
                     : null}
                   returnHref={videoReturnHref}
+                  locale={locale}
                   key={item.id}
                 />
               ))}

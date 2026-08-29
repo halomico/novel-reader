@@ -9,12 +9,13 @@ import iconv from "iconv-lite";
 test("uses the full-text index for mixed encodings and safely includes changed books", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "novel-search-flow-"));
   const libraryDir = path.join(root, "library");
+  const previousSearchDirectory = process.env.CONTENT_SEARCH_INDEX_DIR;
   let mainDb: DatabaseSync | undefined;
   let searchDb: DatabaseSync | undefined;
   await fs.mkdir(libraryDir, { recursive: true });
   process.env.NOVEL_LIBRARY_DIR = libraryDir;
   process.env.DATABASE_PATH = path.join(root, "novels.db");
-  process.env.CONTENT_SEARCH_DB_PATH = path.join(root, "content-search.db");
+  process.env.CONTENT_SEARCH_INDEX_DIR = path.join(root, "indexes");
   process.env.ADMIN_SETTINGS_PATH = path.join(root, "admin-settings.json");
 
   const files = [
@@ -135,7 +136,7 @@ test("uses the full-text index for mixed encodings and safely includes changed b
       assert.deepEqual(chapterResults.map((result) => result.segmentIndex), [0, 0]);
     }
 
-    searchDb.exec("DROP TABLE content_trigram_fts; DROP TABLE content_bigram_fts;");
+    searchDb.exec("DROP TABLE content_bigram_fts;");
     const unavailableIndexResult = await searchNovelContent(matching.query, undefined, { candidateNovelIds: [2] });
     assert.deepEqual(unavailableIndexResult.results, []);
     assert.equal(unavailableIndexResult.searchedBooks, 0);
@@ -144,6 +145,8 @@ test("uses the full-text index for mixed encodings and safely includes changed b
     const { closeAllContentSearchDbs } = await import("./content-search-db");
     closeAllContentSearchDbs();
     delete (globalThis as typeof globalThis & { novelReaderDb?: DatabaseSync }).novelReaderDb;
+    if (previousSearchDirectory === undefined) delete process.env.CONTENT_SEARCH_INDEX_DIR;
+    else process.env.CONTENT_SEARCH_INDEX_DIR = previousSearchDirectory;
     await fs.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 });
@@ -151,9 +154,9 @@ test("uses the full-text index for mixed encodings and safely includes changed b
 test("merges ready library shards and isolates a removed shard", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "novel-search-shards-"));
   const libraryDir = path.join(root, "library");
+  const previousSearchDirectory = process.env.CONTENT_SEARCH_INDEX_DIR;
   process.env.NOVEL_LIBRARY_DIR = libraryDir;
   process.env.DATABASE_PATH = path.join(root, "novels.db");
-  process.env.CONTENT_SEARCH_DB_PATH = path.join(root, "legacy-content-search.db");
   process.env.CONTENT_SEARCH_INDEX_DIR = path.join(root, "indexes");
   process.env.ADMIN_SETTINGS_PATH = path.join(root, "admin-settings.json");
   await fs.mkdir(path.join(libraryDir, "second"), { recursive: true });
@@ -198,7 +201,8 @@ test("merges ready library shards and isolates a removed shard", async () => {
     const globalForDb = globalThis as typeof globalThis & { novelReaderDb?: DatabaseSync };
     globalForDb.novelReaderDb?.close();
     delete globalForDb.novelReaderDb;
-    delete process.env.CONTENT_SEARCH_INDEX_DIR;
+    if (previousSearchDirectory === undefined) delete process.env.CONTENT_SEARCH_INDEX_DIR;
+    else process.env.CONTENT_SEARCH_INDEX_DIR = previousSearchDirectory;
     await fs.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 });
@@ -208,14 +212,14 @@ test("updates a novel file, database metadata, and its title", async () => {
   const libraryDir = path.join(root, "library");
   const previousLibraryDir = process.env.NOVEL_LIBRARY_DIR;
   const previousDatabasePath = process.env.DATABASE_PATH;
-  const previousSearchPath = process.env.CONTENT_SEARCH_DB_PATH;
+  const previousSearchDirectory = process.env.CONTENT_SEARCH_INDEX_DIR;
   let mainDb: DatabaseSync | undefined;
   let searchDb: DatabaseSync | undefined;
 
   await fs.mkdir(libraryDir, { recursive: true });
   process.env.NOVEL_LIBRARY_DIR = libraryDir;
   process.env.DATABASE_PATH = path.join(root, "novels.db");
-  process.env.CONTENT_SEARCH_DB_PATH = path.join(root, "content-search.db");
+  process.env.CONTENT_SEARCH_INDEX_DIR = path.join(root, "indexes");
 
   try {
     const { getDb } = await import("./db");
@@ -267,8 +271,8 @@ test("updates a novel file, database metadata, and its title", async () => {
     else process.env.NOVEL_LIBRARY_DIR = previousLibraryDir;
     if (previousDatabasePath === undefined) delete process.env.DATABASE_PATH;
     else process.env.DATABASE_PATH = previousDatabasePath;
-    if (previousSearchPath === undefined) delete process.env.CONTENT_SEARCH_DB_PATH;
-    else process.env.CONTENT_SEARCH_DB_PATH = previousSearchPath;
+    if (previousSearchDirectory === undefined) delete process.env.CONTENT_SEARCH_INDEX_DIR;
+    else process.env.CONTENT_SEARCH_INDEX_DIR = previousSearchDirectory;
     await fs.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
   }
 });

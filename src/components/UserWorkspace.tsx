@@ -8,7 +8,7 @@ import { countUserUnreadMessages } from "@/lib/station";
 import { getUserLevelDefinition } from "@/lib/user-levels";
 import { hasUserPermission } from "@/lib/user-levels";
 import { isMarketEnabled } from "@/lib/config";
-import { Breadcrumbs } from "./Breadcrumbs";
+import { PageContextBar } from "./PageContextBar";
 import { SiteHeader } from "./SiteHeader";
 
 export type UserWorkspaceKey = "profile" | "growth" | "activity" | "messages" | "market" | "settings";
@@ -41,7 +41,7 @@ export async function UserWorkspace({
   return (
     <main className="appShell userWorkspaceShell">
       <SiteHeader currentUser={user} unreadMessages={unreadMessages} />
-      <Breadcrumbs items={[{ label: uiText(locale, "首页"), href: "/" }, { label: breadcrumb }]} />
+      <PageContextBar items={[{ label: uiText(locale, "首页"), href: "/" }, { label: breadcrumb }]} />
       <section className="userWorkspaceLayout">
         <aside className="userWorkspaceSidebar" aria-label={uiText(locale, "账户")}>
           <div className="userWorkspaceIdentity">

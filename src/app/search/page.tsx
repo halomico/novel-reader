@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { ContentSearchClient } from "@/components/ContentSearchClient";
 import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { PageContextBar } from "@/components/PageContextBar";
 import { SiteHeader } from "@/components/SiteHeader";
 import {
   normalizeSearchQuerySource,
@@ -99,7 +99,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   return (
     <main className="appShell">
       <SiteHeader query={originalQuery} defaultSearchMode="content" currentUser={user} library={libraryScope.slug} />
-      <Breadcrumbs items={[{ label: homeLabel, href: "/" }, { label: searchLabel }]} />
+      <PageContextBar items={[{ label: homeLabel, href: "/" }, { label: searchLabel }]} />
       {!fullTextSearchEnabled ? (
         <section className="searchHero">
           <p className="searchMessage">{uiText(locale, "该书库未加入全站正文索引，请进入具体书籍后使用“本书”搜索。")}</p>

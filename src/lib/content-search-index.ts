@@ -1,11 +1,15 @@
 import fs from "node:fs";
 import type { DatabaseSync } from "node:sqlite";
+import { brotliCompressSync, brotliDecompressSync, constants as zlibConstants } from "node:zlib";
 import { readNovelContent, type Novel } from "./books";
+import { listNovelChapters, readNovelChapterContent } from "./novel-library";
 import { normalizeSearchText } from "./search-query";
+import { iterateNovelSegments } from "./segments";
 
-export const CONTENT_SEARCH_INDEX_VERSION = 2;
-export const CONTENT_SEARCH_MAX_SOURCE_RATIO = 5;
+export const CONTENT_SEARCH_INDEX_VERSION = 3;
+export const CONTENT_SEARCH_MAX_SOURCE_RATIO = 2.5;
 const CONTENT_SEARCH_RATIO_MIN_SOURCE_BYTES = 10 * 1024 * 1024;
+const CONTENT_SEARCH_QUERY_BATCH_SIZE = 512;
 
 export type ContentSearchNovelRecord = Pick<
   Novel,
@@ -30,11 +34,31 @@ type ContentSearchFailureRow = {
 };
 
 export type ContentSearchCandidatePlan = {
-  engine: "fts5-bigram" | "fts5-trigram" | "fts5-hybrid";
+  engine: "fts5-bigram";
   terms: string[];
   candidateIds: number[];
   coveredNovelCount: number;
   uncoveredNovelCount: number;
+};
+
+export type ContentSearchCandidateSegment = {
+  segmentId: number;
+  novelId: number;
+  chapterId: number | null;
+  chapterTitle: string | null;
+  segmentIndex: number;
+  body: Uint8Array;
+  contentHash: string | null;
+  sizeBytes: number;
+  mtimeMs: number;
+  indexVersion: number;
+};
+
+export type ContentSearchSegmentBatch = {
+  engine: "fts5-bigram";
+  terms: string[];
+  segments: ContentSearchCandidateSegment[];
+  nextSegmentId: number;
 };
 
 export type ContentSearchIndexProgress = {
@@ -73,8 +97,14 @@ export type ContentSearchIndexBuildOptions = {
 
 type PreparedNovelIndex = {
   novel: ContentSearchNovelRecord;
-  normalizedContent: string;
-  bigramTokens: string;
+  sourceChars: number;
+  segments: Array<{
+    chapterId: number | null;
+    chapterTitle: string | null;
+    segmentIndex: number;
+    body: Uint8Array;
+    bigramTokens: string;
+  }>;
 };
 
 export class ContentSearchIndexCancelledError extends Error {
@@ -103,12 +133,8 @@ export function getContentSearchDiskUsageBytes(db: DatabaseSync): number {
   return relatedDatabasePaths(db).reduce((total, filePath) => total + fileSize(filePath), 0);
 }
 
-function codePointToken(char: string): string {
-  return (char.codePointAt(0) || 0).toString(16).padStart(6, "0");
-}
-
 export function createBigramToken(left: string, right: string): string {
-  return `b${codePointToken(left)}${codePointToken(right)}`;
+  return `${left}${right}`;
 }
 
 export function createBigramTokenDocument(normalizedContent: string): string {
@@ -123,19 +149,14 @@ export function createBigramTokenDocument(normalizedContent: string): string {
   return Array.from(tokens).join(" ");
 }
 
-export function createCharacterNgrams(value: string, size: number): string[] {
-  const chars = Array.from(value);
-  const seen = new Set<string>();
-  for (let index = 0; index <= chars.length - size; index += 1) {
-    seen.add(chars.slice(index, index + size).join(""));
-  }
-  return Array.from(seen);
+export function compressContentSearchSegment(content: string): Uint8Array {
+  return brotliCompressSync(Buffer.from(content), {
+    params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 4 },
+  });
 }
 
-export function buildTrigramMatchQuery(normalizedTerm: string): string {
-  return createCharacterNgrams(normalizedTerm, 3)
-    .map((term) => `"${term.replace(/"/g, '""')}"`)
-    .join(" AND ");
+export function decompressContentSearchSegment(body: Uint8Array): string {
+  return brotliDecompressSync(Buffer.from(body)).toString("utf8");
 }
 
 function listStates(db: DatabaseSync): ContentSearchStateRow[] {
@@ -182,18 +203,56 @@ function normalizeCandidateTerms(values: string | string[]): string[] {
   );
 }
 
-function queryCoveredIds(db: DatabaseSync, term: string): { engine: "bigram" | "trigram"; ids: Set<number> } {
-  const chars = Array.from(term);
-  const rows =
-    chars.length === 2
-      ? (db
-          .prepare("SELECT rowid AS novelId FROM content_bigram_fts WHERE content_bigram_fts MATCH ? ORDER BY rowid")
-          .all(createBigramToken(chars[0], chars[1])) as Array<{ novelId: number }>)
-      : (db
-          .prepare("SELECT rowid AS novelId FROM content_trigram_fts WHERE content_trigram_fts MATCH ? ORDER BY rowid")
-          .all(buildTrigramMatchQuery(term)) as Array<{ novelId: number }>);
+function buildBigramMatchQuery(terms: string[]): string {
+  const tokens = new Set<string>();
+  for (const term of terms) {
+    const chars = Array.from(term);
+    for (let index = 1; index < chars.length; index += 1) {
+      tokens.add(createBigramToken(chars[index - 1], chars[index]));
+    }
+  }
+  return Array.from(tokens)
+    .map((token) => `"${token.replace(/"/g, '""')}"`)
+    .join(" AND ");
+}
 
-  return { engine: chars.length === 2 ? "bigram" : "trigram", ids: new Set(rows.map((row) => row.novelId)) };
+export function findContentSearchCandidateSegments(
+  db: DatabaseSync,
+  requiredTerms: string | string[],
+  options: { afterSegmentId?: number; limit?: number } = {},
+): ContentSearchSegmentBatch | null {
+  const terms = normalizeCandidateTerms(requiredTerms);
+  if (!terms.length) return null;
+  const afterSegmentId = Math.max(0, Math.floor(options.afterSegmentId || 0));
+  const limit = Math.min(Math.max(Math.floor(options.limit || CONTENT_SEARCH_QUERY_BATCH_SIZE), 1), 2_048);
+
+  try {
+    const segments = db.prepare(
+      `SELECT s.id AS segmentId, s.novel_id AS novelId, s.chapter_id AS chapterId,
+              s.chapter_title AS chapterTitle, s.segment_index AS segmentIndex, s.body,
+              st.content_hash AS contentHash, st.size_bytes AS sizeBytes,
+              st.mtime_ms AS mtimeMs, st.index_version AS indexVersion
+       FROM content_bigram_fts f
+       JOIN content_search_segments s ON s.id = f.rowid
+       JOIN content_search_state st ON st.novel_id = s.novel_id
+       WHERE content_bigram_fts MATCH ? AND f.rowid > ? AND st.index_version = ?
+       ORDER BY f.rowid ASC
+       LIMIT ?`,
+    ).all(
+      buildBigramMatchQuery(terms),
+      afterSegmentId,
+      CONTENT_SEARCH_INDEX_VERSION,
+      limit,
+    ) as ContentSearchCandidateSegment[];
+    return {
+      engine: "fts5-bigram",
+      terms,
+      segments,
+      nextSegmentId: segments.at(-1)?.segmentId || afterSegmentId,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function findContentSearchCandidateNovelIds(
@@ -219,26 +278,20 @@ export function findContentSearchCandidateNovelIds(
   }
 
   try {
-    let matchedIds: Set<number> | null = null;
-    const engines = new Set<"bigram" | "trigram">();
-    for (const term of terms) {
-      const result = queryCoveredIds(db, term);
-      engines.add(result.engine);
-      if (matchedIds === null) {
-        matchedIds = result.ids;
-      } else {
-        const currentMatches: Set<number> = matchedIds;
-        matchedIds = new Set<number>(Array.from(currentMatches).filter((id) => result.ids.has(id)));
-      }
-      if (!matchedIds.size) {
-        break;
-      }
+    const matchedIds = new Set<number>();
+    let afterSegmentId = 0;
+    while (true) {
+      const batch = findContentSearchCandidateSegments(db, terms, { afterSegmentId });
+      if (!batch || !batch.segments.length) break;
+      batch.segments.forEach((segment) => matchedIds.add(segment.novelId));
+      if (batch.segments.length < CONTENT_SEARCH_QUERY_BATCH_SIZE || batch.nextSegmentId <= afterSegmentId) break;
+      afterSegmentId = batch.nextSegmentId;
     }
 
-    const candidateIds = Array.from(matchedIds || []).filter((novelId) => coveredIds.has(novelId));
+    const candidateIds = Array.from(matchedIds).filter((novelId) => coveredIds.has(novelId));
 
     return {
-      engine: engines.size > 1 ? "fts5-hybrid" : engines.has("bigram") ? "fts5-bigram" : "fts5-trigram",
+      engine: "fts5-bigram",
       terms,
       candidateIds: candidateIds.sort((left, right) => left - right),
       coveredNovelCount: coveredIds.size,
@@ -388,11 +441,19 @@ export function getContentSearchIndexSummary(
   };
 }
 
+function deleteNovelSegments(db: DatabaseSync, novelId: number) {
+  const rows = db.prepare(
+    "SELECT id FROM content_search_segments WHERE novel_id = ? ORDER BY id",
+  ).all(novelId) as Array<{ id: number }>;
+  const deleteFts = db.prepare("DELETE FROM content_bigram_fts WHERE rowid = ?");
+  for (const row of rows) deleteFts.run(row.id);
+  db.prepare("DELETE FROM content_search_segments WHERE novel_id = ?").run(novelId);
+}
+
 export function deleteContentSearchIndexNovel(db: DatabaseSync, novelId: number) {
   db.exec("BEGIN");
   try {
-    db.prepare("DELETE FROM content_trigram_fts WHERE rowid = ?").run(novelId);
-    db.prepare("DELETE FROM content_bigram_fts WHERE rowid = ?").run(novelId);
+    deleteNovelSegments(db, novelId);
     db.prepare("DELETE FROM content_search_state WHERE novel_id = ?").run(novelId);
     db.prepare("DELETE FROM content_search_failures WHERE novel_id = ?").run(novelId);
     db.exec("COMMIT");
@@ -405,12 +466,8 @@ export function deleteContentSearchIndexNovel(db: DatabaseSync, novelId: number)
 export function clearContentSearchIndex(db: DatabaseSync) {
   db.exec("BEGIN");
   try {
-    db.exec(`
-      INSERT INTO content_trigram_fts(content_trigram_fts) VALUES('delete-all');
-      INSERT INTO content_bigram_fts(content_bigram_fts) VALUES('delete-all');
-      DELETE FROM content_search_state;
-      DELETE FROM content_search_failures;
-    `);
+    db.prepare("INSERT INTO content_bigram_fts(content_bigram_fts) VALUES(?)").run("delete-all");
+    db.exec(`DELETE FROM content_search_segments; DELETE FROM content_search_state; DELETE FROM content_search_failures;`);
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");
@@ -419,9 +476,36 @@ export function clearContentSearchIndex(db: DatabaseSync) {
 }
 
 function optimizeContentSearchIndex(db: DatabaseSync) {
-  db.prepare("INSERT INTO content_trigram_fts(content_trigram_fts) VALUES('optimize')").run();
-  db.prepare("INSERT INTO content_bigram_fts(content_bigram_fts) VALUES('optimize')").run();
+  db.prepare("INSERT INTO content_bigram_fts(content_bigram_fts) VALUES(?)").run("optimize");
   db.exec("PRAGMA wal_checkpoint(TRUNCATE);");
+}
+
+async function prepareNovelIndex(novel: ContentSearchNovelRecord): Promise<PreparedNovelIndex> {
+  const documents = novel.storage_mode === "chapters"
+    ? listNovelChapters(novel.id).map((chapter) => ({
+        chapterId: chapter.id,
+        chapterTitle: chapter.title,
+        read: () => readNovelChapterContent(chapter),
+      }))
+    : [{ chapterId: null, chapterTitle: null, read: () => readNovelContent(novel) }];
+  const segments: PreparedNovelIndex["segments"] = [];
+  let sourceChars = 0;
+
+  for (const document of documents) {
+    const content = await document.read();
+    sourceChars += content.length;
+    for (const segment of iterateNovelSegments(content)) {
+      const normalizedContent = normalizeSearchText(segment.content);
+      segments.push({
+        chapterId: document.chapterId,
+        chapterTitle: document.chapterTitle,
+        segmentIndex: segment.segmentIndex,
+        body: compressContentSearchSegment(segment.content),
+        bigramTokens: createBigramTokenDocument(normalizedContent),
+      });
+    }
+  }
+  return { novel, sourceChars, segments };
 }
 
 export async function buildContentSearchIndex(
@@ -443,10 +527,14 @@ export async function buildContentSearchIndex(
     clearContentSearchIndex(searchDb);
   }
 
-  const stateRows = listStates(searchDb);
+  let stateRows = listStates(searchDb);
+  if (stateRows.some((state) => state.indexVersion !== CONTENT_SEARCH_INDEX_VERSION)) {
+    clearContentSearchIndex(searchDb);
+    stateRows = [];
+  }
   const states = new Map(stateRows.map((state) => [state.novelId, state]));
   const currentIds = new Set(novels.map((novel) => novel.id));
-  const obsoleteIds = new Set([
+  const obsoleteIds = allowedNovelIds ? new Set<number>() : new Set([
     ...stateRows.filter((state) => !currentIds.has(state.novelId)).map((state) => state.novelId),
     ...listFailures(searchDb).filter((failure) => !currentIds.has(failure.novelId)).map((failure) => failure.novelId),
   ]);
@@ -460,11 +548,13 @@ export async function buildContentSearchIndex(
   let failedBooks = 0;
   let preparedChars = 0;
   const prepared: PreparedNovelIndex[] = [];
-  const deleteTrigram = searchDb.prepare("DELETE FROM content_trigram_fts WHERE rowid = ?");
-  const deleteBigram = searchDb.prepare("DELETE FROM content_bigram_fts WHERE rowid = ?");
   const deleteState = searchDb.prepare("DELETE FROM content_search_state WHERE novel_id = ?");
   const deleteFailure = searchDb.prepare("DELETE FROM content_search_failures WHERE novel_id = ?");
-  const insertTrigram = searchDb.prepare("INSERT INTO content_trigram_fts(rowid, body) VALUES (?, ?)");
+  const insertSegment = searchDb.prepare(
+    `INSERT INTO content_search_segments
+       (novel_id, chapter_id, chapter_title, segment_index, body)
+     VALUES (?, ?, ?, ?, ?)`,
+  );
   const insertBigram = searchDb.prepare("INSERT INTO content_bigram_fts(rowid, tokens) VALUES (?, ?)");
   const upsertState = searchDb.prepare(
     `INSERT INTO content_search_state (novel_id, content_hash, size_bytes, mtime_ms, index_version, indexed_at)
@@ -503,10 +593,17 @@ export async function buildContentSearchIndex(
     searchDb.exec("BEGIN");
     try {
       for (const item of prepared) {
-        deleteTrigram.run(item.novel.id);
-        deleteBigram.run(item.novel.id);
-        insertTrigram.run(item.novel.id, item.normalizedContent);
-        insertBigram.run(item.novel.id, item.bigramTokens);
+        deleteNovelSegments(searchDb, item.novel.id);
+        for (const segment of item.segments) {
+          const inserted = insertSegment.run(
+            item.novel.id,
+            segment.chapterId,
+            segment.chapterTitle,
+            segment.segmentIndex,
+            segment.body,
+          );
+          if (segment.bigramTokens) insertBigram.run(inserted.lastInsertRowid, segment.bigramTokens);
+        }
         upsertState.run(
           item.novel.id,
           item.novel.content_hash,
@@ -540,14 +637,13 @@ export async function buildContentSearchIndex(
     }
 
     try {
-      const normalizedContent = normalizeSearchText(await readNovelContent(novel));
-      prepared.push({ novel, normalizedContent, bigramTokens: createBigramTokenDocument(normalizedContent) });
-      preparedChars += normalizedContent.length;
+      const item = await prepareNovelIndex(novel);
+      prepared.push(item);
+      preparedChars += item.sourceChars;
     } catch (error) {
       searchDb.exec("BEGIN");
       try {
-        deleteTrigram.run(novel.id);
-        deleteBigram.run(novel.id);
+        deleteNovelSegments(searchDb, novel.id);
         deleteState.run(novel.id);
         upsertFailure.run(
           novel.id,

@@ -4,7 +4,6 @@ import { ContextNavigationLink } from "@/components/ContextNavigationLink";
 
 export function SearchTrackedLink({
   className,
-  documentNavigation = false,
   eventKey,
   href,
   novelId,
@@ -14,7 +13,6 @@ export function SearchTrackedLink({
   children,
 }: {
   className: string;
-  documentNavigation?: boolean;
   eventKey?: string | null;
   href: string;
   novelId: number;
@@ -39,9 +37,10 @@ export function SearchTrackedLink({
     <ContextNavigationLink
       className={className}
       contextReturnHref={returnHref}
-      documentNavigation={documentNavigation}
       href={href}
       onClick={trackClick}
+      // Dense result grids must not prefetch every visible card. The wrapped
+      // IntentPrefetchLink still prefetches after real hover/focus/touch intent.
       prefetch={false}
     >
       {children}

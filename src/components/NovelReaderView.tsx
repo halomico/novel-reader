@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import { Suspense } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { NovelAccessGate } from "@/components/NovelAccessGate";
 import { ReadingProgressTracker } from "@/components/ReadingProgressTracker";
@@ -11,7 +12,7 @@ import { AdminReaderActions } from "@/components/AdminReaderActions";
 import Link from "@/components/LocalizedLink";
 import { getClientIp } from "@/lib/admin-access";
 import { recordAnalyticsEvent } from "@/lib/analytics";
-import { readNovelSegments, type Novel } from "@/lib/books";
+import { getAdjacentNovels, readNovelSegments, type Novel } from "@/lib/books";
 import {
   areGuestHotwordLinksEnabled,
   areHotwordLinksEnabled,
@@ -31,7 +32,6 @@ import {
   type NovelChapter,
 } from "@/lib/novel-library";
 import { getReadingProgress, novelContentVersion, type ReadingProgress } from "@/lib/reading-progress";
-import { getNovelRecommendationState } from "@/lib/recommendations";
 import type { NovelSegment } from "@/lib/segments";
 import { isNovelPinned } from "@/lib/pinned-novels";
 import { filterTagsForUser } from "@/lib/tag-preferences";
@@ -130,6 +130,35 @@ function ChapterNavigation({ bookId, context, from }: {
           <span>下一章</span>
         </Link>
       ) : <span className="isDisabled"><span>下一章</span></span>}
+    </nav>
+  );
+}
+
+function ReaderNovelNavigation({
+  previous,
+  next,
+  returnHref,
+}: {
+  previous: { id: number; title: string } | null;
+  next: { id: number; title: string } | null;
+  returnHref: string;
+}) {
+  if (!previous && !next) return null;
+  const href = (id: number) => `/books/${id}?from=${encodeURIComponent(returnHref)}`;
+  return (
+    <nav className="readerNovelNavigation" aria-label="小说导航">
+      {previous ? (
+        <Link href={href(previous.id)} prefetch={false} title={`上一篇：${previous.title}`}>
+          <ChevronLeft size={18} aria-hidden="true" />
+          <span><strong>{previous.title}</strong></span>
+        </Link>
+      ) : <span className="isDisabled" aria-hidden="true"><ChevronLeft size={18} /></span>}
+      {next ? (
+        <Link href={href(next.id)} prefetch={false} title={`下一篇：${next.title}`}>
+          <span><strong>{next.title}</strong></span>
+          <ChevronRight size={18} aria-hidden="true" />
+        </Link>
+      ) : <span className="isDisabled" aria-hidden="true"><ChevronRight size={18} /></span>}
     </nav>
   );
 }
@@ -244,10 +273,8 @@ export async function NovelReaderView({
   const localizedHotwords = await Promise.all(hotwords.map((term) => localizeText(term, locale)));
   const [homeLabel, novelsLabel] = await localizeTexts(["首页", "小说"] as const, locale);
   const initialProgress = user ? getReadingProgress(user.id, book.id) : null;
-  const recommendation = user ? getNovelRecommendationState(user.id, book.id) : null;
   const grove = user ? getNovelGroveState(user.id, book.id) : null;
   const favorite = user ? isNovelFavorite(user.id, book.id) : false;
-  const canRecommend = hasUserPermission(user, "novel_feedback");
   const canReport = user?.role === "user" && hasUserPermission(user, "content_report");
   const library = book.source_id ? getNovelSourceById(book.source_id)?.slug || "default" : "default";
   const catalogHref = safeReturnHref(
@@ -265,6 +292,17 @@ export async function NovelReaderView({
   const currentSearchBookId = book.storage_mode === "chapters" && getNovelReadAccess(book, user).allowed
     ? book.id
     : undefined;
+  const adjacentNovels = chapter ? null : getAdjacentNovels(book);
+  const [displayPreviousNovel, displayNextNovel] = adjacentNovels
+    ? await Promise.all([
+        adjacentNovels.previous
+          ? localizeText(adjacentNovels.previous.title, locale).then((title) => ({ id: adjacentNovels.previous!.id, title }))
+          : null,
+        adjacentNovels.next
+          ? localizeText(adjacentNovels.next.title, locale).then((title) => ({ id: adjacentNovels.next!.id, title }))
+          : null,
+      ])
+    : [null, null];
 
   return (
     <main className="readerShell">
@@ -291,8 +329,6 @@ export async function NovelReaderView({
         next={chapterContext?.next ? { id: chapterContext.next.id, title: chapterContext.next.title, wordCount: chapterContext.next.wordCount } : null}
         from={query.from}
         authenticated={authenticated}
-        canRecommend={canRecommend}
-        initialRecommended={Boolean(recommendation?.recommended)}
         initialInGrove={Boolean(grove?.planted)}
         initialFavorite={favorite}
         canReport={canReport}
@@ -352,13 +388,19 @@ export async function NovelReaderView({
             novelId={book.id}
             price={readAccess.price}
             loginRequired={!authenticated}
-            preview
           />
         ) : null}
         {chapterContext && readAccess.allowed ? (
           <ChapterNavigation bookId={book.id} context={chapterContext} from={query.from} />
         ) : null}
         <ReaderHotwordLinks hotwords={localizedHotwords} novelId={book.id} library={library} />
+        {!chapter ? (
+          <ReaderNovelNavigation
+            previous={displayPreviousNovel}
+            next={displayNextNovel}
+            returnHref={catalogHref}
+          />
+        ) : null}
       </article>
     </main>
   );

@@ -5,14 +5,19 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { localeFromPathname, uiText, withLocalePath } from "@/lib/locale";
 import { beginNavigationProgress } from "./NavigationProgress";
 
-function randomCatalogHref(library = "") {
+function randomCatalogHref(basePath: string, searchParams?: URLSearchParams) {
   const seed = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   const params = new URLSearchParams({ random: seed });
-  if (library && library !== "default") params.set("library", library);
-  return `/novels?${params.toString()}`;
+  if (basePath === "/novels" && searchParams) {
+    const library = searchParams.get("library") || searchParams.get("sourceLibrary") || "";
+    const access = searchParams.get("access") || "";
+    if (library && library !== "default") params.set("library", library);
+    if (access === "free" || access === "soda") params.set("access", access);
+  }
+  return `${basePath}?${params.toString()}`;
 }
 
-export function CatalogRandomButton() {
+export function CatalogRandomButton({ basePath = "/novels" }: { basePath?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const locale = localeFromPathname(usePathname());
@@ -20,7 +25,7 @@ export function CatalogRandomButton() {
 
   function openRandomSelection() {
     beginNavigationProgress();
-    router.push(withLocalePath(randomCatalogHref(searchParams.get("library") || searchParams.get("sourceLibrary") || ""), locale));
+    router.push(withLocalePath(randomCatalogHref(basePath, new URLSearchParams(searchParams.toString())), locale));
   }
 
   return (
@@ -44,7 +49,7 @@ export function CatalogRandomCard({ loginRequired = false }: { loginRequired?: b
 
   function openRandomSelection() {
     beginNavigationProgress();
-    const href = randomCatalogHref();
+    const href = randomCatalogHref("/novels");
     const target = loginRequired ? `/login?${new URLSearchParams({ returnTo: href }).toString()}` : href;
     router.push(withLocalePath(target, locale));
   }
