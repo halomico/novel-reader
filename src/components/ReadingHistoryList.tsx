@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ListChecks, Trash2, X } from "lucide-react";
+import { Check, ListX, SquareCheckBig, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { ReadingProgress } from "@/lib/reading-progress";
@@ -131,46 +131,86 @@ export function ReadingHistoryList({
 
   return (
     <section className="readingHistory">
-      <div className="readingProgressSetting">
+      <div className={managing ? "readingProgressSetting isManaging" : "readingProgressSetting"}>
         <strong>{tr("阅读进度")}</strong>
-        <div className="readingProgressOptions">
-          <label className="settingToggle readingProgressOption">
-            <input
-              type="checkbox"
-              checked={readingHistoryEnabled}
-              disabled={historyPending}
-              onChange={(event) => void updateReadingHistory(event.target.checked)}
-              aria-label={tr("阅读记录")}
-            />
-            <span className="settingToggleTrack" aria-hidden="true"><span /></span>
-          </label>
+        <div className="readingProgressControls">
+          {readingHistoryEnabled && items.length ? (
+            <button
+              className={managing ? "activityManageButton isActive" : "activityManageButton"}
+              type="button"
+              aria-label={tr(managing ? "完成管理" : "管理最近记录")}
+              title={tr(managing ? "完成" : "管理")}
+              onClick={() => {
+                setManaging((value) => !value);
+                setSelected(new Set());
+                setConfirmClear(false);
+              }}
+            >
+              {managing ? <Check size={16} aria-hidden="true" /> : <SquareCheckBig size={16} aria-hidden="true" />}
+              <span>{tr(managing ? "完成" : "管理")}</span>
+            </button>
+          ) : null}
+          <div className="readingProgressOptions">
+            <label className="settingToggle readingProgressOption">
+              <input
+                type="checkbox"
+                checked={readingHistoryEnabled}
+                disabled={historyPending}
+                onChange={(event) => void updateReadingHistory(event.target.checked)}
+                aria-label={tr("阅读记录")}
+              />
+              <span className="settingToggleTrack" aria-hidden="true"><span /></span>
+            </label>
+          </div>
         </div>
-      </div>
-      {message ? <p className="readingHistoryNotice" role="status">{message}</p> : null}
-      {readingHistoryEnabled && items.length ? (
-        <div className="readingHistoryToolbar">
-          {managing ? (
+        {readingHistoryEnabled && items.length && managing ? (
+          <div className="readingHistoryToolbar isManaging">
             <label className="activitySelectAll">
               <input type="checkbox" checked={allSelected} onChange={toggleAll} />
               <span aria-hidden="true"><Check size={12} /></span>
               <em>{tr("全选")}</em>
             </label>
-          ) : null}
-          <button
-            className={managing ? "iconLink isActive" : "iconLink"}
-            type="button"
-            aria-label={tr(managing ? "完成管理" : "管理最近记录")}
-            title={tr(managing ? "完成" : "管理")}
-            onClick={() => {
-              setManaging((value) => !value);
-              setSelected(new Set());
-              setConfirmClear(false);
-            }}
-          >
-            {managing ? <Check size={18} aria-hidden="true" /> : <ListChecks size={18} aria-hidden="true" />}
-          </button>
-        </div>
-      ) : null}
+            <div className="readingHistoryManageActions">
+              <span className="readingHistorySelectedCount" aria-live="polite">
+                {selected.size ? [tr("已选"), selected.size].join(" ") : ""}
+              </span>
+              <button
+                className="activityBatchButton isDanger"
+                type="button"
+                disabled={!selected.size || pending}
+                onClick={removeSelected}
+                aria-label={tr("删除所选")}
+                title={tr("删除所选")}
+              >
+                <Trash2 size={16} aria-hidden="true" />
+              </button>
+              {confirmClear ? (
+                <span className="readingHistoryClearConfirm">
+                  <span>{tr("清空全部")}？</span>
+                  <button className="isDanger" type="button" disabled={pending} onClick={clearAll} aria-label={tr("确认清空")} title={tr("确认清空")}>
+                    <Check size={15} aria-hidden="true" />
+                  </button>
+                  <button type="button" disabled={pending} onClick={() => setConfirmClear(false)} aria-label={tr("取消")} title={tr("取消")}>
+                    <X size={15} aria-hidden="true" />
+                  </button>
+                </span>
+              ) : (
+                <button
+                  className="activityBatchButton"
+                  type="button"
+                  disabled={pending}
+                  onClick={() => setConfirmClear(true)}
+                  aria-label={tr("清空全部")}
+                  title={tr("清空全部")}
+                >
+                  <ListX size={17} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </div>
+      {message ? <p className="readingHistoryNotice" role="status">{message}</p> : null}
       {readingHistoryEnabled && items.length ? (
         <div className="readingHistoryList">
           {items.map((item, index) => {
@@ -218,28 +258,6 @@ export function ReadingHistoryList({
         <div className="activityEmpty">
           <p>{tr("还没有最近阅读")}</p>
           <Link href="/novels">{tr("去看看小说")}</Link>
-        </div>
-      ) : null}
-      {readingHistoryEnabled && managing && items.length ? (
-        <div className="readingHistoryActions">
-          <button type="button" disabled={!selected.size || pending} onClick={removeSelected}>
-            <Trash2 size={16} aria-hidden="true" />
-            {tr("删除")}
-          </button>
-          {confirmClear ? (
-            <span className="readingHistoryClearConfirm">
-              <button type="button" disabled={pending} onClick={clearAll} aria-label={tr("确认清空")} title={tr("确认清空")}>
-                <Check size={16} aria-hidden="true" />
-              </button>
-              <button type="button" disabled={pending} onClick={() => setConfirmClear(false)} aria-label={tr("取消")} title={tr("取消")}>
-                <X size={16} aria-hidden="true" />
-              </button>
-            </span>
-          ) : (
-            <button type="button" disabled={pending} onClick={() => setConfirmClear(true)}>
-              {tr("清空")}
-            </button>
-          )}
         </div>
       ) : null}
       {readingHistoryEnabled && items.length ? (

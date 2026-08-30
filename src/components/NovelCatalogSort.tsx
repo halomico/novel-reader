@@ -68,9 +68,9 @@ export function NovelCatalogSort({
   }
 
   return (
-    <div className="novelSourceFilter novelSortControl" ref={sortRef}>
+    <div className="catalogMenuControl novelSortControl" ref={sortRef}>
       <button
-        className={`novelSourceFilterButton${sortBy !== "updated" || sortOrder !== "desc" ? " isActive" : ""}`}
+        className={"catalogMenuTrigger" + (sortBy !== "updated" || sortOrder !== "desc" ? " isActive" : "")}
         type="button"
         aria-label={`${tr("排序")}：${activeLabel}，${directionLabel}`}
         aria-expanded={open}
@@ -81,13 +81,13 @@ export function NovelCatalogSort({
         <ArrowUpDown size={16} aria-hidden="true" />
       </button>
       {open ? (
-        <div className="novelSourceFilterMenu novelSortMenu" role="menu" aria-label={tr("小说排序")}>
+        <div className="catalogMenuPopover catalogSortPopover" role="menu" aria-label={tr("小说排序")}>
           {SORT_OPTIONS.map(({ value, label }) => {
             const active = sortBy === value;
             const itemOrder = active ? sortOrder : defaultOrder(value);
             return (
               <Link
-                className={active ? "isActive" : ""}
+                className={active ? "catalogMenuItem isActive" : "catalogMenuItem"}
                 href={sortHref(value)}
                 role="menuitem"
                 title={active ? tr(itemOrder === "asc" ? "切换为降序" : "切换为升序") : undefined}

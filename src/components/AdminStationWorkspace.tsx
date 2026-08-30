@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Plus, RotateCcw, Send, Trash2, X } from "lucide-react";
+import { Check, ChevronLeft, Plus, RotateCcw, Send, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
@@ -67,7 +67,7 @@ export function AdminStationComposer({ initialUsername = "" }: { initialUsername
         setSubject("");
         setBody("");
         setOpen(false);
-        router.replace(`/admin/station?thread=${result.data.threadId}`, { scroll: false });
+        router.replace(`/admin/station/${result.data.threadId}`, { scroll: false });
         router.refresh();
       },
     );
@@ -104,10 +104,12 @@ export function AdminStationConversation({
   thread,
   messages: initialMessages,
   stationDisplayName,
+  backHref,
 }: {
   thread: StationThread;
   messages: StationMessage[];
   stationDisplayName: string;
+  backHref?: string;
 }) {
   const router = useRouter();
   const mutation = useInlineMutation();
@@ -194,14 +196,19 @@ export function AdminStationConversation({
     mutation.run(
       () => deleteStationThreadInlineAction(thread.id),
       (result) => {
-        if (result.ok) router.push("/admin/station");
+        if (result.ok) router.push(backHref || "/admin/station");
       },
     );
   }
 
   return (
-    <section className="adminStationConversation">
-      <header>
+    <section className="adminStationConversation isStandalone">
+      <header className={backHref ? "hasBack" : undefined}>
+        {backHref ? (
+          <Link className="adminStationConversationBack" href={backHref} aria-label="返回站务消息" title="返回站务消息">
+            <ChevronLeft size={21} strokeWidth={1.8} aria-hidden="true" />
+          </Link>
+        ) : null}
         <div className="adminStationConversationTitle">
           <h2>{thread.subject}</h2>
           <small>{thread.displayName} · @{thread.username}</small>
@@ -225,7 +232,9 @@ export function AdminStationConversation({
           </button>
         </div>
       </header>
-      <InlineMutationNotice notice={mutation.notice} />
+      <div className={`adminConversationNotice${mutation.notice ? " hasNotice" : ""}`}>
+        <InlineMutationNotice notice={mutation.notice} />
+      </div>
       <div className="stationMessageList" ref={messageListRef}>
         {messages.map((message) => (
           <article className={message.authorRole === "admin" ? "isAdmin" : "isUser"} key={message.id}>
@@ -257,7 +266,7 @@ export function AdminStationConversation({
             />
           </label>
           <button type="submit" disabled={mutation.pending || !reply.trim()} aria-label="发送" title="发送">
-            <Send size={15} aria-hidden="true" /><span className="stationSendLabel">发送</span>
+            <Send className="stationSendIcon" size={19} strokeWidth={1.8} aria-hidden="true" /><span className="stationSendLabel">发送</span>
           </button>
         </form>
       ) : <p className="adminConversationClosed">这条留言已结束。</p>}

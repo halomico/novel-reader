@@ -310,11 +310,11 @@ export default async function ActivityPage({
           <>
             <section className="groveOverview" aria-labelledby="grove-title">
               <header className="groveIntro">
-                <span className="groveIntroIcon"><Trees size={21} aria-hidden="true" /></span>
-                <span>
+                <Trees className="groveIntroIcon" size={36} strokeWidth={1.65} aria-hidden="true" />
+                <div className="groveIntroCopy">
                   <h2 id="grove-title">{groveLabel}</h2>
                   <p>{uiText(locale, "把值得反复阅读、观看和聆听的内容种进来，访问越多，它生长得越茂盛。")}</p>
-                </span>
+                </div>
               </header>
               <dl className="groveStats">
                 {([

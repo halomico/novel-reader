@@ -23,13 +23,14 @@ export async function createStationThreadAction(formData: FormData) {
   if (!hasUserPermission(user, "station_message")) {
     messageNotice("当前等级暂不能发送站务消息", "warning");
   }
+  let threadId: number;
   try {
-    const threadId = createStationThread(user.id, formData.get("subject"), formData.get("body"));
-    revalidatePath("/messages");
-    messageNotice("留言已发送", "success", threadId);
+    threadId = createStationThread(user.id, formData.get("subject"), formData.get("body"));
   } catch (error) {
     messageNotice(error instanceof StationInputError ? error.message : "留言发送失败", "warning");
   }
+  revalidatePath("/messages");
+  redirect(`/messages?tab=station&thread=${threadId}`);
 }
 
 export async function replyStationThreadAction(formData: FormData) {
@@ -41,18 +42,19 @@ export async function replyStationThreadAction(formData: FormData) {
   if (!hasUserPermission(user, "station_message")) {
     messageNotice("当前等级暂不能回复站务消息", "warning", threadId);
   }
+  let replied: boolean;
   try {
-    const replied = addStationReply({
+    replied = addStationReply({
       threadId,
       body: formData.get("body"),
       authorRole: "user",
       userId: user.id,
     });
-    revalidatePath("/messages");
-    messageNotice(replied ? "回复已发送" : "该留言已关闭", replied ? "success" : "warning", threadId);
   } catch (error) {
     messageNotice(error instanceof StationInputError ? error.message : "回复发送失败", "warning", threadId);
   }
+  revalidatePath("/messages");
+  messageNotice(replied ? "回复已发送" : "该留言已关闭", replied ? "success" : "warning", threadId);
 }
 
 export async function replyStationThreadInlineAction(

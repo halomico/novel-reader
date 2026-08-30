@@ -53,22 +53,24 @@ export function MediaVideoCard({
         />
         <span className="mediaVideoPlay" aria-hidden="true"><Play size={20} fill="currentColor" /></span>
         {isNew ? <span className="mediaVideoNewBadge">新</span> : null}
-        <span className="mediaVideoViews"><Eye size={12} aria-hidden="true" />{formatCompactCount(asset.playCount)}</span>
         <span className="mediaVideoMeta">{formatMediaDuration(asset.durationSeconds)}</span>
       </ContextNavigationLink>
       <span className="mediaCardCopy">
         <ContextNavigationLink className="mediaVideoTitleLink" contextReturnHref={returnHref} href={watchHref} prefetch={false} title={title}>{title}</ContextNavigationLink>
         <span className="mediaVideoByline">
           <span className="mediaVideoAuthor" title={asset.artist || uiText(locale, "未知作者")}>{asset.artist || uiText(locale, "未知作者")}</span>
-          {publishedDate ? (
-            <time
-              className="mediaVideoPublishedAt"
-              dateTime={toDateTimeAttribute(asset.publishedAt)}
-              title={formatLocalDateTime(asset.publishedAt)}
-            >
-              {formatCompactUpdateDate(publishedDate.getTime())}
-            </time>
-          ) : null}
+          <span className="mediaVideoMetrics">
+            <span className="mediaVideoViews"><Eye size={11} aria-hidden="true" />{formatCompactCount(asset.playCount)}</span>
+            {publishedDate ? (
+              <time
+                className="mediaVideoPublishedAt"
+                dateTime={toDateTimeAttribute(asset.publishedAt)}
+                title={formatLocalDateTime(asset.publishedAt)}
+              >
+                {formatCompactUpdateDate(publishedDate.getTime())}
+              </time>
+            ) : null}
+          </span>
         </span>
       </span>
     </article>

@@ -38,7 +38,7 @@ import {
   createRegistrationInvites,
   listRegistrationInvites,
 } from "./registration-invites";
-import { exchangeCookieForSoda } from "./user-wallet";
+import { exchangeUserCurrency } from "./user-wallet";
 
 function withTempDatabase(t: TestContext) {
   const previousDatabasePath = process.env.DATABASE_PATH;
@@ -173,7 +173,7 @@ test("market products generate unique slugs, retain cover metadata, and soft del
   );
 });
 
-test("redemption codes store only hashes and cookie exchange updates both ledgers", (t) => {
+test("redemption codes store only hashes and currency exchange updates both ledgers atomically", (t) => {
   withTempDatabase(t);
   const db = getDb();
   const userId = Number(db
@@ -203,14 +203,15 @@ test("redemption codes store only hashes and cookie exchange updates both ledger
   });
   assert.throws(() => redeemMarketCode(userId, codes[0]), /已使用/);
 
-  assert.deepEqual(exchangeCookieForSoda({
+  assert.deepEqual(exchangeUserCurrency({
     userId,
-    cookieAmount: 2,
+    direction: "cookie-to-soda",
+    sourceAmount: 2,
     sodaPerCookie: 10,
   }), {
     cookieBalance: 5,
     sodaBalance: 20,
-    sodaReceived: 20,
+    receivedAmount: 20,
   });
   assert.deepEqual(
     { ...(db.prepare(
@@ -226,6 +227,58 @@ test("redemption codes store only hashes and cookie exchange updates both ledger
     [
       { currency: "cookie", amount: -2 },
       { currency: "soda", amount: 20 },
+    ],
+  );
+
+  assert.throws(
+    () => exchangeUserCurrency({
+      userId,
+      direction: "soda-to-cookie",
+      sourceAmount: 3,
+      sodaPerCookie: 10,
+    }),
+    /苏打数量须为 10 的倍数/,
+  );
+  assert.throws(
+    () => exchangeUserCurrency({
+      userId,
+      direction: "soda-to-cookie",
+      sourceAmount: 30,
+      sodaPerCookie: 10,
+    }),
+    /苏打不足/,
+  );
+  assert.equal(
+    (db.prepare("SELECT COUNT(*) AS count FROM user_currency_transactions WHERE source = 'currency_exchange'")
+      .get() as { count: number }).count,
+    2,
+  );
+  assert.deepEqual(exchangeUserCurrency({
+    userId,
+    direction: "soda-to-cookie",
+    sourceAmount: 10,
+    sodaPerCookie: 10,
+  }), {
+    cookieBalance: 6,
+    sodaBalance: 10,
+    receivedAmount: 1,
+  });
+  assert.deepEqual(
+    { ...(db.prepare(
+      "SELECT cookie_balance, soda_balance, soda_experience, trust_level FROM users WHERE id = ?",
+    ).get(userId) as object) },
+    { cookie_balance: 6, soda_balance: 10, soda_experience: 70, trust_level: 2 },
+  );
+  assert.deepEqual(
+    db.prepare(
+      `SELECT currency, amount FROM user_currency_transactions
+       WHERE source = 'currency_exchange' ORDER BY id`,
+    ).all().map((row) => ({ ...row })),
+    [
+      { currency: "cookie", amount: -2 },
+      { currency: "soda", amount: 20 },
+      { currency: "soda", amount: -10 },
+      { currency: "cookie", amount: 1 },
     ],
   );
 });

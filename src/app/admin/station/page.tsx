@@ -3,14 +3,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AdminStationNavigation } from "@/components/AdminStationNavigation";
-import { AdminStationComposer, AdminStationConversation } from "@/components/AdminStationWorkspace";
-import { getStationDisplayName } from "@/lib/config";
-import {
-  getStationThread,
-  listAdminStationThreads,
-  listStationMessages,
-  markStationThreadRead,
-} from "@/lib/station";
+import { AdminStationComposer } from "@/components/AdminStationWorkspace";
+import { listAdminStationThreads } from "@/lib/station";
 import { AdminFrame } from "../AdminFrame";
 
 export const dynamic = "force-dynamic";
@@ -25,50 +19,40 @@ export default async function AdminStationPage({ searchParams }: StationAdminPag
   if (params.view === "reports") redirect("/admin/station/reports");
   if (params.view === "announcements") redirect("/admin/station/announcements");
 
-  const threads = listAdminStationThreads();
   const requestedId = Number(params.thread || 0);
-  const selectedThread = getStationThread(
-    requestedId || threads[0]?.id || 0,
-    { admin: true },
-  );
-  const messages = selectedThread ? listStationMessages(selectedThread.id) : [];
-  if (selectedThread) markStationThreadRead(selectedThread.id, "admin");
+  if (Number.isSafeInteger(requestedId) && requestedId > 0) {
+    redirect(`/admin/station/${requestedId}`);
+  }
+
+  const threads = listAdminStationThreads();
 
   return (
     <AdminFrame active="station">
-      <div className="adminWorkspace">
+      <div className="adminWorkspace adminStationIndex">
         <AdminStationNavigation active="inbox" />
         <header className="adminWorkspaceHeader">
-          <div><h1>站务消息</h1><p>处理用户留言与沟通记录。</p></div>
+          <div><h1>站务消息</h1></div>
           <AdminStationComposer initialUsername={params.compose || ""} />
         </header>
-        {selectedThread ? (
-          <div className="adminInboxWorkspace">
-            <nav className="adminStationThreadList" aria-label="站务留言">
-              <header><strong>留言</strong><small>{threads.length}</small></header>
-              {threads.map((thread) => (
-                <Link className={selectedThread.id === thread.id ? "isActive" : ""} href={`/admin/station?thread=${thread.id}`} key={thread.id}>
-                  <span className={thread.unreadForAdmin ? "messageUnreadDot" : ""} />
-                  <span>
-                    <strong>{thread.subject}</strong>
-                    <small>{thread.displayName} · {thread.status === "open" ? "处理中" : "已结束"}</small>
-                  </span>
-                  <ChevronRight size={15} aria-hidden="true" />
-                </Link>
-              ))}
-            </nav>
-            <AdminStationConversation
-              thread={selectedThread}
-              messages={messages}
-              stationDisplayName={getStationDisplayName()}
-            />
-          </div>
-        ) : (
+        <nav className="adminStationThreadList" aria-label="站务留言">
+          <header><strong>留言</strong><small>{threads.length}</small></header>
+          {threads.map((thread) => (
+            <Link href={`/admin/station/${thread.id}`} prefetch={false} key={thread.id}>
+              <span className={thread.unreadForAdmin ? "messageUnreadDot" : ""} />
+              <span>
+                <strong>{thread.subject}</strong>
+                <small>{thread.displayName} · {thread.status === "open" ? "处理中" : "已结束"}</small>
+              </span>
+              <ChevronRight size={15} aria-hidden="true" />
+            </Link>
+          ))}
+        </nav>
+        {!threads.length ? (
           <div className="adminStationEmpty">
             <strong>暂无留言</strong>
             <small>用户发起的站务消息会显示在这里。</small>
           </div>
-        )}
+        ) : null}
       </div>
     </AdminFrame>
   );

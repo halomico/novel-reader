@@ -154,11 +154,8 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
     <main className="appShell catalogShell advancedTagSearchPage">
       <SiteHeader currentUser={user} library={libraryScope.slug} />
       <Breadcrumbs items={[{ label: homeLabel, href: "/" }, { label: tagsLabel, href: "/tags" }, { label: advancedLabel }]} />
-      <header className="tagLibraryHeader advancedTagSearchHeader">
-        <span className="tagLibraryIcon" aria-hidden="true"><ListFilter size={23} /></span>
-        <div>
-          <h1>{advancedLabel}</h1>
-        </div>
+      <header className="advancedTagSearchHeader userContentHeader">
+        <span><ListFilter size={19} aria-hidden="true" /><h1>{advancedLabel}</h1></span>
       </header>
 
       <TagIntersectionSearchForm
@@ -208,6 +205,7 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
           query={titleInput}
           basePath="/tags/search"
           extraParams={{ tags: selectedSlugs.join(",") || undefined, exclude: excludedSlugs.join(",") || undefined, library: libraryScope.slug === DEFAULT_NOVEL_LIBRARY_SLUG ? undefined : libraryScope.slug }}
+          scrollTargetId="advanced-search-results"
         />
       ) : null}
     </main>

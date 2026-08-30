@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { getCatalogFeatureSettings, getLibraryDir } from "./config";
+import { getCatalogFeatureSettings, getLibraryDir, getReaderAdjacentNovelSort } from "./config";
 import { getDb } from "./db";
 import { sampleNovelIds, sampleNovelIdsFromList } from "./novel-id-sampler";
 import { sampleRecommendationPoolNovelIds } from "./recommendation-pool";
@@ -451,13 +451,35 @@ export function getNovelById(id: number): Novel | null {
   return book || null;
 }
 
-export function getAdjacentNovels(book: Pick<Novel, "id" | "mtime_ms" | "source_id">): {
+export function getAdjacentNovels(
+  book: Pick<Novel, "id" | "title" | "mtime_ms" | "source_id">,
+  sortBy = getReaderAdjacentNovelSort(),
+): {
   previous: Novel | null;
   next: Novel | null;
 } {
   const db = getDb();
   const sourceCondition = book.source_id ? "AND source_id = ?" : "AND source_id IS NULL";
   const sourceValues = book.source_id ? [book.source_id] : [];
+  if (sortBy === "name") {
+    const previous = db.prepare(
+      `SELECT ${NOVEL_SELECT_COLUMNS}
+       FROM novels
+       WHERE (title COLLATE NOCASE < ? OR (title COLLATE NOCASE = ? AND id < ?))
+         ${sourceCondition}
+       ORDER BY title COLLATE NOCASE DESC, id DESC
+       LIMIT 1`,
+    ).get(book.title, book.title, book.id, ...sourceValues) as Novel | undefined;
+    const next = db.prepare(
+      `SELECT ${NOVEL_SELECT_COLUMNS}
+       FROM novels
+       WHERE (title COLLATE NOCASE > ? OR (title COLLATE NOCASE = ? AND id > ?))
+         ${sourceCondition}
+       ORDER BY title COLLATE NOCASE ASC, id ASC
+       LIMIT 1`,
+    ).get(book.title, book.title, book.id, ...sourceValues) as Novel | undefined;
+    return { previous: previous || null, next: next || null };
+  }
   const previous = db.prepare(
     `SELECT ${NOVEL_SELECT_COLUMNS}
      FROM novels

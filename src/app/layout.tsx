@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Script from "next/script";
 import { Suspense } from "react";
 import { DefaultPaletteRotation } from "@/components/DefaultPaletteRotation";
@@ -7,7 +8,12 @@ import { SiteEntryNotice } from "@/components/SiteEntryNotice";
 import { ThemeScript } from "@/components/ThemeScript";
 import { getReaderDefaultFontSize, getSiteTitle } from "@/lib/config";
 import { getRequestLocale, localizeTexts } from "@/lib/locale-server";
-import { getSiteUrl, getUmamiConfig } from "@/lib/seo";
+import {
+  getSiteUrl,
+  getUmamiConfig,
+  UMAMI_BEFORE_SEND_HANDLER,
+  UMAMI_ROUTE_SCOPE_HEADER,
+} from "@/lib/seo";
 import { getSiteIconHref } from "@/lib/site-icon";
 import { readSiteSettings } from "@/lib/site-settings";
 import { getEntryDrawerAnnouncement } from "@/lib/station";
@@ -48,12 +54,13 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const requestHeaders = await headers();
   const settings = readSiteSettings();
   const locale = await getRequestLocale();
   const user = await getCurrentUser();
   const entryAnnouncement = getEntryDrawerAnnouncement(Boolean(user));
   const defaultFontSize = getReaderDefaultFontSize();
-  const umami = getUmamiConfig();
+  const umami = requestHeaders.get(UMAMI_ROUTE_SCOPE_HEADER) === "admin" ? null : getUmamiConfig();
   const defaultPalette = resolveDefaultPalette(
     settings.defaultPalette,
     settings.defaultPaletteRandomEnabled,
@@ -70,6 +77,11 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           defaultPalette={defaultPalette}
           defaultReaderTagsMode={settings.readerDefaultTagsMode}
         />
+        {umami ? (
+          <Script id="umami-public-route-filter" strategy="beforeInteractive">
+            {`window.${UMAMI_BEFORE_SEND_HANDLER}=function(_,payload){var path=window.location.pathname;return path==="/admin"||path.indexOf("/admin/")===0?false:payload;};`}
+          </Script>
+        ) : null}
       </head>
       <body>
         <Suspense fallback={null}><NavigationProgress /></Suspense>
@@ -81,7 +93,12 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
           />
         ) : null}
         {umami ? (
-          <Script src={umami.scriptUrl} data-website-id={umami.websiteId} strategy="lazyOnload" />
+          <Script
+            src={umami.scriptUrl}
+            data-website-id={umami.websiteId}
+            data-before-send={UMAMI_BEFORE_SEND_HANDLER}
+            strategy="lazyOnload"
+          />
         ) : null}
         {umami?.recorderUrl ? (
           <Script src={umami.recorderUrl} data-website-id={umami.websiteId} strategy="lazyOnload" />

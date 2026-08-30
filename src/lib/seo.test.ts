@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { absoluteSiteUrl, canonicalPagePath, getSiteUrl, getUmamiConfig } from "./seo";
+import {
+  absoluteSiteUrl,
+  canonicalPagePath,
+  getSiteUrl,
+  getUmamiConfig,
+  isPublicUmamiPathname,
+} from "./seo";
 
 test("SEO URL helpers normalize the public origin and pagination", () => {
   const env = { SITE_URL: "https://reader.example.com/path/", PORT: "3210" };
@@ -64,4 +70,13 @@ test("Umami recorder uses an explicit safe URL or derives recorder.js when enabl
     })?.recorderUrl,
     null,
   );
+});
+
+test("Umami only tracks public routes", () => {
+  assert.equal(isPublicUmamiPathname("/"), true);
+  assert.equal(isPublicUmamiPathname("/books/12"), true);
+  assert.equal(isPublicUmamiPathname("/administrator"), true);
+  assert.equal(isPublicUmamiPathname("/admin"), false);
+  assert.equal(isPublicUmamiPathname("/admin/"), false);
+  assert.equal(isPublicUmamiPathname("/admin/settings"), false);
 });

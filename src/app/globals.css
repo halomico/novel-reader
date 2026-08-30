@@ -146,8 +146,6 @@ textarea {
 .mediaSearchForm input:focus-visible,
 .tagLibrarySearch input:focus,
 .tagLibrarySearch input:focus-visible,
-.mediaBrowseTagSearch input:focus,
-.mediaBrowseTagSearch input:focus-visible,
 .advancedTagFilter input:focus,
 .advancedTagFilter input:focus-visible,
 .stationReplyForm textarea:focus,
@@ -280,9 +278,13 @@ textarea {
 }
 
 .searchForm input {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  width: 100%;
   height: 30px;
   min-width: 0;
   border: 0;
+  padding: 0 32px 0 34px;
   outline: 0;
   background: transparent;
   color: var(--text);
@@ -317,7 +319,11 @@ textarea {
 }
 
 .searchClearButton {
+  position: relative;
+  z-index: 2;
   display: inline-flex;
+  grid-column: 3;
+  grid-row: 1;
   align-items: center;
   justify-content: center;
   width: 28px;
@@ -358,7 +364,11 @@ textarea {
 }
 
 .searchIconButton {
+  position: relative;
+  z-index: 2;
   display: inline-flex;
+  grid-column: 1;
+  grid-row: 1;
   align-items: center;
   justify-content: center;
   width: 28px;
@@ -1219,20 +1229,15 @@ textarea {
 }
 
 .advancedTagSearchHeader {
-  margin-bottom: 18px;
-}
-
-.advancedTagSearchHeader > div {
-  display: grid;
-  gap: 3px;
+  margin-bottom: 0;
 }
 
 .advancedTagSearchForm {
   display: grid;
   gap: 12px;
   margin-bottom: 24px;
-  padding-block: 14px;
-  border-block: 1px solid var(--border);
+  padding-block: 12px 14px;
+  border-bottom: 1px solid var(--border);
 }
 
 .advancedTagSearchToolbar {
@@ -1480,10 +1485,10 @@ textarea {
   display: inline-flex;
   min-height: 30px;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 4px 9px;
+  padding: 4px 10px;
   background: var(--surface);
   color: var(--text);
   cursor: pointer;
@@ -1491,8 +1496,7 @@ textarea {
   font-weight: 700;
 }
 
-.advancedTagOption > svg,
-.advancedTagOption > span[aria-hidden="true"] {
+.advancedTagOption > svg {
   flex: 0 0 13px;
   width: 13px;
   color: var(--accent);
@@ -1544,6 +1548,10 @@ textarea {
   justify-content: flex-end;
   margin: -4px 0 10px;
   border-bottom: 1px solid var(--border);
+}
+
+.advancedTagSearchPage .bookGrid {
+  border-top: 0;
 }
 
 .tagDetailHeadingRow {
@@ -2452,6 +2460,43 @@ button.pageNumber {
   color: var(--accent);
 }
 
+.bookSearchPage .searchResults {
+  gap: 0;
+  border-top: 1px solid var(--border);
+}
+
+.contentSearchResults {
+  gap: 0;
+}
+
+.bookSearchPage .searchResultCard,
+.contentSearchResults .searchResultCard {
+  display: block;
+  padding: 14px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.bookSearchPage .searchResultCard:hover,
+.bookSearchPage .searchResultCard:focus-visible,
+.contentSearchResults .searchResultCard:hover,
+.contentSearchResults .searchResultCard:focus-visible {
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+
+.bookSearchPage .searchResultBody,
+.contentSearchResults .searchResultBody {
+  gap: 6px;
+}
+
+.bookSearchPage .searchResultBody strong,
+.contentSearchResults .searchResultBody strong {
+  font-size: 16px;
+  font-weight: 620;
+}
+
 .searchResultBody span {
   color: var(--muted);
   line-height: 1.7;
@@ -3059,8 +3104,7 @@ mark {
   line-height: 1.25;
 }
 
-.mediaSortMenu,
-.mediaBrowseMenu {
+.mediaSortMenu {
   position: relative;
   z-index: 8;
   flex: 0 0 auto;
@@ -3146,147 +3190,6 @@ mark {
 .mediaSortMenuSpacer {
   width: 14px;
   height: 14px;
-}
-
-.mediaBrowsePopover {
-  position: absolute;
-  top: calc(100% + 7px);
-  right: 0;
-  z-index: 30;
-  display: grid;
-  width: min(286px, calc(100vw - 24px));
-  max-height: min(560px, calc(100vh - 100px));
-  overflow-y: auto;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 7px;
-  background: var(--surface);
-  box-shadow: var(--shadow-float);
-}
-
-.mediaBrowsePopover.isCompact {
-  width: max-content;
-  min-width: 132px;
-}
-
-.mediaBrowsePopover.isCompact .mediaBrowseOptions button {
-  min-width: 116px;
-  grid-template-columns: 15px max-content;
-}
-
-.mediaBrowseSection {
-  display: grid;
-  gap: 5px;
-  padding: 5px;
-}
-
-.mediaBrowseSection + .mediaBrowseSection {
-  margin-top: 4px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
-}
-
-.mediaBrowseSection > strong,
-.mediaBrowseSection > header > strong {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.mediaBrowseOptions,
-.mediaBrowseTagOptions {
-  display: grid;
-  gap: 2px;
-}
-
-.mediaBrowseOptions button,
-.mediaBrowseTagOptions button,
-.mediaBrowseSection > header button {
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font: inherit;
-}
-
-.mediaBrowseOptions button,
-.mediaBrowseTagOptions button {
-  display: grid;
-  min-height: 33px;
-  grid-template-columns: 15px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 7px;
-  border-radius: 5px;
-  padding: 5px 7px;
-  font-size: 13px;
-  text-align: left;
-}
-
-.mediaBrowseOptions button {
-  grid-template-columns: 15px minmax(0, 1fr);
-}
-
-.mediaBrowseOptions button:hover,
-.mediaBrowseOptions button:focus-visible,
-.mediaBrowseTagOptions button:hover,
-.mediaBrowseTagOptions button:focus-visible {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  color: var(--accent);
-}
-
-.mediaBrowseOptions button.isActive,
-.mediaBrowseTagOptions button.isActive {
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.mediaBrowseTagOptions small {
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.mediaBrowseSection > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.mediaBrowseSection > header button {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 0;
-  color: var(--accent);
-  font-size: 11px;
-}
-
-.mediaBrowseTagSearch {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  align-items: center;
-  gap: 5px;
-  min-height: 32px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 0 8px;
-  color: var(--muted);
-}
-
-.mediaBrowseTagSearch:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 54%, var(--border));
-  color: var(--accent);
-}
-
-.mediaBrowseTagSearch input {
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  padding: 6px 0;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: 12px;
 }
 
 .mediaLibraryHeader p,
@@ -3559,8 +3462,8 @@ mark {
 
 .mediaAssetGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 18px 14px;
 }
 
 .mediaVideoCard {
@@ -3568,17 +3471,15 @@ mark {
   display: grid;
   align-content: start;
   gap: 0;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--surface);
-  transition: border-color 140ms ease, background 140ms ease;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .mediaVideoCard:hover,
 .mediaVideoCard:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-  background: color-mix(in srgb, var(--accent) 2%, var(--surface));
+  background: transparent;
 }
 
 .mediaVideoPreview {
@@ -3587,7 +3488,7 @@ mark {
   aspect-ratio: 16 / 9;
   overflow: hidden;
   border: 0;
-  border-radius: 0;
+  border-radius: 5px;
   background: #101214;
 }
 
@@ -3668,17 +3569,9 @@ mark {
 }
 
 .mediaVideoViews {
-  position: absolute;
-  bottom: 7px;
-  left: 7px;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  border-radius: 5px;
-  padding: 3px 6px;
-  background: rgb(15 18 20 / 78%);
-  color: #fff;
-  font-size: 11px;
+  gap: 3px;
 }
 
 .mediaVideoCard:hover .mediaVideoPlay,
@@ -3739,8 +3632,8 @@ mark {
 }
 
 .mediaVideoCard .mediaCardCopy {
-  gap: 4px;
-  padding: 10px 11px 11px;
+  gap: 5px;
+  padding: 8px 1px 3px;
 }
 
 .mediaVideoByline {
@@ -3767,12 +3660,21 @@ mark {
   white-space: nowrap;
 }
 
+.mediaVideoMetrics {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 9px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .mediaVideoTitleLink {
   display: -webkit-box;
   min-height: 2.9em;
   overflow: hidden;
   color: var(--text);
-  font-size: 14.5px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.45;
   text-overflow: ellipsis;
@@ -4518,8 +4420,16 @@ mark {
 .adminLoginShell {
   width: min(1440px, calc(100% - 40px));
   margin: 0 auto;
-  padding: 22px 0 56px;
   font-family: var(--font-ui);
+}
+
+.adminShell {
+  --admin-shell-top: 22px;
+  padding: 0 0 56px;
+}
+
+.adminLoginShell {
+  padding: 22px 0 56px;
 }
 
 /* Admin fields inherit site-wide border-only focus; no extra halo. */
@@ -5265,13 +5175,13 @@ mark {
 
 .adminSidebar {
   position: sticky;
-  top: 18px;
+  top: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 18px;
   width: 198px;
-  min-height: calc(100vh - 36px);
-  padding: 7px 12px 7px 0;
+  min-height: 100vh;
+  padding: calc(var(--admin-shell-top) + 7px) 12px 7px 0;
   border-right: 1px solid var(--border);
   background: transparent;
   transition: width 160ms ease, padding 160ms ease;
@@ -5347,7 +5257,7 @@ mark {
   font-family: var(--font-brand);
   font-size: 18px;
   font-weight: 600;
-  line-height: 1;
+  line-height: 1.2;
   letter-spacing: -0.024em;
   text-rendering: geometricPrecision;
   transition: color 150ms ease;
@@ -5423,6 +5333,67 @@ mark {
   opacity: 0.48;
 }
 
+.adminCompactSegmentedField {
+  display: grid;
+  width: min(100%, 360px);
+  gap: 6px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.adminCompactSegmentedField legend {
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.adminCompactSegmentedField > div {
+  display: inline-grid;
+  width: fit-content;
+  grid-template-columns: repeat(2, minmax(68px, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px;
+  background: color-mix(in srgb, var(--surface-strong) 35%, transparent);
+}
+
+.adminCompactSegmentedField label {
+  position: relative;
+  cursor: pointer;
+}
+
+.adminCompactSegmentedField input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.adminCompactSegmentedField label > span {
+  display: grid;
+  min-height: 29px;
+  place-items: center;
+  border-radius: 999px;
+  padding: 4px 13px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.adminCompactSegmentedField label:has(input:checked) > span {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: 0 1px 3px color-mix(in srgb, #000 10%, transparent);
+}
+
+.adminCompactSegmentedField label:focus-within > span {
+  outline: 2px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  outline-offset: -2px;
+}
+
 .adminMain {
   min-width: 0;
 }
@@ -5433,7 +5404,7 @@ mark {
 }
 
 .adminMain .adminTopbar {
-  padding-top: 0;
+  padding-top: var(--admin-shell-top);
 }
 
 .adminMain .adminTitleBlock h1 {
@@ -7547,12 +7518,18 @@ a.analyticsSearchTag:focus-visible {
   white-space: nowrap;
 }
 
-.adminAccessSettings {
+.adminSettingsGroup {
   display: grid;
   gap: 7px;
+  padding-block: 4px 8px;
 }
 
-.adminAccessSettings h4 {
+.adminSettingsGroup + .adminSettingsGroup {
+  border-top: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  padding-top: 12px;
+}
+
+.adminSettingsGroup h4 {
   margin: 0;
   color: var(--muted);
   font-size: 12px;
@@ -9457,17 +9434,16 @@ a.analyticsSearchTag:focus-visible {
     width: 100%;
   }
 
+  .searchForm input {
+    font-size: 16px;
+  }
+
   .siteHeader.hasPrimaryNav .headerTools {
     grid-column: 2;
     grid-row: 1;
     grid-template-columns: 40px auto;
     width: auto;
     gap: 8px;
-  }
-
-  .mediaBrowsePopover {
-    right: auto;
-    left: 0;
   }
 
   .siteHeader.hasPrimaryNav .headerActions {
@@ -9749,6 +9725,14 @@ a.analyticsSearchTag:focus-visible {
   .adminShell,
   .adminLoginShell {
     width: min(100% - 20px, 720px);
+  }
+
+  .adminShell {
+    --admin-shell-top: 12px;
+    padding-top: 0;
+  }
+
+  .adminLoginShell {
     padding-top: 12px;
   }
 
@@ -10240,7 +10224,6 @@ a.analyticsSearchTag:focus-visible {
 
 /* Reply composer send button styles live with .stationConversation .stationReplyForm button */
 
-.stationNewThread.isCompact > summary,
 .adminStationNewButton {
   border: 0;
   border-radius: 6px;
@@ -10248,8 +10231,6 @@ a.analyticsSearchTag:focus-visible {
   box-shadow: none;
 }
 
-.stationNewThread.isCompact > summary:hover,
-.stationNewThread.isCompact > summary:focus-visible,
 .adminStationNewButton:hover,
 .adminStationNewButton:focus-visible {
   border: 0;
@@ -10461,7 +10442,8 @@ a.analyticsSearchTag:focus-visible {
 
 .marketWalletTools {
   display: grid;
-  grid-template-columns: minmax(420px, 3fr) minmax(300px, 2fr);
+  grid-template-columns: minmax(360px, 1.2fr) minmax(260px, 0.8fr);
+  column-gap: 28px;
   border: 1px solid var(--border);
   border-radius: 7px;
   overflow: hidden;
@@ -10471,50 +10453,67 @@ a.analyticsSearchTag:focus-visible {
 .marketExchangeLine {
   display: grid;
   min-width: 0;
-  min-height: 58px;
-  grid-template-columns: auto minmax(112px, 0.65fr) auto minmax(112px, 0.65fr) auto;
-  align-items: center;
-  gap: 9px;
-  padding: 10px 12px;
+  align-content: start;
+  gap: 10px;
+  padding: 14px 2px 16px;
 }
 
 .marketExchangeName {
-  display: grid;
-  min-width: 84px;
-  gap: 1px;
+  min-width: 0;
 }
 
-.marketExchangeName strong {
+.marketExchangeName strong,
+.marketCodeLine > strong {
   color: var(--text);
-  font-size: 12px;
+  font-size: 14px;
+  font-weight: 680;
 }
 
-.marketExchangeName small {
-  color: var(--muted);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
+.marketExchangeStack {
+  display: grid;
+  min-width: 0;
 }
 
 .marketExchangeValue {
-  display: flex;
+  display: grid;
   min-width: 0;
-  min-height: 36px;
-  align-items: center;
+  min-height: 66px;
   gap: 7px;
   border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 6px 9px;
+  border-radius: 8px;
+  padding: 9px 11px;
   background: color-mix(in srgb, var(--surface-strong) 40%, var(--surface));
 }
 
-.marketExchangeValue > span {
-  flex: 0 0 auto;
+.marketExchangeMeta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
 }
 
-.marketExchangeValue input,
-.marketExchangeValue output {
+.marketExchangeMeta small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.marketExchangeAmount {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.marketExchangeAmount input,
+.marketExchangeAmount output {
   width: 100%;
   min-width: 0;
   border: 0;
@@ -10522,58 +10521,110 @@ a.analyticsSearchTag:focus-visible {
   padding: 0;
   background: transparent;
   color: var(--text);
-  font-size: 15px;
+  font-size: 19px;
   font-weight: 680;
   font-variant-numeric: tabular-nums;
 }
 
-.marketExchangeValue svg {
+.marketExchangeCurrency {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.marketExchangeCurrency svg {
   flex: 0 0 auto;
   color: var(--accent);
 }
 
-.marketExchangeArrow {
+.marketExchangeSwap {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  justify-self: center;
+  place-items: center;
+  margin-block: -5px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  padding: 0;
+  background: var(--surface);
   color: var(--muted);
+  cursor: pointer;
 }
 
-.marketCodeLine {
-  display: flex;
-  min-width: 0;
-  min-height: 58px;
-  align-items: center;
-  gap: 8px;
-  border-left: 1px solid var(--border);
-  padding: 10px 12px;
+.marketExchangeSwap:hover,
+.marketExchangeSwap:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
   color: var(--accent);
 }
 
-.marketCodeLine label {
+.marketExchangeSwap.isStatic {
+  cursor: default;
+}
+
+.marketExchangeLine > button {
+  width: 100%;
+  min-height: 36px;
+}
+
+.marketCodeLine {
+  display: grid;
   min-width: 0;
-  flex: 1;
+  align-content: start;
+  gap: 10px;
+  border-left: 0;
+  padding: 14px 2px 16px;
+}
+
+.marketCodeInputRow {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.marketCodeInputRow label {
+  display: grid;
+  min-width: 0;
+  min-height: 40px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--surface-strong) 26%, transparent);
 }
 
 .marketCodeLine input {
   width: 100%;
-  min-height: 36px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 7px 10px;
-  background: var(--surface);
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: transparent;
   color: var(--text);
 }
 
 @media (max-width: 900px) {
   .marketWalletTools {
     grid-template-columns: minmax(0, 1fr);
+    column-gap: 0;
   }
 
   .marketCodeLine {
     border-top: 1px solid var(--border);
-    border-left: 0;
   }
 }
 
-.marketExchangeLine button,
+.marketExchangeLine > button,
 .marketCodeLine button,
 .marketPurchaseActions button,
 .marketOrderFile a,
@@ -10593,7 +10644,7 @@ a.analyticsSearchTag:focus-visible {
   font-weight: 700;
 }
 
-.marketExchangeLine button:disabled {
+.marketExchangeLine > button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
@@ -12340,15 +12391,9 @@ a.analyticsSearchTag:focus-visible {
     font-size: 21px;
   }
 
-  .marketExchangeLine {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
-  }
-
-  .marketExchangeName {
-    display: flex;
-    grid-column: 1 / -1;
-    align-items: center;
-    justify-content: space-between;
+  .marketExchangeAmount input,
+  .marketExchangeAmount output {
+    font-size: 18px;
   }
 
   .marketProductPage > header.hasCover {
@@ -13854,8 +13899,7 @@ a.analyticsSearchTag:focus-visible {
   width: min(960px, calc(100% - 32px));
 }
 
-.messagesPage,
-.announcementDetail {
+.messagesPage {
   margin-top: 10px;
   border-top: 1px solid var(--border);
 }
@@ -13869,8 +13913,7 @@ a.analyticsSearchTag:focus-visible {
   border-bottom: 1px solid var(--border);
 }
 
-.messagesHeader h1,
-.announcementDetail h1 {
+.messagesHeader h1 {
   margin: 0;
   font-family: var(--font-title);
   font-size: 22px;
@@ -14011,59 +14054,70 @@ a.analyticsSearchTag:focus-visible {
   padding: 22px 2px;
 }
 
-.stationConversation,
-.announcementDetail {
+.stationConversation {
   display: grid;
-  gap: 18px;
-  padding: 22px 0;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+  background: transparent;
 }
 
 .stationConversation > header {
   display: flex;
   min-width: 0;
+  min-height: 52px;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  padding: 8px 12px;
+  background: transparent;
+  direction: ltr;
 }
 
 .stationConversation > header h2 {
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  font-size: 18px;
+  font-size: 14px;
+  font-weight: 680;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.stationConversation > header > a,
-.stationConversation > header > span {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.stationConversation > header > span {
-  margin-left: auto;
-}
-
 .stationMessageList {
   display: grid;
-  gap: 0;
-  border-block: 1px solid var(--border);
+  min-height: 0;
+  align-content: start;
+  gap: 9px;
+  overflow-y: auto;
+  border: 0;
+  padding: 16px;
+  background: transparent;
+  scrollbar-width: thin;
 }
 
 .stationMessageList article {
   display: grid;
-  gap: 6px;
-  border-bottom: 1px solid var(--border);
-  padding: 14px 2px;
-}
-
-.stationMessageList article:last-child {
-  border-bottom: 0;
+  width: fit-content;
+  max-width: min(76%, 620px);
+  gap: 5px;
+  border: 0;
+  border-radius: 11px 11px 11px 4px;
+  padding: 8px 11px;
+  background: color-mix(in srgb, var(--surface-strong) 42%, transparent);
 }
 
 .stationMessageList article.isAdmin {
-  border-left: 2px solid color-mix(in srgb, var(--accent) 58%, transparent);
-  padding-left: 12px;
+  justify-self: start;
+}
+
+.stationMessageList article.isUser {
+  justify-self: end;
+  border-radius: 11px 11px 4px 11px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .stationMessageList article > header {
@@ -14077,7 +14131,7 @@ a.analyticsSearchTag:focus-visible {
 .stationMessageList article > header strong {
   color: var(--text);
   font-size: 11px;
-  font-weight: 680;
+  font-weight: 650;
 }
 
 .stationMessageList article > header time,
@@ -14096,15 +14150,7 @@ a.analyticsSearchTag:focus-visible {
   overflow-wrap: anywhere;
 }
 
-.stationReplyForm,
-.stationNewThread form {
-  display: grid;
-  gap: 10px;
-}
-
 .stationReplyForm textarea,
-.stationNewThread input,
-.stationNewThread textarea,
 .accessRuleEditor input,
 .accessPolicyEditor input {
   width: 100%;
@@ -14119,105 +14165,48 @@ a.analyticsSearchTag:focus-visible {
   transition: border-color 120ms ease, background-color 120ms ease;
 }
 
-.stationReplyForm textarea,
-.stationNewThread textarea {
-  resize: vertical;
-}
-
-.stationReplyForm button,
-.stationNewThread button {
-  display: inline-flex;
-  width: fit-content;
-  min-height: 34px;
-  align-items: center;
-  gap: 6px;
-  justify-self: end;
-  border: 0;
-  border-radius: 6px;
-  padding: 6px 12px;
-  background: var(--accent);
-  color: #fffaf2;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 680;
-}
-
-.stationReplyForm button:disabled,
-.stationNewThread button:disabled {
-  opacity: 0.48;
-  cursor: not-allowed;
-}
-
-.stationConversation .stationMessageList {
-  gap: 12px;
-  border: 0;
-  padding: 16px 0;
-}
-
-.stationConversation .stationMessageList article {
-  width: fit-content;
-  max-width: min(82%, 680px);
-  gap: 6px;
-  border: 0;
-  border-radius: 14px 14px 14px 4px;
-  padding: 10px 12px;
-  background: color-mix(in srgb, var(--surface-strong) 54%, var(--surface));
-}
-
-.stationConversation .stationMessageList article.isAdmin {
-  justify-self: start;
-  border: 0;
-  padding: 10px 12px;
-}
-
-.stationConversation .stationMessageList article.isUser {
-  justify-self: end;
-  border-radius: 14px 14px 4px 14px;
-  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
-}
-
-/* Unified front/back station composer: compact bar, send integrated */
-.stationConversation .stationReplyForm,
-.adminStationConversation .stationReplyForm {
-  grid-template-columns: minmax(0, 1fr) 34px;
+.stationReplyForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
   align-items: end;
-  gap: 6px;
-  min-height: 42px;
-  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
-  border-radius: 8px;
-  padding: 4px 4px 4px 10px;
-  background: color-mix(in srgb, var(--bg-soft) 70%, var(--surface));
-  transition: border-color 120ms ease, background-color 120ms ease;
+  gap: 8px;
+  min-height: 54px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  padding: 8px 10px;
+  background: transparent;
 }
 
-.stationConversation .stationReplyForm:focus-within,
-.adminStationConversation .stationReplyForm:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
-  background: var(--surface);
-  box-shadow: none;
-}
-
-.stationConversation .stationReplyForm .inlineMutationNotice,
-.adminStationConversation .stationReplyForm .inlineMutationNotice {
+.stationReplyForm .inlineMutationNotice {
   grid-column: 1 / -1;
   margin: 0 2px;
 }
 
-.stationConversation .stationReplyForm > label,
-.adminStationConversation .stationReplyForm > label {
+.stationReplyForm > label {
   display: block;
   min-width: 0;
+  min-height: 36px;
+  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  border-radius: 9px;
+  padding: 0 9px;
+  background: color-mix(in srgb, var(--surface-strong) 38%, transparent);
+  transition: border-color 120ms ease, background-color 120ms ease;
 }
 
-.stationConversation .stationReplyForm textarea,
-.adminStationConversation .stationReplyForm textarea {
+.stationReplyForm > label:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  background: color-mix(in srgb, var(--surface-strong) 58%, transparent);
+}
+
+.stationReplyForm textarea {
   display: block;
   width: 100%;
-  min-height: 32px;
-  max-height: 140px;
+  min-height: 34px;
+  max-height: 96px;
   border: 0;
   border-radius: 0;
-  padding: 6px 4px;
+  padding: 7px 0;
   outline: 0;
   background: transparent;
   box-shadow: none;
@@ -14228,60 +14217,37 @@ a.analyticsSearchTag:focus-visible {
   overflow-y: auto;
 }
 
-.stationConversation .stationReplyForm button,
-.adminStationConversation .stationReplyForm button {
+.stationReplyForm button {
   display: grid;
-  width: 34px;
-  min-width: 34px;
-  height: 34px;
-  min-height: 34px;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
   place-items: center;
   align-self: end;
   justify-self: end;
   gap: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: 9px;
   padding: 0;
   background: var(--accent);
   color: #fffaf2;
+  cursor: pointer;
 }
 
-.stationConversation .stationReplyForm button:hover:not(:disabled),
-.adminStationConversation .stationReplyForm button:hover:not(:disabled) {
+.stationReplyForm button:hover:not(:disabled) {
   background: var(--accent-strong, var(--accent));
 }
 
-.stationConversation .stationReplyForm button .stationSendLabel,
-.adminStationConversation .stationReplyForm button .stationSendLabel {
+.stationReplyForm button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.stationReplyForm button .stationSendLabel {
   display: none;
 }
 
-.stationNewThread {
-  margin-top: 18px;
-  border-block: 1px solid var(--border);
-}
-
-.stationNewThread summary {
-  display: inline-flex;
-  min-height: 46px;
-  align-items: center;
-  gap: 7px;
-  color: var(--accent);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 680;
-  list-style: none;
-}
-
-.stationNewThread summary::-webkit-details-marker {
-  display: none;
-}
-
-.stationNewThread form {
-  padding: 2px 0 16px;
-}
-
-.stationNewThread label,
 .accessRuleEditor label,
 .accessPolicyEditor label {
   display: grid;
@@ -14293,147 +14259,94 @@ a.analyticsSearchTag:focus-visible {
 
 .stationChatWorkspace {
   display: grid;
-  min-height: 540px;
-  grid-template-columns: minmax(210px, 270px) minmax(0, 1fr);
+  height: clamp(520px, calc(100dvh - 216px), 700px);
+  min-height: 0;
+  grid-template-columns: minmax(224px, 270px) minmax(0, 1fr);
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface);
+  border: 0;
+  background: transparent;
 }
 
 .stationChatSidebar {
   min-width: 0;
   border-right: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface-strong) 18%, var(--surface));
+  background: transparent;
 }
 
 .stationChatSidebar > header {
-  position: relative;
   display: flex;
-  min-height: 52px;
+  min-height: 48px;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   border-bottom: 1px solid var(--border);
-  padding: 8px 10px 8px 13px;
+  padding: 7px 6px 7px 2px;
 }
 
-.stationChatSidebar > header > span {
-  display: inline-flex;
+.stationChatSidebar > header > strong {
   min-width: 0;
-  align-items: center;
-  gap: 7px;
-  color: var(--accent);
-}
-
-.stationChatSidebar > header strong {
   overflow: hidden;
   color: var(--text);
   font-size: 13px;
+  font-weight: 680;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .stationChatSidebar .stationThreadList > a {
-  min-height: 62px;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  min-height: 58px;
+  gap: 10px;
   border-bottom-color: color-mix(in srgb, var(--border) 78%, transparent);
-  padding: 9px 10px;
+  padding: 9px 6px 9px 2px;
 }
 
 .stationChatSidebar .stationThreadList > a:hover,
 .stationChatSidebar .stationThreadList > a:focus-visible,
 .stationChatSidebar .stationThreadList > a.isActive {
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  background: transparent;
 }
 
 .stationChatSidebar .stationThreadList > a.isActive {
-  box-shadow: inset 2px 0 var(--accent);
+  box-shadow: none;
 }
 
-.stationThreadAvatar,
-.stationConversationAvatar {
+.stationChatSidebar .stationThreadList > a.isActive strong {
+  color: var(--accent);
+}
+
+.stationChatSidebar .messageEmpty {
+  padding: 20px 8px;
+}
+
+.stationThreadAvatar {
   position: relative;
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: 22px;
+  height: 22px;
   flex: 0 0 auto;
   place-items: center;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border-radius: 0;
+  background: transparent;
   color: var(--accent);
 }
 
 .stationThreadAvatar .messageUnreadDot {
   position: absolute;
-  top: -1px;
-  right: -1px;
+  top: 0;
+  right: -2px;
   width: 7px;
   height: 7px;
-  border: 2px solid var(--surface);
+  border: 1px solid var(--bg);
   border-radius: 50%;
   background: var(--accent);
-}
-
-.stationNewThread.isCompact {
-  position: relative;
-  margin: 0;
-  border: 0;
-}
-
-.stationNewThread.isCompact > summary {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  min-height: 32px;
-  place-items: center;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  color: var(--muted);
-}
-
-.stationNewThread.isCompact[open] > summary,
-.stationNewThread.isCompact > summary:hover,
-.stationNewThread.isCompact > summary:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
-  color: var(--accent);
-}
-
-.stationNewThread.isCompact > form {
-  position: absolute;
-  z-index: 22;
-  top: calc(100% + 8px);
-  left: 0;
-  width: min(360px, calc(100vw - 36px));
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 13px;
-  background: var(--surface);
-  box-shadow: 0 16px 40px color-mix(in srgb, #000 16%, transparent);
-}
-
-.stationNewThread.isCompact > form > strong {
-  font-size: 14px;
-}
-
-.stationChatWorkspace .stationConversation {
-  min-width: 0;
-  min-height: 0;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 0;
-  padding: 0;
-}
-
-.stationChatWorkspace .stationConversation > header {
-  min-height: 52px;
-  border-bottom: 1px solid var(--border);
-  padding: 8px 12px;
 }
 
 .stationConversationHeading {
   display: grid;
   min-width: 0;
   gap: 1px;
+  margin-left: 0 !important;
 }
 
 .stationChatWorkspace .stationConversationHeading h2 {
@@ -14448,50 +14361,27 @@ a.analyticsSearchTag:focus-visible {
   white-space: nowrap;
 }
 
-.stationConversationStatus {
-  margin-left: auto;
-  border-radius: 999px;
-  padding: 3px 7px;
-  background: color-mix(in srgb, var(--muted) 9%, transparent);
-  color: var(--muted) !important;
-  font-size: 10px !important;
-  white-space: nowrap;
-}
-
-.stationConversationStatus.isOpen {
-  background: color-mix(in srgb, #2e7d52 10%, transparent);
-  color: #2e7d52 !important;
-}
-
-.stationChatWorkspace .stationConversation .stationMessageList {
-  min-height: 0;
-  align-content: start;
-  overflow-y: auto;
-  padding: 18px;
-  background: color-mix(in srgb, var(--surface-strong) 12%, var(--surface));
-}
-
-.stationChatWorkspace .stationConversation .stationMessageList article {
-  border-radius: 10px;
-}
-
-.stationChatWorkspace .stationConversation .stationReplyForm {
-  margin: 10px 12px 12px;
-  border-radius: 10px;
-}
-
-.stationChatWorkspace .stationConversation .stationReplyForm textarea {
-  min-height: 42px;
-  max-height: 150px;
-}
-
-.stationChatWorkspace .stationConversation .stationReplyForm button {
-  display: inline-flex;
-  justify-content: center;
-  border-radius: 8px;
-}
-
 .stationChatBack {
+  display: none;
+  direction: ltr;
+  transform: none;
+}
+
+.stationChatBack svg {
+  display: block;
+  transform: none;
+}
+
+.stationChatBackIcon {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  direction: ltr;
+  transform: none;
+}
+
+.stationChatHeaderSpacer {
   display: none;
 }
 
@@ -14563,36 +14453,117 @@ a.analyticsSearchTag:focus-visible {
 
   .stationChatBack {
     display: grid;
-    width: 30px;
-    height: 30px;
+    width: 44px;
+    height: 44px;
     place-items: center;
-    transform: rotate(180deg);
+    border-radius: 50%;
+    color: var(--text);
+    direction: ltr;
+    transform: none;
+    -webkit-tap-highlight-color: transparent;
   }
 
-  .stationNewThread.isCompact > form {
-    position: fixed;
-    top: 76px;
-    right: 12px;
-    left: 12px;
-    width: auto;
+  .stationChatBack:active {
+    background: color-mix(in srgb, var(--text) 7%, transparent);
   }
+
+  .stationChatWorkspace .stationConversation > header {
+    display: grid;
+    min-height: 50px;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    gap: 0;
+    padding: 3px max(2px, env(safe-area-inset-right)) 3px max(2px, env(safe-area-inset-left));
+  }
+
+  .stationChatWorkspace .stationConversationHeading {
+    justify-self: stretch;
+    text-align: center;
+  }
+
+  .stationChatHeaderSpacer {
+    display: block;
+    width: 44px;
+    height: 44px;
+  }
+
+  .userWorkspaceShell.isMobileImmersive {
+    width: 100%;
+    min-height: 100dvh;
+  }
+
+  .userWorkspaceShell.isMobileImmersive > .siteHeader,
+  .userWorkspaceShell.isMobileImmersive > .pageContextBar,
+  .userWorkspaceShell.isMobileImmersive .userWorkspaceSidebar,
+  .userWorkspaceShell.isMobileImmersive .messagesHeader,
+  .userWorkspaceShell.isMobileImmersive .telegramLinkPanel {
+    display: none;
+  }
+
+  .userWorkspaceShell.isMobileImmersive > :not(.siteHeader),
+  .userWorkspaceShell.isMobileImmersive .userWorkspaceLayout,
+  .userWorkspaceShell.isMobileImmersive .userWorkspaceContent,
+  .userWorkspaceShell.isMobileImmersive .messagesPage {
+    width: 100%;
+    margin: 0;
+  }
+
+  .userWorkspaceShell.isMobileImmersive .messagesPage {
+    border: 0;
+  }
+
+  .userWorkspaceShell.isMobileImmersive .stationChatWorkspace,
+  .userWorkspaceShell.isMobileImmersive .stationConversation {
+    width: 100%;
+    min-height: 100dvh;
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .userWorkspaceShell.isMobileImmersive .stationConversation > header {
+    padding-top: max(3px, env(safe-area-inset-top));
+  }
+
+  .userWorkspaceShell.isMobileImmersive .stationConversation .stationReplyForm {
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+
 }
 
-.announcementDetail > header {
+.announcementDetail {
+  width: min(820px, 100%);
+  padding: 0 0 56px;
+}
+
+.announcementDetailHeader {
   display: grid;
-  gap: 8px;
+  gap: 7px;
   border-bottom: 1px solid var(--border);
-  padding-bottom: 18px;
+  padding: 20px 0 16px;
 }
 
-.announcementDetail > header p {
+.announcementDetailHeader h1 {
   margin: 0;
+  font-family: var(--font-title);
+  font-size: 21px;
+  line-height: 1.36;
+  overflow-wrap: anywhere;
+}
+
+.announcementDetailHeader time {
+  display: block;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+  white-space: nowrap;
 }
 
 .announcementBody {
-  font-size: 16px;
+  padding-top: 22px;
+  font-size: 15px;
+  line-height: 1.8;
 }
 
 .accessAdminPanel {
@@ -14853,34 +14824,25 @@ a.analyticsSearchTag:focus-visible {
   gap: 10px;
 }
 
-.adminInboxWorkspace {
-  display: grid;
-  min-height: 580px;
-  grid-template-columns: minmax(220px, 290px) minmax(0, 1fr);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  overflow: hidden;
-  background: var(--surface);
-}
-
 .adminStationThreadList {
   display: grid;
+  width: min(860px, 100%);
   align-content: start;
-  max-height: 680px;
+  min-height: 0;
   overflow-y: auto;
-  border-right: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface-strong) 22%, var(--surface));
+  border-block: 1px solid var(--border);
+  background: transparent;
   scrollbar-width: thin;
 }
 
 .adminStationThreadList > header {
   display: flex;
-  min-height: 50px;
+  min-height: 48px;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   border-bottom: 1px solid var(--border);
-  padding: 10px 12px;
+  padding: 10px 0;
 }
 
 .adminStationThreadList > header strong {
@@ -14900,19 +14862,35 @@ a.analyticsSearchTag:focus-visible {
   align-items: center;
   gap: 9px;
   border-bottom: 1px solid var(--border);
-  padding: 11px 12px;
+  min-height: 62px;
+  padding: 10px 0;
 }
 
 .adminStationThreadList > a:hover,
-.adminStationThreadList > a:focus-visible,
-.adminStationThreadList > a.isActive {
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
+.adminStationThreadList > a:focus-visible {
   color: var(--accent);
   box-shadow: inset 2px 0 var(--accent);
 }
 
+.adminStationThreadList > a:hover,
+.adminStationThreadList > a:focus-visible {
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+
+.adminStationThreadList > a:last-child {
+  border-bottom: 0;
+}
+
 .adminStationThreadList > a > span:nth-child(2) {
   min-width: 0;
+}
+
+.adminStationThreadList > a > span:first-child {
+  display: block;
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
 }
 
 .adminStationThreadList strong {
@@ -14931,22 +14909,86 @@ a.analyticsSearchTag:focus-visible {
   font-size: 10px;
 }
 
+.adminStationDetail {
+  gap: 16px;
+}
+
+.adminStationConversationPage {
+  width: min(940px, 100%);
+  min-width: 0;
+  margin: 0 auto;
+}
+
 .adminStationConversation {
   display: grid;
+  height: clamp(500px, calc(100dvh - 228px), 760px);
   min-width: 0;
-  align-content: start;
+  min-height: 0;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   gap: 0;
+  overflow: hidden;
+  border-block: 1px solid var(--border);
+  background: transparent;
 }
 
 .adminStationConversation > header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   min-width: 0;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   border-bottom: 1px solid var(--border);
-  padding: 14px 16px;
+  padding: 10px 0;
+}
+
+.adminStationConversation > header.hasBack {
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+}
+
+.adminStationConversationBack {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--muted);
+  direction: ltr;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.adminStationConversationBack:hover,
+.adminStationConversationBack:focus-visible {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+}
+
+.adminStationConversationBack svg {
+  display: block;
+  transform: none;
+}
+
+.adminConversationNotice {
+  grid-row: 2;
+  min-height: 0;
+}
+
+.adminConversationNotice.hasNotice {
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 7px 0;
+}
+
+.adminConversationNotice .inlineMutationNotice {
+  position: static;
+  max-width: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 11px;
+  backdrop-filter: none;
 }
 
 .adminStationConversationTitle {
@@ -14956,10 +14998,14 @@ a.analyticsSearchTag:focus-visible {
 .adminStationConversationTitle h2 {
   min-width: 0;
   margin: 0;
+  display: -webkit-box;
   overflow: hidden;
   font-size: 15px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .adminStationConversationTitle small {
@@ -14970,31 +15016,21 @@ a.analyticsSearchTag:focus-visible {
 }
 
 .adminStationConversation .stationMessageList {
-  display: grid;
-  align-content: start;
-  gap: 12px;
-  overflow-y: auto;
-  border: 0;
-  padding: 18px;
-  background: color-mix(in srgb, var(--surface-strong) 14%, var(--surface));
-}
-
-.adminStationConversation .stationMessageList article {
-  width: fit-content;
-  max-width: min(78%, 680px);
-  gap: 6px;
-  border: 0;
-  border-radius: 14px 14px 14px 4px;
-  padding: 10px 12px;
-  background: color-mix(in srgb, var(--surface-strong) 52%, var(--surface));
+  grid-row: 3;
+  overscroll-behavior: contain;
+  padding: 18px 20px;
 }
 
 .adminStationConversation .stationMessageList article.isAdmin {
   justify-self: end;
-  border: 0;
-  border-radius: 14px 14px 4px 14px;
-  padding: 10px 12px;
-  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  border-radius: 11px 11px 4px 11px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.adminStationConversation .stationMessageList article.isUser {
+  justify-self: start;
+  border-radius: 11px 11px 11px 4px;
+  background: color-mix(in srgb, var(--surface-strong) 42%, transparent);
 }
 
 .adminStationConversation .stationMessageList p {
@@ -15003,27 +15039,8 @@ a.analyticsSearchTag:focus-visible {
 }
 
 .adminStationConversation .stationReplyForm {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 6px;
-  border-top: 1px solid var(--border);
-  padding: 12px 16px;
-  background: var(--surface);
-}
-
-.adminStationConversation .stationReplyForm textarea {
-  min-height: 66px;
-  resize: vertical;
-}
-
-.adminStationConversation .stationReplyForm button {
-  display: inline-flex;
-  width: 68px;
-  height: 36px;
-  min-height: 36px;
-  justify-content: center;
-  border-radius: 8px;
-  padding: 0 14px;
+  grid-row: 4;
+  padding-inline: 0;
 }
 
 .adminStationThreadActions {
@@ -15033,6 +15050,7 @@ a.analyticsSearchTag:focus-visible {
 }
 
 .adminConversationClosed {
+  grid-row: 4;
   margin: 0;
   border-top: 1px solid var(--border);
   padding: 14px 16px;
@@ -15042,6 +15060,7 @@ a.analyticsSearchTag:focus-visible {
 
 .adminStationEmpty {
   display: grid;
+  width: min(860px, 100%);
   min-height: 260px;
   place-content: center;
   gap: 4px;
@@ -15133,21 +15152,33 @@ a.analyticsSearchTag:focus-visible {
     gap: 12px;
   }
 
-  .adminInboxWorkspace {
-    grid-template-columns: minmax(0, 1fr);
-    min-height: 0;
+  .adminStationThreadList {
+    max-height: min(620px, calc(100dvh - 210px));
   }
 
-  .adminStationThreadList {
-    max-height: 260px;
-    overflow-y: auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
+  .adminStationConversationPage {
+    width: 100%;
   }
 
   .adminStationConversation {
-    min-height: 420px;
-    padding: 0;
+    height: clamp(480px, calc(100dvh - 210px), 720px);
+  }
+
+  .adminStationConversation > header {
+    padding-inline: 2px;
+  }
+
+  .adminStationConversation > header.hasBack {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+  }
+
+  .adminStationConversationBack {
+    width: 36px;
+    height: 36px;
+  }
+
+  .adminStationConversation .stationMessageList {
+    padding-inline: 10px;
   }
 
   .accessPolicyEditor {
@@ -16093,7 +16124,8 @@ a.analyticsSearchTag:focus-visible {
   grid-template-columns: minmax(0, 1fr) auto;
   min-height: 58px;
   align-items: center;
-  gap: 16px;
+  column-gap: 16px;
+  row-gap: 0;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 14px;
@@ -16104,6 +16136,14 @@ a.analyticsSearchTag:focus-visible {
   color: var(--text);
   font-size: 14px;
   font-weight: 700;
+}
+
+.readingProgressControls {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .readingProgressOptions {
@@ -16126,16 +16166,23 @@ a.analyticsSearchTag:focus-visible {
 
 .readingHistoryToolbar {
   display: flex;
-  min-height: 32px;
+  width: 100%;
+  min-height: 38px;
+  grid-column: 1 / -1;
   align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  padding: 8px 0 0;
 }
 
 .activitySelectAll {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 11.5px;
+  padding-inline-start: 6.5px;
   color: var(--muted);
   cursor: pointer;
   font-size: 12px;
@@ -16185,7 +16232,7 @@ a.analyticsSearchTag:focus-visible {
 
 .readingHistoryList {
   display: grid;
-  border-top: 1px solid var(--border);
+  border-top: 0;
 }
 
 .readingHistoryItem {
@@ -16292,48 +16339,87 @@ a.analyticsSearchTag:focus-visible {
   background: var(--accent);
 }
 
-.readingHistoryActions {
+.readingHistoryManageActions {
   display: flex;
+  min-width: 0;
   align-items: center;
   justify-content: flex-end;
-  gap: 7px;
+  gap: 4px;
 }
 
-.readingHistoryActions > button,
+.activityManageButton,
+.activityBatchButton,
 .readingHistoryClearConfirm button {
   display: inline-flex;
-  min-height: 31px;
+  min-width: 30px;
+  min-height: 30px;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 5px 10px;
+  gap: 6px;
+  border: 0;
+  border-radius: 6px;
+  padding: 5px 7px;
   background: transparent;
   color: var(--muted);
+  font: inherit;
+  font-size: 12px;
   cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
 }
 
-.readingHistoryActions > button:hover,
-.readingHistoryActions > button:focus-visible,
+.activityManageButton:hover,
+.activityManageButton:focus-visible,
+.activityManageButton.isActive,
+.activityBatchButton:hover,
+.activityBatchButton:focus-visible,
 .readingHistoryClearConfirm button:hover,
 .readingHistoryClearConfirm button:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--accent);
 }
 
-.readingHistoryActions button:disabled {
+.activityManageButton.isActive {
+  font-weight: 680;
+}
+
+.activityBatchButton.isDanger:hover,
+.activityBatchButton.isDanger:focus-visible,
+.readingHistoryClearConfirm button.isDanger:hover,
+.readingHistoryClearConfirm button.isDanger:focus-visible {
+  background: color-mix(in srgb, #c94a57 9%, transparent);
+  color: #c94a57;
+}
+
+.readingHistoryManageActions button:disabled {
   cursor: default;
-  opacity: 0.45;
+  opacity: 0.32;
+}
+
+.readingHistorySelectedCount {
+  min-width: 38px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .readingHistoryClearConfirm {
   display: inline-flex;
+  min-height: 30px;
+  align-items: center;
   gap: 4px;
+  border-radius: 6px;
+  padding-left: 7px;
+  background: color-mix(in srgb, #c94a57 6%, transparent);
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .readingHistoryClearConfirm button {
-  width: 31px;
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
   padding: 0;
 }
 
@@ -17067,101 +17153,195 @@ a.analyticsSearchTag:focus-visible {
   }
 }
 
-.novelSourceFilter {
+.mediaBrowseControls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.catalogMenuControl {
   position: relative;
   z-index: 12;
   display: inline-flex;
 }
 
-.novelSourceFilterButton {
+.catalogMenuTrigger {
   position: relative;
   display: inline-grid;
   width: 30px;
   height: 30px;
   place-items: center;
   border: 0;
-  border-radius: 8px;
+  border-radius: 7px;
   padding: 0;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  transition: background 140ms ease, color 140ms ease;
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
-.novelSourceFilterButton:hover,
-.novelSourceFilterButton:focus-visible,
-.novelSourceFilterButton.isActive {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: var(--accent);
-}
-
-.novelSourceFilterMenu {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  display: grid;
-  width: min(218px, calc(100vw - 28px));
-  max-height: min(360px, 55vh);
-  overflow-y: auto;
-  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
-  border-radius: 10px;
-  padding: 5px;
-  background: color-mix(in srgb, var(--surface) 96%, transparent);
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.16);
-  backdrop-filter: blur(14px);
-}
-
-.novelSourceFilterMenu a {
-  display: grid;
-  min-height: 36px;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 7px;
-  border-radius: 7px;
-  padding: 7px 9px;
-  color: var(--text);
-  font-size: 13px;
-}
-
-.novelSourceFilterMenu a:hover,
-.novelSourceFilterMenu a:focus-visible,
-.novelSourceFilterMenu a.isActive {
+.catalogMenuTrigger:hover,
+.catalogMenuTrigger:focus-visible,
+.catalogMenuTrigger.isActive {
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--accent);
 }
 
-.novelSourceFilterMenu a > span {
+.catalogMenuPopover {
+  --catalog-menu-width: 112px;
+
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  width: min(var(--catalog-menu-width), calc(100vw - 24px));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 14%);
+}
+
+.catalogMenuItem {
+  display: grid;
+  width: 100%;
+  min-height: 32px;
+  grid-template-columns: minmax(0, 1fr) 14px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 5px;
+  padding: 5px 8px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  text-decoration: none;
+}
+
+.catalogMenuItem:hover,
+.catalogMenuItem:focus-visible {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--accent);
+}
+
+.catalogMenuItem.isActive {
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.catalogMenuItem > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.novelSourceFilterMenu small {
+.catalogMenuItem > svg {
+  grid-column: 2;
+  justify-self: end;
+}
+
+.catalogFilterPopover {
+  --catalog-menu-width: 160px;
+
+  max-height: min(320px, 55vh);
+  overflow-y: auto;
+}
+
+.catalogFilterPopover .catalogMenuItem {
+  grid-template-columns: minmax(0, 1fr) auto 14px;
+}
+
+.catalogFilterPopover .catalogMenuItem > svg {
+  grid-column: 3;
+}
+
+.catalogFilterPopover small,
+.catalogTagPopover small {
   color: var(--muted);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
 
-.novelSourceFilterMenu .novelFilterSectionLabel {
-  padding: 7px 9px 4px;
+.catalogFilterPopover .novelFilterSectionLabel {
+  padding: 6px 8px 3px;
   color: var(--muted);
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-weight: 650;
+  letter-spacing: 0.06em;
 }
 
-.novelSourceFilterMenu .novelFilterSectionLabel:not(:first-child) {
-  margin-top: 4px;
+.catalogFilterPopover .novelFilterSectionLabel:not(:first-child) {
+  margin-top: 3px;
   border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  padding-top: 9px;
+  padding-top: 7px;
 }
 
-.novelSourceFilterMenu a > svg {
-  grid-column: 3;
+.catalogTagPopover {
+  --catalog-menu-width: 172px;
+
+  max-height: min(320px, 55vh);
+  overflow-y: auto;
 }
 
-.novelSortMenu {
-  width: 156px;
+.catalogTagMenuItem,
+.catalogTagMenuAll {
+  display: grid;
+  width: 100%;
+  min-height: 32px;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 5px;
+  padding: 5px 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.catalogTagMenuItem:hover,
+.catalogTagMenuItem:focus-visible,
+.catalogTagMenuAll:hover,
+.catalogTagMenuAll:focus-visible {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--accent);
+}
+
+.catalogTagMenuItem.isActive {
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.catalogTagMenuItem > span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalogTagMenuItem .contentTag {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.catalogMenuSpacer {
+  width: 14px;
+  height: 14px;
+}
+
+.catalogTagMenuAll {
+  grid-template-columns: 14px minmax(0, 1fr);
+  margin-top: 3px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 5px 5px;
+  padding-top: 7px;
 }
 
 .readerTitle > div {
@@ -19235,7 +19415,6 @@ a.analyticsSearchTag:focus-visible {
   min-width: 220px;
 }
 
-.stationNewThread.isCompact > summary,
 .adminStationNewButton {
   border: 0;
   border-radius: 6px;
@@ -19243,9 +19422,6 @@ a.analyticsSearchTag:focus-visible {
   box-shadow: none;
 }
 
-.stationNewThread.isCompact[open] > summary,
-.stationNewThread.isCompact > summary:hover,
-.stationNewThread.isCompact > summary:focus-visible,
 .adminStationNewButton:hover,
 .adminStationNewButton:focus-visible {
   border: 0;

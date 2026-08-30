@@ -21,6 +21,7 @@ type AdminFrameProps = {
   notice?: string;
   tone?: "success" | "warning" | "error";
   breadcrumbs?: BreadcrumbItem[];
+  mobileImmersive?: boolean;
   children: React.ReactNode;
 };
 
@@ -58,7 +59,14 @@ function titleFor(active: AdminFrameProps["active"]): string {
   return "系统设置";
 }
 
-export async function AdminFrame({ active, notice = "", tone, breadcrumbs, children }: AdminFrameProps) {
+export async function AdminFrame({
+  active,
+  notice = "",
+  tone,
+  breadcrumbs,
+  mobileImmersive = false,
+  children,
+}: AdminFrameProps) {
   const headerStore = await headers();
   const access = getAdminAccessState(headerStore);
   if (!access.allowed) {
@@ -80,7 +88,7 @@ export async function AdminFrame({ active, notice = "", tone, breadcrumbs, child
   ];
 
   return (
-    <main className="adminShell adminLayout">
+    <main className={`adminShell adminLayout${mobileImmersive ? " isMobileImmersive" : ""}`}>
       <AdminSidebarNavigation active={active} siteName={siteName} logoutAction={logoutAdminAction} />
 
       <section className="adminMain">

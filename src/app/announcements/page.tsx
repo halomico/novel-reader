@@ -2,8 +2,8 @@ import { Bell, ChevronRight } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "@/components/LocalizedLink";
 import { notFound } from "next/navigation";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
+import { PageContextBar } from "@/components/PageContextBar";
 import { SiteHeader } from "@/components/SiteHeader";
 import { canAccessHomeAnnouncementCard, canSeeHomePortalContentEntry } from "@/lib/config";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
@@ -42,9 +42,9 @@ export default async function AnnouncementsPage() {
   })));
   const [homeLabel, announcementLabel] = await localizeTexts(["首页", "公告"] as const, locale);
   return (
-    <main className="appShell messagesShell">
+    <main className="appShell announcementShell">
       <SiteHeader currentUser={user} />
-      <Breadcrumbs items={[{ label: homeLabel, href: "/" }, { label: announcementLabel }]} />
+      <PageContextBar items={[{ label: homeLabel, href: "/" }, { label: announcementLabel }]} />
       <section className="messagesPage publicAnnouncementsPage">
         <header className="messagesHeader"><h1><Bell size={20} aria-hidden="true" />{announcementLabel}</h1></header>
         <div className="announcementList">

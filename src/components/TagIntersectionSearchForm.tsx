@@ -243,7 +243,7 @@ export function TagIntersectionSearchForm({
                         aria-pressed={isIncluded || isExcluded}
                         key={tag.id}
                       >
-                        {isIncluded ? <Check size={13} aria-hidden="true" /> : isExcluded ? <Minus size={13} aria-hidden="true" /> : <span aria-hidden="true" />}
+                        {isIncluded ? <Check size={13} aria-hidden="true" /> : isExcluded ? <Minus size={13} aria-hidden="true" /> : null}
                         <span>{tag.name}</span>
                         <small>{tag.count}</small>
                       </button>

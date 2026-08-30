@@ -1,6 +1,5 @@
 ﻿"use client";
 
-import { BookText } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Pagination } from "@/components/Pagination";
@@ -477,7 +476,7 @@ export function ContentSearchClient({
       <SearchProgress job={job} showProgressBars={displayProgress} locale={locale} />
 
       {pagedResults.length > 0 ? (
-        <section className="searchResults">
+        <section className="searchResults contentSearchResults">
           {pagedResults.map((result: SearchResult) => {
             const fromParams = new URLSearchParams(resultReturnParams);
             if (resultReturnPath === "/search") fromParams.set("q", keyword);
@@ -505,9 +504,6 @@ export function ContentSearchClient({
                   }
                 }}
               >
-                <span className="bookMark" aria-hidden="true">
-                  <BookText size={20} />
-                </span>
                 <span className="searchResultBody">
                   <strong>{result.title}</strong>
                   <span>{highlightSnippet(result.snippet, highlightTerms)}</span>

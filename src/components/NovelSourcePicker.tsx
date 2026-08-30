@@ -79,9 +79,9 @@ export function NovelSourcePicker({
   }
 
   return (
-    <div className="novelSourceFilter" ref={pickerRef}>
+    <div className="catalogMenuControl novelFilterControl" ref={pickerRef}>
       <button
-        className={`novelSourceFilterButton${activeSlug !== DEFAULT_NOVEL_LIBRARY_SLUG || access !== "all" ? " isActive" : ""}`}
+        className={"catalogMenuTrigger" + (activeSlug !== DEFAULT_NOVEL_LIBRARY_SLUG || access !== "all" ? " isActive" : "")}
         type="button"
         aria-label={`${tr("筛选")}：${activeLabel} · ${accessLabel}`}
         aria-expanded={open}
@@ -92,11 +92,11 @@ export function NovelSourcePicker({
         <ListFilter size={16} aria-hidden="true" />
       </button>
       {open ? (
-        <div className="novelSourceFilterMenu" role="menu" aria-label={tr("筛选小说")}>
+        <div className="catalogMenuPopover catalogFilterPopover" role="menu" aria-label={tr("筛选小说")}>
           <span className="novelFilterSectionLabel" role="presentation">{tr("来源")}</span>
           {sources.map((source) => (
             <Link
-              className={source.slug === activeSlug ? "isActive" : ""}
+              className={source.slug === activeSlug ? "catalogMenuItem isActive" : "catalogMenuItem"}
               href={sourceHref(source.slug)}
               role="menuitem"
               onClick={() => {
@@ -111,7 +111,7 @@ export function NovelSourcePicker({
             </Link>
           ))}
           <Link
-            className={activeSlug === ALL_NOVEL_LIBRARIES_SLUG ? "isActive isAllLibraries" : "isAllLibraries"}
+            className={activeSlug === ALL_NOVEL_LIBRARIES_SLUG ? "catalogMenuItem isActive isAllLibraries" : "catalogMenuItem isAllLibraries"}
             href={sourceHref(ALL_NOVEL_LIBRARIES_SLUG)}
             role="menuitem"
             onClick={() => {
@@ -127,7 +127,7 @@ export function NovelSourcePicker({
             const label = value === "free" ? tr("免费") : value === "soda" ? tr("苏打") : tr("全部");
             return (
               <Link
-                className={access === value ? "isActive" : ""}
+                className={access === value ? "catalogMenuItem isActive" : "catalogMenuItem"}
                 href={accessHref(value)}
                 role="menuitem"
                 onClick={() => setOpen(false)}

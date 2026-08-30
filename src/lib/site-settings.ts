@@ -28,6 +28,7 @@ export type RelatedVideoMode = "next" | "random";
 export type AudioPlaybackMode = "stop" | "next" | "repeat-one";
 export type UserRegistrationMode = "closed" | "invite" | "open";
 export type NovelSourceSearchMode = "full" | "book";
+export type ReaderAdjacentNovelSort = "updated" | "name";
 
 export type IpRateLimitRule = {
   id: string;
@@ -63,6 +64,7 @@ export type SiteSettings = {
   readerDefaultFontSize: number;
   readerDefaultLineHeight: ReaderLineHeight;
   readerDefaultTagsMode: ReaderTagsMode;
+  readerAdjacentNovelSort: ReaderAdjacentNovelSort;
   novelCatalogSearchExpanded: boolean;
   defaultPalette: ColorPalette;
   defaultPaletteRandomEnabled: boolean;
@@ -97,6 +99,7 @@ export type SiteSettings = {
   emailVerificationRequired: boolean;
   marketEnabled: boolean;
   cookieToSodaRate: number;
+  bidirectionalCurrencyExchangeEnabled: boolean;
   userDailyRegistrationLimitPerIp: number;
   userDailyReportLimit: number;
   userAvatarMaxBytes: number;
@@ -130,7 +133,7 @@ type SiteSettingsGlobal = typeof globalThis & {
   siteSettingsCache?: SiteSettingsCache;
 };
 
-const SITE_SETTINGS_CACHE_SCHEMA_VERSION = 14;
+const SITE_SETTINGS_CACHE_SCHEMA_VERSION = 16;
 
 const DEFAULT_SETTINGS_PREVIEW_TEXT =
   process.env.SETTINGS_PREVIEW_TEXT?.trim() ||
@@ -177,6 +180,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   readerDefaultFontSize: 18,
   readerDefaultLineHeight: 1.7,
   readerDefaultTagsMode: "collapsed",
+  readerAdjacentNovelSort: "updated",
   novelCatalogSearchExpanded: true,
   defaultPalette: "default",
   defaultPaletteRandomEnabled: false,
@@ -211,6 +215,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   emailVerificationRequired: false,
   marketEnabled: true,
   cookieToSodaRate: 10,
+  bidirectionalCurrencyExchangeEnabled: false,
   userDailyRegistrationLimitPerIp: 0,
   userDailyReportLimit: 50,
   userAvatarMaxBytes: 0,
@@ -466,6 +471,7 @@ function readSiteSettingsFromDisk(): SiteSettings {
         typeof parsed.readerDefaultTagsMode === "string" ? parsed.readerDefaultTagsMode : undefined,
         DEFAULT_SETTINGS.readerDefaultTagsMode,
       ),
+      readerAdjacentNovelSort: parsed.readerAdjacentNovelSort === "name" ? "name" : "updated",
       novelCatalogSearchExpanded: cleanBool(
         parsed.novelCatalogSearchExpanded,
         DEFAULT_SETTINGS.novelCatalogSearchExpanded,
@@ -524,6 +530,10 @@ function readSiteSettingsFromDisk(): SiteSettings {
       ),
       marketEnabled: cleanBool(parsed.marketEnabled, DEFAULT_SETTINGS.marketEnabled),
       cookieToSodaRate: cleanInt(parsed.cookieToSodaRate, DEFAULT_SETTINGS.cookieToSodaRate, 1, 10_000),
+      bidirectionalCurrencyExchangeEnabled: cleanBool(
+        parsed.bidirectionalCurrencyExchangeEnabled,
+        DEFAULT_SETTINGS.bidirectionalCurrencyExchangeEnabled,
+      ),
       userDailyRegistrationLimitPerIp: cleanInt(
         parsed.userDailyRegistrationLimitPerIp,
         DEFAULT_SETTINGS.userDailyRegistrationLimitPerIp,

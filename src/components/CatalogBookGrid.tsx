@@ -62,7 +62,7 @@ export function CatalogBookCard({
         <span className="bookCardSubline">
           <span>{formatNovelWordCount(book.word_count)}</span>
           {"\u00A0\u00A0"}
-          <span>更新于 {formatNovelUpdateTime(book)}</span>
+          <span>发布于 {formatNovelUpdateTime(book)}</span>
         </span>
       </span>
     </SearchTrackedLink>

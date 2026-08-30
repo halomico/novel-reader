@@ -2,7 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getCookieToSodaRate, isMarketEnabled } from "@/lib/config";
+import {
+  getCookieToSodaRate,
+  isBidirectionalCurrencyExchangeEnabled,
+  isMarketEnabled,
+} from "@/lib/config";
 import {
   MarketError,
   purchaseMarketProduct,
@@ -10,7 +14,11 @@ import {
 } from "@/lib/market";
 import { getCurrentUser } from "@/lib/user-auth";
 import { hasUserPermission } from "@/lib/user-levels";
-import { exchangeCookieForSoda, type UserCurrency } from "@/lib/user-wallet";
+import {
+  exchangeUserCurrency,
+  type CurrencyExchangeDirection,
+  type UserCurrency,
+} from "@/lib/user-wallet";
 
 function marketNotice(pathname: string, message: string, tone: "success" | "warning" | "error" = "success"): never {
   const params = new URLSearchParams({ notice: message, tone });
@@ -21,7 +29,17 @@ function errorMessage(error: unknown): string {
   if (error instanceof MarketError) return error.message;
   if (
     error instanceof Error &&
-    ["曲奇不足", "兑换数量过大", "苏打余额已达上限", "用户不可用"].includes(error.message)
+    (
+      [
+        "请输入有效兑换数量",
+        "曲奇不足",
+        "苏打不足",
+        "兑换数量过大",
+        "曲奇余额已达上限",
+        "苏打余额已达上限",
+        "用户不可用",
+      ].includes(error.message) || /^苏打数量须为 \d+ 的倍数$/u.test(error.message)
+    )
   ) {
     return error.message;
   }
@@ -77,18 +95,26 @@ export async function redeemMarketCodeAction(formData: FormData) {
   marketNotice("/market", `已到账 ${result.amount} ${label}`);
 }
 
-export async function exchangeCookieForSodaAction(formData: FormData) {
+export async function exchangeCurrencyAction(formData: FormData) {
   const user = await requireMarketUser();
+  const direction: CurrencyExchangeDirection = formData.get("direction") === "soda-to-cookie"
+    ? "soda-to-cookie"
+    : "cookie-to-soda";
+  if (direction === "soda-to-cookie" && !isBidirectionalCurrencyExchangeEnabled()) {
+    marketNotice("/market", "暂未开放苏打换曲奇", "warning");
+  }
+  let result: ReturnType<typeof exchangeUserCurrency>;
   try {
-    const result = exchangeCookieForSoda({
+    result = exchangeUserCurrency({
       userId: user.id,
-      cookieAmount: Number(formData.get("cookieAmount")),
+      direction,
+      sourceAmount: Number(formData.get("sourceAmount")),
       sodaPerCookie: getCookieToSodaRate(),
     });
-    revalidatePath("/market");
-    revalidatePath("/account");
-    marketNotice("/market", `已兑换 ${result.sodaReceived} 苏打`);
   } catch (error) {
     marketNotice("/market", errorMessage(error), "warning");
   }
+  revalidatePath("/market");
+  revalidatePath("/account");
+  marketNotice("/market", `已兑换 ${result.receivedAmount} ${direction === "cookie-to-soda" ? "苏打" : "曲奇"}`);
 }

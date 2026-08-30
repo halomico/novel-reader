@@ -3,11 +3,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import {
   buildTitleSearchSql,
   clearNovelSegmentCache,
   defaultNovelCatalogSortOrder,
+  getAdjacentNovels,
+  getNovelById,
   normalizeNovelAccessFilter,
   normalizeNovelCatalogSort,
   normalizeNovelCatalogSortOrder,
@@ -16,8 +18,25 @@ import {
   readNovelSegments,
   type Novel,
 } from "./books";
+import { getDb } from "./db";
 import { sampleNovelIdsFromList } from "./novel-id-sampler";
 import { parseSearchQuery } from "./search-query";
+
+function withTempDatabase(t: TestContext) {
+  const previousDatabasePath = process.env.DATABASE_PATH;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-adjacent-"));
+  process.env.DATABASE_PATH = path.join(root, "novels.db");
+  const state = globalThis as typeof globalThis & { novelReaderDb?: DatabaseSync };
+  state.novelReaderDb?.close();
+  delete state.novelReaderDb;
+  t.after(() => {
+    state.novelReaderDb?.close();
+    delete state.novelReaderDb;
+    if (previousDatabasePath === undefined) delete process.env.DATABASE_PATH;
+    else process.env.DATABASE_PATH = previousDatabasePath;
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+}
 
 test("honors the configured catalog range up to 100 books", () => {
   assert.equal(normalizePageSize(75), 75);
@@ -40,6 +59,56 @@ test("keeps catalog sorting and access filters on their supported values", () =>
   assert.equal(normalizeNovelAccessFilter("free"), "free");
   assert.equal(normalizeNovelAccessFilter("soda"), "soda");
   assert.equal(normalizeNovelAccessFilter("paid"), "all");
+});
+
+test("resolves adjacent novels by the configured time or name order", (t) => {
+  withTempDatabase(t);
+  const db = getDb();
+  const defaultSource = db.prepare("SELECT id FROM novel_sources WHERE slug = 'default'").get() as { id: number };
+  const otherSourceId = Number(
+    db.prepare("INSERT INTO novel_sources (slug, name, relative_path) VALUES ('other', '其他来源', 'other')").run()
+      .lastInsertRowid,
+  );
+  const insert = db.prepare(
+    "INSERT INTO novels (title, file_name, relative_path, size_bytes, mtime_ms, source_id) VALUES (?, ?, ?, 1, ?, ?)",
+  );
+  insert.run("Alpha", "alpha.txt", "alpha.txt", 100, defaultSource.id);
+  const currentId = Number(insert.run("Bravo", "bravo.txt", "bravo.txt", 200, defaultSource.id).lastInsertRowid);
+  insert.run("Charlie", "charlie.txt", "charlie.txt", 300, defaultSource.id);
+  insert.run("Bravo Later", "bravo-later.txt", "bravo-later.txt", 200, defaultSource.id);
+  insert.run("Other Source", "other-source.txt", "other/other-source.txt", 250, otherSourceId);
+  const current = getNovelById(currentId);
+  assert.ok(current);
+
+  const byTime = getAdjacentNovels(current, "updated");
+  assert.equal(byTime.previous?.title, "Bravo Later");
+  assert.equal(byTime.next?.title, "Alpha");
+
+  const byName = getAdjacentNovels(current, "name");
+  assert.equal(byName.previous?.title, "Alpha");
+  assert.equal(byName.next?.title, "Bravo Later");
+
+  const index = db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_novels_source_mtime_id'")
+    .get() as { name: string } | undefined;
+  assert.equal(index?.name, "idx_novels_source_mtime_id");
+
+  const plans = [
+    db.prepare(
+      `EXPLAIN QUERY PLAN SELECT id FROM novels
+       WHERE (mtime_ms > ? OR (mtime_ms = ? AND id > ?)) AND source_id = ?
+       ORDER BY mtime_ms ASC, id ASC LIMIT 1`,
+    ).all(current.mtime_ms, current.mtime_ms, current.id, current.source_id),
+    db.prepare(
+      `EXPLAIN QUERY PLAN SELECT id FROM novels
+       WHERE (mtime_ms < ? OR (mtime_ms = ? AND id < ?)) AND source_id = ?
+       ORDER BY mtime_ms DESC, id DESC LIMIT 1`,
+    ).all(current.mtime_ms, current.mtime_ms, current.id, current.source_id),
+  ] as Array<Array<{ detail: string }>>;
+  for (const plan of plans) {
+    assert.equal(plan.some((row) => row.detail.includes("idx_novels_source_mtime_id")), true);
+    assert.equal(plan.some((row) => row.detail.includes("TEMP B-TREE")), false);
+  }
 });
 
 test("pushes compound title matching into SQLite", () => {

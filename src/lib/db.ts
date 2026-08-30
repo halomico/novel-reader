@@ -112,6 +112,8 @@ function migrateNovelLibraryModel(db: DatabaseSync) {
       ON novel_sources(sort_order, name, id);
     CREATE INDEX IF NOT EXISTS idx_novels_source_title
       ON novels(source_id, title COLLATE NOCASE, id);
+    CREATE INDEX IF NOT EXISTS idx_novels_source_mtime_id
+      ON novels(source_id, mtime_ms DESC, id DESC);
     CREATE INDEX IF NOT EXISTS idx_novel_chapters_novel_sort
       ON novel_chapters(novel_id, sort_order, id);
   `);

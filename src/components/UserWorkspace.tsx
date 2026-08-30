@@ -26,11 +26,13 @@ export async function UserWorkspace({
   user,
   active,
   breadcrumb,
+  mobileImmersive = false,
   children,
 }: {
   user: UserProfile;
   active: UserWorkspaceKey;
   breadcrumb: string;
+  mobileImmersive?: boolean;
   children: React.ReactNode;
 }) {
   const locale = await getRequestLocale();
@@ -39,7 +41,7 @@ export async function UserWorkspace({
   const showMarket = isMarketEnabled() && hasUserPermission(user, "market_access");
 
   return (
-    <main className="appShell userWorkspaceShell">
+    <main className={`appShell userWorkspaceShell${mobileImmersive ? " isMobileImmersive" : ""}`}>
       <SiteHeader currentUser={user} unreadMessages={unreadMessages} />
       <PageContextBar items={[{ label: uiText(locale, "首页"), href: "/" }, { label: breadcrumb }]} />
       <section className="userWorkspaceLayout">

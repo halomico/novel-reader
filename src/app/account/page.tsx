@@ -154,9 +154,10 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
       {view === "growth" && checkin ? (
         <article className="userPanel accountPanel accountGrowth">
           <header className="accountGrowthHeader">
-            <div>
-              <span className="accountGrowthLevel"><Sparkles size={18} aria-hidden="true" />Lv.{user.trustLevel}</span>
+            <div className="accountGrowthIdentity">
+              <Sparkles size={18} aria-hidden="true" />
               <h1>{displayLevelName}</h1>
+              <span className="accountGrowthLevel">Lv.{user.trustLevel}</span>
             </div>
             <div className="accountGrowthBalance">
               <CupSoda size={18} aria-hidden="true" />

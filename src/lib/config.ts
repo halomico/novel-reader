@@ -12,6 +12,7 @@ import {
   readSiteSettings as readSiteSettingsFromDisk,
   type AudioPlaybackMode,
   type IpRateLimitRule,
+  type ReaderAdjacentNovelSort,
   type RelatedVideoMode,
   type UserRegistrationMode,
 } from "./site-settings";
@@ -61,6 +62,10 @@ export function getDefaultNovelLibrarySlug(): string {
 
 export function getReaderDefaultFontSize(): number {
   return readSiteSettings().readerDefaultFontSize;
+}
+
+export function getReaderAdjacentNovelSort(): ReaderAdjacentNovelSort {
+  return readSiteSettings().readerAdjacentNovelSort;
 }
 
 export function isNovelCatalogSearchExpandedByDefault(): boolean {
@@ -165,6 +170,10 @@ export function isMarketEnabled(): boolean {
 
 export function getCookieToSodaRate(): number {
   return readSettingInt(readSiteSettings().cookieToSodaRate, "COOKIE_TO_SODA_RATE", 10, 1, 10_000);
+}
+
+export function isBidirectionalCurrencyExchangeEnabled(): boolean {
+  return readSiteSettings().bidirectionalCurrencyExchangeEnabled;
 }
 
 export function getUserDailyRegistrationLimitPerIp(): number {

@@ -1,4 +1,3 @@
-import { BookText } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
@@ -77,7 +76,7 @@ export default async function BookSearchPage({ params, searchParams }: BookSearc
   const basePath = `/books/${book.id}/search`;
 
   return (
-    <main className="appShell">
+    <main className="appShell bookSearchPage">
       <SiteHeader
         query={originalQuery}
         defaultSearchMode="current"
@@ -113,7 +112,6 @@ export default async function BookSearchPage({ params, searchParams }: BookSearc
                 key={`${result.chapterId}-${result.segmentIndex}`}
                 prefetch={false}
               >
-                <span className="bookMark" aria-hidden="true"><BookText size={20} /></span>
                 <span className="searchResultBody">
                   <strong>{result.title}</strong>
                   <span>{validation.ok ? highlightSnippet(result.snippet, validation.query.highlightTerms) : result.snippet}</span>

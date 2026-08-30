@@ -20,7 +20,7 @@ import {
   isAdvancedTagSearchPublic,
   isNovelLibraryPublic,
 } from "./config";
-import { readSiteSettings, writeSiteSettings } from "./site-settings";
+import { readSiteSettings, writeSiteSettings, type SiteSettings } from "./site-settings";
 
 test("atomically replaces an existing settings file", () => {
   const previousPath = process.env.ADMIN_SETTINGS_PATH;
@@ -48,6 +48,7 @@ test("atomically replaces an existing settings file", () => {
     assert.equal(defaults.readerDefaultFontSize, 18);
     assert.equal(defaults.readerDefaultLineHeight, 1.7);
     assert.equal(defaults.readerDefaultTagsMode, "collapsed");
+    assert.equal(defaults.readerAdjacentNovelSort, "updated");
     assert.equal(defaults.novelCatalogSearchExpanded, true);
     assert.equal(defaults.defaultNovelLibrarySlug, "default");
     assert.equal(defaults.siteEntryNoticeEnabled, false);
@@ -58,15 +59,17 @@ test("atomically replaces an existing settings file", () => {
     assert.equal(defaults.randomRecommendationsEnabled, false);
     assert.equal(defaults.catalogPromotionOrder, "manual-first");
     assert.equal(defaults.audioDefaultPlaybackMode, "next");
+    assert.equal(defaults.bidirectionalCurrencyExchangeEnabled, false);
     assert.equal(defaults.userDailyReportLimit, 50);
     assert.equal(defaults.announcementCardTarget, "list");
     assert.equal(defaults.adminTheme, "system");
     assert.equal(defaults.adminIpAllowlistEnabled, false);
     assert.deepEqual(defaults.adminAllowedNetworks, []);
     assert.deepEqual(defaults.novelSourceSearchModes, {});
-    writeSiteSettings({ ...defaults, siteName: "第一次" });
+    writeSiteSettings({ ...defaults, siteName: "第一次", bidirectionalCurrencyExchangeEnabled: true });
     writeSiteSettings({ ...readSiteSettings(), siteName: "第二次" });
     assert.equal(readSiteSettings().siteName, "第二次");
+    assert.equal(readSiteSettings().bidirectionalCurrencyExchangeEnabled, true);
     assert.deepEqual(fs.readdirSync(tempDir), ["admin-settings.json"]);
   } finally {
     if (previousPath === undefined) {
@@ -265,30 +268,28 @@ test("normalizes the reader tag default and catalog promotion order", () => {
   process.env.ADMIN_SETTINGS_PATH = path.join(tempDir, "admin-settings.json");
 
   try {
-    fs.writeFileSync(
-      process.env.ADMIN_SETTINGS_PATH,
-      JSON.stringify({
-        brandLinkTarget: "home",
-        readerDefaultTagsMode: "expanded",
-        catalogPromotionOrder: "random-first",
-      }),
-      "utf8",
-    );
+    writeSiteSettings({
+      ...readSiteSettings(),
+      brandLinkTarget: "home",
+      readerDefaultTagsMode: "expanded",
+      readerAdjacentNovelSort: "name",
+      catalogPromotionOrder: "random-first",
+    });
     assert.equal(readSiteSettings().brandLinkTarget, "home");
     assert.equal(readSiteSettings().readerDefaultTagsMode, "expanded");
+    assert.equal(readSiteSettings().readerAdjacentNovelSort, "name");
     assert.equal(readSiteSettings().catalogPromotionOrder, "random-first");
 
-    fs.writeFileSync(
-      process.env.ADMIN_SETTINGS_PATH,
-      JSON.stringify({
-        brandLinkTarget: "invalid",
-        readerDefaultTagsMode: "invalid",
-        catalogPromotionOrder: "invalid",
-      }),
-      "utf8",
-    );
+    writeSiteSettings({
+      ...readSiteSettings(),
+      brandLinkTarget: "invalid" as SiteSettings["brandLinkTarget"],
+      readerDefaultTagsMode: "invalid" as SiteSettings["readerDefaultTagsMode"],
+      readerAdjacentNovelSort: "invalid" as SiteSettings["readerAdjacentNovelSort"],
+      catalogPromotionOrder: "invalid" as SiteSettings["catalogPromotionOrder"],
+    });
     assert.equal(readSiteSettings().brandLinkTarget, "novels");
     assert.equal(readSiteSettings().readerDefaultTagsMode, "collapsed");
+    assert.equal(readSiteSettings().readerAdjacentNovelSort, "updated");
     assert.equal(readSiteSettings().catalogPromotionOrder, "manual-first");
   } finally {
     if (previousPath === undefined) {

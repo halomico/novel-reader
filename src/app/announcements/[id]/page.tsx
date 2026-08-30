@@ -1,9 +1,8 @@
-import { Bell } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { AnnouncementMarkdown } from "@/components/AnnouncementMarkdown";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
+import { PageContextBar } from "@/components/PageContextBar";
 import { SiteHeader } from "@/components/SiteHeader";
 import { canAccessHomeAnnouncementCard, canSeeHomePortalContentEntry } from "@/lib/config";
 import { getVisibleAnnouncement, markAnnouncementRead } from "@/lib/station";
@@ -55,18 +54,19 @@ export default async function AnnouncementPage({ params }: AnnouncementPageProps
   const [homeLabel, announcementLabel] = await localizeTexts(["首页", "公告"] as const, locale);
 
   return (
-    <main className="appShell messagesShell">
+    <main className="appShell announcementShell">
       <SiteHeader currentUser={user} />
-      <Breadcrumbs items={[{ label: homeLabel, href: "/" }, { label: announcementLabel, href: "/announcements" }, { label: displayTitle }]} />
+      <PageContextBar items={[
+        { label: homeLabel, href: "/" },
+        { label: announcementLabel, href: "/announcements" },
+        { label: displayTitle },
+      ]} />
       <article className="announcementDetail">
-        <header>
-          <Bell size={19} aria-hidden="true" />
-          <div>
-            <h1>{displayTitle}</h1>
-            <time dateTime={announcement.publishedAt || undefined}>
-              {announcement.publishedAt ? new Date(announcement.publishedAt).toLocaleDateString(locale === "zh-Hant" ? "zh-TW" : "zh-CN") : ""}
-            </time>
-          </div>
+        <header className="announcementDetailHeader">
+          <h1>{displayTitle}</h1>
+          <time dateTime={announcement.publishedAt || undefined}>
+            {announcement.publishedAt ? new Date(announcement.publishedAt).toLocaleDateString(locale === "zh-Hant" ? "zh-TW" : "zh-CN") : ""}
+          </time>
         </header>
         <div className="announcementBody">
           <AnnouncementMarkdown>{displayBody}</AnnouncementMarkdown>

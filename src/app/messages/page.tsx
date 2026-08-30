@@ -1,9 +1,10 @@
-import { Bell, ChevronRight, Link2, Mail, MessageSquareText, Plus, Send, Unlink } from "lucide-react";
+import { Bell, ChevronLeft, ChevronRight, Link2, Mail, MessageSquareText, Send, Unlink } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "@/components/LocalizedLink";
 import { redirect } from "next/navigation";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
 import { UserStationConversation } from "@/components/UserStationConversation";
+import { StationNewThreadDialog } from "@/components/StationNewThreadDialog";
 import { UserWorkspace } from "@/components/UserWorkspace";
 import { getNoticeDisplaySeconds, getStationDisplayName } from "@/lib/config";
 import {
@@ -18,7 +19,7 @@ import { getCurrentUser } from "@/lib/user-auth";
 import { hasUserPermission } from "@/lib/user-levels";
 import { getTelegramUserLink } from "@/lib/telegram-links";
 import { isTelegramUserLinkAvailable } from "@/lib/telegram-config";
-import { createStationThreadAction, unlinkTelegramAction } from "./actions";
+import { unlinkTelegramAction } from "./actions";
 import { getRequestLocale, localizeText } from "@/lib/locale-server";
 import { uiText, withLocalePath } from "@/lib/locale";
 
@@ -67,7 +68,7 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
   })));
 
   return (
-    <UserWorkspace user={user} active="messages" breadcrumb={tr("消息")}>
+    <UserWorkspace user={user} active="messages" breadcrumb={tr("消息")} mobileImmersive={Boolean(selectedThread)}>
       {params.notice ? (
         <DismissibleNotice
           message={await localizeText(params.notice, locale)}
@@ -76,7 +77,7 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
           displaySeconds={getNoticeDisplaySeconds()}
         />
       ) : null}
-      <section className="messagesPage">
+      <section className={selectedThread ? "messagesPage hasConversation" : "messagesPage"}>
         <header className="messagesHeader userContentHeader">
           <span><MessageSquareText size={19} aria-hidden="true" /><h1>{tr("消息")}</h1></span>
           <nav className="messagesTabs" aria-label={tr("消息分类")}>
@@ -125,19 +126,9 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
           <section className={selectedThread ? "stationChatWorkspace hasSelection" : "stationChatWorkspace"}>
             <aside className="stationChatSidebar">
               <header>
-                <span><Mail size={16} aria-hidden="true" /><strong>{stationDisplayName}</strong></span>
+                <strong>{tr("对话")}</strong>
                 {canMessageStation ? (
-                  <details className="stationNewThread isCompact">
-                    <summary aria-label={`${tr("联系")}${stationDisplayName}`} title={`${tr("联系")}${stationDisplayName}`}>
-                      <Plus size={17} aria-hidden="true" />
-                    </summary>
-                    <form action={createStationThreadAction}>
-                      <strong>{tr("新对话")}</strong>
-                      <label><span>{tr("主题")}</span><input name="subject" maxLength={80} required /></label>
-                      <label><span>{tr("内容")}</span><textarea name="body" rows={5} required /></label>
-                      <button type="submit"><Send size={15} aria-hidden="true" />{tr("发送")}</button>
-                    </form>
-                  </details>
+                  <StationNewThreadDialog locale={locale} stationDisplayName={stationDisplayName} />
                 ) : null}
               </header>
               <nav className="stationThreadList" aria-label={tr("站务对话")}>
@@ -160,15 +151,14 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
             {selectedThread ? (
               <div className="stationConversation">
                 <header>
-                  <Link className="stationChatBack" href="/messages?tab=station" aria-label={tr("返回站务列表")}><ChevronRight size={17} aria-hidden="true" /></Link>
-                  <span className="stationConversationAvatar"><Mail size={16} aria-hidden="true" /></span>
+                  <Link className="stationChatBack" href="/messages?tab=station" aria-label={tr("返回站务列表")}>
+                    <span className="stationChatBackIcon"><ChevronLeft size={25} strokeWidth={1.8} aria-hidden="true" /></span>
+                  </Link>
                   <span className="stationConversationHeading">
                     <h2>{selectedThread.subject}</h2>
-                    <small>{stationDisplayName}</small>
+                    <small>{tr(selectedThread.status === "open" ? "处理中" : "已结束")}</small>
                   </span>
-                  <span className={selectedThread.status === "open" ? "stationConversationStatus isOpen" : "stationConversationStatus"}>
-                    {tr(selectedThread.status === "open" ? "处理中" : "已结束")}
-                  </span>
+                  <span className="stationChatHeaderSpacer" aria-hidden="true" />
                 </header>
                 <UserStationConversation
                   threadId={selectedThread.id}
@@ -186,7 +176,7 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
               <div className="stationChatEmpty">
                 <MessageSquareText size={24} aria-hidden="true" />
                 <strong>{threads.length ? tr("选择一条对话") : tr("暂无站务对话")}</strong>
-                <small>{canMessageStation ? tr("使用左上角加号发起新对话") : tr("当前等级暂不可发起站务对话")}</small>
+                <small>{canMessageStation ? tr("从左侧选择或发起新对话") : tr("当前等级暂不可发起站务对话")}</small>
               </div>
             )}
           </section>

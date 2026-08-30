@@ -71,11 +71,12 @@ export function IntentPrefetchLink({
   return (
     <LocalizedLink
       href={href}
+      {...props}
+      prefetch={false}
       onPointerEnter={handlePointerEnter}
       onPointerLeave={handlePointerLeave}
       onFocus={handleFocus}
       onTouchStart={handleTouchStart}
-      {...props}
     />
   );
 }

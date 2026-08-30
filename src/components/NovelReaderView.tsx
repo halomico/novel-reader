@@ -145,20 +145,21 @@ function ReaderNovelNavigation({
 }) {
   if (!previous && !next) return null;
   const href = (id: number) => `/books/${id}?from=${encodeURIComponent(returnHref)}`;
+  const isSingle = Boolean(previous) !== Boolean(next);
   return (
-    <nav className="readerNovelNavigation" aria-label="小说导航">
+    <nav className={`readerNovelNavigation${isSingle ? " isSingle" : ""}`} aria-label="小说导航">
       {previous ? (
-        <Link href={href(previous.id)} prefetch={false} title={`上一篇：${previous.title}`}>
-          <ChevronLeft size={18} aria-hidden="true" />
-          <span><strong>{previous.title}</strong></span>
+        <Link className="readerNovelLink readerNovelPrevious" href={href(previous.id)} prefetch={false} aria-label={`上一篇：${previous.title}`} title={`上一篇：${previous.title}`}>
+          <span className="readerNovelArrow"><ChevronLeft size={20} strokeWidth={1.8} aria-hidden="true" /></span>
+          <span className="readerNovelTitle"><strong>{previous.title}</strong></span>
         </Link>
-      ) : <span className="isDisabled" aria-hidden="true"><ChevronLeft size={18} /></span>}
+      ) : null}
       {next ? (
-        <Link href={href(next.id)} prefetch={false} title={`下一篇：${next.title}`}>
-          <span><strong>{next.title}</strong></span>
-          <ChevronRight size={18} aria-hidden="true" />
+        <Link className="readerNovelLink readerNovelNext" href={href(next.id)} prefetch={false} aria-label={`下一篇：${next.title}`} title={`下一篇：${next.title}`}>
+          <span className="readerNovelTitle"><strong>{next.title}</strong></span>
+          <span className="readerNovelArrow"><ChevronRight size={20} strokeWidth={1.8} aria-hidden="true" /></span>
         </Link>
-      ) : <span className="isDisabled" aria-hidden="true"><ChevronRight size={18} /></span>}
+      ) : null}
     </nav>
   );
 }

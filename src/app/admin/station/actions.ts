@@ -29,6 +29,12 @@ async function requireAdmin() {
   return session;
 }
 
+function revalidateStationPaths(threadId?: number) {
+  revalidatePath("/messages");
+  revalidatePath("/admin/station");
+  if (threadId) revalidatePath(`/admin/station/${threadId}`);
+}
+
 export async function createAdminStationThreadInlineAction(
   usernameValue: string,
   subjectValue: string,
@@ -39,7 +45,7 @@ export async function createAdminStationThreadInlineAction(
   if (!userId) return mutationResult(false, "用户不存在或不可用", "warning");
   try {
     const threadId = createAdminStationThread(userId, subjectValue, bodyValue);
-    revalidatePath("/messages");
+    revalidateStationPaths(threadId);
     return mutationResult(true, "消息已发送", "success", { threadId });
   } catch (error) {
     return mutationResult(false, stationError(error, "消息发送失败"), "warning");
@@ -103,7 +109,7 @@ export async function deleteStationThreadInlineAction(idValue: number): Promise<
   await requireAdmin();
   const deleted = deleteStationThread(Math.floor(Number(idValue)));
   if (!deleted) return mutationResult(false, "留言不存在", "warning");
-  revalidatePath("/messages");
+  revalidateStationPaths();
   return mutationResult(true, "留言已删除", "success");
 }
 
@@ -116,7 +122,7 @@ export async function replyStationThreadInlineAction(
   try {
     const replied = addStationReply({ threadId, body: bodyValue, authorRole: "admin" });
     if (!replied) return mutationResult(false, "该留言已结束", "warning");
-    revalidatePath("/messages");
+    revalidateStationPaths(threadId);
     return mutationResult(true, "回复已发送", "success", {
       messages: listStationMessages(threadId),
     });
@@ -134,7 +140,7 @@ export async function setStationThreadStatusInlineAction(
   if (!setStationThreadStatus(threadId, status)) {
     return mutationResult(false, "留言不存在", "warning");
   }
-  revalidatePath("/messages");
+  revalidateStationPaths(threadId);
   return mutationResult(
     true,
     status === "open" ? "留言已重新打开" : "留言已结束",

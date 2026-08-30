@@ -193,6 +193,29 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 <option value="hidden">关闭</option>
               </AdminSelect>
             </label>
+            <fieldset className="adminCompactSegmentedField">
+              <legend>文末上一篇 / 下一篇排序</legend>
+              <div>
+                <label>
+                  <input
+                    name="readerAdjacentNovelSort"
+                    type="radio"
+                    value="updated"
+                    defaultChecked={settings.readerAdjacentNovelSort === "updated"}
+                  />
+                  <span>时间</span>
+                </label>
+                <label>
+                  <input
+                    name="readerAdjacentNovelSort"
+                    type="radio"
+                    value="name"
+                    defaultChecked={settings.readerAdjacentNovelSort === "name"}
+                  />
+                  <span>名称</span>
+                </label>
+              </div>
+            </fieldset>
             <AdminSwitchRow
               name="novelCatalogSearchExpanded"
               title="小说搜索框默认展开"
@@ -320,56 +343,67 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
 
           <details className="adminSettingsSection adminSettingsDisclosure">
             <summary>账户与内容访问</summary>
-            <div className="adminFieldGrid">
-              <label>
-                <span>用户头像上限 / MB</span>
-                <input name="userAvatarMaxMb" type="number" min="0.1" max="10" step="0.1" defaultValue={userAvatarMaxMb} />
+            <div className="adminSettingsGroup">
+              <h4>账户与站务</h4>
+              <div className="adminFieldGrid">
+                <label>
+                  <span>用户头像上限 / MB</span>
+                  <input name="userAvatarMaxMb" type="number" min="0.1" max="10" step="0.1" defaultValue={userAvatarMaxMb} />
+                </label>
+                <label>
+                  <span>站务显示名称</span>
+                  <input name="stationDisplayName" maxLength={20} defaultValue={settings.stationDisplayName} />
+                </label>
+              </div>
+              <div className="adminFieldGrid">
+                <label>
+                  <span>单 IP 每日注册上限</span>
+                  <input name="userDailyRegistrationLimitPerIp" type="number" min="0" max="100" defaultValue={userDailyRegistrationLimit} />
+                </label>
+                <label>
+                  <span>单用户每日反馈上限</span>
+                  <input name="userDailyReportLimit" type="number" min="1" max="500" defaultValue={userDailyReportLimit} />
+                </label>
+              </div>
+              <AdminSwitchRow name="userLoginEnabled" title="开放前台登录" description="关闭后不再接受新登录。" defaultChecked={settings.userLoginEnabled} />
+              <label className="adminCompactField">
+                <span>注册方式</span>
+                <AdminSelect name="userRegistrationMode" defaultValue={settings.userRegistrationMode}>
+                  <option value="closed">关闭</option>
+                  <option value="invite">邀请码</option>
+                  <option value="open">开放注册</option>
+                </AdminSelect>
               </label>
-              <label>
-                <span>站务显示名称</span>
-                <input name="stationDisplayName" maxLength={20} defaultValue={settings.stationDisplayName} />
-              </label>
-            </div>
-            <div className="adminFieldGrid">
-              <label>
-                <span>单 IP 每日注册上限</span>
-                <input name="userDailyRegistrationLimitPerIp" type="number" min="0" max="100" defaultValue={userDailyRegistrationLimit} />
-              </label>
-              <label>
-                <span>单用户每日反馈上限</span>
-                <input name="userDailyReportLimit" type="number" min="1" max="500" defaultValue={userDailyReportLimit} />
-              </label>
-            </div>
-            <AdminSwitchRow name="userLoginEnabled" title="开放前台登录" description="关闭后未登录用户不能登录；已登录用户仍可退出。" defaultChecked={settings.userLoginEnabled} />
-            <label className="adminCompactField">
-              <span>注册方式</span>
-              <AdminSelect name="userRegistrationMode" defaultValue={settings.userRegistrationMode}>
-                <option value="closed">关闭</option>
-                <option value="invite">邀请码</option>
-                <option value="open">开放注册</option>
-              </AdminSelect>
-            </label>
-            <AdminSwitchRow
-              name="emailVerificationRequired"
-              title="注册后验证邮箱"
-              description={mailConfigured ? "验证通过后账号可登录。" : "请先配置 SMTP 与 SITE_URL。"}
-              status={mailConfigured ? "已就绪" : "未配置"}
-              defaultChecked={settings.emailVerificationRequired}
-              disabled={!mailConfigured}
-            />
-            <AdminSwitchRow name="marketEnabled" title="启用集市" description="入口仍受用户等级权限控制。" defaultChecked={settings.marketEnabled} />
-            <label className="adminCompactField isNarrow">
-              <span>每曲奇兑换苏打</span>
-              <input
-                name="cookieToSodaRate"
-                type="number"
-                min="1"
-                max="10000"
-                defaultValue={settings.cookieToSodaRate}
+              <AdminSwitchRow
+                name="emailVerificationRequired"
+                title="注册后验证邮箱"
+                description={mailConfigured ? "验证后允许登录。" : "请先配置 SMTP 与 SITE_URL。"}
+                status={mailConfigured ? "已就绪" : "未配置"}
+                defaultChecked={settings.emailVerificationRequired}
+                disabled={!mailConfigured}
               />
-            </label>
-            <AdminSwitchRow name="analyticsEnabled" title="启用访问数据统计" description="统计小说与资源访问，用于分析内容、IP、来源和客户端。" defaultChecked={settings.analyticsEnabled} />
-            <div className="adminAccessSettings">
+            </div>
+            <div className="adminSettingsGroup">
+              <h4>集市与兑换</h4>
+              <AdminSwitchRow name="marketEnabled" title="启用集市" description="入口仍受等级权限控制。" defaultChecked={settings.marketEnabled} />
+              <AdminSwitchRow
+                name="bidirectionalCurrencyExchangeEnabled"
+                title="允许双向兑换"
+                description="开启后可按相同比例用苏打换回曲奇。"
+                defaultChecked={settings.bidirectionalCurrencyExchangeEnabled}
+              />
+              <label className="adminCompactField isNarrow">
+                <span>每曲奇兑换苏打</span>
+                <input
+                  name="cookieToSodaRate"
+                  type="number"
+                  min="1"
+                  max="10000"
+                  defaultValue={settings.cookieToSodaRate}
+                />
+              </label>
+            </div>
+            <div className="adminSettingsGroup">
               <h4>前台资源访问</h4>
               <div className="adminAccessModeGrid">
                 <label className="adminAccessModeRow">
@@ -456,9 +490,11 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               <p className="adminFieldHint">公开展示允许访客浏览列表、标题、封面和基础信息，播放、阅读、预览或下载时提示登录；公开可用允许访客直接使用内容。</p>
               <HomeCardOrderField initialOrder={settings.homePortalOrder} />
             </div>
-            <div className="adminFieldGrid">
-              <label>
-                <span>实时访问最多保留 / 条</span>
+            <div className="adminSettingsGroup">
+              <h4>访问统计</h4>
+              <AdminSwitchRow name="analyticsEnabled" title="启用站内统计" description="记录内容访问、来源和客户端。" defaultChecked={settings.analyticsEnabled} />
+              <label className="adminCompactField isNarrow">
+                <span>实时访问保留 / 条</span>
                 <input name="analyticsRealtimeLimit" type="number" min="30" max="10000" defaultValue={analyticsRealtimeLimit} />
               </label>
             </div>

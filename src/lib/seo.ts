@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 
 type SeoEnvironment = Readonly<Record<string, string | undefined>>;
 
+export const UMAMI_ROUTE_SCOPE_HEADER = "x-novel-reader-umami-scope";
+export const UMAMI_BEFORE_SEND_HANDLER = "novelReaderUmamiPublicOnly";
+
 export const NO_INDEX_ROBOTS: Metadata["robots"] = {
   index: false,
   follow: false,
@@ -39,6 +42,10 @@ export type UmamiConfig = {
   scriptUrl: string;
   recorderUrl: string | null;
 };
+
+export function isPublicUmamiPathname(pathname: string): boolean {
+  return pathname !== "/admin" && !pathname.startsWith("/admin/");
+}
 
 function safeHttpUrl(value: string): URL | null {
   try {

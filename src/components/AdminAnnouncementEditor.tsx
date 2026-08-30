@@ -88,7 +88,7 @@ export function AdminAnnouncementEditor({
           </label>
           <label>
             <span>状态</span>
-            <AdminSelect name="status" defaultValue={announcement?.status === "published" ? "published" : "archived"}>
+            <AdminSelect name="status" defaultValue={!announcement || announcement.status === "published" ? "published" : "archived"}>
               <option value="published">发布</option>
               <option value="archived">下线</option>
             </AdminSelect>

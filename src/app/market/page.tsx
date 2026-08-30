@@ -5,7 +5,12 @@ import Link from "@/components/LocalizedLink";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
 import { MarketWalletTools } from "@/components/MarketWalletTools";
 import { UserWorkspace } from "@/components/UserWorkspace";
-import { getCookieToSodaRate, getNoticeDisplaySeconds, isMarketEnabled } from "@/lib/config";
+import {
+  getCookieToSodaRate,
+  getNoticeDisplaySeconds,
+  isBidirectionalCurrencyExchangeEnabled,
+  isMarketEnabled,
+} from "@/lib/config";
 import {
   listMarketProducts,
   listUserMarketOrders,
@@ -30,6 +35,7 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
   const products = listMarketProducts();
   const orders = listUserMarketOrders(user.id, 8);
   const cookieToSodaRate = getCookieToSodaRate();
+  const bidirectionalExchangeEnabled = isBidirectionalCurrencyExchangeEnabled();
 
   return (
     <UserWorkspace user={user} active="market" breadcrumb="集市">
@@ -52,7 +58,9 @@ export default async function MarketPage({ searchParams }: MarketPageProps) {
 
         <MarketWalletTools
           cookieBalance={user.cookieBalance}
+          sodaBalance={user.sodaBalance}
           cookieToSodaRate={cookieToSodaRate}
+          bidirectionalExchangeEnabled={bidirectionalExchangeEnabled}
         />
 
         <div className="marketProductGrid">

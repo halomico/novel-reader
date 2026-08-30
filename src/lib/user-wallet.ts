@@ -3,6 +3,7 @@ import { getDb } from "./db";
 import { getUserLevelForExperience } from "./user-levels";
 
 export type UserCurrency = "soda" | "cookie";
+export type CurrencyExchangeDirection = "cookie-to-soda" | "soda-to-cookie";
 
 export type CurrencyTransaction = {
   id: number;
@@ -105,15 +106,32 @@ export function adjustUserCurrency(input: {
   }
 }
 
-export function exchangeCookieForSoda(input: {
+export function exchangeUserCurrency(input: {
   userId: number;
-  cookieAmount: number;
+  direction: CurrencyExchangeDirection;
+  sourceAmount: number;
   sodaPerCookie: number;
-}): { cookieBalance: number; sodaBalance: number; sodaReceived: number } {
-  const cookieAmount = Math.min(Math.max(Math.floor(input.cookieAmount), 1), 1_000_000);
-  const sodaPerCookie = Math.min(Math.max(Math.floor(input.sodaPerCookie), 1), 10_000);
-  const sodaReceived = cookieAmount * sodaPerCookie;
-  if (!Number.isSafeInteger(sodaReceived) || sodaReceived > 2_000_000_000) {
+}): { cookieBalance: number; sodaBalance: number; receivedAmount: number } {
+  const sourceAmount = Number(input.sourceAmount);
+  if (!Number.isSafeInteger(sourceAmount) || sourceAmount < 1 || sourceAmount > 1_000_000) {
+    throw new Error("请输入有效兑换数量");
+  }
+  const sodaPerCookie = Number(input.sodaPerCookie);
+  if (!Number.isSafeInteger(sodaPerCookie) || sodaPerCookie < 1 || sodaPerCookie > 10_000) {
+    throw new Error("兑换比例无效");
+  }
+  if (input.direction === "soda-to-cookie" && sourceAmount % sodaPerCookie !== 0) {
+    throw new Error(`苏打数量须为 ${sodaPerCookie} 的倍数`);
+  }
+
+  const cookieDelta = input.direction === "cookie-to-soda"
+    ? -sourceAmount
+    : sourceAmount / sodaPerCookie;
+  const sodaDelta = input.direction === "cookie-to-soda"
+    ? sourceAmount * sodaPerCookie
+    : -sourceAmount;
+  const receivedAmount = input.direction === "cookie-to-soda" ? sodaDelta : cookieDelta;
+  if (!Number.isSafeInteger(receivedAmount) || receivedAmount > 2_000_000_000) {
     throw new Error("兑换数量过大");
   }
   const db = getDb();
@@ -131,10 +149,12 @@ export function exchangeCookieForSoda(input: {
       soda_experience: number;
     } | undefined;
     if (!user || user.status !== "active") throw new Error("用户不可用");
-    if (user.cookie_balance < cookieAmount) throw new Error("曲奇不足");
-    const cookieBalance = user.cookie_balance - cookieAmount;
-    const sodaBalance = user.soda_balance + sodaReceived;
-    const sodaExperience = user.soda_experience + sodaReceived;
+    if (cookieDelta < 0 && user.cookie_balance < -cookieDelta) throw new Error("曲奇不足");
+    if (sodaDelta < 0 && user.soda_balance < -sodaDelta) throw new Error("苏打不足");
+    const cookieBalance = user.cookie_balance + cookieDelta;
+    const sodaBalance = user.soda_balance + sodaDelta;
+    const sodaExperience = user.soda_experience + Math.max(sodaDelta, 0);
+    if (cookieBalance > 2_000_000_000) throw new Error("曲奇余额已达上限");
     if (sodaBalance > 2_000_000_000 || sodaExperience > 2_000_000_000) {
       throw new Error("苏打余额已达上限");
     }
@@ -146,32 +166,36 @@ export function exchangeCookieForSoda(input: {
        WHERE id = ?`,
     ).run(cookieBalance, sodaBalance, sodaExperience, trustLevel, input.userId);
     const reference = `currency-exchange:${input.userId}:${crypto.randomUUID()}`;
-    db.prepare(
+    const recordTransaction = db.prepare(
       `INSERT INTO user_currency_transactions (
          user_id, currency, amount, balance_after, source, reference_key, note
        )
-       VALUES (?, 'cookie', ?, ?, 'currency_exchange', ?, ?)`,
-    ).run(
-      input.userId,
-      -cookieAmount,
-      cookieBalance,
-      `${reference}:cookie`,
-      `兑换 ${sodaReceived} 苏打`,
+       VALUES (?, ?, ?, ?, 'currency_exchange', ?, ?)`,
     );
-    db.prepare(
-      `INSERT INTO user_currency_transactions (
-         user_id, currency, amount, balance_after, source, reference_key, note
-       )
-       VALUES (?, 'soda', ?, ?, 'currency_exchange', ?, ?)`,
-    ).run(
+    const sourceCurrency: UserCurrency = input.direction === "cookie-to-soda" ? "cookie" : "soda";
+    const targetCurrency: UserCurrency = input.direction === "cookie-to-soda" ? "soda" : "cookie";
+    const sourceBalance = sourceCurrency === "cookie" ? cookieBalance : sodaBalance;
+    const targetBalance = targetCurrency === "cookie" ? cookieBalance : sodaBalance;
+    const sourceLabel = sourceCurrency === "cookie" ? "曲奇" : "苏打";
+    const targetLabel = targetCurrency === "cookie" ? "曲奇" : "苏打";
+    recordTransaction.run(
       input.userId,
-      sodaReceived,
-      sodaBalance,
-      `${reference}:soda`,
-      `由 ${cookieAmount} 曲奇兑换`,
+      sourceCurrency,
+      -sourceAmount,
+      sourceBalance,
+      `${reference}:${sourceCurrency}`,
+      `兑换 ${receivedAmount} ${targetLabel}`,
+    );
+    recordTransaction.run(
+      input.userId,
+      targetCurrency,
+      receivedAmount,
+      targetBalance,
+      `${reference}:${targetCurrency}`,
+      `由 ${sourceAmount} ${sourceLabel}兑换`,
     );
     db.exec("COMMIT");
-    return { cookieBalance, sodaBalance, sodaReceived };
+    return { cookieBalance, sodaBalance, receivedAmount };
   } catch (error) {
     db.exec("ROLLBACK");
     throw error;

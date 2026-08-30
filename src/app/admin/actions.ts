@@ -816,6 +816,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
       String(formData.get("readerDefaultTagsMode") || ""),
       previous.readerDefaultTagsMode,
     ),
+    readerAdjacentNovelSort: formData.get("readerAdjacentNovelSort") === "name" ? "name" : "updated",
     novelCatalogSearchExpanded: formData.get("novelCatalogSearchExpanded") === "on",
     defaultPalette: isColorPalette(defaultPalette) ? defaultPalette : "default",
     defaultPaletteRandomEnabled: formData.get("defaultPaletteRandomEnabled") === "on",
@@ -875,6 +876,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
       1,
       10_000,
     ),
+    bidirectionalCurrencyExchangeEnabled: formData.get("bidirectionalCurrencyExchangeEnabled") === "on",
     userDailyRegistrationLimitPerIp: intField(
       formData,
       "userDailyRegistrationLimitPerIp",

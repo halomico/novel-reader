@@ -27,6 +27,7 @@ import {
 } from "@/lib/locale";
 import { getCurrentUserFromRequest, USER_SESSION_COOKIE } from "@/lib/user-auth";
 import { NOVEL_CATALOG_SEARCH_COOKIE } from "@/lib/ui-preferences";
+import { isPublicUmamiPathname, UMAMI_ROUTE_SCOPE_HEADER } from "@/lib/seo";
 
 function bypassGlobalAccess(pathname: string): boolean {
   return (
@@ -109,6 +110,7 @@ function createLocaleResponse(request: NextRequest, locale: AppLocale): NextResp
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set(LOCALE_REQUEST_HEADER, locale);
   const normalizedPath = stripLocalePath(request.nextUrl.pathname);
+  requestHeaders.set(UMAMI_ROUTE_SCOPE_HEADER, isPublicUmamiPathname(normalizedPath) ? "public" : "admin");
   if (normalizedPath !== request.nextUrl.pathname) {
     const rewriteUrl = request.nextUrl.clone();
     rewriteUrl.pathname = normalizedPath;
