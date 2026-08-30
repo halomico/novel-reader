@@ -7,6 +7,7 @@ import {
   prefersTraditionalLanguage,
   stripLocalePath,
   TRADITIONAL_LOCALE,
+  uiText,
   withLocalePath,
 } from "./locale";
 import { localizeText, normalizeSearchText } from "./locale-server";
@@ -37,4 +38,11 @@ test("uses explicit Chinese language preferences before the country hint", () =>
 test("converts display text and normalizes traditional search input on demand", async () => {
   assert.equal(await localizeText("小说标签与阅读记录", TRADITIONAL_LOCALE), "小說標籤與閱讀記錄");
   assert.equal(await normalizeSearchText("小說標籤與閱讀記錄"), "小说标签与阅读记录");
+  assert.equal(uiText(TRADITIONAL_LOCALE, "默认"), "預設");
+  assert.equal(uiText(TRADITIONAL_LOCALE, "发布于"), "發佈於");
+  assert.equal(uiText(TRADITIONAL_LOCALE, "万字"), "萬字");
+  assert.equal(uiText(TRADITIONAL_LOCALE, "来源"), "來源");
+  assert.equal(uiText(TRADITIONAL_LOCALE, "搜索视频"), "搜尋視頻");
+  assert.equal(uiText(TRADITIONAL_LOCALE, "搜索音频"), "搜尋音頻");
+  assert.equal(uiText(TRADITIONAL_LOCALE, "搜索文件"), "搜尋文件");
 });

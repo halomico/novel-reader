@@ -102,7 +102,7 @@ function GroveCard({ item, locale, returnHref }: {
   const typeLabel = uiText(locale, item.kind === "novel" ? "小说" : item.kind === "video" ? "视频" : "音频");
   const title = item.kind === "novel" ? item.title : displayMediaTitle(item.title, item.fileName);
   const metadata = item.kind === "novel"
-    ? [formatNovelWordCount(item.wordCount), item.chapterCount ? `${item.chapterCount}章` : ""].filter(Boolean).join(" · ")
+    ? [formatNovelWordCount(item.wordCount, locale), item.chapterCount ? `${item.chapterCount}${uiText(locale, "章")}` : ""].filter(Boolean).join(" · ")
     : item.kind === "audio"
       ? [item.artist, formatMediaDuration(item.durationSeconds)].filter(Boolean).join(" · ")
       : formatMediaDuration(item.durationSeconds);
@@ -400,6 +400,7 @@ export default async function ActivityPage({
                         book={book}
                         returnHref={`/activity?view=favorites&page=${displayNovelResult.page}`}
                         tags={displayTagsByNovel.get(book.id) || []}
+                        locale={locale}
                       />
                     </FavoriteSelectableItem>
                   ))}

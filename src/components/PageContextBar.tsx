@@ -4,14 +4,21 @@ import { Breadcrumbs, type BreadcrumbItem } from "./Breadcrumbs";
 export function PageContextBar({
   items,
   children,
+  search,
 }: {
   items: BreadcrumbItem[];
   children?: ReactNode;
+  search?: ReactNode;
 }) {
   return (
-    <div className="pageContextBar">
+    <div className={search ? "pageContextBar hasMediaSearch" : "pageContextBar"}>
       <Breadcrumbs items={items} />
-      {children ? <div className="pageContextActions">{children}</div> : null}
+      {children || search ? (
+        <div className="pageContextActions">
+          {children}
+          {search}
+        </div>
+      ) : null}
     </div>
   );
 }

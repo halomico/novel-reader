@@ -19,7 +19,7 @@ export function MediaSearchForm({
   clearLabel = "清除搜索",
   submitLabel = "搜索资源",
   hiddenFields = [],
-  className = "mediaSearchForm",
+  className = "mediaSearchForm tagLibrarySearch",
 }: {
   action?: string;
   query?: string;
@@ -40,6 +40,7 @@ export function MediaSearchForm({
 
   return (
     <Form className={className} action={action} role="search" onSubmit={beginNavigationProgress}>
+      <Search size={16} aria-hidden="true" />
       <input
         ref={inputRef}
         name="q"
@@ -49,35 +50,33 @@ export function MediaSearchForm({
         aria-label={placeholder}
         onChange={(event) => setKeyword(event.target.value)}
         autoComplete="off"
+        spellCheck={false}
       />
       {hiddenFields.map((field) => (
         <input key={`${field.name}-${field.value}`} name={field.name} type="hidden" value={field.value} />
       ))}
-      <div className="mediaSearchTrailing">
-        {keyword.trim() ? (
-          <button
-            className="mediaSearchIconButton mediaSearchClearButton"
-            type="button"
-            aria-label={clearLabel}
-            title={clearLabel}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => {
-              setKeyword("");
-              if (query.trim()) {
-                beginNavigationProgress();
-                router.push(clearHref);
-                return;
-              }
-              window.requestAnimationFrame(() => inputRef.current?.focus());
-            }}
-          >
-            <X size={14} strokeWidth={1.5} aria-hidden="true" />
-          </button>
-        ) : null}
-        <button className="mediaSearchIconButton mediaSearchSubmitButton" type="submit" aria-label={submitLabel} title={submitLabel}>
-          <Search size={15} strokeWidth={1.75} aria-hidden="true" />
+      {keyword.trim() ? (
+        <button
+          type="button"
+          aria-label={clearLabel}
+          title={clearLabel}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            setKeyword("");
+            if (query.trim()) {
+              beginNavigationProgress();
+              router.push(clearHref);
+              return;
+            }
+            window.requestAnimationFrame(() => inputRef.current?.focus());
+          }}
+        >
+          <X size={15} aria-hidden="true" />
         </button>
-      </div>
+      ) : null}
+      <button className="searchSubmit isVisuallyHidden" type="submit" tabIndex={-1} aria-label={submitLabel}>
+        {submitLabel}
+      </button>
     </Form>
   );
 }

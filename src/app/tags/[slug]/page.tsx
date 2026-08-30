@@ -201,6 +201,7 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
           returnHref={returnHref}
           ariaLabel={`${displayTag.name} ${tagsLabel}`}
           tagsByNovel={displayTagsByNovel}
+          locale={locale}
         />
       ) : (
         <section className="emptyState">

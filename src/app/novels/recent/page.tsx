@@ -41,7 +41,7 @@ export default async function RecentNovelsPage({ searchParams }: { searchParams:
       <PageContextBar items={[{ label: homeLabel, href: "/" }, { label: novelsLabel, href: "/novels" }, { label: recentLabel }]}>
         <ResultCount count={result.totalBooks} />
       </PageContextBar>
-      {books.length ? <CatalogBookGrid books={books} returnHref={returnHref} ariaLabel="最近更新小说" /> : <section className="emptyState"><h2>暂无小说</h2></section>}
+      {books.length ? <CatalogBookGrid books={books} returnHref={returnHref} ariaLabel="最近更新小说" locale={locale} /> : <section className="emptyState"><h2>暂无小说</h2></section>}
       <Pagination
         page={result.page}
         totalPages={result.totalPages}

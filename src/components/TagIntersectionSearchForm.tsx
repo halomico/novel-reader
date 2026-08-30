@@ -122,7 +122,7 @@ export function TagIntersectionSearchForm({
     const normalizedTitle = titleQuery.normalize("NFKC").replace(/\s+/gu, " ").trim();
     const normalizedContent = contentQuery.normalize("NFKC").replace(/\s+/gu, " ").trim();
     if (!includedTags.length && !normalizedTitle && !normalizedContent && !sourceLibrary) {
-      setMessage(tr("请选择书库、标签或输入标题、正文关键词"));
+      setMessage(tr("请选择来源、标签或输入标题、正文关键词"));
       return;
     }
     const params = new URLSearchParams();
@@ -140,15 +140,15 @@ export function TagIntersectionSearchForm({
     <form className="advancedTagSearchForm" onSubmit={submit}>
       <div className="advancedTagSearchToolbar">
         <label className="advancedLibraryField">
-          <span>{tr("书库")}</span>
+          <span>{tr("来源")}</span>
           <span className="advancedLibrarySelect">
-            <select value={sourceLibrary} onChange={(event) => { setSourceLibrary(event.target.value); setMessage(""); }} aria-label={tr("选择书库")}>
+            <select value={sourceLibrary} onChange={(event) => { setSourceLibrary(event.target.value); setMessage(""); }} aria-label={tr("选择来源")}>
               {sources.map((source) => (
                 <option value={source.slug} key={source.id}>
-                  {source.slug === DEFAULT_NOVEL_LIBRARY_SLUG ? "默认" : source.name}（{source.novelCount}）
+                  {source.slug === DEFAULT_NOVEL_LIBRARY_SLUG ? tr("默认") : source.name}（{source.novelCount}）
                 </option>
               ))}
-              <option value={ALL_NOVEL_LIBRARIES_SLUG}>全部</option>
+              <option value={ALL_NOVEL_LIBRARIES_SLUG}>{tr("全部")}</option>
             </select>
             <ChevronDown size={15} aria-hidden="true" />
           </span>

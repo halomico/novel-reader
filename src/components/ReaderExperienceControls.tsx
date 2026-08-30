@@ -13,7 +13,9 @@ import {
   X,
 } from "lucide-react";
 import Link from "@/components/LocalizedLink";
+import { usePathname } from "next/navigation";
 import { useEffect, useState, type CSSProperties } from "react";
+import { localeFromPathname } from "@/lib/locale";
 import {
   DEFAULT_READER_LINE_HEIGHT,
   getReaderThemeSystemTheme,
@@ -94,6 +96,7 @@ export function ReaderExperienceControls({
   const [width, setWidth] = useState<ReaderWidth>(800);
   const [fontSize, setFontSize] = useState(18);
   const [lineHeight, setLineHeight] = useState<ReaderLineHeight>(DEFAULT_READER_LINE_HEIGHT);
+  const locale = localeFromPathname(usePathname());
 
   useEffect(() => {
     const root = document.documentElement;
@@ -310,7 +313,7 @@ export function ReaderExperienceControls({
               chapters.length ? <nav className="readerDirectoryList">
                 {chapters.map((chapter, index) => (
                   <Link className={chapter.id === currentChapterId ? "isActive" : ""} href={chapterHref(bookId, chapter.id, from)} key={chapter.id} onClick={() => setPanel(null)}>
-                    <span><i>{index + 1}</i>{chapter.title}</span><small>{formatNovelWordCount(chapter.wordCount)}</small>
+                    <span><i>{index + 1}</i>{chapter.title}</span><small>{formatNovelWordCount(chapter.wordCount, locale)}</small>
                   </Link>
                 ))}
               </nav> : <p className="readerPanelEmpty">当前为单文件小说，无章节目录。</p>
@@ -320,7 +323,7 @@ export function ReaderExperienceControls({
                 <h2>{title}</h2>
                 {chapterTitle ? <p className="readerBookChapterTitle">{chapterTitle}</p> : null}
                 {description ? <p className="readerBookDescription">{description}</p> : null}
-                <dl><div><dt>字数</dt><dd>{formatNovelWordCount(wordCount)}</dd></div><div><dt>章节</dt><dd>{chapterCount ? `${chapterCount}章` : "单篇"}</dd></div></dl>
+                <dl><div><dt>字数</dt><dd>{formatNovelWordCount(wordCount, locale)}</dd></div><div><dt>章节</dt><dd>{chapterCount ? `${chapterCount}章` : "单篇"}</dd></div></dl>
                 {chapterCount ? <Link href={`/books/${bookId}/chapters`} onClick={() => setPanel(null)}>查看完整目录</Link> : null}
               </div>
             ) : null}

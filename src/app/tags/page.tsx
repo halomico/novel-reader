@@ -116,13 +116,13 @@ export default async function TagsPage({ searchParams }: { searchParams: Promise
       <SiteHeader currentUser={user} />
       <PageContextBar items={[{ label: uiText(locale, "首页"), href: "/" }, { label: uiText(locale, "标签") }]}>
         <div className="tagLibraryTools">
-          <TagLibrarySearch locale={locale} />
           {showAdvancedSearch ? (
             <Link className="tagAdvancedSearchLink" href="/tags/search">
               <ListFilter size={16} aria-hidden="true" />
               {uiText(locale, "高级搜索")}
             </Link>
           ) : null}
+          <TagLibrarySearch locale={locale} />
         </div>
       </PageContextBar>
       <section className={`tagLibrary${showHidden ? " isManagingHidden" : ""}`}>

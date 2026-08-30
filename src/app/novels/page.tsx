@@ -247,6 +247,7 @@ export default async function NovelsPage({ searchParams }: NovelsPageProps) {
           ariaLabel="小说列表"
           tagsByNovel={displayTagsByNovel}
           searchEventKey={searchEventKey}
+          locale={locale}
         />
       ) : (
         <section className="emptyState">

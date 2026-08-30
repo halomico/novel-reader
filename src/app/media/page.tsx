@@ -22,7 +22,6 @@ import {
   listMediaAssets,
   listMediaFolders,
   listVideoCategories,
-  listVideoTags,
   normalizeMediaFolder,
   sortMediaFolders,
   type MediaAsset,
@@ -194,11 +193,7 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
     : undefined;
   const categoryParam = videoCategoryId ? String(videoCategoryId) : "";
   const activeVideoCategory = videoCategories.find((category) => category.id === videoCategoryId);
-  const quickVideoTags = kind === "video" ? listVideoTags({ pageSize: 40 }).tags : [];
   const activeVideoTag = kind === "video" ? getVideoTagBySlug(params.tag) : null;
-  const videoTags = activeVideoTag && !quickVideoTags.some((tag) => tag.id === activeVideoTag.id)
-    ? [activeVideoTag, ...quickVideoTags]
-    : quickVideoTags;
   const tagParam = activeVideoTag?.slug || "";
   const queryInput = (params.q || "").trim();
   const sourceResult = listMediaAssets({
@@ -233,13 +228,8 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
   const displayCategory = activeVideoCategory
     ? displayCategories.find((category) => category.id === activeVideoCategory.id)
     : undefined;
-  const displayVideoTags = await Promise.all(videoTags.map(async (tag) => ({
-    ...tag,
-    name: await localizeText(tag.name, locale),
-    description: await localizeText(tag.description, locale),
-  })));
   const displayVideoTag = activeVideoTag
-    ? displayVideoTags.find((tag) => tag.id === activeVideoTag.id)
+    ? { ...activeVideoTag, name: await localizeText(activeVideoTag.name, locale) }
     : undefined;
   const thumbnailSettings = getVideoThumbnailSettings();
   const directThumbnails = kind === "video" && !hasScopedContentAccessRules("video");
@@ -292,41 +282,44 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
   const searchPlaceholder = kind === "video"
     ? uiText(locale, "搜索视频")
     : kind === "audio"
-      ? uiText(locale, "搜索标题、作者或目录")
-      : uiText(locale, "搜索文件或目录");
+      ? uiText(locale, "搜索音频")
+      : uiText(locale, "搜索文件");
 
   return (
     <>
       <MediaConnectionHint origin={mediaPublicOrigin} />
       <main className="appShell">
       <SiteHeader currentUser={user} />
-      <PageContextBar items={breadcrumbItems}>
+      <PageContextBar
+        items={breadcrumbItems}
+        search={(
+          <MediaSearchForm
+            action="/media"
+            query={result.query}
+            placeholder={searchPlaceholder}
+            clearHref={mediaHref(kind, kind === "video" ? "" : result.folder, "", categoryParam, sortBy, sortOrder, tagParam)}
+            clearLabel={uiText(locale, "清除搜索")}
+            submitLabel={uiText(locale, "搜索资源")}
+            hiddenFields={[
+              { name: "kind", value: kind },
+              ...(sortBy !== defaultSortBy ? [{ name: "sort", value: sortBy }] : []),
+              ...(sortOrder !== (sortBy === "name" ? "asc" : "desc") ? [{ name: "order", value: sortOrder }] : []),
+              ...(categoryParam ? [{ name: "category", value: categoryParam }] : []),
+              ...(tagParam ? [{ name: "tag", value: tagParam }] : []),
+              ...(kind !== "video" && result.folder ? [{ name: "folder", value: result.folder }] : []),
+            ]}
+          />
+        )}
+      >
         <MediaPublicSort
           kind={kind}
           folder={kind === "video" ? "" : result.folder}
           query={result.query}
           category={categoryParam}
           tag={tagParam}
-          tags={displayVideoTags}
           sortBy={sortBy}
           sortOrder={sortOrder}
           locale={locale}
-        />
-        <MediaSearchForm
-          action="/media"
-          query={result.query}
-          placeholder={searchPlaceholder}
-          clearHref={mediaHref(kind, kind === "video" ? "" : result.folder, "", categoryParam, sortBy, sortOrder, tagParam)}
-          clearLabel={uiText(locale, "清除搜索")}
-          submitLabel={uiText(locale, "搜索资源")}
-          hiddenFields={[
-            { name: "kind", value: kind },
-            ...(sortBy !== defaultSortBy ? [{ name: "sort", value: sortBy }] : []),
-            ...(sortOrder !== (sortBy === "name" ? "asc" : "desc") ? [{ name: "order", value: sortOrder }] : []),
-            ...(categoryParam ? [{ name: "category", value: categoryParam }] : []),
-            ...(tagParam ? [{ name: "tag", value: tagParam }] : []),
-            ...(kind !== "video" && result.folder ? [{ name: "folder", value: result.folder }] : []),
-          ]}
         />
       </PageContextBar>
       <section className="mediaLibrary">

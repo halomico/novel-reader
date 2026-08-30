@@ -35,7 +35,7 @@ export function NovelSourcePicker({
   const activeSource = sources.find((source) => source.slug === activeSlug);
   const activeLabel = activeSlug === ALL_NOVEL_LIBRARIES_SLUG
     ? tr("全部")
-    : activeSource ? novelLibraryDisplayName(activeSource) : tr("默认");
+    : activeSource ? novelLibraryDisplayName(activeSource, locale) : tr("默认");
   const accessLabel = access === "free" ? tr("免费") : access === "soda" ? tr("苏打") : tr("全部");
 
   useEffect(() => {
@@ -105,7 +105,7 @@ export function NovelSourcePicker({
               }}
               key={source.id}
             >
-              <span>{novelLibraryDisplayName(source)}</span>
+              <span>{novelLibraryDisplayName(source, locale)}</span>
               <small>{source.novelCount}</small>
               {source.slug === activeSlug ? <Check size={14} aria-hidden="true" /> : null}
             </Link>

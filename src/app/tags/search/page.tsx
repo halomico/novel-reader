@@ -192,7 +192,7 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
         />
       ) : result ? (
         result.books.length ? (
-          <CatalogBookGrid books={result.books} returnHref={returnHref} ariaLabel="高级搜索结果" tagsByNovel={tagsByNovel} />
+          <CatalogBookGrid books={result.books} returnHref={returnHref} ariaLabel="高级搜索结果" tagsByNovel={tagsByNovel} locale={locale} />
         ) : (
           <section className="emptyState"><h2>{noResultsLabel}</h2></section>
         )

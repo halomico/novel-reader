@@ -1,11 +1,13 @@
+import { Tags } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import Link from "@/components/LocalizedLink";
 import { MediaSearchForm } from "@/components/MediaSearchForm";
+import { PageContextBar } from "@/components/PageContextBar";
 import { Pagination } from "@/components/Pagination";
+import { ResultCount } from "@/components/ResultCount";
 import { SiteHeader } from "@/components/SiteHeader";
 import { checkContentAccess } from "@/lib/content-access";
 import { languageAlternates, uiText, withLocalePath } from "@/lib/locale";
@@ -71,23 +73,14 @@ export default async function VideoTagsPage({ searchParams }: VideoTagsPageProps
   return (
     <main className="appShell">
       <SiteHeader currentUser={user} />
-      <Breadcrumbs items={[
-        { label: uiText(locale, "首页"), href: "/" },
-        { label: uiText(locale, "视频"), href: "/media?kind=video" },
-        { label: uiText(locale, "标签") },
-      ]} />
-      <section className="mediaTagDirectory">
-        <header className="mediaLibraryHeader mediaTagDirectoryHeader">
-          <div className="mediaLibraryHeading">
-            <h1>{uiText(locale, "视频标签")}</h1>
-            <span className="resultCount">
-              <span>{uiText(locale, "共")}</span>
-              <strong>{result.totalTags.toLocaleString(locale === "zh-Hant" ? "zh-Hant" : "zh-CN")}</strong>
-              <span>{uiText(locale, "个")}</span>
-            </span>
-          </div>
+      <PageContextBar
+        items={[
+          { label: uiText(locale, "首页"), href: "/" },
+          { label: uiText(locale, "视频"), href: "/media?kind=video" },
+          { label: uiText(locale, "标签") },
+        ]}
+        search={(
           <MediaSearchForm
-            className="mediaSearchForm mediaTagSearch"
             action="/media/tags"
             query={queryInput}
             placeholder={uiText(locale, "搜索标签")}
@@ -95,6 +88,12 @@ export default async function VideoTagsPage({ searchParams }: VideoTagsPageProps
             clearLabel={uiText(locale, "清除搜索")}
             submitLabel={uiText(locale, "搜索标签")}
           />
+        )}
+      />
+      <section className="mediaTagDirectory">
+        <header className="mediaTagDirectoryHeader userContentHeader">
+          <span><Tags size={19} aria-hidden="true" /><h1>{uiText(locale, "视频标签")}</h1></span>
+          <ResultCount count={result.totalTags} unit={uiText(locale, "个")} />
         </header>
 
         {tags.length ? (

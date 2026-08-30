@@ -1,8 +1,6 @@
 "use client";
 
 import {
-  ArrowDown,
-  ArrowUpDown,
   Cookie,
   CupSoda,
   TicketCheck,
@@ -13,6 +11,38 @@ import {
   redeemMarketCodeAction,
 } from "@/app/market/actions";
 import type { CurrencyExchangeDirection } from "@/lib/user-wallet";
+
+function ExchangeAsset({ currency }: { currency: "cookie" | "soda" }) {
+  const soda = currency === "soda";
+  const Icon = soda ? CupSoda : Cookie;
+  return (
+    <span className="marketExchangeAsset">
+      <Icon size={15} strokeWidth={1.9} aria-hidden="true" />
+      <strong>{soda ? "苏打" : "曲奇"}</strong>
+    </span>
+  );
+}
+
+function ExchangeSwapIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" aria-hidden="true">
+      <path
+        d="M7.8 3V21L2.6 15.8"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M16.2 21V3L21.4 8.2"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 export function MarketWalletTools({
   cookieBalance,
@@ -32,6 +62,8 @@ export function MarketWalletTools({
     return Number.isSafeInteger(value) ? value : 0;
   }, [amount]);
   const reverse = direction === "soda-to-cookie";
+  const payCurrency = reverse ? "soda" : "cookie";
+  const receiveCurrency = reverse ? "cookie" : "soda";
   const exactReverseAmount = !reverse || amountValue % cookieToSodaRate === 0;
   const receiveAmount = exactReverseAmount
     ? (reverse ? amountValue / cookieToSodaRate : amountValue * cookieToSodaRate)
@@ -52,9 +84,9 @@ export function MarketWalletTools({
       <form className="marketExchangeLine" action={exchangeCurrencyAction}>
         <header className="marketExchangeName"><strong>兑换</strong></header>
         <div className="marketExchangeStack">
-          <label className="marketExchangeValue">
-            <span className="marketExchangeMeta"><span>支付</span><small>余额 {sourceBalance.toLocaleString("zh-CN")}</small></span>
-            <span className="marketExchangeAmount">
+          <label className="marketExchangePanel">
+            <span className="marketExchangeSide">支付</span>
+            <span className="marketExchangeRow">
               <input
                 name="sourceAmount"
                 type="number"
@@ -62,43 +94,43 @@ export function MarketWalletTools({
                 max="1000000"
                 step={reverse ? cookieToSodaRate : 1}
                 value={amount}
+                placeholder="0"
                 onChange={(event) => setAmount(event.target.value)}
                 aria-label={reverse ? "支付苏打数量" : "支付曲奇数量"}
                 required
               />
-              <span className="marketExchangeCurrency">
-                {reverse ? <CupSoda size={17} aria-hidden="true" /> : <Cookie size={17} aria-hidden="true" />}
-                <strong>{reverse ? "苏打" : "曲奇"}</strong>
-              </span>
+              <ExchangeAsset currency={payCurrency} />
             </span>
           </label>
           {bidirectionalExchangeEnabled ? (
             <button
-              className="marketExchangeSwap"
+              className={`marketExchangeSwap${reverse ? " isReversed" : ""}`}
               type="button"
               onClick={swapDirection}
               aria-label={`切换为${reverse ? "曲奇兑换苏打" : "苏打兑换曲奇"}`}
               title="调换兑换方向"
             >
-              <ArrowUpDown size={16} strokeWidth={1.9} aria-hidden="true" />
+              <ExchangeSwapIcon />
             </button>
           ) : (
             <span className="marketExchangeSwap isStatic" aria-hidden="true">
-              <ArrowDown size={16} strokeWidth={1.9} />
+              <ExchangeSwapIcon />
             </span>
           )}
-          <div className="marketExchangeValue isOutput">
-            <span className="marketExchangeMeta"><span>获得</span></span>
-            <span className="marketExchangeAmount">
+          <div className="marketExchangePanel isOutput">
+            <span className="marketExchangeSide">获得</span>
+            <span className="marketExchangeRow">
               <output aria-live="polite">{receiveAmount == null ? "—" : receiveAmount.toLocaleString("zh-CN")}</output>
-              <span className="marketExchangeCurrency">
-                {reverse ? <Cookie size={17} aria-hidden="true" /> : <CupSoda size={17} aria-hidden="true" />}
-                <strong>{reverse ? "曲奇" : "苏打"}</strong>
-              </span>
+              <ExchangeAsset currency={receiveCurrency} />
             </span>
           </div>
         </div>
-        <button name="direction" type="submit" value={direction} disabled={!canExchange}>兑换</button>
+        {reverse && !exactReverseAmount ? (
+          <p className="marketExchangeHint">须为 {cookieToSodaRate.toLocaleString("zh-CN")} 的倍数</p>
+        ) : null}
+        <button className="marketExchangeSubmit" name="direction" type="submit" value={direction} disabled={!canExchange}>
+          兑换
+        </button>
       </form>
 
       <form className="marketCodeLine" action={redeemMarketCodeAction}>

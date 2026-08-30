@@ -695,10 +695,11 @@
 .homePortalGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-self: start;
   align-content: start;
   gap: 0 30px;
   border-top: 1px solid var(--border);
-  padding: 28px 0 76px;
+  padding: 0 0 76px;
 }
 
 @media (min-width: 821px) {
@@ -1987,7 +1988,7 @@ nav.accountGrowthTools > a + a {
   .homePortalGrid {
     grid-template-columns: 1fr;
     gap: 0;
-    padding: 18px 0 68px;
+    padding: 0 0 68px;
   }
 
   .homePortalCard {
@@ -2650,13 +2651,19 @@ nav.accountGrowthTools > a + a {
 
 .readerNovelLink.readerNovelNext {
   grid-template-columns: minmax(0, 1fr) 28px;
-  text-align: right;
 }
 
 .readerNovelTitle {
   display: grid;
   align-self: center;
   min-width: 0;
+}
+
+.readerNovelLink.readerNovelNext .readerNovelTitle {
+  justify-self: end;
+  width: fit-content;
+  max-width: 100%;
+  text-align: left;
 }
 
 .readerNovelNavigation strong {
@@ -2887,10 +2894,17 @@ nav.accountGrowthTools > a + a {
 
 .readingProgressSetting,
 .marketWalletTools {
-  border-width: 1px 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.readingProgressSetting {
+  border-width: 1px 0;
+}
+
+.marketWalletTools {
+  border-width: 0 0 1px;
 }
 
 .readingProgressSetting {
@@ -3002,9 +3016,16 @@ nav.accountGrowthTools > a + a {
     gap: 6px;
   }
 
-  .pageContextActions .mediaSearchForm {
-    width: clamp(132px, 46vw, 180px);
-    flex-basis: auto;
+  .pageContextBar.hasMediaSearch {
+    min-height: 48px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .pageContextBar.hasMediaSearch .pageContextActions {
+    max-width: none;
+    width: auto;
+    gap: 4px;
   }
 
   .breadcrumbs {

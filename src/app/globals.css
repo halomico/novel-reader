@@ -848,9 +848,45 @@ textarea {
   padding: 12px 0 16px;
 }
 
+.pageContextBar.hasMediaSearch {
+  min-height: 52px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding-block: 10px 12px;
+}
+
+.pageContextBar.hasMediaSearch .pageContextActions {
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
 .pageContextBar > .breadcrumbs {
+  min-width: 0;
   align-self: center;
   margin: 0;
+}
+
+.pageContextBar .breadcrumbs ol {
+  overflow: hidden;
+}
+
+.pageContextBar .breadcrumbs li {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.pageContextBar .breadcrumbs li:last-child {
+  flex: 1 1 8em;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.pageContextBar .breadcrumbs li:last-child a,
+.pageContextBar .breadcrumbs li:last-child span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pageContextActions {
@@ -863,7 +899,8 @@ textarea {
 }
 
 .pageContextBar + .tagLibrary,
-.pageContextBar + .mediaLibrary {
+.pageContextBar + .mediaLibrary,
+.pageContextBar + .mediaTagDirectory {
   margin-top: 0;
 }
 
@@ -3212,16 +3249,34 @@ mark {
   color: var(--muted);
 }
 
-.pageContextActions .mediaSearchForm {
-  width: min(280px, 100%);
-  height: 38px;
+.pageContextActions .mediaSearchForm.tagLibrarySearch {
+  position: relative;
+  display: grid;
+  width: min(230px, 32vw);
+  height: auto;
   min-width: 0;
-  flex: 0 1 280px;
+  max-width: none;
+  min-height: 34px;
+  flex: 0 0 auto;
+  grid-template-columns: 18px minmax(0, 1fr) 26px;
+  align-items: center;
+  gap: 5px;
+  overflow: visible;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 0 4px 0 9px;
+  background: var(--surface);
 }
 
-.pageContextActions .mediaSearchForm input {
-  height: 36px;
-  padding-block: 0;
+.pageContextActions .mediaSearchForm.tagLibrarySearch input {
+  height: auto;
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+.pageContextActions .mediaSearchForm.tagLibrarySearch:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
 }
 
 .mediaSearchForm input {
@@ -3697,16 +3752,16 @@ mark {
   margin-top: 0;
 }
 
-.mediaTagDirectoryHeader {
-  padding-top: 2px;
+.mediaTagDirectoryHeader.userContentHeader {
+  margin: 0;
 }
 
-.mediaTagDirectoryHeader .mediaLibraryHeading {
-  gap: 10px;
-}
-
-.mediaTagSearch {
-  width: min(360px, 48%);
+.mediaTagDirectoryHeader.userContentHeader h1 {
+  font-family: var(--font-title);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
 }
 
 .mediaTagGrid {
@@ -9271,7 +9326,7 @@ a.analyticsSearchTag:focus-visible {
     margin-left: 0;
   }
 
-  .tagLibrarySearch {
+  .tagLibraryTools .tagLibrarySearch {
     width: auto;
     flex: 1 1 auto;
   }
@@ -9666,6 +9721,12 @@ a.analyticsSearchTag:focus-visible {
     width: min(60%, 360px);
     min-width: 0;
     flex: 1 1 220px;
+  }
+
+  .pageContextActions .mediaSearchForm.tagLibrarySearch {
+    width: min(230px, 32vw);
+    max-width: none;
+    flex: 0 0 auto;
   }
 
   .mediaExplorer {
@@ -10380,6 +10441,14 @@ a.analyticsSearchTag:focus-visible {
   gap: 24px;
 }
 
+.marketOverview {
+  gap: 0;
+}
+
+.marketOverview > :not(.marketPageHeader):not(.marketWalletTools) {
+  margin-top: 20px;
+}
+
 .marketPageHeader,
 .marketProductPage > header,
 .marketOrderPage > header {
@@ -10443,7 +10512,7 @@ a.analyticsSearchTag:focus-visible {
 .marketWalletTools {
   display: grid;
   grid-template-columns: minmax(360px, 1.2fr) minmax(260px, 0.8fr);
-  column-gap: 28px;
+  column-gap: 0;
   border: 1px solid var(--border);
   border-radius: 7px;
   overflow: hidden;
@@ -10454,8 +10523,8 @@ a.analyticsSearchTag:focus-visible {
   display: grid;
   min-width: 0;
   align-content: start;
-  gap: 10px;
-  padding: 14px 2px 16px;
+  gap: 12px;
+  padding: 14px 24px 16px 2px;
 }
 
 .marketExchangeName {
@@ -10472,48 +10541,36 @@ a.analyticsSearchTag:focus-visible {
 .marketExchangeStack {
   display: grid;
   min-width: 0;
+  gap: 6px;
 }
 
-.marketExchangeValue {
+.marketExchangePanel {
   display: grid;
   min-width: 0;
-  min-height: 66px;
-  gap: 7px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 9px 11px;
-  background: color-mix(in srgb, var(--surface-strong) 40%, var(--surface));
-}
-
-.marketExchangeMeta {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
+  min-height: 78px;
   gap: 8px;
-  color: var(--muted);
-  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 14px 12px;
+  background: color-mix(in srgb, var(--surface-strong) 55%, var(--surface));
 }
 
-.marketExchangeMeta small {
-  overflow: hidden;
+.marketExchangeSide {
   color: var(--muted);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.2;
 }
 
-.marketExchangeAmount {
+.marketExchangeRow {
   display: grid;
   min-width: 0;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
-.marketExchangeAmount input,
-.marketExchangeAmount output {
+.marketExchangeRow input,
+.marketExchangeRow output {
   width: 100%;
   min-width: 0;
   border: 0;
@@ -10521,21 +10578,40 @@ a.analyticsSearchTag:focus-visible {
   padding: 0;
   background: transparent;
   color: var(--text);
-  font-size: 19px;
-  font-weight: 680;
+  font-size: 26px;
+  font-weight: 650;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
 }
 
-.marketExchangeCurrency {
+.marketExchangeRow input[type="number"] {
+  appearance: textfield;
+}
+
+.marketExchangeRow input::-webkit-outer-spin-button,
+.marketExchangeRow input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.marketExchangeAsset {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
+  max-width: 100%;
   color: var(--text);
-  font-size: 12px;
+  font-size: 14px;
   white-space: nowrap;
 }
 
-.marketExchangeCurrency svg {
+.marketExchangeAsset strong {
+  font-size: 14px;
+  font-weight: 680;
+}
+
+.marketExchangeAsset svg {
   flex: 0 0 auto;
   color: var(--accent);
 }
@@ -10544,22 +10620,30 @@ a.analyticsSearchTag:focus-visible {
   position: relative;
   z-index: 1;
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   justify-self: center;
   place-items: center;
-  margin-block: -5px;
-  border: 1px solid var(--border);
-  border-radius: 50%;
+  margin-block: -18px;
+  border: 0;
+  border-radius: 0;
   padding: 0;
-  background: var(--surface);
+  background: transparent;
   color: var(--muted);
   cursor: pointer;
 }
 
+.marketExchangeSwap svg {
+  display: block;
+  transition: transform 180ms ease;
+}
+
+.marketExchangeSwap.isReversed svg {
+  transform: rotate(180deg);
+}
+
 .marketExchangeSwap:hover,
 .marketExchangeSwap:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
   color: var(--accent);
 }
 
@@ -10567,9 +10651,23 @@ a.analyticsSearchTag:focus-visible {
   cursor: default;
 }
 
-.marketExchangeLine > button {
+.marketExchangeSwap.isStatic:hover,
+.marketExchangeSwap.isStatic:focus-visible {
+  color: var(--muted);
+}
+
+.marketExchangeHint {
+  margin: -2px 2px 0;
+  color: var(--accent);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+
+.marketExchangeLine > button,
+.marketExchangeSubmit {
   width: 100%;
-  min-height: 36px;
+  min-height: 42px;
 }
 
 .marketCodeLine {
@@ -10577,8 +10675,8 @@ a.analyticsSearchTag:focus-visible {
   min-width: 0;
   align-content: start;
   gap: 10px;
-  border-left: 0;
-  padding: 14px 2px 16px;
+  border-left: 1px solid var(--border);
+  padding: 14px 2px 16px 24px;
 }
 
 .marketCodeInputRow {
@@ -10619,8 +10717,14 @@ a.analyticsSearchTag:focus-visible {
     column-gap: 0;
   }
 
+  .marketExchangeLine {
+    padding: 14px 2px 16px;
+  }
+
   .marketCodeLine {
     border-top: 1px solid var(--border);
+    border-left: 0;
+    padding: 14px 2px 16px;
   }
 }
 
@@ -10644,7 +10748,15 @@ a.analyticsSearchTag:focus-visible {
   font-weight: 700;
 }
 
-.marketExchangeLine > button:disabled {
+.marketExchangeLine > button,
+.marketExchangeSubmit {
+  min-height: 42px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.marketExchangeLine > button:disabled,
+.marketExchangeSubmit:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
@@ -12391,9 +12503,14 @@ a.analyticsSearchTag:focus-visible {
     font-size: 21px;
   }
 
-  .marketExchangeAmount input,
-  .marketExchangeAmount output {
-    font-size: 18px;
+  .marketExchangeRow input,
+  .marketExchangeRow output {
+    font-size: 22px;
+  }
+
+  .marketExchangePanel {
+    min-height: 72px;
+    padding: 9px 12px 11px;
   }
 
   .marketProductPage > header.hasCover {
@@ -17177,6 +17294,7 @@ a.analyticsSearchTag:focus-visible {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
+  text-decoration: none;
   transition: background-color 120ms ease, color 120ms ease;
 }
 

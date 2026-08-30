@@ -12,6 +12,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { getNovelById } from "@/lib/books";
 import { canAccessNovelLibrary, canConsumeNovelLibrary, isGuestLibraryNavEnabled, isNovelLibraryPublic } from "@/lib/config";
 import { checkContentAccess } from "@/lib/content-access";
+import { uiText } from "@/lib/locale";
 import { getRequestLocale, localizeText, localizeTexts } from "@/lib/locale-server";
 import { getNovelPreviewChapterCount, getNovelReadAccess } from "@/lib/novel-access";
 import { getNovelSourceById, listNovelChaptersPage } from "@/lib/novel-library";
@@ -105,9 +106,9 @@ export default async function NovelChaptersPage({
                     : <ChevronRight size={14} aria-hidden="true" />}
                 </span>
                 <span className="novelChapterCardMeta">
-                  <small>{formatNovelWordCount(chapter.wordCount)}</small>
+                  <small>{formatNovelWordCount(chapter.wordCount, locale)}</small>
                   {"\u00A0\u00A0"}
-                  <small>更新于 {formatNovelUpdateTime({ mtime_ms: chapter.mtimeMs, updated_at: chapter.updatedAt })}</small>
+                  <small>{uiText(locale, "更新于")} {formatNovelUpdateTime({ mtime_ms: chapter.mtimeMs, updated_at: chapter.updatedAt })}</small>
                 </span>
               </ContextNavigationLink>
             );
