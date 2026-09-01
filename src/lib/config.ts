@@ -40,6 +40,11 @@ export function getMediaDir(): string {
   return resolveFromProject(process.env.MEDIA_DIR || "./data/media");
 }
 
+export function isMediaLibraryDiscoverEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const raw = (env.MEDIA_LIBRARY_DISCOVER || "on").trim().toLowerCase();
+  return raw !== "0" && raw !== "off" && raw !== "false" && raw !== "no";
+}
+
 export function getSiteName(): string {
   return readSiteSettings().siteName || process.env.SITE_NAME || "Example Reader";
 }

@@ -8,6 +8,7 @@ import {
   getMediaDir,
   isAudioLibraryEnabled,
   isFileLibraryEnabled,
+  isMediaLibraryDiscoverEnabled,
   isVideoLibraryEnabled,
 } from "./config";
 import { getDb } from "./db";
@@ -1007,6 +1008,11 @@ function removeThumbnailFile(id: number) {
 
 async function performMediaLibrarySync(state: MediaLibrarySyncState, force = false): Promise<MediaSyncResult> {
   const startedAt = Date.now();
+  if (!isMediaLibraryDiscoverEnabled()) {
+    state.folders = emptyFolderSnapshot();
+    state.syncedAt = Date.now();
+    return { added: 0, updated: 0, removed: 0 };
+  }
   if (!isRemoteMediaStorage()) {
     ensureMediaDirectories();
   }
