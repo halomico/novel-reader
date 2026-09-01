@@ -966,6 +966,11 @@
 .readerShell .readerSegment {
   content-visibility: auto;
   contain-intrinsic-size: auto 1200px;
+  margin-top: 0;
+}
+
+.readerShell .readerSegment + .readerSegment {
+  margin-top: 0;
 }
 
 .bookTitle,

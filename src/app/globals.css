@@ -18505,7 +18505,7 @@ a.analyticsSearchTag:focus-visible {
 }
 
 .readerShell .readerSegment + .readerSegment {
-  margin-top: 1.1em;
+  margin-top: 0;
 }
 
 .readerChapterNavigation {
