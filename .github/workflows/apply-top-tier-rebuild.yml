@@ -1,0 +1,91 @@
+name: Apply top-tier rebuild
+
+on:
+  push:
+    branches:
+      - top-tier-rebuild-20260904
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: contains(github.event.head_commit.message, '[apply-top-tier]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          ref: top-tier-rebuild-20260904
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install baseline dependencies
+        run: npm ci
+
+      - name: Apply deterministic source migration
+        run: node scripts/apply-top-tier-rebuild.mjs
+
+      - name: Resolve and lock editor dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Run typecheck
+        id: typecheck
+        continue-on-error: true
+        run: npm run typecheck > /tmp/typecheck.log 2>&1
+
+      - name: Run tests
+        id: tests
+        continue-on-error: true
+        run: npm test > /tmp/tests.log 2>&1
+
+      - name: Run production build
+        id: build
+        continue-on-error: true
+        run: npm run build > /tmp/build.log 2>&1
+
+      - name: Write verification report
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '# Top-tier rebuild verification'
+            echo
+            echo "- Typecheck: ${{ steps.typecheck.outcome }}"
+            echo "- Tests: ${{ steps.tests.outcome }}"
+            echo "- Build: ${{ steps.build.outcome }}"
+            echo
+            echo '## Typecheck'
+            echo '```text'
+            tail -n 160 /tmp/typecheck.log 2>/dev/null || true
+            echo '```'
+            echo
+            echo '## Tests'
+            echo '```text'
+            tail -n 160 /tmp/tests.log 2>/dev/null || true
+            echo '```'
+            echo
+            echo '## Build'
+            echo '```text'
+            tail -n 160 /tmp/build.log 2>/dev/null || true
+            echo '```'
+          } > TOP_TIER_CI_REPORT.md
+
+      - name: Commit generated implementation and verification
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: implement security hardening and original composer"
+          git push origin HEAD:top-tier-rebuild-20260904
+
+      - name: Enforce verification
+        if: steps.typecheck.outcome != 'success' || steps.tests.outcome != 'success' || steps.build.outcome != 'success'
+        run: exit 1
