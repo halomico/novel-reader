@@ -343,7 +343,7 @@ export function HeaderSearch({
     setIsModeMenuOpen(false);
     void fetch("/api/search/analytics", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
       body: JSON.stringify({
         action: "current",
         query: nextKeyword,

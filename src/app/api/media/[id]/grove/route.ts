@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { validateSameOriginMutation } from "@/core/security/origin";
 import { toggleMediaGrove } from "@/lib/grove";
 import { getMediaAsset, isFeedbackMediaKind, isMediaKindConsumable } from "@/lib/media";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
@@ -6,7 +7,9 @@ import { getCurrentUserFromRequest } from "@/lib/user-auth";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: NextRequest, {
+  const guard = validateSameOriginMutation(request);
+  if (guard) return guard; params }: { params: Promise<{ id: string }> }) {
   const fetchSite = request.headers.get("sec-fetch-site");
   if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "same-site") {
     return NextResponse.json({ ok: false, message: "请求无效" }, { status: 403 });

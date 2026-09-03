@@ -1,6 +1,5 @@
 "use client";
 
-import crypto from "node:crypto";
 import {
   $applyNodeReplacement,
   type EditorConfig,
@@ -20,7 +19,7 @@ function newAnchorId(): string {
   if (typeof globalThis.crypto?.randomUUID === "function") {
     return `heading_${globalThis.crypto.randomUUID().replace(/-/g, "")}`;
   }
-  return `heading_${crypto.randomBytes(16).toString("hex")}`;
+  return `heading_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 14)}`;
 }
 
 export class OriginalHeadingNode extends HeadingNode {

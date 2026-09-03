@@ -86,7 +86,7 @@ export function AdminMarketFilePicker({
     try {
       const startResponse = await fetch("/admin/market/upload?action=start", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
         body: JSON.stringify({
           productId,
           fileName: file.name,

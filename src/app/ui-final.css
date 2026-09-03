@@ -3901,3 +3901,18 @@ nav.accountGrowthTools > a + a {
     width: 100%;
   }
 }
+
+/* Top-tier UI corrections: navigation titles wrap by content, not by artificial rows. */
+.readerNovelLink { align-items: center; min-height: 0; }
+.readerNovelTitle { min-width: 0; }
+.readerNovelTitle strong {
+  display: block;
+  min-height: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.5;
+  -webkit-line-clamp: unset;
+}
+.readerNovelNavigation { align-items: stretch; }
+

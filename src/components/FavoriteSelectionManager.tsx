@@ -93,7 +93,7 @@ export function FavoriteSelectionManager({
     try {
       const response = await fetch("/api/account/favorites", {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
         body: JSON.stringify({ kind, ids }),
       });
       if (!response.ok) throw new Error("remove failed");

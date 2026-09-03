@@ -31,7 +31,7 @@ async function controlRequest<T>(
       ...init,
       headers: {
         Authorization: `Bearer ${config.controlSecret}`,
-        ...(init.body ? { "Content-Type": "application/json" } : {}),
+        ...(init.body ? { "Content-Type": "application/json", "X-Novel-Mutation": "1" } : {}),
         ...init.headers,
       },
       cache: "no-store",

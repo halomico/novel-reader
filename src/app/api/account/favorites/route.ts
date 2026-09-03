@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { validateSameOriginMutation } from "@/core/security/origin";
 import { removeMediaFavorites, removeNovelFavorites, removeOriginalFavorites } from "@/lib/favorites";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 
@@ -9,6 +10,8 @@ function isFavoriteKind(value: unknown): value is FavoriteKind {
 }
 
 export async function DELETE(request: NextRequest) {
+  const guard = validateSameOriginMutation(request);
+  if (guard) return guard;
   const fetchSite = request.headers.get("sec-fetch-site");
   if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "same-site") {
     return NextResponse.json({ ok: false, message: "请求无效" }, { status: 403 });

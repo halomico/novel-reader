@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { validateSameOriginMutation } from "@/core/security/origin";
 import { getUserDailyReportLimit } from "@/lib/config";
 import { createContentReport, isContentReportCategory, isMediaReportCategory, isOriginalReportCategory } from "@/lib/reports";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
@@ -8,6 +9,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
+  const guard = validateSameOriginMutation(request);
+  if (guard) return guard;
   const user = getCurrentUserFromRequest(request);
   if (!user) {
     return NextResponse.json({ ok: false, message: "请先登录" }, { status: 401 });

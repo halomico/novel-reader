@@ -6,8 +6,8 @@ import { getClientIp } from "./admin-access";
 import { getDb } from "./db";
 import { assignDefaultAvatarIfMissing } from "./default-avatars";
 import { LOCALE_COOKIE, normalizeLocale } from "./locale";
-import { hashPassword, verifyPassword } from "./password";
-import { getUserPasswordRow, recordUserLogin, type UserProfile } from "./users";
+import { hashPassword, passwordNeedsRehash, verifyPassword } from "./password";
+import { getUserPasswordRow, recordUserLogin, updateUserPasswordHash, type UserProfile } from "./users";
 
 export const USER_SESSION_COOKIE = "novel_user_session";
 
@@ -98,16 +98,15 @@ function readUserFromSessionValue(value: string | undefined): UserProfile | null
   return row ? toUserProfile(row) : null;
 }
 
-export function hashUserPassword(password: string): string {
+export async function hashUserPassword(password: string): Promise<string> {
   return hashPassword(password);
 }
 
-export function verifyUserPassword(password: string, storedHash: string): boolean {
+export async function verifyUserPassword(password: string, storedHash?: string | null): Promise<boolean> {
   return verifyPassword(password, storedHash);
 }
 
 export async function createUserSession(userId: number, ip: string, userAgent: string, persistent = true) {
-  deleteExpiredUserSessions();
   const sessionId = crypto.randomBytes(18).toString("base64url");
   const token = crypto.randomBytes(32).toString("base64url");
   const expiresAt = Date.now() + SESSION_TTL_SECONDS * 1000;
@@ -136,8 +135,12 @@ export async function loginUser(
   persistent = true,
 ): Promise<{ ok: true; user: UserProfile } | { ok: false; message: string }> {
   const row = getUserPasswordRow(username);
-  if (!row || row.status === "disabled" || !verifyUserPassword(password, row.password_hash)) {
+  const passwordValid = await verifyUserPassword(password, row?.password_hash);
+  if (!row || row.status === "disabled" || !passwordValid) {
     return { ok: false, message: "用户名或密码不正确" };
+  }
+  if (passwordNeedsRehash(row.password_hash)) {
+    updateUserPasswordHash(row.id, await hashUserPassword(password));
   }
   if (row.status === "pending") {
     return { ok: false, message: "邮箱尚未验证，请先完成验证" };

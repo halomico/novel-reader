@@ -225,7 +225,7 @@ export function ReadingProgressTracker({
       sentRef.current = current;
       void fetch("/api/account/reading-progress", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
         body: JSON.stringify(current),
         credentials: "same-origin",
         keepalive: true,

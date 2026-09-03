@@ -91,7 +91,7 @@ export function ReadingHistoryList({
     try {
       const response = await fetch("/api/account/preferences", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
         body: JSON.stringify({ readingHistoryEnabled: enabled, readingHistoryKind: kind }),
       });
       if (!response.ok) throw new Error("preference update failed");
@@ -110,7 +110,7 @@ export function ReadingHistoryList({
     try {
       const response = await fetch(kind === "original" ? "/api/account/original-reading-progress" : "/api/account/reading-progress", {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
         body: JSON.stringify(kind === "original"
           ? { articleIds: Array.from(selected) }
           : { novelIds: Array.from(selected) }),

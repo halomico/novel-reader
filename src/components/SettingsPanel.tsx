@@ -269,7 +269,7 @@ export function SettingsPanel({
     try {
       const response = await fetch("/api/account/preferences", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
         body: JSON.stringify({ locale: nextLocale }),
       });
       if (!response.ok) throw new Error("locale update failed");

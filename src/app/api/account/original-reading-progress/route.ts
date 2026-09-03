@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { validateSameOriginMutation } from "@/core/security/origin";
 import { canConsumeOriginalChannel } from "@/lib/config";
 import {
   clearOriginalReadingProgress,
@@ -28,6 +29,8 @@ export async function GET(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  const guard = validateSameOriginMutation(request);
+  if (guard) return guard;
   const user = await getCurrentUser();
   if (!user) return privateJson({ ok: false, message: "请先登录" }, 401);
   let body: { articleId?: unknown; scrollRatio?: unknown };
@@ -53,6 +56,8 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const guard = validateSameOriginMutation(request);
+  if (guard) return guard;
   const user = await getCurrentUser();
   if (!user) return privateJson({ ok: false, message: "请先登录" }, 401);
   const url = new URL(request.url);

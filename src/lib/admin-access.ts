@@ -1,5 +1,6 @@
 ﻿import { BlockList, isIP } from "node:net";
 import { isAdminEnabled } from "./config";
+import { getTrustedClientIp } from "@/core/security/client-ip";
 import { readSiteSettings } from "./site-settings";
 
 export type AdminAccessState = {
@@ -125,12 +126,7 @@ export function normalizeAdminNetworkRules(value: unknown): string[] {
 }
 
 export function getClientIp(headers: Headers): string {
-  const clientIp =
-    headers.get("cf-connecting-ip")?.trim() ||
-    headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    headers.get("x-real-ip")?.trim() ||
-    "unknown";
-  return clientIp === "unknown" ? clientIp : normalizeIpLiteral(clientIp);
+  return getTrustedClientIp(headers);
 }
 
 export function getAdminAccessState(headers: Headers): AdminAccessState {

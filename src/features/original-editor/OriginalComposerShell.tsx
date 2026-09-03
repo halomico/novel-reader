@@ -92,6 +92,7 @@ export type OriginalComposerTag = { id: number; name: string };
 type SaveState = "clean" | "dirty" | "saving" | "saved" | "offline" | "error" | "conflict";
 type OutlineItem = { id: string; level: 2 | 3; text: string; paid: boolean };
 
+const MAX_TITLE_LENGTH = 100;
 const LOCAL_SAVE_DELAY_MS = 350;
 const SERVER_SAVE_DELAY_MS = 900;
 const MAX_SERVER_SAVE_INTERVAL_MS = 5_000;

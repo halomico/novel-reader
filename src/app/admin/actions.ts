@@ -112,7 +112,7 @@ import {
   clearBrowseHistory,
   createUserRecord,
   deleteBrowseHistoryItem,
-  deleteUserIds,
+  anonymizeUserIds,
   getUserById,
   updateUserRecord,
   updateUserStatus,
@@ -830,7 +830,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
       10_080,
     ),
     adminUsername,
-    adminPasswordHash: newPassword ? hashPassword(newPassword) : previous.adminPasswordHash,
+    adminPasswordHash: newPassword ? await hashPassword(newPassword) : previous.adminPasswordHash,
     adminPasswordSha256: newPassword ? "" : previous.adminPasswordSha256,
     adminLoginRateLimitPerMinute: intField(formData, "adminLoginRateLimitPerMinute", previous.adminLoginRateLimitPerMinute || 6, 1, 120),
     adminLoginRateLimitEnabled: formData.get("adminLoginRateLimitEnabled") === "on",
@@ -1664,14 +1664,14 @@ export async function deleteAdminUsersAction(
     .filter((value) => Number.isInteger(value) && value > 0);
 
   if (!ids.length) {
-    return mutationResult(false, "请选择要删除的用户", "warning");
+    return mutationResult(false, "请选择要停用并匿名化的用户", "warning");
   }
 
-  const deleted = deleteUserIds(ids);
-  const deletedIds = ids.filter((id) => !getUserById(id));
+  const deleted = anonymizeUserIds(ids, "admin-panel");
+  const deletedIds = deleted > 0 ? ids : [];
   return mutationResult(
     deleted > 0,
-    `已删除 ${deleted} 个用户`,
+    `已停用并匿名化 ${deleted} 个用户`,
     deleted ? "success" : "warning",
     { deletedIds },
   );

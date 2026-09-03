@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { validateSameOriginMutation } from "@/core/security/origin";
 import { getNovelById } from "@/lib/books";
 import { getNovelChapter } from "@/lib/novel-library";
 import { getNovelReadAccess } from "@/lib/novel-access";
@@ -38,6 +39,8 @@ export async function GET(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  const guard = validateSameOriginMutation(request);
+  if (guard) return guard;
   const user = await getCurrentUser();
   if (!user) {
     return privateJson({ ok: false, message: "请先登录" }, 401);
@@ -85,6 +88,8 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const guard = validateSameOriginMutation(request);
+  if (guard) return guard;
   const user = await getCurrentUser();
   if (!user) {
     return privateJson({ ok: false, message: "请先登录" }, 401);

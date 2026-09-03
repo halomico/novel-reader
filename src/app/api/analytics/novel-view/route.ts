@@ -1,4 +1,5 @@
 import { after, type NextRequest } from "next/server";
+import { validateSameOriginMutation } from "@/core/security/origin";
 import { recordAnalyticsEvent } from "@/lib/analytics";
 import { getNovelById } from "@/lib/books";
 import { canAccessNovelLibrary } from "@/lib/config";
@@ -13,6 +14,8 @@ export const runtime = "nodejs";
 const NO_STORE_HEADERS = { "Cache-Control": "no-store" };
 
 export async function POST(request: NextRequest) {
+  const guard = validateSameOriginMutation(request);
+  if (guard) return guard;
   const fetchSite = request.headers.get("sec-fetch-site");
   if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "same-site") {
     return new Response(null, { status: 403, headers: NO_STORE_HEADERS });

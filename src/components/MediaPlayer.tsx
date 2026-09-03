@@ -203,7 +203,7 @@ export function MediaPlayer({
     if (!lease) return;
     void fetch("/api/media-playback", {
       method: "DELETE",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
       body: JSON.stringify({ mediaId: id, sessionId: lease.sessionId, token: lease.token }),
       keepalive: true,
     });
@@ -212,7 +212,7 @@ export function MediaPlayer({
   const acquireLease = useCallback(async (): Promise<PlaybackLease> => {
     const response = await fetch("/api/media-playback", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
       body: JSON.stringify({
         mediaId: id,
         clientId: clientId(),
@@ -468,7 +468,7 @@ export function MediaPlayer({
       try {
         const response = await fetch("/api/media-playback", {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
           body: JSON.stringify({
             mediaId: id,
             sessionId: activeLease.sessionId,

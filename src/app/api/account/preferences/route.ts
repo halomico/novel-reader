@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { validateSameOriginMutation } from "@/core/security/origin";
 import { NextResponse } from "next/server";
 import {
   LOCALE_COOKIE,
@@ -20,6 +21,8 @@ type PreferencePayload = {
 };
 
 export async function PATCH(request: Request) {
+  const guard = validateSameOriginMutation(request);
+  if (guard) return guard;
   let payload: PreferencePayload;
   try {
     payload = await request.json() as PreferencePayload;

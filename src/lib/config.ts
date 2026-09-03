@@ -86,10 +86,14 @@ function readIntConfig(name: string, fallback: number, min: number, max: number)
 }
 
 function readSettingInt(settingValue: number, envName: string, fallback: number, min: number, max: number): number {
-  if (Number.isFinite(settingValue) && settingValue >= min) {
+  const configuredEnv = process.env[envName];
+  if (configuredEnv !== undefined && configuredEnv.trim() !== "") {
+    return readIntConfig(envName, fallback, min, max);
+  }
+  if (Number.isFinite(settingValue)) {
     return Math.min(Math.max(Math.floor(settingValue), min), max);
   }
-  return readIntConfig(envName, fallback, min, max);
+  return fallback;
 }
 
 function readBoolConfig(name: string, fallback: boolean): boolean {

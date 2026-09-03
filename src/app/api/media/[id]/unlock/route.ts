@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { validateSameOriginMutation } from "@/core/security/origin";
 import { unlockVideoWithSoda } from "@/lib/media-access";
 import { getMediaAsset, isMediaKindConsumable } from "@/lib/media";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
@@ -6,7 +7,9 @@ import { getCurrentUserFromRequest } from "@/lib/user-auth";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: NextRequest, {
+  const guard = validateSameOriginMutation(request);
+  if (guard) return guard; params }: { params: Promise<{ id: string }> }) {
   const user = getCurrentUserFromRequest(request);
   if (!user) {
     return NextResponse.json({ ok: false, message: "请先登录" }, { status: 401 });

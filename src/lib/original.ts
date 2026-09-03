@@ -318,7 +318,8 @@ function normalizeAccessMode(_value: unknown, unlockSodaPrice = 0): OriginalAcce
 }
 
 function normalizeStatus(value: unknown): OriginalArticleStatus {
-  return value === "draft" || value === "hidden" ? value : "published";
+  if (value === "published" || value === "draft") return value;
+  return "hidden";
 }
 
 function toArticle(row: ArticleRow, tags: OriginalTag[] = []): OriginalArticle {

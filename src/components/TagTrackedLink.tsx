@@ -17,7 +17,7 @@ function recordTagClick(slug: string) {
   }
   void fetch("/api/analytics/tag-click", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
     body,
     keepalive: true,
   }).catch(() => undefined);

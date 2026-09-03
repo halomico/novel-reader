@@ -1,6 +1,7 @@
 "use server";
 
 import crypto from "node:crypto";
+import { checkLoginAttempt, clearLoginFailures, recordLoginFailure } from "@/core/security/auth-rate-limit";
 import fs from "node:fs";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
@@ -169,6 +170,7 @@ export async function registerUserAction(formData: FormData) {
     authNotice("/register", verification.message, "warning", returnValues);
   }
 
+  const passwordHash = await hashUserPassword(password);
   let userId = 0;
   const db = getDb();
   try {
@@ -180,7 +182,7 @@ export async function registerUserAction(formData: FormData) {
       username,
       displayName,
       email: email || null,
-      passwordHash: hashUserPassword(password),
+      passwordHash,
       status: verificationRequired ? "pending" : "active",
       localePreference: normalizeLocale(headerStore.get(LOCALE_REQUEST_HEADER)),
       registrationIp: clientIp,
@@ -245,6 +247,10 @@ export async function loginUserAction(formData: FormData) {
   const loginValues = { username, remember: rememberLogin ? "1" : "0", returnTo };
   const headerStore = await headers();
   const clientIp = getClientIp(headerStore);
+  const throttle = checkLoginAttempt(clientIp, username);
+  if (!throttle.allowed) {
+    authNotice("/login", `登录太频繁，请 ${throttle.retryAfterSeconds} 秒后再试`, "warning", loginValues);
+  }
   const verification = await verifyHumanRequest(formData, "login", clientIp);
   if (!verification.ok) {
     authNotice("/login", verification.message, "warning", loginValues);
@@ -252,8 +258,10 @@ export async function loginUserAction(formData: FormData) {
 
   const result = await loginUser(username, password, rememberLogin);
   if (!result.ok) {
+    recordLoginFailure(clientIp, username);
     authNotice("/login", result.message, "warning", loginValues);
   }
+  clearLoginFailures(clientIp, username);
   redirect(returnTo);
 }
 
@@ -368,11 +376,11 @@ export async function updateAccountPasswordAction(formData: FormData) {
   }
 
   const passwordHash = getUserPasswordHashById(user.id);
-  if (!passwordHash || !verifyUserPassword(currentPassword, passwordHash)) {
+  if (!passwordHash || !(await verifyUserPassword(currentPassword, passwordHash))) {
     authNotice("/account", "当前密码不正确", "warning");
   }
 
-  updateUserPasswordHash(user.id, hashUserPassword(newPassword));
+  updateUserPasswordHash(user.id, await hashUserPassword(newPassword));
   deleteUserSessions(user.id);
   const headerStore = await headers();
   await createUserSession(user.id, getClientIp(headerStore), headerStore.get("user-agent") || "");

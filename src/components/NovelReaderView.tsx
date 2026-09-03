@@ -56,6 +56,10 @@ type ChapterContext = {
   next: NovelChapter | null;
 };
 
+function readerNavigationTitle(value: string): string {
+  return value.normalize("NFKC").replace(/\s+/gu, " ").trim();
+}
+
 function safeReturnHref(value: string | undefined, fallback = "/novels"): string {
   return value?.startsWith("/") && !value.startsWith("//") && !value.includes("\\") ? value : fallback;
 }

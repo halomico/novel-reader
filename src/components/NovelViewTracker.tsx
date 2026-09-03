@@ -13,7 +13,7 @@ function recordNovelView(novelId: number) {
   }
   void fetch("/api/analytics/novel-view", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
     body,
     keepalive: true,
   }).catch(() => undefined);

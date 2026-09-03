@@ -201,7 +201,7 @@ export function ContentSearchClient({
     reportedAnalyticsRef.current = signature;
     void fetch("/api/search/analytics", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
       body: JSON.stringify({ action: "results", eventKey: searchEventKey, resultCount, resultNovelCount }),
       keepalive: true,
     }).catch(() => {
@@ -327,7 +327,7 @@ export function ContentSearchClient({
 
       const response = await fetch("/api/search/content", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
         body: JSON.stringify({
           q: keyword,
           library,

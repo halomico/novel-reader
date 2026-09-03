@@ -67,7 +67,7 @@ export function ContentReportButton({
     try {
       const response = await fetch("/api/reports", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
         body: JSON.stringify({ ...target, category, details }),
       });
       const data = await response.json() as { ok?: boolean; message?: string };

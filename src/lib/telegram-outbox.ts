@@ -167,7 +167,7 @@ export async function processTelegramOutbox(limit = 20): Promise<number> {
       try {
         const response = await fetch(`https://api.telegram.org/bot${config.botToken}/${row.method}`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
           body: row.payload_json,
           signal: AbortSignal.timeout(8_000),
         });

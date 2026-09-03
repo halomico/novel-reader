@@ -33,7 +33,7 @@ export function OriginalAuthorBlockButton({
       try {
         const response = await fetch(`/api/original/authors/${authorId}/block`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
           body: JSON.stringify({ blocked: next }),
         });
         const result = await response.json() as { ok?: boolean; blocked?: boolean; message?: string };

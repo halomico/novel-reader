@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { validateSameOriginMutation } from "@/core/security/origin";
 import { recordAnalyticsEvent } from "@/lib/analytics";
 import { canAccessTagLibrary, isTagLibraryEnabled } from "@/lib/config";
 import { getTagBySlug } from "@/lib/tags";
@@ -8,6 +9,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
+  const guard = validateSameOriginMutation(request);
+  if (guard) return guard;
   const fetchSite = request.headers.get("sec-fetch-site");
   if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "same-site") {
     return new Response(null, { status: 403 });

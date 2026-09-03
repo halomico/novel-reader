@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { getTrustedRequestCountry } from "@/core/security/client-ip";
 import { NextResponse } from "next/server";
 import {
   checkContentAccess,
@@ -98,7 +99,7 @@ function resolveRequestedLocale(request: NextRequest): AppLocale {
     !isCrawler(request) &&
     prefersTraditionalLanguage(
       request.headers.get("accept-language"),
-      request.headers.get("cf-ipcountry")?.toUpperCase() || null,
+      getTrustedRequestCountry(request.headers),
     )
   ) {
     return TRADITIONAL_LOCALE;
@@ -210,5 +211,5 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   runtime: "nodejs",
-  matcher: ["/((?!_next/static|_next/image).*)"],
+  matcher: ["/((?!_next/static|_next/image|api/live|api/ready|api/version|site-icon/|default-avatars/|avatar-widgets/|media-file/|.*\.(?:svg|png|jpg|jpeg|webp|avif|ico|css|js|map|woff2?)$).*)"],
 };

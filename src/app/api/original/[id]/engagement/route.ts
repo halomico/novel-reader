@@ -11,7 +11,9 @@ export const runtime = "nodejs";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  {
+  const guard = validateSameOriginMutation(request);
+  if (guard) return guard; params }: { params: Promise<{ id: string }> },
 ) {
   const guard = validateSameOriginMutation(request);
   if (guard) return guard;

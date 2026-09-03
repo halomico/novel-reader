@@ -19,7 +19,7 @@ async function ensureTelegramWebhook() {
   if (current?.value === fingerprint) return;
   const response = await fetch(`https://api.telegram.org/bot${config.botToken}/setWebhook`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
     body: JSON.stringify({
       url: config.webhookUrl,
       secret_token: config.webhookSecret,

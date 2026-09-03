@@ -26,7 +26,7 @@ export function SearchTrackedLink({
     if (eventKey) {
       void fetch("/api/search/analytics", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
         body: JSON.stringify({ action: "click", eventKey, novelId, segmentIndex }),
         keepalive: true,
       }).catch(() => undefined);

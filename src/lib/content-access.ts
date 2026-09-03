@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { getTrustedRequestCountry } from "@/core/security/client-ip";
 import { getClientIp, matchesIpRule } from "./admin-access";
 import { getDb } from "./db";
 import { checkRateLimit, clearRateLimitBucketsByPrefix } from "./rate-limit";
@@ -251,8 +252,7 @@ function readActiveAccessConfig(now: number) {
 }
 
 export function getRequestCountry(headers: HeaderReader): string {
-  const value = (headers.get("cf-ipcountry") || "").trim().toUpperCase();
-  return /^(?:[A-Z]{2}|T1)$/.test(value) ? value : "unknown";
+  return getTrustedRequestCountry(headers);
 }
 
 function scopeMatches(configured: ContentAccessScope, requested: ContentAccessRequestScope): boolean {

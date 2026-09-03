@@ -126,8 +126,8 @@ export function validateUsername(value: string): string | null {
 }
 
 export function validatePassword(value: string): string | null {
-  if (value.length < 6 || value.length > 72) {
-    return "密码长度需要在 6-72 个字符之间";
+  if (value.length < 10 || value.length > 256) {
+    return "密码长度需要在 10-256 个字符之间";
   }
   return null;
 }
@@ -389,32 +389,54 @@ export function removeAvatarFile(avatarPath: string | null): boolean {
   return false;
 }
 
-export function deleteUserIds(ids: number[]): number {
-  const validIds = ids.filter((id) => Number.isInteger(id) && id > 0);
-  if (!validIds.length) {
-    return 0;
-  }
+function userTableExists(db: ReturnType<typeof getDb>, name: string): boolean {
+  return Boolean(db.prepare("SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = ?").get(name));
+}
 
+function deleteUserRowsIfPresent(db: ReturnType<typeof getDb>, table: string, userId: number): void {
+  if (!userTableExists(db, table)) return;
+  const columns = new Set((db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((row) => row.name));
+  const column = columns.has("user_id") ? "user_id" : columns.has("owner_id") ? "owner_id" : "";
+  if (column) db.prepare(`DELETE FROM ${table} WHERE ${column} = ?`).run(userId);
+}
+
+export function anonymizeUserIds(ids: number[], actor = "admin"): number {
+  const validIds = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+  if (!validIds.length) return 0;
   const db = getDb();
-  const avatars = db
-    .prepare(`SELECT avatar_path AS avatarPath FROM users WHERE id IN (${validIds.map(() => "?").join(",")})`)
-    .all(...validIds) as Array<{ avatarPath: string | null }>;
-  const deleteUser = db.prepare("DELETE FROM users WHERE id = ?");
-  let deleted = 0;
-  db.exec("BEGIN");
+  const rows = db.prepare(`SELECT id, username, avatar_path AS avatarPath, deleted_at FROM users WHERE id IN (${validIds.map(() => "?").join(",")})`).all(...validIds) as Array<{ id: number; username: string; avatarPath: string | null; deleted_at: string | null }>;
+  let anonymized = 0;
+  db.exec("BEGIN IMMEDIATE");
   try {
-    for (const id of validIds) {
-      deleted += Number(deleteUser.run(id).changes);
+    for (const row of rows) {
+      if (row.deleted_at) continue;
+      for (const table of ["user_sessions", "email_verification_tokens", "user_email_verification_tokens", "telegram_user_links", "user_telegram_links"]) {
+        deleteUserRowsIfPresent(db, table, row.id);
+      }
+      const anonymousUsername = `deleted-${row.id}-${Math.random().toString(36).slice(2, 10)}`;
+      const changed = db.prepare(`UPDATE users SET
+          username = ?, display_name = '已注销用户', email = NULL, email_verified_at = NULL,
+          password_hash = ?, avatar_path = NULL, status = 'disabled', role = 'user',
+          registration_ip = NULL, last_login_ip = NULL, last_login_at = NULL,
+          deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND deleted_at IS NULL`).run(anonymousUsername, `disabled:${anonymousUsername}`, row.id).changes;
+      if (changed) {
+        db.prepare(`INSERT INTO admin_user_anonymization_audit (user_id, previous_username, actor) VALUES (?, ?, ?)`).run(row.id, row.username, actor.slice(0, 120));
+        anonymized += 1;
+      }
     }
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");
     throw error;
   }
-  for (const avatar of avatars) {
-    removeAvatarFile(avatar.avatarPath);
-  }
-  return deleted;
+  for (const row of rows) if (row.avatarPath) removeAvatarFile(row.avatarPath);
+  return anonymized;
+}
+
+/** @deprecated Administrative deletion now preserves a tombstone and all historical records. */
+export function deleteUserIds(ids: number[]): number {
+  return anonymizeUserIds(ids);
 }
 
 export function recordUserLogin(userId: number, ip: string, userAgent: string) {

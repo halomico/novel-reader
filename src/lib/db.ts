@@ -1,4 +1,6 @@
 import fs from "node:fs";
+import { ensureCoreSchema } from "@/core/db/schema";
+import { migrateContentAccessSchemaSafe } from "@/core/db/content-access-migration";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { getDatabasePath } from "./config";
@@ -278,71 +280,7 @@ function migrateContentReports(db: DatabaseSync) {
 }
 
 function migrateContentAccessSchema(db: DatabaseSync) {
-  const ruleTable = db
-    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'content_access_rules'")
-    .get() as { sql?: string } | undefined;
-  const policyTable = db
-    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'content_access_policies'")
-    .get() as { sql?: string } | undefined;
-  const ruleSql = ruleTable?.sql || "";
-  const policySql = policyTable?.sql || "";
-  const currentRules = ruleSql.includes("country_mode") &&
-    ruleSql.includes("'crawler'") &&
-    ruleSql.includes("'video'") &&
-    ruleSql.includes("'audio'") &&
-    ruleSql.includes("'file'") &&
-    !ruleSql.includes("'media'");
-  const currentPolicies = policySql.includes("country_mode") &&
-    policySql.includes("'video'") &&
-    policySql.includes("'audio'") &&
-    policySql.includes("'file'") &&
-    !policySql.includes("'media'");
-  if (currentRules && currentPolicies) {
-    return;
-  }
-
-  db.exec("BEGIN");
-  try {
-    db.exec(`
-      DROP TABLE content_access_rules;
-      DROP TABLE content_access_policies;
-
-      CREATE TABLE content_access_rules (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        target_type TEXT NOT NULL CHECK(target_type IN ('ip', 'cidr', 'country', 'crawler')),
-        target_value TEXT NOT NULL,
-        match_mode TEXT NOT NULL DEFAULT 'include' CHECK(match_mode IN ('include', 'exclude')),
-        scope TEXT NOT NULL DEFAULT 'all' CHECK(scope IN ('all', 'novel', 'video', 'audio', 'file')),
-        country_mode TEXT NOT NULL DEFAULT 'all' CHECK(country_mode IN ('all', 'cn', 'non_cn')),
-        audience TEXT NOT NULL DEFAULT 'all' CHECK(audience IN ('all', 'guest')),
-        source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual', 'rate_limit')),
-        reason TEXT NOT NULL DEFAULT '',
-        expires_at INTEGER,
-        enabled INTEGER NOT NULL DEFAULT 1,
-        created_by TEXT NOT NULL DEFAULT '',
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE TABLE content_access_policies (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        enabled INTEGER NOT NULL DEFAULT 1,
-        scope TEXT NOT NULL DEFAULT 'all' CHECK(scope IN ('all', 'novel', 'video', 'audio', 'file')),
-        country_mode TEXT NOT NULL DEFAULT 'all' CHECK(country_mode IN ('all', 'cn', 'non_cn')),
-        audience TEXT NOT NULL DEFAULT 'guest' CHECK(audience IN ('all', 'guest')),
-        window_seconds INTEGER NOT NULL,
-        max_requests INTEGER NOT NULL,
-        block_seconds INTEGER NOT NULL,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    db.exec("COMMIT");
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
-  }
+  migrateContentAccessSchemaSafe(db);
 }
 
 function migrateUserEconomy(db: DatabaseSync) {
@@ -2046,6 +1984,7 @@ function initialize(db: DatabaseSync) {
   migrateTagVisibility(db);
   dropLegacyContentAccessBans(db);
   migrateContentAccessSchema(db);
+  ensureCoreSchema(db);
   addColumnIfMissing(
     db,
     "announcements",
@@ -2083,6 +2022,7 @@ function initialize(db: DatabaseSync) {
   addColumnIfMissing(db, "novels", "last_accessed_ip", "last_accessed_ip TEXT");
   addColumnIfMissing(db, "novels", "last_accessed_user_agent", "last_accessed_user_agent TEXT");
   addColumnIfMissing(db, "users", "registration_ip", "registration_ip TEXT");
+  addColumnIfMissing(db, "users", "deleted_at", "deleted_at TEXT");
   addColumnIfMissing(db, "users", "role", "role TEXT NOT NULL DEFAULT 'user'");
   addColumnIfMissing(db, "media_assets", "storage_node_id", "storage_node_id TEXT");
   addColumnIfMissing(db, "media_assets", "artist", "artist TEXT NOT NULL DEFAULT ''");

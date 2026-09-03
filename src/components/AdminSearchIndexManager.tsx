@@ -127,7 +127,7 @@ export function AdminSearchIndexManager({ showProgressBars, sources }: AdminSear
     try {
       const response = await fetch("/admin/indexes/job", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
         body: JSON.stringify({ force, sourceId: source?.sourceId }),
       });
       const data = (await response.json()) as IndexApiResponse;
@@ -167,7 +167,7 @@ export function AdminSearchIndexManager({ showProgressBars, sources }: AdminSear
     try {
       const response = await fetch("/admin/indexes/manage", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
         body: JSON.stringify({ action: "clear", sourceId: source.sourceId }),
       });
       const data = (await response.json()) as IndexApiResponse;

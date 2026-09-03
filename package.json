@@ -15,7 +15,10 @@
     "typecheck": "tsc --noEmit",
     "test:navigation": "node --import tsx --test src/lib/context-navigation.test.ts",
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
-    "check": "npm run typecheck && npm test"
+    "check": "npm run typecheck && npm test && npm run build",
+    "db:backup": "tsx scripts/db-backup.ts",
+    "db:verify": "tsx scripts/db-verify.ts",
+    "test:migrations": "node --import tsx --test src/core/db/content-access-migration.test.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
@@ -28,7 +31,16 @@
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.3",
+    "@lexical/code": "^0.38.2",
+    "@lexical/link": "^0.38.2",
+    "@lexical/list": "^0.38.2",
+    "@lexical/markdown": "^0.38.2",
+    "@lexical/react": "^0.38.2",
+    "@lexical/rich-text": "^0.38.2",
+    "@lexical/selection": "^0.38.2",
+    "@lexical/utils": "^0.38.2",
+    "lexical": "^0.38.2"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

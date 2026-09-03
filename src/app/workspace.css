@@ -245,3 +245,18 @@
     height: 13px;
   }
 }
+
+/* Workspace section icons stay neutral like the settings icon. */
+.workspaceShell h1 > svg,
+.workspaceShell h2 > svg,
+.accountShell h1 > svg,
+.activityPage h1 > svg,
+.messagesPage h1 > svg,
+.marketPage h1 > svg,
+.originalMinePage h1 > svg,
+.workspacePageTitle > svg,
+.workspaceSectionTitle > svg {
+  color: var(--textMuted, var(--muted, #7b818a)) !important;
+  fill: none !important;
+}
+
