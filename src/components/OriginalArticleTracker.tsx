@@ -13,6 +13,19 @@ function storageKey(slug: string): string {
   return `${STORAGE_PREFIX}${encodeURIComponent(slug)}`;
 }
 
+function eventId(articleId: number, action: "detail_view" | "read_open"): string {
+  const key = `novel-reader:original-event:${articleId}:${action}`;
+  try {
+    const current = sessionStorage.getItem(key);
+    if (current) return current;
+    const next = `event_${typeof crypto.randomUUID === "function" ? crypto.randomUUID().replace(/-/g, "") : `${Date.now()}_${Math.random().toString(36).slice(2)}`}`;
+    sessionStorage.setItem(key, next);
+    return next;
+  } catch {
+    return `event_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  }
+}
+
 function readPosition(slug: string): StoredPosition | null {
   try {
     const raw = window.localStorage.getItem(storageKey(slug));
@@ -71,9 +84,19 @@ function writePosition(slug: string, ratio: number): void {
 function saveProgress(articleId: number, ratio: number, keepalive = false): void {
   void fetch("/api/account/original-reading-progress", {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
     body: JSON.stringify({ articleId, scrollRatio: ratio }),
     keepalive,
+  }).catch(() => undefined);
+}
+
+function sendEngagement(articleId: number, action: "detail_view" | "read_open"): void {
+  void fetch(`/api/original/${articleId}/engagement`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
+    body: JSON.stringify({ eventId: eventId(articleId, action), action }),
+    keepalive: true,
+    credentials: "same-origin",
   }).catch(() => undefined);
 }
 
@@ -82,16 +105,13 @@ function useVisibleEngagement(articleId: number, targetId: string) {
   useEffect(() => {
     const target = document.getElementById(targetId);
     if (!target) return;
-
     let intersecting = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
-
     function cancel() {
       if (!timer) return;
       clearTimeout(timer);
       timer = null;
     }
-
     function schedule() {
       cancel();
       if (!intersecting || document.visibilityState !== "visible" || sentRef.current) return;
@@ -99,25 +119,18 @@ function useVisibleEngagement(articleId: number, targetId: string) {
         timer = null;
         if (!intersecting || document.visibilityState !== "visible" || sentRef.current) return;
         sentRef.current = true;
-        void fetch(`/api/original/${articleId}/engagement`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: "{}",
-          keepalive: true,
-        }).catch(() => undefined);
+        sendEngagement(articleId, "detail_view");
       }, ENGAGEMENT_DELAY_MS);
     }
-
     const observer = new IntersectionObserver(([entry]) => {
-      intersecting = Boolean(entry?.isIntersecting);
+      intersecting = Boolean(entry?.isIntersecting && entry.intersectionRatio >= 0.3);
       if (intersecting) schedule();
       else cancel();
-    }, { threshold: 0.05 });
+    }, { threshold: [0, 0.3, 0.5] });
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") schedule();
       else cancel();
     };
-
     observer.observe(target);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
@@ -128,10 +141,6 @@ function useVisibleEngagement(articleId: number, targetId: string) {
   }, [articleId, targetId]);
 }
 
-/**
- * Owns the two client-side article signals: deliberate visible engagement and
- * optional reading-position persistence. Server rendering remains read-only.
- */
 export function OriginalArticleTracker({
   articleId,
   slug,
@@ -150,18 +159,14 @@ export function OriginalArticleTracker({
   const frameRef = useRef<number | null>(null);
   const timerRef = useRef<number | null>(null);
   const lastSentRatioRef = useRef(initialRatio);
+  const readOpenSentRef = useRef(false);
   useVisibleEngagement(articleId, engagementTargetId);
 
   useEffect(() => {
     if (!readingProgressEnabled) {
-      try {
-        window.localStorage.removeItem(storageKey(slug));
-      } catch {
-        // Ignore storage policy errors.
-      }
+      try { window.localStorage.removeItem(storageKey(slug)); } catch { /* ignore */ }
       return;
     }
-
     const local = readPosition(slug);
     const saved = initialRatio > 0 ? { ratio: initialRatio } : local;
     if (resume && saved) {
@@ -176,16 +181,14 @@ export function OriginalArticleTracker({
     }
 
     function flush(send = true, keepalive = false) {
-      if (frameRef.current !== null) {
-        window.cancelAnimationFrame(frameRef.current);
-        frameRef.current = null;
-      }
-      if (timerRef.current !== null) {
-        window.clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
+      if (frameRef.current !== null) { window.cancelAnimationFrame(frameRef.current); frameRef.current = null; }
+      if (timerRef.current !== null) { window.clearTimeout(timerRef.current); timerRef.current = null; }
       const ratio = currentRatio();
       writePosition(slug, ratio);
+      if (!readOpenSentRef.current && ratio > 0.01 && document.visibilityState === "visible") {
+        readOpenSentRef.current = true;
+        sendEngagement(articleId, "read_open");
+      }
       if (send && Math.abs(ratio - lastSentRatioRef.current) >= 0.002) {
         lastSentRatioRef.current = ratio;
         saveProgress(articleId, ratio, keepalive);
@@ -196,7 +199,12 @@ export function OriginalArticleTracker({
       if (frameRef.current === null) {
         frameRef.current = window.requestAnimationFrame(() => {
           frameRef.current = null;
-          writePosition(slug, currentRatio());
+          const ratio = currentRatio();
+          writePosition(slug, ratio);
+          if (!readOpenSentRef.current && ratio > 0.01 && document.visibilityState === "visible") {
+            readOpenSentRef.current = true;
+            sendEngagement(articleId, "read_open");
+          }
         });
       }
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);
