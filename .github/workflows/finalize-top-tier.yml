@@ -1,0 +1,106 @@
+name: Finalize top-tier implementation
+
+on:
+  push:
+    branches:
+      - top-tier-rebuild-20260904
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: contains(github.event.head_commit.message, '[finalize-top-tier]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out implementation branch
+        uses: actions/checkout@v6
+        with:
+          ref: top-tier-rebuild-20260904
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install committed dependencies
+        run: npm ci
+
+      - name: Apply final integration
+        run: node scripts/finalize-top-tier-rebuild.mjs
+
+      - name: Refresh dependency lock
+        run: npm install --no-audit --no-fund
+
+      - name: Typecheck
+        id: typecheck
+        continue-on-error: true
+        run: npm run typecheck > /tmp/typecheck.log 2>&1
+
+      - name: Tests
+        id: tests
+        continue-on-error: true
+        run: npm test > /tmp/tests.log 2>&1
+
+      - name: Build
+        id: build
+        continue-on-error: true
+        run: npm run build > /tmp/build.log 2>&1
+
+      - name: Write report
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '# Final verification'
+            echo "typecheck=${{ steps.typecheck.outcome }}"
+            echo "tests=${{ steps.tests.outcome }}"
+            echo "build=${{ steps.build.outcome }}"
+            echo
+            echo '## Typecheck'
+            echo '```text'
+            tail -n 320 /tmp/typecheck.log 2>/dev/null || true
+            echo '```'
+            echo '## Tests'
+            echo '```text'
+            tail -n 220 /tmp/tests.log 2>/dev/null || true
+            echo '```'
+            echo '## Build'
+            echo '```text'
+            tail -n 320 /tmp/build.log 2>/dev/null || true
+            echo '```'
+          } > TOP_TIER_CI_REPORT.md
+
+      - name: Commit attempted finalization
+        if: always()
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: finalize engagement purity and original composer" || true
+          git push origin HEAD:top-tier-rebuild-20260904
+
+      - name: Enforce verification
+        if: steps.typecheck.outcome != 'success' || steps.tests.outcome != 'success' || steps.build.outcome != 'success'
+        run: exit 1
+
+      - name: Remove one-time automation
+        shell: bash
+        run: |
+          rm -f \
+            .github/workflows/apply-top-tier-rebuild.yml \
+            .github/workflows/apply-top-tier-repair.yml \
+            .github/workflows/finalize-top-tier.yml \
+            .github/workflows/top-tier-export.yml \
+            scripts/apply-top-tier-rebuild.mjs \
+            scripts/repair-top-tier-rebuild.mjs \
+            scripts/finalize-top-tier-rebuild.mjs
+          git add -A
+          git commit -m "chore: remove one-time rebuild automation" || true
+          git push origin HEAD:top-tier-rebuild-20260904
+
+      - name: Fast-forward main from the verified tree
+        run: git push origin HEAD:main
