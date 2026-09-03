@@ -1586,7 +1586,7 @@ textarea {
   min-height: 34px;
   align-items: center;
   justify-content: flex-end;
-  margin: -4px 0 10px;
+  margin: -4px 0 0;
   border-bottom: 1px solid var(--border);
 }
 
@@ -10638,18 +10638,18 @@ a.analyticsSearchTag:focus-visible {
 .marketOrderFile a,
 .marketOrderSecret button {
   display: inline-flex;
-  min-height: 32px;
+  min-height: var(--action-height);
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 0;
-  border-radius: 5px;
-  padding: 6px 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 74%, var(--border));
+  border-radius: var(--action-radius);
+  padding: 0 var(--action-inline-padding);
   background: var(--accent);
-  color: #fff;
+  color: #fffaf2;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--action-font-size);
+  font-weight: var(--action-font-weight);
 }
 
 .marketExchangeLine > button,

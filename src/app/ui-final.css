@@ -816,7 +816,10 @@
     width: 100vw;
     max-width: none;
     margin-inline: calc(50% - 50vw);
-    padding-inline: 12px;
+    /* The brand begins 12px from the edge; the trailing hit target keeps
+       the visible menu glyph on that same visual grid. */
+    padding-block: 12px;
+    padding-inline: 12px 1px;
   }
 
   .siteHeader.hasPrimaryNav > .brand {
@@ -1055,7 +1058,7 @@
   :root[data-reader-page-turn="slide"]:has(.novelReaderShell),
   :root[data-reader-page-turn="instant"]:has(.novelReaderShell) {
     overflow: hidden;
-    scrollbar-gutter: auto;
+    scrollbar-gutter: stable;
   }
 
   :root[data-reader-page-turn="slide"] body:has(.novelReaderShell),
@@ -1065,18 +1068,16 @@
 
   :root[data-reader-page-turn="slide"] .novelReaderShell .readerText,
   :root[data-reader-page-turn="instant"] .novelReaderShell .readerText {
-    --reader-page-gap: calc(var(--reader-page-inline-gutter) * 2);
     box-sizing: border-box;
-    width: 100vw;
+    width: 100%;
     height: max(320px, calc(100dvh - var(--reader-page-block-start) - var(--reader-page-block-end)));
     column-fill: auto;
-    column-gap: var(--reader-page-gap);
-    column-rule: 8px solid var(--reader-bg);
-    column-width: var(--reader-page-column-width, calc(100vw - 44px));
+    column-gap: 0;
+    column-width: var(--reader-page-column-width, 100vw);
     overflow-x: auto;
     overflow-y: hidden;
     overscroll-behavior-x: none;
-    padding-inline: var(--reader-page-inline-gutter);
+    padding-inline: 0;
     scroll-behavior: auto;
     scrollbar-width: none;
     touch-action: pan-y pinch-zoom;
@@ -1084,8 +1085,8 @@
 
   :root[data-reader-page-turn="slide"] .novelReaderShell .readerPagedStage,
   :root[data-reader-page-turn="instant"] .novelReaderShell .readerPagedStage {
-    width: 100vw;
-    margin-inline: calc(var(--reader-page-inline-gutter) * -1);
+    width: 100%;
+    margin-inline: 0;
   }
 
   :root[data-reader-page-turn="slide"] .novelReaderShell .readerBreadcrumbs,
@@ -1106,6 +1107,11 @@
   :root[data-reader-page-turn="instant"] .novelReaderShell .readerSegment {
     content-visibility: visible;
     contain-intrinsic-size: none;
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell .readerParagraph,
+  :root[data-reader-page-turn="instant"] .novelReaderShell .readerParagraph {
+    margin-inline: var(--reader-page-inline-gutter);
   }
 
   :root[data-reader-page-turn="slide"] .novelReaderShell:not(.isReaderPageEnd) .readerChapterNavigation,
@@ -1482,26 +1488,6 @@
 .readerSettingRow .readerJustifyToggle {
   justify-self: end;
   margin-left: auto;
-}
-
-.readerJustifyToggle .settingToggleTrack {
-  width: 36px;
-  height: 21px;
-  background: var(--reader-border);
-}
-
-.readerJustifyToggle .settingToggleTrack > span {
-  width: 15px;
-  height: 15px;
-  background: var(--reader-panel);
-}
-
-.readerJustifyToggle input:checked ~ .settingToggleTrack {
-  background: var(--reader-accent);
-}
-
-.readerJustifyToggle input:checked ~ .settingToggleTrack > span {
-  transform: translateX(15px);
 }
 
 @media (min-width: 821px) {
@@ -2851,36 +2837,6 @@ nav.accountGrowthTools > a + a {
   justify-self: end;
 }
 
-.settingsReaderJustifyToggle .settingToggleTrack {
-  width: 36px;
-  height: 21px;
-}
-
-.settingsReaderJustifyToggle .settingToggleTrack > span {
-  width: 15px;
-  height: 15px;
-}
-
-.settingsReaderJustifyToggle input:checked ~ .settingToggleTrack > span {
-  transform: translateX(15px);
-}
-
-:root[data-reader-justify="off"] .settingsReaderJustifyToggle .settingToggleTrack {
-  background: var(--border);
-}
-
-:root[data-reader-justify="off"] .settingsReaderJustifyToggle .settingToggleTrack > span {
-  transform: translateX(0);
-}
-
-:root[data-reader-justify="on"] .settingsReaderJustifyToggle .settingToggleTrack {
-  background: var(--accent);
-}
-
-:root[data-reader-justify="on"] .settingsReaderJustifyToggle .settingToggleTrack > span {
-  transform: translateX(15px);
-}
-
 .previewReader {
   padding: 16px 2px;
 }
@@ -3100,10 +3056,10 @@ nav.accountGrowthTools > a + a {
     --reader-page-inline-gutter: clamp(20px, 5.65vw, 24px);
     --reader-page-block-start: max(28px, env(safe-area-inset-top));
     --reader-page-block-end: max(28px, env(safe-area-inset-bottom));
-    width: 100vw;
+    width: 100%;
     height: 100dvh;
     min-height: 100dvh;
-    padding: var(--reader-page-block-start) var(--reader-page-inline-gutter) var(--reader-page-block-end);
+    padding: var(--reader-page-block-start) 0 var(--reader-page-block-end);
   }
 
   .readerNovelLink {
@@ -3442,6 +3398,13 @@ nav.accountGrowthTools > a + a {
   gap: 2px;
 }
 
+@media (min-width: 821px) {
+  .headerTools:has(.searchForm:not(.isPinnedOpen):not(.isDefaultOpen)),
+  .headerActions {
+    gap: 0;
+  }
+}
+
 .catalogMenuTrigger {
   width: 30px;
   height: 30px;
@@ -3584,22 +3547,13 @@ nav.accountGrowthTools > a + a {
 }
 
 .accountProfile .accountAvatarEditButton {
-  min-height: 30px;
-  border: 0;
-  border-radius: var(--action-radius);
-  padding: 0 8px;
-  background: transparent;
-  color: var(--accent);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 650;
-  cursor: pointer;
+  white-space: nowrap;
 }
 
 .accountProfile .accountAvatarEditButton:hover,
 .accountProfile .accountAvatarEditButton:focus-visible {
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
-  color: var(--accent);
+  background: var(--accent-strong);
+  color: #fffaf2;
   outline: 0;
 }
 
@@ -3631,11 +3585,10 @@ nav.accountGrowthTools > a + a {
 
 .avatarEditorDrawer > header {
   display: flex;
-  min-height: 60px;
+  min-height: 54px;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border-bottom: 1px solid var(--border);
   padding: 0 14px 0 20px;
 }
 
@@ -3703,25 +3656,17 @@ nav.accountGrowthTools > a + a {
 
 .accountProfile .avatarRandomizeButton,
 .accountProfile .avatarUploadButton {
-  display: grid;
+  display: inline-flex;
   min-height: var(--action-height);
-  place-items: center;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   border: 1px solid var(--border);
   border-radius: var(--action-radius);
-  padding: 0;
+  padding: 0 11px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-}
-
-.accountProfile .avatarRandomizeButton {
-  width: var(--action-height);
-}
-
-.accountProfile .avatarUploadButton {
-  display: inline-flex;
-  padding: 0 11px;
-  gap: 5px;
   font-size: var(--action-font-size);
   font-weight: 650;
 }
@@ -3769,7 +3714,7 @@ nav.accountGrowthTools > a + a {
   }
 
   .avatarEditorDrawer > header {
-    min-height: 58px;
+    min-height: 54px;
   }
 
   .avatarEditorBody {
@@ -3853,7 +3798,7 @@ nav.accountGrowthTools > a + a {
  * redemption row separated once underneath. */
 .marketWalletTools {
   display: grid;
-  width: min(100%, 620px);
+  width: min(100%, 430px);
   grid-template-columns: minmax(0, 1fr);
   gap: 0;
   border: 0;
@@ -3866,8 +3811,8 @@ nav.accountGrowthTools > a + a {
   display: grid;
   min-width: 0;
   align-content: start;
-  gap: 9px;
-  padding: 14px 0 15px;
+  gap: 8px;
+  padding: 12px 0 14px;
 }
 
 .marketExchangeName strong,
@@ -3884,27 +3829,24 @@ nav.accountGrowthTools > a + a {
 }
 
 .marketExchangePanel {
-  min-height: 62px;
-  border-radius: 8px;
-  padding: 8px 12px 9px;
+  min-height: 56px;
+  border-radius: 6px;
+  padding: 7px 10px 8px;
 }
 
 .marketExchangeRow input,
 .marketExchangeRow output {
-  font-size: 21px;
+  font-size: 19px;
 }
 
 .marketExchangeSwap {
-  margin: -14px auto -14px;
+  margin: -12px auto -12px;
 }
 
 .marketExchangeLine > .marketExchangeSubmit {
-  width: fit-content;
-  min-width: 88px;
-  min-height: 35px;
-  justify-self: start;
-  border-radius: 6px;
-  font-size: 13px;
+  width: 100%;
+  min-width: 0;
+  justify-self: stretch;
 }
 
 .marketCodeLine {
@@ -3914,6 +3856,28 @@ nav.accountGrowthTools > a + a {
   border-top: 1px solid var(--border);
   border-left: 0;
   padding: 14px 0 0;
+}
+
+.marketCodeInputRow {
+  grid-template-columns: minmax(0, 1fr) 76px;
+}
+
+.marketCodeInputRow label {
+  min-height: var(--action-height);
+  border-radius: var(--action-radius);
+  padding: 5px 9px;
+}
+
+.marketExchangeLine > .marketExchangeSubmit,
+.marketCodeLine button {
+  min-height: var(--action-height);
+  border: 1px solid color-mix(in srgb, var(--accent) 74%, var(--border));
+  border-radius: var(--action-radius);
+  padding: 0 var(--action-inline-padding);
+  background: var(--accent);
+  color: #fffaf2;
+  font-size: var(--action-font-size);
+  font-weight: var(--action-font-weight);
 }
 
 .marketOrdersSection {

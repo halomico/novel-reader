@@ -61,7 +61,7 @@ export default async function OriginalAuthorPage({ params, searchParams }: Autho
       <section className="originalPage">
         <header className="originalAuthorProfile">
           <UserAvatar className="originalAuthorAvatar" userId={author.id} displayName={displayName} avatarPath={author.avatarPath} />
-          <div>
+          <div className="originalAuthorIdentity">
             <h1>{displayName}</h1>
             <p>@{author.username} · Lv.{author.trustLevel}</p>
           </div>

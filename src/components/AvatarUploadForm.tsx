@@ -38,6 +38,7 @@ function AvatarEditorActions({
         onClick={onRandomize}
       >
         <Dices size={18} aria-hidden="true" />
+        <span>{uiText(locale, "随机")}</span>
       </button>
       <label
         className={pending ? "avatarUploadButton isPending" : "avatarUploadButton"}
@@ -178,7 +179,7 @@ export function AvatarUploadForm({
           <strong>{displayName}</strong>
           <small>@{username} · Lv.{trustLevel} · {levelName}</small>
         </div>
-        <button className="accountAvatarEditButton" type="button" onClick={() => setOpen(true)}>
+        <button className="accountActionButton accountAvatarEditButton" type="button" onClick={() => setOpen(true)}>
           {uiText(locale, "编辑头像")}
         </button>
       </div>

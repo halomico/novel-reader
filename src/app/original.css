@@ -582,6 +582,7 @@
 .originalArticleTags {
   min-width: 0;
   flex: 0 1 auto;
+  height: 20px;
   gap: 4px;
   margin-left: auto;
   overflow: hidden;
@@ -589,6 +590,13 @@
 
 .originalArticleTag {
   flex: 0 0 auto;
+  min-height: 20px;
+  padding: 2px 7px;
+  font-size: 11px;
+}
+
+.originalArticleTag small {
+  font-size: 10px;
 }
 
 .originalReaderShell {
@@ -654,7 +662,8 @@
   gap: 3px;
 }
 
-.originalAuthorLink {
+.originalAuthorLink,
+.originalCommentAuthor {
   width: fit-content;
   color: var(--reader-text, var(--text));
   font-size: 14px;
@@ -664,7 +673,9 @@
 }
 
 .originalAuthorLink:hover,
-.originalAuthorLink:focus-visible {
+.originalAuthorLink:focus-visible,
+.originalCommentAuthor:hover,
+.originalCommentAuthor:focus-visible {
   color: var(--accent);
 }
 
@@ -931,20 +942,6 @@
   gap: 2px;
 }
 
-.originalCommentAuthor {
-  width: fit-content;
-  color: var(--accent);
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 1.3;
-  text-decoration: none;
-}
-
-.originalCommentAuthor:hover,
-.originalCommentAuthor:focus-visible {
-  color: color-mix(in srgb, var(--accent) 78%, var(--reader-text, var(--text)));
-}
-
 .originalCommentList > article > header time {
   color: var(--reader-muted, var(--muted));
   font-size: 11px;
@@ -981,6 +978,13 @@
   margin: 0;
 }
 
+.originalAuthorIdentity {
+  display: grid;
+  min-width: 0;
+  height: 48px;
+  align-content: space-between;
+}
+
 .originalAuthorProfile h1 {
   font-size: 19px;
   line-height: 1.35;
@@ -989,7 +993,8 @@
 .originalAuthorProfile p,
 .originalAuthorCount {
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .originalBlockedAuthorList {
@@ -2331,6 +2336,10 @@
     width: 44px;
     height: 44px;
     flex-basis: 44px;
+  }
+
+  .originalAuthorIdentity {
+    height: 44px;
   }
 
   .originalAuthorCount {
