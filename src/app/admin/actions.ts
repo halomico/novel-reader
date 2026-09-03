@@ -767,6 +767,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
   const audioAccessMode = homeCardAccessModeField(formData, "audioAccessMode");
   const fileAccessMode = homeCardAccessModeField(formData, "fileAccessMode");
   const tagAccessMode = homeCardAccessModeField(formData, "tagAccessMode");
+  const originalAccessMode = homeCardAccessModeField(formData, "originalAccessMode");
   const announcementCardAccessMode = homeCardAccessModeField(formData, "announcementCardAccessMode");
   const advancedTagAccessMode = mediaAccessModeField(formData, "advancedTagAccessMode");
   const hotwordAccessMode = mediaAccessModeField(formData, "hotwordAccessMode");
@@ -774,6 +775,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
     announcement: announcementCardAccessMode,
     novels: novelAccessMode,
     tags: tagAccessMode,
+    original: originalAccessMode,
     video: videoAccessMode,
     audio: audioAccessMode,
     file: fileAccessMode,
@@ -877,6 +879,25 @@ export async function saveAdminSettingsAction(formData: FormData) {
       10_000,
     ),
     bidirectionalCurrencyExchangeEnabled: formData.get("bidirectionalCurrencyExchangeEnabled") === "on",
+    // The original channel uses the shared four-state access selector below as
+    // its single source of truth. Keep the legacy boolean synchronized so old
+    // deployments can still read the setting without creating a second UI
+    // switch that can drift out of sync.
+    originalChannelEnabled: originalAccessMode !== "off",
+    originalPublishMinSoda: intField(formData, "originalPublishMinSoda", previous.originalPublishMinSoda, 0, 2_000_000_000),
+    originalPublishMinLevel: intField(formData, "originalPublishMinLevel", previous.originalPublishMinLevel, 1, 6),
+    originalPublishFeeSoda: intField(formData, "originalPublishFeeSoda", previous.originalPublishFeeSoda, 0, 10_000),
+    originalEditFeeSoda: intField(formData, "originalEditFeeSoda", previous.originalEditFeeSoda, 0, 10_000),
+    originalMaxArticlePrice: intField(formData, "originalMaxArticlePrice", previous.originalMaxArticlePrice, 1, 2_000_000_000),
+    originalFreeCommentsPerLevel: intField(formData, "originalFreeCommentsPerLevel", previous.originalFreeCommentsPerLevel, 0, 100),
+    originalCommentCostSoda: intField(formData, "originalCommentCostSoda", previous.originalCommentCostSoda, 0, 10_000),
+    originalArticleMinWords: intField(formData, "originalArticleMinWords", previous.originalArticleMinWords, 1, 200_000),
+    originalCommentMinChars: intField(formData, "originalCommentMinChars", previous.originalCommentMinChars, 1, 200),
+    originalMaxTags: intField(formData, "originalMaxTags", previous.originalMaxTags, 1, 20),
+    originalPageSize: intField(formData, "originalPageSize", previous.originalPageSize, 5, 100),
+    originalPublishNoticeText: String(formData.get("originalPublishNoticeText") || "").normalize("NFKC").trim().slice(0, 120),
+    originalPublishNoticeLinkLabel: String(formData.get("originalPublishNoticeLinkLabel") || "").normalize("NFKC").trim().slice(0, 40),
+    originalPublishNoticeUrl: String(formData.get("originalPublishNoticeUrl") || "").trim().slice(0, 500),
     userDailyRegistrationLimitPerIp: intField(
       formData,
       "userDailyRegistrationLimitPerIp",
@@ -927,6 +948,8 @@ export async function saveAdminSettingsAction(formData: FormData) {
   revalidatePath("/media");
   revalidatePath("/tags");
   revalidatePath("/tags/search");
+  revalidatePath("/original");
+  revalidatePath("/admin/original");
   revalidatePath("/search");
   revalidatePath("/settings");
   revalidatePath("/admin");

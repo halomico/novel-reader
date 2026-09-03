@@ -35,6 +35,28 @@ export function setUserTagHidden(userId: number, tagId: number, hidden: boolean)
   return true;
 }
 
+export function replaceUserHiddenTags(userId: number, tagIds: readonly number[]): number[] {
+  const db = getDb();
+  const uniqueIds = [...new Set(tagIds.filter((tagId) => Number.isInteger(tagId) && tagId > 0))].slice(0, 1_000);
+  const validIds = uniqueIds.length
+    ? (db
+        .prepare(`SELECT id FROM tags WHERE id IN (${uniqueIds.map(() => "?").join(",")}) ORDER BY id ASC`)
+        .all(...uniqueIds) as Array<{ id: number }>).map((row) => row.id)
+    : [];
+
+  db.exec("BEGIN");
+  try {
+    db.prepare("DELETE FROM user_hidden_tags WHERE user_id = ?").run(userId);
+    const insert = db.prepare("INSERT INTO user_hidden_tags (user_id, tag_id) VALUES (?, ?)");
+    for (const tagId of validIds) insert.run(userId, tagId);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+  return validIds;
+}
+
 export function filterTagsForUser<T extends Tag>(tags: readonly T[], userId: number | null | undefined): T[] {
   if (!userId || !tags.length) return [...tags];
   const hidden = listEffectivelyHiddenTagIds(userId);

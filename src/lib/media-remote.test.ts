@@ -198,6 +198,21 @@ test("uploads directly to the media node while the main app keeps only the index
     assert.equal(fs.existsSync(mainMediaRoot), false);
 
     const signedPlaybackUrl = delivery.mediaDeliveryUrl(asset, true);
+    const playbackPreflight = await fetch(signedPlaybackUrl, {
+      method: "OPTIONS",
+      headers: {
+        Origin: browserOrigin,
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "range,if-range",
+      },
+    });
+    assert.equal(playbackPreflight.status, 204);
+    assert.equal(playbackPreflight.headers.get("access-control-allow-origin"), browserOrigin);
+    assert.match(playbackPreflight.headers.get("access-control-allow-methods") || "", /GET/);
+    const playbackHead = await fetch(signedPlaybackUrl, { method: "HEAD", headers: { Origin: browserOrigin } });
+    assert.equal(playbackHead.status, 200);
+    assert.equal(playbackHead.headers.get("access-control-allow-origin"), browserOrigin);
+    assert.equal(playbackHead.headers.get("content-length"), String(content.length));
     const playback = await fetch(signedPlaybackUrl);
     assert.equal(playback.status, 200);
     assert.equal(playback.headers.get("cache-control"), "private, max-age=300, no-transform");

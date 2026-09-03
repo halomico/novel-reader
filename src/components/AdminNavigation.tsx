@@ -3,6 +3,7 @@
 import {
   BarChart3,
   BookOpen,
+  FilePenLine,
   House,
   LibraryBig,
   LogOut,
@@ -32,6 +33,7 @@ export type AdminNavKey =
   | "media"
   | "market"
   | "tags"
+  | "original"
   | "access"
   | "station";
 
@@ -39,6 +41,7 @@ const navItems = [
   { href: "/admin", label: "后台首页", value: "home", icon: House },
   { href: "/admin/books", label: "小说管理", value: "books", icon: BookOpen },
   { href: "/admin/tags", label: "标签管理", value: "tags", icon: Tags },
+  { href: "/admin/original", label: "原创管理", value: "original", icon: FilePenLine },
   { href: "/admin/access", label: "内容访问", value: "access", icon: ShieldCheck },
   { href: "/admin/station", label: "站务中心", value: "station", icon: MessagesSquare },
   { href: "/admin/media", label: "资源管理", value: "media", icon: LibraryBig },

@@ -94,11 +94,11 @@ export function NovelCatalogSort({
                 onClick={() => setOpen(false)}
                 key={value}
               >
-                <span>{tr(label)}</span>
                 {active ? itemOrder === "asc"
                   ? <ArrowUp size={14} aria-hidden="true" />
                   : <ArrowDown size={14} aria-hidden="true" />
-                : null}
+                : <i className="catalogMenuItemMarker" aria-hidden="true" />}
+                <span>{tr(label)}</span>
               </Link>
             );
           })}

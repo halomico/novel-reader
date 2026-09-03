@@ -100,6 +100,21 @@ export type SiteSettings = {
   marketEnabled: boolean;
   cookieToSodaRate: number;
   bidirectionalCurrencyExchangeEnabled: boolean;
+  originalChannelEnabled: boolean;
+  originalPublishMinSoda: number;
+  originalPublishMinLevel: number;
+  originalPublishFeeSoda: number;
+  originalEditFeeSoda: number;
+  originalMaxArticlePrice: number;
+  originalFreeCommentsPerLevel: number;
+  originalCommentCostSoda: number;
+  originalArticleMinWords: number;
+  originalCommentMinChars: number;
+  originalMaxTags: number;
+  originalPageSize: number;
+  originalPublishNoticeText: string;
+  originalPublishNoticeLinkLabel: string;
+  originalPublishNoticeUrl: string;
   userDailyRegistrationLimitPerIp: number;
   userDailyReportLimit: number;
   userAvatarMaxBytes: number;
@@ -133,7 +148,7 @@ type SiteSettingsGlobal = typeof globalThis & {
   siteSettingsCache?: SiteSettingsCache;
 };
 
-const SITE_SETTINGS_CACHE_SCHEMA_VERSION = 16;
+const SITE_SETTINGS_CACHE_SCHEMA_VERSION = 19;
 
 const DEFAULT_SETTINGS_PREVIEW_TEXT =
   process.env.SETTINGS_PREVIEW_TEXT?.trim() ||
@@ -216,6 +231,21 @@ const DEFAULT_SETTINGS: SiteSettings = {
   marketEnabled: true,
   cookieToSodaRate: 10,
   bidirectionalCurrencyExchangeEnabled: false,
+  originalChannelEnabled: true,
+  originalPublishMinSoda: 10,
+  originalPublishMinLevel: 2,
+  originalPublishFeeSoda: 1,
+  originalEditFeeSoda: 1,
+  originalMaxArticlePrice: 1_000,
+  originalFreeCommentsPerLevel: 3,
+  originalCommentCostSoda: 1,
+  originalArticleMinWords: 2_000,
+  originalCommentMinChars: 4,
+  originalMaxTags: 8,
+  originalPageSize: 20,
+  originalPublishNoticeText: "请在发表文章前仔细阅读",
+  originalPublishNoticeLinkLabel: "社区准则",
+  originalPublishNoticeUrl: "/announcements",
   userDailyRegistrationLimitPerIp: 0,
   userDailyReportLimit: 50,
   userAvatarMaxBytes: 0,
@@ -301,6 +331,17 @@ function cleanBool(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
 
+function cleanLink(value: unknown, fallback: string): string {
+  const link = cleanText(value).slice(0, 500);
+  if (link.startsWith("/") && !link.startsWith("//")) return link;
+  try {
+    const url = new URL(link);
+    return url.protocol === "http:" || url.protocol === "https:" ? link : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export function normalizeNovelSourceSearchModes(value: unknown): Record<string, NovelSourceSearchMode> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {};
@@ -318,15 +359,18 @@ export function normalizeNovelSourceSearchModes(value: unknown): Record<string, 
 
 function legacyHomePortalAccessModes(value: Record<string, unknown>): HomePortalAccessModes {
   const displayed = new Set(Array.isArray(value.publicDisplayHomeCards) ? value.publicDisplayHomeCards : []);
-  const mode = (key: string, enabledKey: string, guestKey: string) => resolveHomePortalAccessMode(
+  const mode = (key: string, enabledKey: string, guestKey: string, guestDefault = key === "announcement") => resolveHomePortalAccessMode(
     cleanBool(value[enabledKey], true),
-    cleanBool(value[guestKey], key === "announcement"),
+    cleanBool(value[guestKey], guestDefault),
     displayed.has(key),
   );
   return {
     announcement: mode("announcement", "announcementCardEnabled", "guestAnnouncementCardEnabled"),
     novels: mode("novels", "novelLibraryEnabled", "guestLibraryNavEnabled"),
     tags: mode("tags", "tagLibraryEnabled", "guestTagLibraryNavEnabled"),
+    // The channel was added after the legacy home-card model. Preserve its
+    // current public default when older settings have no original keys.
+    original: mode("original", "originalChannelEnabled", "guestOriginalChannelNavEnabled", true),
     video: mode("video", "videoLibraryEnabled", "guestVideoNavEnabled"),
     audio: mode("audio", "audioLibraryEnabled", "guestAudioNavEnabled"),
     file: mode("file", "fileLibraryEnabled", "guestFileNavEnabled"),
@@ -440,6 +484,15 @@ function readSiteSettingsFromDisk(): SiteSettings {
         console.error("Failed to remove legacy settings", error);
       }
     }
+    const homePortalAccessModes = normalizeHomePortalAccessModes(
+      parsed.homePortalAccessModes,
+      legacyHomePortalAccessModes(parsed as Record<string, unknown>),
+    );
+    const explicitOriginalAccessMode = Boolean(
+      parsed.homePortalAccessModes &&
+      typeof parsed.homePortalAccessModes === "object" &&
+      Object.hasOwn(parsed.homePortalAccessModes, "original"),
+    );
     return {
       siteName: cleanText(parsed.siteName),
       siteTitle: cleanText(parsed.siteTitle),
@@ -534,6 +587,30 @@ function readSiteSettingsFromDisk(): SiteSettings {
         parsed.bidirectionalCurrencyExchangeEnabled,
         DEFAULT_SETTINGS.bidirectionalCurrencyExchangeEnabled,
       ),
+      // Keep the pre-four-state flag only as a compatibility projection. When
+      // the shared mode is present it is the source of truth; old files that
+      // predate the mode continue to use their legacy boolean value.
+      originalChannelEnabled: explicitOriginalAccessMode
+        ? homePortalAccessModes.original !== "off"
+        : cleanBool(parsed.originalChannelEnabled, DEFAULT_SETTINGS.originalChannelEnabled),
+      originalPublishMinSoda: cleanInt(parsed.originalPublishMinSoda, DEFAULT_SETTINGS.originalPublishMinSoda, 0, 2_000_000_000),
+      originalPublishMinLevel: cleanInt(parsed.originalPublishMinLevel, DEFAULT_SETTINGS.originalPublishMinLevel, 1, 6),
+      originalPublishFeeSoda: cleanInt(parsed.originalPublishFeeSoda, DEFAULT_SETTINGS.originalPublishFeeSoda, 0, 10_000),
+      originalEditFeeSoda: cleanInt(parsed.originalEditFeeSoda, DEFAULT_SETTINGS.originalEditFeeSoda, 0, 10_000),
+      originalMaxArticlePrice: cleanInt(parsed.originalMaxArticlePrice, DEFAULT_SETTINGS.originalMaxArticlePrice, 1, 2_000_000_000),
+      originalFreeCommentsPerLevel: cleanInt(parsed.originalFreeCommentsPerLevel, DEFAULT_SETTINGS.originalFreeCommentsPerLevel, 0, 100),
+      originalCommentCostSoda: cleanInt(parsed.originalCommentCostSoda, DEFAULT_SETTINGS.originalCommentCostSoda, 0, 10_000),
+      originalArticleMinWords: cleanInt(parsed.originalArticleMinWords, DEFAULT_SETTINGS.originalArticleMinWords, 1, 200_000),
+      originalCommentMinChars: cleanInt(parsed.originalCommentMinChars, DEFAULT_SETTINGS.originalCommentMinChars, 1, 200),
+      originalMaxTags: cleanInt(parsed.originalMaxTags, DEFAULT_SETTINGS.originalMaxTags, 1, 20),
+      originalPageSize: cleanInt(parsed.originalPageSize, DEFAULT_SETTINGS.originalPageSize, 5, 100),
+      originalPublishNoticeText: (typeof parsed.originalPublishNoticeText === "string"
+        ? cleanText(parsed.originalPublishNoticeText)
+        : DEFAULT_SETTINGS.originalPublishNoticeText).slice(0, 120),
+      originalPublishNoticeLinkLabel: (typeof parsed.originalPublishNoticeLinkLabel === "string"
+        ? cleanText(parsed.originalPublishNoticeLinkLabel)
+        : DEFAULT_SETTINGS.originalPublishNoticeLinkLabel).slice(0, 40),
+      originalPublishNoticeUrl: cleanLink(parsed.originalPublishNoticeUrl, DEFAULT_SETTINGS.originalPublishNoticeUrl),
       userDailyRegistrationLimitPerIp: cleanInt(
         parsed.userDailyRegistrationLimitPerIp,
         DEFAULT_SETTINGS.userDailyRegistrationLimitPerIp,
@@ -545,10 +622,7 @@ function readSiteSettingsFromDisk(): SiteSettings {
       stationDisplayName: cleanText(parsed.stationDisplayName).slice(0, 20) || DEFAULT_SETTINGS.stationDisplayName,
       announcementCardTarget: parsed.announcementCardTarget === "latest" ? "latest" : "list",
       homePortalOrder: normalizeHomePortalOrder(parsed.homePortalOrder),
-      homePortalAccessModes: normalizeHomePortalAccessModes(
-        parsed.homePortalAccessModes,
-        legacyHomePortalAccessModes(parsed as Record<string, unknown>),
-      ),
+      homePortalAccessModes,
       analyticsEnabled: cleanBool(parsed.analyticsEnabled, DEFAULT_SETTINGS.analyticsEnabled),
       analyticsRealtimeLimit: cleanInt(parsed.analyticsRealtimeLimit, DEFAULT_SETTINGS.analyticsRealtimeLimit, 0, 10_000),
       advancedTagSearchEnabled: cleanBool(parsed.advancedTagSearchEnabled, DEFAULT_SETTINGS.advancedTagSearchEnabled),

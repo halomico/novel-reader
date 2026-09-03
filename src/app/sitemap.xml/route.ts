@@ -1,4 +1,4 @@
-import { canAccessHomeAnnouncementCard, isNovelLibraryPublic, isTagLibraryEnabled, isTagLibraryPublic } from "@/lib/config";
+import { canAccessHomeAnnouncementCard, canAccessOriginalChannel, isNovelLibraryPublic, isTagLibraryEnabled, isTagLibraryPublic } from "@/lib/config";
 import { getDb } from "@/lib/db";
 import { isMediaKindPublic, type MediaKind } from "@/lib/media";
 import { absoluteSiteUrl } from "@/lib/seo";
@@ -17,6 +17,12 @@ export function GET() {
 
   if (isTagLibraryEnabled() && isTagLibraryPublic()) {
     urls.push(absoluteSiteUrl("/sitemap/tags.xml"));
+  }
+  if (canAccessOriginalChannel(false)) {
+    const originalCount = (getDb().prepare(
+      "SELECT COUNT(*) AS count FROM original_articles WHERE status = 'published'",
+    ).get() as { count: number }).count;
+    if (originalCount > 0) urls.push(absoluteSiteUrl("/sitemap/original.xml"));
   }
   if ((["video", "audio", "file"] as MediaKind[]).some(isMediaKindPublic)) {
     urls.push(absoluteSiteUrl("/sitemap/media.xml"));

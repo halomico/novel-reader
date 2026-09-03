@@ -11,6 +11,7 @@ import {
   getNovelReadAccess,
   getSodaNovelPreviewSegments,
   listReadableNovelIds,
+  listSearchableNovelIds,
   unlockNovelWithSoda,
 } from "./novel-access";
 import { readSiteSettings, writeSiteSettings } from "./site-settings";
@@ -73,6 +74,12 @@ test("supports chapter previews and idempotent permanent soda unlocks", (t) => {
   assert.equal(getNovelReadAccess(book, null, { chapterSortOrder: 0 }).reason, "preview");
   assert.equal(getNovelReadAccess(book, null, { chapterSortOrder: 1 }).reason, "login_required");
   assert.equal(getNovelReadAccess(book, { id: userId, role: "user" }, { chapterSortOrder: 1 }).reason, "unlock_required");
+  assert.deepEqual(listReadableNovelIds({ id: userId, role: "user" }), []);
+  assert.deepEqual(
+    listSearchableNovelIds({ id: userId, role: "user" }),
+    [novelId],
+    "未解锁小说应参与全文检索，但正文入口仍由阅读权限门控",
+  );
   assert.deepEqual(unlockNovelWithSoda(userId, novelId), { ok: true, charged: true, sodaBalance: 2 });
   assert.deepEqual(unlockNovelWithSoda(userId, novelId), { ok: true, charged: false, sodaBalance: 2 });
   assert.equal(getNovelReadAccess(book, { id: userId, role: "user" }, { chapterSortOrder: 0 }).reason, "granted");

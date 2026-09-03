@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import { PageContextBar } from "@/components/PageContextBar";
 import { SiteHeader } from "@/components/SiteHeader";
+import { WorkspacePage, WorkspacePageHeader } from "@/components/WorkspacePageChrome";
 import { canAccessHomeAnnouncementCard, canSeeHomePortalContentEntry } from "@/lib/config";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { listVisibleAnnouncements } from "@/lib/station";
@@ -45,8 +46,8 @@ export default async function AnnouncementsPage() {
     <main className="appShell announcementShell">
       <SiteHeader currentUser={user} />
       <PageContextBar items={[{ label: homeLabel, href: "/" }, { label: announcementLabel }]} />
-      <section className="messagesPage publicAnnouncementsPage">
-        <header className="messagesHeader"><h1><Bell size={20} aria-hidden="true" />{announcementLabel}</h1></header>
+      <WorkspacePage className="messagesPage publicAnnouncementsPage">
+        <WorkspacePageHeader className="messagesHeader" icon={Bell} title={announcementLabel} />
         <div className="announcementList">
           {displayAnnouncements.length ? displayAnnouncements.map((announcement) => (
             <Link className="announcementListItem" href={`/announcements/${announcement.id}`} key={announcement.id}>
@@ -59,7 +60,7 @@ export default async function AnnouncementsPage() {
             </Link>
           )) : <p className="messageEmpty">{uiText(locale, "暂无公告")}</p>}
         </div>
-      </section>
+      </WorkspacePage>
     </main>
   );
 }

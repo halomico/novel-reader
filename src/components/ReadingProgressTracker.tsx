@@ -2,6 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import type { ReadingProgress } from "@/lib/reading-progress";
+import { READER_LAYOUT_CHANGE_EVENT, resolveReaderPageMetrics } from "@/lib/reader-layout";
+import { normalizeReaderPageTurn } from "@/lib/ui-preferences";
 
 type StoredProgress = {
   novelId: number;
@@ -17,6 +19,7 @@ type StoredProgress = {
 const STORAGE_PREFIX = "novel-reader:reading-progress:";
 const MAX_LOCAL_ITEMS = 30;
 const SYNC_INTERVAL_MS = 20_000;
+const MOBILE_READER_QUERY = "(max-width: 820px)";
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(Math.max(value, minimum), maximum);
@@ -56,11 +59,34 @@ function progressChanged(left: StoredProgress | null, right: StoredProgress): bo
     left.completed !== right.completed;
 }
 
-function scrollToProgress(progress: Pick<StoredProgress, "segmentIndex" | "segmentRatio">) {
+function scrollToProgress(
+  progress: Pick<StoredProgress, "segmentIndex" | "segmentRatio">,
+  totalSegments: number,
+) {
   const segment = document.querySelector<HTMLElement>(
     `.readerSegment[data-segment-index="${progress.segmentIndex}"]`,
   );
   if (!segment) return;
+  const readerText = document.querySelector<HTMLElement>(".readerText");
+  if (
+    readerText &&
+    window.matchMedia(MOBILE_READER_QUERY).matches &&
+    normalizeReaderPageTurn(document.documentElement.dataset.readerPageTurn) !== "scroll"
+  ) {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      const localRatio = (progress.segmentIndex + clamp(progress.segmentRatio, 0, 1)) / Math.max(totalSegments, 1);
+      const renderedGap = Number.parseFloat(getComputedStyle(readerText).columnGap);
+      const metrics = resolveReaderPageMetrics({
+        viewportWidth: readerText.getBoundingClientRect().width,
+        scrollWidth: readerText.scrollWidth,
+        scrollLeft: readerText.scrollLeft,
+        pageGap: Number.isFinite(renderedGap) ? renderedGap : 0,
+      });
+      const targetIndex = Math.round(localRatio * Math.max(metrics.count - 1, 0));
+      readerText.scrollTo({ left: targetIndex * metrics.stride, behavior: "auto" });
+    }));
+    return;
+  }
   const header = document.querySelector<HTMLElement>(".readerSiteHeader");
   const headerOffset = header?.getBoundingClientRect().height || 0;
   const target = window.scrollY + segment.getBoundingClientRect().top +
@@ -120,7 +146,7 @@ export function ReadingProgressTracker({
 
     if (resume && resumeProgress) {
       window.requestAnimationFrame(() => {
-        scrollToProgress(resumeProgress);
+        scrollToProgress(resumeProgress, totalSegments);
         const url = new URL(window.location.href);
         url.searchParams.delete("resume");
         window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
@@ -130,18 +156,37 @@ export function ReadingProgressTracker({
     function measureProgress() {
       frameRef.current = null;
       if (!totalSegments) return;
-      const probeY = clamp(window.innerHeight * 0.42, 80, Math.max(window.innerHeight - 80, 80));
-      const target = document.elementFromPoint(window.innerWidth / 2, probeY);
-      const documentBottomReached =
-        window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 80;
+      const readerText = document.querySelector<HTMLElement>(".readerText");
+      const paged = Boolean(readerText) &&
+        window.matchMedia(MOBILE_READER_QUERY).matches &&
+        normalizeReaderPageTurn(document.documentElement.dataset.readerPageTurn) !== "scroll";
+      const readerRect = readerText?.getBoundingClientRect();
+      const probeY = paged && readerRect
+        ? clamp(readerRect.top + readerRect.height * 0.42, readerRect.top + 12, readerRect.bottom - 12)
+        : clamp(window.innerHeight * 0.42, 80, Math.max(window.innerHeight - 80, 80));
+      const probeX = paged && readerRect
+        ? clamp(readerRect.left + readerRect.width * 0.5, readerRect.left + 12, readerRect.right - 12)
+        : window.innerWidth / 2;
+      const target = document.elementFromPoint(probeX, probeY);
+      const readingEndReached = paged && readerText
+        ? readerText.scrollLeft + readerText.clientWidth >= readerText.scrollWidth - 24
+        : window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 80;
       const segment = target?.closest<HTMLElement>(".readerSegment") ||
-        (documentBottomReached
+        (readingEndReached
           ? document.querySelector<HTMLElement>(".readerSegment:last-of-type")
           : null);
       if (!segment) return;
       const segmentIndex = Math.max(Number(segment.dataset.segmentIndex || 0), 0);
-      const rect = segment.getBoundingClientRect();
-      const segmentRatio = rect.height > 0 ? clamp((probeY - rect.top) / rect.height, 0, 1) : 0;
+      const segmentRects = paged
+        ? Array.from(segment.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0)
+        : [];
+      const fragmentIndex = segmentRects.findIndex((rect) => (
+        probeX >= rect.left && probeX <= rect.right && probeY >= rect.top && probeY <= rect.bottom
+      ));
+      const activeRect = fragmentIndex >= 0 ? segmentRects[fragmentIndex] : segment.getBoundingClientRect();
+      const segmentRatio = paged && fragmentIndex >= 0
+        ? clamp((fragmentIndex + (probeY - activeRect.top) / Math.max(activeRect.height, 1)) / segmentRects.length, 0, 1)
+        : activeRect.height > 0 ? clamp((probeY - activeRect.top) / activeRect.height, 0, 1) : 0;
       const localProgress = (segmentIndex + segmentRatio) / totalSegments;
       const progressPercent = clamp(((chapterIndex + localProgress) / totalChapters) * 100, 0, 100);
       const lastChapter = chapterIndex >= totalChapters - 1;
@@ -152,7 +197,7 @@ export function ReadingProgressTracker({
         segmentRatio,
         progressPercent,
         contentVersion,
-        completed: (lastChapter && documentBottomReached) || progressPercent >= 98,
+        completed: (lastChapter && readingEndReached) || progressPercent >= 98,
         savedAt: Date.now(),
       };
       currentRef.current = next;
@@ -195,13 +240,18 @@ export function ReadingProgressTracker({
     }
 
     const onScroll = () => scheduleMeasure(true);
+    const onReaderScroll = () => scheduleMeasure(true);
     const onResize = () => scheduleMeasure(false);
+    const onReaderLayout = () => scheduleMeasure(false);
     const onPageHide = () => {
       measureProgress();
       flush();
     };
     window.addEventListener("scroll", onScroll, { passive: true });
+    const readerText = document.querySelector<HTMLElement>(".readerText");
+    readerText?.addEventListener("scroll", onReaderScroll, { passive: true });
     window.addEventListener("resize", onResize);
+    window.addEventListener(READER_LAYOUT_CHANGE_EVENT, onReaderLayout);
     window.addEventListener("pagehide", onPageHide);
     document.addEventListener("visibilitychange", onVisibilityChange);
     flushTimerRef.current = window.setInterval(flush, SYNC_INTERVAL_MS);
@@ -212,7 +262,9 @@ export function ReadingProgressTracker({
       measureProgress();
       flush();
       window.removeEventListener("scroll", onScroll);
+      readerText?.removeEventListener("scroll", onReaderScroll);
       window.removeEventListener("resize", onResize);
+      window.removeEventListener(READER_LAYOUT_CHANGE_EVENT, onReaderLayout);
       window.removeEventListener("pagehide", onPageHide);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };

@@ -2,6 +2,7 @@
 
 import {
   Activity,
+  FileText,
   KeyRound,
   LogOut,
   Menu,
@@ -10,7 +11,6 @@ import {
   Sparkles,
   Store,
   UserPlus,
-  UserRound,
 } from "lucide-react";
 import Link from "@/components/LocalizedLink";
 import { IntentPrefetchLink } from "@/components/IntentPrefetchLink";
@@ -18,10 +18,12 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { logoutUserAction } from "@/app/account/actions";
 import { localeFromPathname, uiText } from "@/lib/locale";
+import { UserAvatar } from "./UserAvatar";
 
 type HeaderUserMenuProps = {
   user:
     | {
+        id: number;
         displayName: string;
         avatarPath: string | null;
         trustLevel: number;
@@ -30,6 +32,7 @@ type HeaderUserMenuProps = {
   loginEnabled: boolean;
   registrationEnabled: boolean;
   showMarket: boolean;
+  showOriginal: boolean;
   unreadMessages: number;
 };
 
@@ -38,6 +41,7 @@ export function HeaderUserMenu({
   loginEnabled,
   registrationEnabled,
   showMarket,
+  showOriginal,
   unreadMessages,
 }: HeaderUserMenuProps) {
   const [open, setOpen] = useState(false);
@@ -93,10 +97,8 @@ export function HeaderUserMenu({
           {user ? (
             <>
               <IntentPrefetchLink className="userMenuIdentity" href="/account" onClick={closeMenu}>
-                <span className="userMenuAvatar" aria-hidden="true">
-                  {user.avatarPath ? <img src={user.avatarPath} alt="" /> : <UserRound size={18} />}
-                </span>
-                <span>
+                <UserAvatar className="userMenuAvatar" userId={user.id} displayName={user.displayName} avatarPath={user.avatarPath} />
+                <span className="userMenuIdentityCopy">
                   <strong>{user.displayName}</strong>
                   <small>Lv.{user.trustLevel}</small>
                 </span>
@@ -113,6 +115,12 @@ export function HeaderUserMenu({
                 <IntentPrefetchLink href="/market" onClick={closeMenu}>
                   <Store size={16} aria-hidden="true" />
                   {tr("集市")}
+                </IntentPrefetchLink>
+              ) : null}
+              {showOriginal ? (
+                <IntentPrefetchLink href="/original/mine" onClick={closeMenu}>
+                  <FileText size={16} aria-hidden="true" />
+                  {tr("文章")}
                 </IntentPrefetchLink>
               ) : null}
               <Link href="/messages" onClick={closeMenu}>

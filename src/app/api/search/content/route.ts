@@ -4,7 +4,6 @@ import {
   canAccessAdvancedTagSearch,
   canConsumeNovelLibrary,
   getFrontendSearchConcurrencyLimit,
-  shouldShowProgressBars,
 } from "@/lib/config";
 import {
   cancelContentJob,
@@ -21,7 +20,7 @@ import { hasUserPermission } from "@/lib/user-levels";
 import { LOCALE_COOKIE, normalizeLocale, TRADITIONAL_LOCALE, type AppLocale } from "@/lib/locale";
 import { localizeTexts, normalizeSearchText as normalizeLocaleSearchText } from "@/lib/locale-server";
 import type { ContentJobSnapshot } from "@/lib/content-jobs";
-import { listReadableNovelIds } from "@/lib/novel-access";
+import { listSearchableNovelIds } from "@/lib/novel-access";
 import { listNovelIdsBySource, resolveNovelLibraryScope } from "@/lib/novel-library";
 import { isNovelSourceFullTextSearchEnabled, listFullTextSearchNovelIds } from "@/lib/novel-search-policy";
 
@@ -146,13 +145,13 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const readableNovelIds = listReadableNovelIds(user);
-  const allowedIds = new Set(readableNovelIds);
+  const searchableNovelIds = listSearchableNovelIds(user);
+  const allowedIds = new Set(searchableNovelIds);
   const fullTextIds = new Set(listFullTextSearchNovelIds());
   const libraryIds = libraryScope.kind === "source"
     ? new Set(listNovelIdsBySource(libraryScope.source.id))
     : null;
-  candidateNovelIds = (candidateNovelIds || readableNovelIds)
+  candidateNovelIds = (candidateNovelIds || searchableNovelIds)
     .filter((id) => allowedIds.has(id) && fullTextIds.has(id) && (!libraryIds || libraryIds.has(id)));
   const cacheScope = `access:${crypto.createHash("sha256")
     .update(candidateNovelIds.join(","))
@@ -169,7 +168,6 @@ export async function POST(request: NextRequest) {
     ok: true,
     jobId: job.id,
     job: await localizeJob(job, getResponseLocale(request)),
-    showProgressBars: shouldShowProgressBars(),
   });
 }
 
@@ -186,7 +184,6 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     ok: true,
     job: await localizeJob(job, getResponseLocale(request)),
-    showProgressBars: shouldShowProgressBars(),
   });
 }
 
@@ -200,5 +197,5 @@ export async function DELETE(request: NextRequest) {
     return jsonError("搜索任务不存在或已过期", 404);
   }
 
-  return NextResponse.json({ ok: true, job, showProgressBars: shouldShowProgressBars() });
+  return NextResponse.json({ ok: true, job });
 }

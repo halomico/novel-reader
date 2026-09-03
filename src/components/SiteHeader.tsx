@@ -16,6 +16,7 @@ import {
   isMarketEnabled,
   isNovelLibraryEnabled,
   isNovelCatalogSearchExpandedByDefault,
+  isOriginalChannelEntryVisible,
   isUserLoginEnabled,
   isUserRegistrationEnabled,
   isTagLibraryEnabled,
@@ -51,6 +52,7 @@ export async function SiteHeader({
   showSearch = true,
   isHomePage = false,
   readerMode = false,
+  readerAutoHideOnScroll = true,
   authMode = false,
   library,
   currentSearchBookId,
@@ -70,6 +72,7 @@ export async function SiteHeader({
   showSearch?: boolean;
   isHomePage?: boolean;
   readerMode?: boolean;
+  readerAutoHideOnScroll?: boolean;
   authMode?: boolean;
   library?: string;
   currentSearchBookId?: number;
@@ -101,12 +104,13 @@ export async function SiteHeader({
   ].filter((kind): kind is "video" | "audio" | "file" => kind !== null);
   const showLibraryNav = isNovelLibraryEnabled() && (Boolean(user) || isGuestLibraryNavEnabled());
   const showTagNav = isTagLibraryEnabled() && (Boolean(user) || isGuestTagLibraryNavEnabled());
+  const showOriginalNav = isOriginalChannelEntryVisible(Boolean(user));
   const mediaKinds = user
     ? enabledMediaKinds
     : enabledMediaKinds.filter((kind) => (
       kind === "video" ? isGuestVideoNavEnabled() : kind === "audio" ? isGuestAudioNavEnabled() : isGuestFileNavEnabled()
     ));
-  const showPrimaryNav = showPrimaryNavigation && (showLibraryNav || showTagNav || mediaKinds.length > 0);
+  const showPrimaryNav = showPrimaryNavigation && (showLibraryNav || showTagNav || showOriginalNav || mediaKinds.length > 0);
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
   const unreadCount = user ? unreadMessages ?? countUserUnreadMessages(user.id) : 0;
   const showAdvancedSearch = canAccessAdvancedTagSearch(false) ||
@@ -143,8 +147,8 @@ export async function SiteHeader({
         <Link className="brand" href={brandHref} aria-label={brandHref === "/novels" ? novelsLabel : homeLabel}>
           <span>{siteName}</span>
         </Link>
-        {readerMode ? <ReaderHeaderBehavior /> : null}
-        {showPrimaryNav ? <HeaderPrimaryNav mediaKinds={mediaKinds} showLibrary={showLibraryNav} showTags={showTagNav} /> : null}
+        {readerMode ? <ReaderHeaderBehavior hideOnScroll={readerAutoHideOnScroll} /> : null}
+        {showPrimaryNav ? <HeaderPrimaryNav mediaKinds={mediaKinds} showLibrary={showLibraryNav} showTags={showTagNav} showOriginal={showOriginalNav} /> : null}
         {showTools ? (
           <div className={canShowSearch ? "headerTools" : "headerTools hasNoSearch"}>
             {mediaSearchKind ? (
@@ -167,6 +171,7 @@ export async function SiteHeader({
               {!readerMode ? <ThemeToggle /> : null}
               <HeaderUserMenu
                 user={user ? {
+                  id: user.id,
                   displayName: user.displayName,
                   avatarPath: user.avatarPath,
                   trustLevel: user.trustLevel,
@@ -175,6 +180,7 @@ export async function SiteHeader({
                 loginEnabled={loginEnabled}
                 registrationEnabled={registrationEnabled}
                 showMarket={showMarket}
+                showOriginal={showOriginalNav}
               />
             </div>
           </div>

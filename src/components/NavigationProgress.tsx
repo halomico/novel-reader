@@ -8,8 +8,18 @@ type ProgressState = "idle" | "loading" | "complete";
 const SHOW_DELAY_MS = 140;
 const FAILSAFE_MS = 12_000;
 
+function dispatchNavigationProgress(readerNavigation: boolean) {
+  window.dispatchEvent(new CustomEvent("novel:navigation-start", {
+    detail: { readerNavigation },
+  }));
+}
+
 export function beginNavigationProgress() {
-  window.dispatchEvent(new Event("novel:navigation-start"));
+  dispatchNavigationProgress(false);
+}
+
+export function beginReaderNavigationProgress() {
+  dispatchNavigationProgress(true);
 }
 
 export function NavigationProgress() {
@@ -33,6 +43,7 @@ export function NavigationProgress() {
     }
 
     function finish() {
+      document.documentElement.classList.remove("isReaderPagePending");
       if (showTimerRef.current) {
         clearTimeout(showTimerRef.current);
         showTimerRef.current = null;
@@ -48,9 +59,10 @@ export function NavigationProgress() {
       });
     }
 
-    function start() {
+    function start(readerNavigation = false) {
       clearTimers();
       setState("idle");
+      document.documentElement.classList.toggle("isReaderPagePending", readerNavigation);
       showTimerRef.current = setTimeout(() => setState("loading"), SHOW_DELAY_MS);
       failsafeTimerRef.current = setTimeout(finish, FAILSAFE_MS);
     }
@@ -71,23 +83,32 @@ export function NavigationProgress() {
       ) {
         return;
       }
-      if (destination.href !== window.location.href) start();
+      if (destination.href !== window.location.href) {
+        start(Boolean(target.closest(".readerShell")) && destination.pathname.includes("/books/"));
+      }
     }
 
+    const handleManualStart = (event: Event) => {
+      const detail = (event as CustomEvent<{ readerNavigation?: boolean }>).detail;
+      start(Boolean(detail?.readerNavigation));
+    };
+
     document.addEventListener("click", handleDocumentClick, true);
-    window.addEventListener("novel:navigation-start", start);
+    window.addEventListener("novel:navigation-start", handleManualStart);
     window.addEventListener("pageshow", finish);
     return () => {
       document.removeEventListener("click", handleDocumentClick, true);
-      window.removeEventListener("novel:navigation-start", start);
+      window.removeEventListener("novel:navigation-start", handleManualStart);
       window.removeEventListener("pageshow", finish);
       clearTimers();
+      document.documentElement.classList.remove("isReaderPagePending");
     };
   }, []);
 
   useEffect(() => {
     if (previousRouteRef.current === routeKey) return;
     previousRouteRef.current = routeKey;
+    document.documentElement.classList.remove("isReaderPagePending");
     if (showTimerRef.current) {
       clearTimeout(showTimerRef.current);
       showTimerRef.current = null;

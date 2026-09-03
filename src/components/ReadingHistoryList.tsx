@@ -3,12 +3,26 @@
 import { Check, ListX, SquareCheckBig, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { ReadingProgress } from "@/lib/reading-progress";
 import { uiText, type AppLocale } from "@/lib/locale";
 import Link from "./LocalizedLink";
 import { ContextNavigationLink } from "./ContextNavigationLink";
 import { LocalDateTime } from "./LocalDateTime";
 import { Pagination } from "./Pagination";
+import { UserAvatar } from "./UserAvatar";
+
+export type ReadingHistoryListItem = {
+  id: number;
+  title: string;
+  href: string;
+  progressPercent: number;
+  completed: boolean;
+  lastReadAt: string;
+  author?: {
+    id: number;
+    name: string;
+    avatarPath: string | null;
+  };
+};
 
 export function ReadingHistoryList({
   initialItems,
@@ -16,12 +30,14 @@ export function ReadingHistoryList({
   totalPages,
   locale,
   historyEnabled,
+  kind,
 }: {
-  initialItems: ReadingProgress[];
+  initialItems: ReadingHistoryListItem[];
   page: number;
   totalPages: number;
   locale: AppLocale;
   historyEnabled: boolean;
+  kind: "novel" | "original";
 }) {
   const [items, setItems] = useState(initialItems);
   const [managing, setManaging] = useState(false);
@@ -33,7 +49,7 @@ export function ReadingHistoryList({
   const [message, setMessage] = useState("");
   const router = useRouter();
   const tr = (text: string) => uiText(locale, text);
-  const allSelected = items.length > 0 && items.every((item) => selected.has(item.novelId));
+  const allSelected = items.length > 0 && items.every((item) => selected.has(item.id));
 
   useEffect(() => {
     setItems(initialItems);
@@ -43,11 +59,11 @@ export function ReadingHistoryList({
     setReadingHistoryEnabled(historyEnabled);
   }, [historyEnabled]);
 
-  function toggleSelected(novelId: number) {
+  function toggleSelected(id: number) {
     setSelected((current) => {
       const next = new Set(current);
-      if (next.has(novelId)) next.delete(novelId);
-      else next.add(novelId);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }
@@ -56,7 +72,7 @@ export function ReadingHistoryList({
     setSelected((current) => (
       allSelected
         ? new Set()
-        : new Set(items.map((item) => item.novelId))
+        : new Set(items.map((item) => item.id))
     ));
     setConfirmClear(false);
   }
@@ -76,7 +92,7 @@ export function ReadingHistoryList({
       const response = await fetch("/api/account/preferences", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ readingHistoryEnabled: enabled }),
+        body: JSON.stringify({ readingHistoryEnabled: enabled, readingHistoryKind: kind }),
       });
       if (!response.ok) throw new Error("preference update failed");
       router.refresh();
@@ -92,13 +108,15 @@ export function ReadingHistoryList({
     if (!selected.size || pending) return;
     setPending(true);
     try {
-      const response = await fetch("/api/account/reading-progress", {
+      const response = await fetch(kind === "original" ? "/api/account/original-reading-progress" : "/api/account/reading-progress", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ novelIds: Array.from(selected) }),
+        body: JSON.stringify(kind === "original"
+          ? { articleIds: Array.from(selected) }
+          : { novelIds: Array.from(selected) }),
       });
       if (!response.ok) throw new Error("delete failed");
-      setItems((current) => current.filter((item) => !selected.has(item.novelId)));
+      setItems((current) => current.filter((item) => !selected.has(item.id)));
       setSelected(new Set());
       setManaging(false);
       setMessage(tr("记录已删除"));
@@ -114,7 +132,10 @@ export function ReadingHistoryList({
     if (pending) return;
     setPending(true);
     try {
-      const response = await fetch("/api/account/reading-progress?all=1", { method: "DELETE" });
+      const endpoint = kind === "original"
+        ? "/api/account/original-reading-progress?all=1"
+        : "/api/account/reading-progress?all=1";
+      const response = await fetch(endpoint, { method: "DELETE" });
       if (!response.ok) throw new Error("clear failed");
       setItems([]);
       setSelected(new Set());
@@ -132,7 +153,19 @@ export function ReadingHistoryList({
   return (
     <section className="readingHistory">
       <div className={managing ? "readingProgressSetting isManaging" : "readingProgressSetting"}>
-        <strong>{tr("阅读进度")}</strong>
+        <div className="readingProgressHeading">
+          <strong>{tr("阅读进度")}</strong>
+          <label className="settingToggle readingProgressOption">
+            <input
+              type="checkbox"
+              checked={readingHistoryEnabled}
+              disabled={historyPending}
+              onChange={(event) => void updateReadingHistory(event.target.checked)}
+              aria-label={tr("阅读记录")}
+            />
+            <span className="settingToggleTrack" aria-hidden="true"><span /></span>
+          </label>
+        </div>
         <div className="readingProgressControls">
           {readingHistoryEnabled && items.length ? (
             <button
@@ -150,18 +183,6 @@ export function ReadingHistoryList({
               <span>{tr(managing ? "完成" : "管理")}</span>
             </button>
           ) : null}
-          <div className="readingProgressOptions">
-            <label className="settingToggle readingProgressOption">
-              <input
-                type="checkbox"
-                checked={readingHistoryEnabled}
-                disabled={historyPending}
-                onChange={(event) => void updateReadingHistory(event.target.checked)}
-                aria-label={tr("阅读记录")}
-              />
-              <span className="settingToggleTrack" aria-hidden="true"><span /></span>
-            </label>
-          </div>
         </div>
         {readingHistoryEnabled && items.length && managing ? (
           <div className="readingHistoryToolbar isManaging">
@@ -217,28 +238,36 @@ export function ReadingHistoryList({
             const progress = Math.round(item.progressPercent);
             const isContinueItem = page === 1 && index === 0 && !item.completed && progress > 0;
             return (
-              <article className={selected.has(item.novelId) ? "readingHistoryItem isSelected" : "readingHistoryItem"} key={item.novelId}>
+              <article className={selected.has(item.id) ? "readingHistoryItem isSelected" : "readingHistoryItem"} key={item.id}>
                 {managing ? (
                   <label className="readingHistorySelect">
                     <input
                       type="checkbox"
-                      checked={selected.has(item.novelId)}
-                      onChange={() => toggleSelected(item.novelId)}
+                      checked={selected.has(item.id)}
+                      onChange={() => toggleSelected(item.id)}
                       aria-label={`${tr("选择")} ${item.title}`}
                     />
                     <span aria-hidden="true"><Check size={13} /></span>
                   </label>
                 ) : null}
                 <ContextNavigationLink
-                  className="readingHistoryMain"
-                  href={item.chapterId
-                    ? `/books/${item.novelId}/chapters/${item.chapterId}?resume=1`
-                    : `/books/${item.novelId}?resume=1`}
+                  className={item.author ? "readingHistoryMain hasAuthor" : "readingHistoryMain"}
+                  href={item.href}
                   prefetch={false}
                 >
+                  {item.author ? (
+                    <UserAvatar
+                      className="readingHistoryAuthorAvatar"
+                      userId={item.author.id}
+                      displayName={item.author.name}
+                      avatarPath={item.author.avatarPath}
+                    />
+                  ) : null}
                   <span className="readingHistoryCopy">
                     <strong>{item.title}</strong>
                     <small>
+                      {item.author ? <span>{item.author.name}</span> : null}
+                      {item.author ? <span aria-hidden="true">·</span> : null}
                       {isContinueItem ? <span className="readingHistoryResumeLabel">{tr("继续阅读")}</span> : null}
                       {isContinueItem ? <span aria-hidden="true">·</span> : null}
                       {item.completed ? tr("已读完") : progress > 0 ? `${progress}%` : null}
@@ -257,7 +286,7 @@ export function ReadingHistoryList({
       ) : readingHistoryEnabled && !historyPending ? (
         <div className="activityEmpty">
           <p>{tr("还没有最近阅读")}</p>
-          <Link href="/novels">{tr("去看看小说")}</Link>
+          <Link href={kind === "original" ? "/original" : "/novels"}>{tr(kind === "original" ? "去看看原创" : "去看看小说")}</Link>
         </div>
       ) : null}
       {readingHistoryEnabled && items.length ? (
@@ -266,7 +295,7 @@ export function ReadingHistoryList({
           totalPages={totalPages}
           query=""
           basePath="/activity"
-          extraParams={{ view: "recent" }}
+          extraParams={{ view: "recent", type: kind === "original" ? "original" : undefined }}
         />
       ) : null}
     </section>

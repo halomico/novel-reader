@@ -1,31 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { setUserTagHidden } from "@/lib/tag-preferences";
+import { replaceUserHiddenTags } from "@/lib/tag-preferences";
 import { getCurrentUser } from "@/lib/user-auth";
 
-function safeReturnPath(value: FormDataEntryValue | null): string {
-  const path = String(value || "/tags");
-  return path.startsWith("/tags") && !path.startsWith("//") && !/[\r\n#\\]/.test(path) ? path : "/tags";
-}
-
-export async function setTagPreferenceAction(formData: FormData) {
+export async function replaceTagPreferencesAction(tagIds: number[]): Promise<{ ok: boolean; hiddenIds: number[] }> {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  const tagId = Number(formData.get("tagId"));
-  const returnPath = safeReturnPath(formData.get("returnPath"));
-  if (Number.isInteger(tagId) && tagId > 0) {
-    setUserTagHidden(user.id, tagId, formData.get("hidden") === "1");
-  }
+  if (!user || !Array.isArray(tagIds)) return { ok: false, hiddenIds: [] };
+  const hiddenIds = replaceUserHiddenTags(user.id, tagIds);
   revalidatePath("/tags");
-  revalidatePath(returnPath.split("?", 1)[0]);
-  redirect(returnPath);
-}
-
-export async function updateTagPreferenceInlineAction(tagId: number, hidden: boolean): Promise<boolean> {
-  const user = await getCurrentUser();
-  if (!user || !Number.isInteger(tagId) || tagId <= 0) return false;
-  setUserTagHidden(user.id, tagId, hidden);
-  return true;
+  return { ok: true, hiddenIds };
 }

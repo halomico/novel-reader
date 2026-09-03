@@ -6,6 +6,7 @@ import { DismissibleNotice } from "@/components/DismissibleNotice";
 import { UserStationConversation } from "@/components/UserStationConversation";
 import { StationNewThreadDialog } from "@/components/StationNewThreadDialog";
 import { UserWorkspace } from "@/components/UserWorkspace";
+import { WorkspacePage, WorkspacePageHeader, WorkspacePrimaryTabs } from "@/components/WorkspacePageChrome";
 import { getNoticeDisplaySeconds, getStationDisplayName } from "@/lib/config";
 import {
   getStationThread,
@@ -77,18 +78,16 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
           displaySeconds={getNoticeDisplaySeconds()}
         />
       ) : null}
-      <section className={selectedThread ? "messagesPage hasConversation" : "messagesPage"}>
-        <header className="messagesHeader userContentHeader">
-          <span><MessageSquareText size={19} aria-hidden="true" /><h1>{tr("消息")}</h1></span>
-          <nav className="messagesTabs" aria-label={tr("消息分类")}>
-            <Link className={tab === "announcements" ? "isActive" : ""} href="/messages">
-              <Bell size={16} aria-hidden="true" />{tr("公告")}
-            </Link>
-            <Link className={tab === "station" ? "isActive" : ""} href="/messages?tab=station">
-              <Mail size={16} aria-hidden="true" />{tr("站务")}
-            </Link>
-          </nav>
-        </header>
+      <WorkspacePage className={selectedThread ? "messagesPage hasConversation" : "messagesPage"}>
+        <WorkspacePageHeader className="messagesHeader" icon={MessageSquareText} title={tr("消息")} />
+        <WorkspacePrimaryTabs
+          className="messagesPageTabs"
+          label={tr("消息分类")}
+          items={[
+            { href: "/messages", label: tr("公告"), icon: Bell, active: tab === "announcements" },
+            { href: "/messages?tab=station", label: tr("站务"), icon: Mail, active: tab === "station" },
+          ]}
+        />
 
         {tab === "station" && telegramAvailable ? (
           <div className="telegramLinkPanel">
@@ -181,7 +180,7 @@ export default async function MessagesPage({ searchParams }: MessagesPageProps) 
             )}
           </section>
         )}
-      </section>
+      </WorkspacePage>
     </UserWorkspace>
   );
 }

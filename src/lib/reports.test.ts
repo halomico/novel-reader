@@ -88,3 +88,28 @@ test("accepts video and audio reports while rejecting novel-only reasons", (t) =
   assert.equal(reports[1].targetId, videoId);
   assert.equal(reports[1].mediaKind, "video");
 });
+
+test("accepts original article reports through the shared report pipeline", (t) => {
+  withTempDatabase(t);
+  const reporterId = createUserRecord({ username: "original-reporter", displayName: "Reporter", passwordHash: "hash", role: "user" });
+  const authorId = createUserRecord({ username: "original-report-author", displayName: "Author", passwordHash: "hash", role: "user" });
+  const articleId = Number(getDb().prepare(
+    `INSERT INTO original_articles
+       (slug, author_id, title, body_markdown, status, published_at)
+     VALUES ('reported-original', ?, '待反馈原创', '正文', 'published', CURRENT_TIMESTAMP)`,
+  ).run(authorId).lastInsertRowid);
+
+  assert.deepEqual(
+    createContentReport({ userId: reporterId, originalArticleId: articleId, category: "playback_error", details: "", dailyLimit: 3 }),
+    { ok: false, reason: "invalid" },
+  );
+  assert.equal(
+    createContentReport({ userId: reporterId, originalArticleId: articleId, category: "spam", details: "疑似垃圾内容", dailyLimit: 3 }).ok,
+    true,
+  );
+  const report = listContentReports({ status: "open" }).reports[0];
+  assert.equal(report.targetType, "original");
+  assert.equal(report.targetId, articleId);
+  assert.equal(report.targetTitle, "待反馈原创");
+  assert.equal(report.targetSlug, "reported-original");
+});

@@ -83,6 +83,14 @@ test("migrates supported application data and discards retired access records", 
       last_login_at TEXT,
       last_login_ip TEXT
     );
+    CREATE TABLE original_reading_history (
+      user_id INTEGER NOT NULL,
+      article_id INTEGER NOT NULL,
+      visit_count INTEGER NOT NULL DEFAULT 0,
+      last_read_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(user_id, article_id)
+    );
     CREATE TABLE novel_recommendations (
       novel_id INTEGER NOT NULL,
       user_id INTEGER NOT NULL,
@@ -242,14 +250,16 @@ test("migrates supported application data and discards retired access records", 
     assert.equal(userColumns.some((column) => column.name === "soda_experience"), true);
     assert.equal(userColumns.some((column) => column.name === "locale_preference"), true);
     assert.equal(userColumns.some((column) => column.name === "reading_history_enabled"), true);
+    assert.equal(userColumns.some((column) => column.name === "original_reading_history_enabled"), true);
     assert.equal(userColumns.some((column) => column.name === "reading_progress_enabled"), true);
     assert.deepEqual(
       { ...(db.prepare(
-        "SELECT locale_preference, reading_history_enabled, reading_progress_enabled FROM users",
+        "SELECT locale_preference, reading_history_enabled, original_reading_history_enabled, reading_progress_enabled FROM users",
       ).get() as object) },
       {
         locale_preference: "zh-Hans",
         reading_history_enabled: 1,
+        original_reading_history_enabled: 1,
         reading_progress_enabled: 1,
       },
     );
@@ -260,6 +270,12 @@ test("migrates supported application data and discards retired access records", 
       readingHistoryColumns.some((column) => column.name === "recorded_in_history"),
       true,
     );
+    const originalReadingHistoryColumns = db
+      .prepare("PRAGMA table_info(original_reading_history)")
+      .all() as Array<{ name: string }>;
+    for (const columnName of ["scroll_ratio", "progress_percent", "completed", "recorded_in_history", "updated_at"]) {
+      assert.equal(originalReadingHistoryColumns.some((column) => column.name === columnName), true);
+    }
     assert.equal((db.prepare("SELECT role FROM users").get() as { role: string }).role, "user");
     assert.deepEqual(
       { ...(db.prepare("SELECT trust_level, soda_balance, soda_experience FROM users").get() as object) },
@@ -273,7 +289,7 @@ test("migrates supported application data and discards retired access records", 
       (db.prepare("SELECT soda_required FROM user_levels WHERE level = 6").get() as { soda_required: number }).soda_required,
       2500,
     );
-    for (const tableName of ["user_novel_favorites", "user_hidden_tags"]) {
+    for (const tableName of ["user_novel_favorites", "user_original_favorites", "user_original_grove", "user_original_author_blocks", "user_hidden_tags"]) {
       assert.equal(
         (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName) as { name: string }).name,
         tableName,
@@ -294,6 +310,8 @@ test("migrates supported application data and discards retired access records", 
       (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'content_reports'").get() as { name: string }).name,
       "content_reports",
     );
+    const reportColumns = db.prepare("PRAGMA table_info(content_reports)").all() as Array<{ name: string }>;
+    assert.equal(reportColumns.some((column) => column.name === "original_article_id"), true);
     assert.equal((db.prepare("SELECT visit_count FROM user_reading_history").get() as { visit_count: number }).visit_count, 2);
     const readingColumns = db.prepare("PRAGMA table_info(user_reading_history)").all() as Array<{ name: string }>;
     for (const columnName of ["segment_ratio", "progress_percent", "content_version", "completed", "updated_at"]) {

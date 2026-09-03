@@ -15,6 +15,7 @@ export function HeaderPrimaryNav({
   mediaKinds,
   showLibrary = true,
   showTags = false,
+  showOriginal = false,
   className = "headerPrimaryNav",
   ariaLabel = "前台主导航",
   onNavigate,
@@ -22,6 +23,7 @@ export function HeaderPrimaryNav({
   mediaKinds: MediaKind[];
   showLibrary?: boolean;
   showTags?: boolean;
+  showOriginal?: boolean;
   className?: string;
   ariaLabel?: string;
   onNavigate?: () => void;
@@ -43,6 +45,11 @@ export function HeaderPrimaryNav({
       {showTags ? (
         <Link href="/tags" aria-current={pathname.startsWith("/tags") ? "page" : undefined} onClick={onNavigate}>
           {uiText(locale, "标签")}
+        </Link>
+      ) : null}
+      {showOriginal ? (
+        <Link href="/original" aria-current={pathname.startsWith("/original") ? "page" : undefined} onClick={onNavigate}>
+          {uiText(locale, "原创")}
         </Link>
       ) : null}
       {mediaKinds.map((kind) => {

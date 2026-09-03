@@ -104,11 +104,12 @@ export function queueReportTelegramNotification(reportId: number) {
   if (!config?.adminChatIds.length) return;
   const report = getDb().prepare(
     `SELECT r.category, r.details, u.username, u.display_name,
-            COALESCE(n.title, m.title, '已删除内容') AS target_title
+            COALESCE(n.title, m.title, a.title, '已删除内容') AS target_title
      FROM content_reports r
      INNER JOIN users u ON u.id = r.user_id
      LEFT JOIN novels n ON n.id = r.novel_id
      LEFT JOIN media_assets m ON m.id = r.media_id
+     LEFT JOIN original_articles a ON a.id = r.original_article_id
      WHERE r.id = ?`,
   ).get(reportId) as {
     category: string;

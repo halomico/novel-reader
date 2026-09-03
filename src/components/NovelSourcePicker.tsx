@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ListFilter } from "lucide-react";
+import { Check, Filter } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -89,11 +89,23 @@ export function NovelSourcePicker({
         title={`${tr("筛选")}：${activeLabel} · ${accessLabel}`}
         onClick={() => setOpen((current) => !current)}
       >
-        <ListFilter size={16} aria-hidden="true" />
+        <Filter size={16} aria-hidden="true" />
       </button>
       {open ? (
         <div className="catalogMenuPopover catalogFilterPopover" role="menu" aria-label={tr("筛选小说")}>
-          <span className="novelFilterSectionLabel" role="presentation">{tr("来源")}</span>
+          <Link
+            className={activeSlug === ALL_NOVEL_LIBRARIES_SLUG ? "catalogMenuItem isActive isAllLibraries" : "catalogMenuItem isAllLibraries"}
+            href={sourceHref(ALL_NOVEL_LIBRARIES_SLUG)}
+            role="menuitem"
+            onClick={() => {
+              rememberSource(ALL_NOVEL_LIBRARIES_SLUG);
+              setOpen(false);
+            }}
+          >
+            {activeSlug === ALL_NOVEL_LIBRARIES_SLUG ? <Check size={14} aria-hidden="true" /> : <i className="catalogMenuItemMarker" aria-hidden="true" />}
+            <span>{tr("全部")}</span>
+            <small>{sources.reduce((total, source) => total + source.novelCount, 0)}</small>
+          </Link>
           {sources.map((source) => (
             <Link
               className={source.slug === activeSlug ? "catalogMenuItem isActive" : "catalogMenuItem"}
@@ -105,24 +117,12 @@ export function NovelSourcePicker({
               }}
               key={source.id}
             >
+              {source.slug === activeSlug ? <Check size={14} aria-hidden="true" /> : <i className="catalogMenuItemMarker" aria-hidden="true" />}
               <span>{novelLibraryDisplayName(source, locale)}</span>
               <small>{source.novelCount}</small>
-              {source.slug === activeSlug ? <Check size={14} aria-hidden="true" /> : null}
             </Link>
           ))}
-          <Link
-            className={activeSlug === ALL_NOVEL_LIBRARIES_SLUG ? "catalogMenuItem isActive isAllLibraries" : "catalogMenuItem isAllLibraries"}
-            href={sourceHref(ALL_NOVEL_LIBRARIES_SLUG)}
-            role="menuitem"
-            onClick={() => {
-              rememberSource(ALL_NOVEL_LIBRARIES_SLUG);
-              setOpen(false);
-            }}
-          >
-            <span>{tr("全部")}</span>
-            {activeSlug === ALL_NOVEL_LIBRARIES_SLUG ? <Check size={14} aria-hidden="true" /> : null}
-          </Link>
-          <span className="novelFilterSectionLabel" role="presentation">{tr("内容")}</span>
+          <span className="catalogMenuDivider" role="presentation" />
           {(["all", "free", "soda"] as const).map((value) => {
             const label = value === "free" ? tr("免费") : value === "soda" ? tr("苏打") : tr("全部");
             return (
@@ -133,8 +133,8 @@ export function NovelSourcePicker({
                 onClick={() => setOpen(false)}
                 key={value}
               >
+                {access === value ? <Check size={14} aria-hidden="true" /> : <i className="catalogMenuItemMarker" aria-hidden="true" />}
                 <span>{label}</span>
-                {access === value ? <Check size={14} aria-hidden="true" /> : null}
               </Link>
             );
           })}

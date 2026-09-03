@@ -1,12 +1,19 @@
 import {
   COLOR_PALETTES,
   ADMIN_SIDEBAR_STORAGE_KEY,
+  DEFAULT_READER_WIDTH,
   PALETTE_STORAGE_KEY,
+  READER_FONT_SIZE_STORAGE_KEY,
   READER_HOTWORDS_STORAGE_KEY,
   READER_LINE_HEIGHT_STORAGE_KEY,
   READER_LINE_HEIGHTS,
+  READER_JUSTIFY_STORAGE_KEY,
+  READER_PAGE_TURN_OPTIONS,
+  READER_PAGE_TURN_STORAGE_KEY,
   READER_PAPER_STORAGE_KEY,
   READER_THEME_OPTIONS,
+  READER_WIDTH_STORAGE_KEY,
+  READER_WIDTHS,
   LEGACY_READER_THEME_STORAGE_KEYS,
   READER_TAGS_STORAGE_KEY,
   DEFAULT_READER_LINE_HEIGHT,
@@ -15,6 +22,7 @@ import {
   type ReaderLineHeight,
   type ReaderTagsMode,
 } from "@/lib/ui-preferences";
+import { READER_KEEP_CHROME_SESSION_KEY } from "@/lib/reader-layout";
 
 export function ThemeScript({
   defaultTheme = "system",
@@ -37,6 +45,12 @@ export function ThemeScript({
     (function () {
       try {
         var root = document.documentElement;
+        var readerRoute = /(?:^|\\/)books\\/\\d+(?:\\/|$)/.test(window.location.pathname) ||
+          /(?:^|\\/)original\\/(?!new(?:\\/|$)|mine(?:\\/|$)|tags(?:\\/|$)|author(?:\\/|$))[^/]+\\/?$/.test(window.location.pathname);
+        var keepReaderChrome = sessionStorage.getItem(${JSON.stringify(READER_KEEP_CHROME_SESSION_KEY)}) === "1";
+        if (readerRoute && window.matchMedia("(max-width: 820px)").matches && !keepReaderChrome) {
+          root.classList.add("isReaderChromeHidden");
+        }
         var theme = localStorage.getItem("novel-theme") || ${JSON.stringify(defaultTheme)};
         var paletteName = localStorage.getItem(${JSON.stringify(PALETTE_STORAGE_KEY)}) || ${JSON.stringify(defaultPalette)};
         var palettes = ${JSON.stringify(paletteTokens)};
@@ -45,10 +59,16 @@ export function ThemeScript({
         var readerHotwords = localStorage.getItem(${JSON.stringify(READER_HOTWORDS_STORAGE_KEY)});
         var readerLineHeights = ${JSON.stringify(READER_LINE_HEIGHTS)};
         var readerLineHeight = Number(localStorage.getItem(${JSON.stringify(READER_LINE_HEIGHT_STORAGE_KEY)}) || ${defaultLineHeight});
+        var readerPageTurnOptions = ${JSON.stringify(READER_PAGE_TURN_OPTIONS.map((option) => option.value))};
+        var readerPageTurn = localStorage.getItem(${JSON.stringify(READER_PAGE_TURN_STORAGE_KEY)});
+        var readerJustify = localStorage.getItem(${JSON.stringify(READER_JUSTIFY_STORAGE_KEY)});
+        var readerWidthOptions = ${JSON.stringify(READER_WIDTHS.filter((value) => value !== "auto"))};
+        var readerWidthValue = localStorage.getItem(${JSON.stringify(READER_WIDTH_STORAGE_KEY)});
+        var readerWidth = readerWidthValue === "auto" ? "auto" : Number(readerWidthValue || ${DEFAULT_READER_WIDTH});
         var readerPaper = localStorage.getItem(${JSON.stringify(READER_PAPER_STORAGE_KEY)});
         var readerThemeSystemThemes = ${JSON.stringify(readerThemeSystemThemes)};
         var adminSidebarCollapsed = localStorage.getItem(${JSON.stringify(ADMIN_SIDEBAR_STORAGE_KEY)}) === "true";
-        var fontSize = Number(localStorage.getItem("novel-font-size") || ${JSON.stringify(defaultFontSize)});
+        var fontSize = Number(localStorage.getItem(${JSON.stringify(READER_FONT_SIZE_STORAGE_KEY)}) || ${JSON.stringify(defaultFontSize)});
         if (!Number.isFinite(fontSize) || fontSize < 8 || fontSize > 25) {
           fontSize = ${JSON.stringify(defaultFontSize)};
         }
@@ -58,6 +78,12 @@ export function ThemeScript({
                 return Math.abs(item - readerLineHeight) < Math.abs(nearest - readerLineHeight) ? item : nearest;
               })
             : ${defaultLineHeight};
+        }
+        if (readerPageTurnOptions.indexOf(readerPageTurn) === -1) {
+          readerPageTurn = "scroll";
+        }
+        if (readerWidth !== "auto" && readerWidthOptions.indexOf(readerWidth) === -1) {
+          readerWidth = ${DEFAULT_READER_WIDTH};
         }
         var validReaderPaper = Object.prototype.hasOwnProperty.call(readerThemeSystemThemes, readerPaper);
         if (validReaderPaper) {
@@ -81,9 +107,17 @@ export function ThemeScript({
               ? "expanded"
               : ${JSON.stringify(defaultReaderTagsMode)}));
         root.dataset.readerHotwords = readerHotwords === "show" || readerHotwords === "hide" ? readerHotwords : "show";
+        root.dataset.readerPageTurn = readerPageTurn;
+        root.dataset.readerJustify = readerJustify === "off" ? "off" : "on";
+        root.dataset.readerWidth = String(readerWidth);
         root.dataset.adminSidebar = adminSidebarCollapsed ? "collapsed" : "expanded";
         root.style.setProperty("--reader-font-size", fontSize + "px");
         root.style.setProperty("--reader-line-height", String(readerLineHeight));
+        if (readerWidth === "auto") {
+          root.style.removeProperty("--reader-preferred-paper-width");
+        } else {
+          root.style.setProperty("--reader-preferred-paper-width", readerWidth + "px");
+        }
         root.style.setProperty("--palette-light-accent", palette.lightAccent);
         root.style.setProperty("--palette-light-strong", palette.lightStrong);
         root.style.setProperty("--palette-dark-accent", palette.darkAccent);

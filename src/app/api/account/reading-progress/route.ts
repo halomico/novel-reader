@@ -42,6 +42,9 @@ export async function PUT(request: Request) {
   if (!user) {
     return privateJson({ ok: false, message: "请先登录" }, 401);
   }
+  if (!user.readingHistoryEnabled) {
+    return privateJson({ ok: false, message: "阅读进度已关闭" }, 409);
+  }
 
   let payload: ReadingProgressUpdate & { novelId?: number };
   try {

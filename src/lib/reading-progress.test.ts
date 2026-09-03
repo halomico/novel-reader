@@ -56,10 +56,11 @@ test("separates exact reading progress from durable aggregate analytics", async 
     progressPercent: 50,
     contentVersion: "version-1",
     completed: false,
-  }).saved, true);
+  }).saved, false);
+  assert.equal(Math.round(getReadingProgress(1, 1)?.progressPercent || 0), 42);
 
   assert.equal(clearReadingProgress(1), 1);
-  assert.equal(Math.round(getReadingProgress(1, 1)?.progressPercent || 0), 50);
+  assert.equal(Math.round(getReadingProgress(1, 1)?.progressPercent || 0), 42);
   assert.equal(listReadingProgressPage(1).totalItems, 0);
   assert.equal(updateReadingProgress(1, book, {
     segmentIndex: 6,
@@ -67,7 +68,8 @@ test("separates exact reading progress from durable aggregate analytics", async 
     progressPercent: 60,
     contentVersion: "version-1",
     completed: false,
-  }).saved, true);
+  }).saved, false);
+  assert.equal(Math.round(getReadingProgress(1, 1)?.progressPercent || 0), 42);
   assert.equal(listReadingProgressPage(1).totalItems, 0);
 
   db.prepare("UPDATE users SET reading_history_enabled = 1 WHERE id = 1").run();

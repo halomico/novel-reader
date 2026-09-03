@@ -9,6 +9,7 @@ import {
   filterTagsForUser,
   listEffectivelyHiddenTagIds,
   listExplicitlyHiddenTagIds,
+  replaceUserHiddenTags,
   setUserTagHidden,
 } from "./tag-preferences";
 import { createTag } from "./tags";
@@ -49,4 +50,23 @@ test("hiding a tag group hides descendants only for that user", (t) => {
   assert.equal(setUserTagHidden(firstUser, group.id, false), true);
   assert.deepEqual([...listEffectivelyHiddenTagIds(firstUser)], []);
   assert.equal(setUserTagHidden(firstUser, 999, true), false);
+});
+
+test("replaces a user's hidden tags in one validated batch", (t) => {
+  withTempDatabase(t);
+  const db = getDb();
+  const userId = Number(db
+    .prepare("INSERT INTO users (username, display_name, password_hash) VALUES ('batch', 'Batch', 'hash')")
+    .run().lastInsertRowid);
+  const group = createTag({ name: "背景", slug: "setting" });
+  const first = createTag({ name: "现代", slug: "modern", parentId: group.id });
+  const second = createTag({ name: "古代", slug: "ancient", parentId: group.id });
+
+  setUserTagHidden(userId, group.id, true);
+  assert.deepEqual(replaceUserHiddenTags(userId, [second.id, second.id, -1, 999_999]), [second.id]);
+  assert.deepEqual([...listExplicitlyHiddenTagIds(userId)], [second.id]);
+  assert.deepEqual([...listEffectivelyHiddenTagIds(userId)], [second.id]);
+  assert.deepEqual(replaceUserHiddenTags(userId, []), []);
+  assert.deepEqual([...listExplicitlyHiddenTagIds(userId)], []);
+  assert.equal(first.parentId, group.id);
 });

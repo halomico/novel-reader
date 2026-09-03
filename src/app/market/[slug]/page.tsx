@@ -45,7 +45,7 @@ export default async function MarketProductPage({ params, searchParams }: Market
   const query = await searchParams;
   const deliveries = listMarketDeliveryItems(product.id);
   const locked = user.trustLevel < product.minLevel;
-  const canPurchase = !locked && hasUserPermission(user, "market_purchase") && deliveries.length > 0;
+  const canPurchase = !locked && deliveries.length > 0;
   const coverUrl = marketProductCoverUrl(product);
 
   return (

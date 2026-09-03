@@ -218,10 +218,15 @@ function migrateContentReports(db: DatabaseSync) {
     .get() as { sql?: string } | undefined;
   if (
     !table?.sql ||
-    (table.sql.includes("media_id") && table.sql.includes("'playback_error'"))
+    (table.sql.includes("media_id") &&
+      table.sql.includes("original_article_id") &&
+      table.sql.includes("'playback_error'"))
   ) {
     return;
   }
+
+  const hasMediaColumn = table.sql.includes("media_id");
+  const hasOriginalColumn = table.sql.includes("original_article_id");
 
   db.exec("BEGIN");
   try {
@@ -231,6 +236,7 @@ function migrateContentReports(db: DatabaseSync) {
         user_id INTEGER NOT NULL,
         novel_id INTEGER,
         media_id INTEGER,
+        original_article_id INTEGER,
         category TEXT NOT NULL CHECK(category IN ('title_error', 'tag_error', 'hotword_error', 'playback_error', 'spam', 'other')),
         details TEXT NOT NULL DEFAULT '',
         status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'resolved')),
@@ -239,20 +245,25 @@ function migrateContentReports(db: DatabaseSync) {
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CHECK(
-          (novel_id IS NOT NULL AND media_id IS NULL) OR
-          (novel_id IS NULL AND media_id IS NOT NULL)
+          (novel_id IS NOT NULL AND media_id IS NULL AND original_article_id IS NULL) OR
+          (novel_id IS NULL AND media_id IS NOT NULL AND original_article_id IS NULL) OR
+          (novel_id IS NULL AND media_id IS NULL AND original_article_id IS NOT NULL)
         ),
         FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
         FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE,
-        FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE CASCADE
+        FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE CASCADE,
+        FOREIGN KEY(original_article_id) REFERENCES original_articles(id) ON DELETE CASCADE
       );
 
       INSERT INTO content_reports_new (
-        id, user_id, novel_id, media_id, category, details, status,
+        id, user_id, novel_id, media_id, original_article_id, category, details, status,
         resolved_by, resolved_at, created_at, updated_at
       )
       SELECT
-        id, user_id, novel_id, NULL, category, details, status,
+        id, user_id, novel_id,
+        ${hasMediaColumn ? "media_id" : "NULL"},
+        ${hasOriginalColumn ? "original_article_id" : "NULL"},
+        category, details, status,
         resolved_by, resolved_at, created_at, updated_at
       FROM content_reports;
 
@@ -722,6 +733,270 @@ function migrateMarketplaceAndRegistration(db: DatabaseSync) {
   }
 }
 
+/** Schema for the lightweight user-authored article channel. */
+function migrateOriginalChannel(db: DatabaseSync) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS original_articles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slug TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      author_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      excerpt TEXT NOT NULL DEFAULT '',
+      body_markdown TEXT NOT NULL,
+      paid_body_markdown TEXT NOT NULL DEFAULT '',
+      word_count INTEGER NOT NULL DEFAULT 0 CHECK(word_count >= 0),
+      access_mode TEXT NOT NULL DEFAULT 'free' CHECK(access_mode IN ('free', 'paid')),
+      unlock_soda_price INTEGER NOT NULL DEFAULT 0 CHECK(unlock_soda_price >= 0),
+      status TEXT NOT NULL DEFAULT 'published' CHECK(status IN ('draft', 'published', 'hidden')),
+      is_pinned INTEGER NOT NULL DEFAULT 0 CHECK(is_pinned IN (0, 1)),
+      pinned_at TEXT,
+      view_count INTEGER NOT NULL DEFAULT 0 CHECK(view_count >= 0),
+      comment_count INTEGER NOT NULL DEFAULT 0 CHECK(comment_count >= 0),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      published_at TEXT,
+      FOREIGN KEY(author_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_original_articles_visible_time
+      ON original_articles(status, published_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_original_articles_author_time
+      ON original_articles(author_id, created_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_original_articles_author_visible_time
+      ON original_articles(author_id, status, published_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_original_articles_title
+      ON original_articles(title COLLATE NOCASE, id);
+
+    CREATE TABLE IF NOT EXISTS original_tags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slug TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      name TEXT NOT NULL,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_original_tags_name ON original_tags(name COLLATE NOCASE, id);
+
+    CREATE TABLE IF NOT EXISTS original_article_tags (
+      article_id INTEGER NOT NULL,
+      tag_id INTEGER NOT NULL,
+      PRIMARY KEY(article_id, tag_id),
+      FOREIGN KEY(article_id) REFERENCES original_articles(id) ON DELETE CASCADE,
+      FOREIGN KEY(tag_id) REFERENCES original_tags(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_original_article_tags_tag ON original_article_tags(tag_id, article_id);
+
+    CREATE TABLE IF NOT EXISTS original_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      article_id INTEGER NOT NULL,
+      author_id INTEGER NOT NULL,
+      body_markdown TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'published' CHECK(status IN ('published', 'hidden')),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(article_id) REFERENCES original_articles(id) ON DELETE CASCADE,
+      FOREIGN KEY(author_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_original_comments_article_time
+      ON original_comments(article_id, status, created_at ASC, id ASC);
+    CREATE INDEX IF NOT EXISTS idx_original_comments_author_time
+      ON original_comments(author_id, created_at DESC, id DESC);
+
+    CREATE TABLE IF NOT EXISTS original_comment_daily_usage (
+      user_id INTEGER NOT NULL,
+      usage_date TEXT NOT NULL,
+      used_count INTEGER NOT NULL DEFAULT 0 CHECK(used_count >= 0),
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(user_id, usage_date),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS original_purchases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      article_id INTEGER NOT NULL,
+      buyer_id INTEGER NOT NULL,
+      author_id INTEGER NOT NULL,
+      price_soda INTEGER NOT NULL CHECK(price_soda > 0),
+      reference_key TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(article_id, buyer_id),
+      FOREIGN KEY(article_id) REFERENCES original_articles(id) ON DELETE CASCADE,
+      FOREIGN KEY(buyer_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(author_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_original_purchases_author_time
+      ON original_purchases(author_id, created_at DESC, id DESC);
+
+    CREATE TABLE IF NOT EXISTS original_reading_history (
+      user_id INTEGER NOT NULL,
+      article_id INTEGER NOT NULL,
+      visit_count INTEGER NOT NULL DEFAULT 0 CHECK(visit_count >= 0),
+      scroll_ratio REAL NOT NULL DEFAULT 0 CHECK(scroll_ratio >= 0 AND scroll_ratio <= 1),
+      progress_percent REAL NOT NULL DEFAULT 0 CHECK(progress_percent >= 0 AND progress_percent <= 100),
+      completed INTEGER NOT NULL DEFAULT 0 CHECK(completed IN (0, 1)),
+      recorded_in_history INTEGER NOT NULL DEFAULT 1 CHECK(recorded_in_history IN (0, 1)),
+      last_read_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(user_id, article_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(article_id) REFERENCES original_articles(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_original_reading_history_user_time
+      ON original_reading_history(user_id, last_read_at DESC, article_id DESC);
+
+    CREATE TABLE IF NOT EXISTS user_original_favorites (
+      user_id INTEGER NOT NULL,
+      article_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(user_id, article_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(article_id) REFERENCES original_articles(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_original_favorites_user_time
+      ON user_original_favorites(user_id, created_at DESC, article_id DESC);
+
+    CREATE TABLE IF NOT EXISTS user_original_grove (
+      user_id INTEGER NOT NULL,
+      article_id INTEGER NOT NULL,
+      visit_count INTEGER NOT NULL DEFAULT 0 CHECK(visit_count >= 0),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(user_id, article_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(article_id) REFERENCES original_articles(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_original_grove_user_time
+      ON user_original_grove(user_id, created_at DESC, article_id DESC);
+
+    CREATE TABLE IF NOT EXISTS user_original_author_blocks (
+      user_id INTEGER NOT NULL,
+      author_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(user_id, author_id),
+      CHECK(user_id <> author_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(author_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_user_original_author_blocks_user_time
+      ON user_original_author_blocks(user_id, created_at DESC, author_id DESC);
+
+    CREATE TRIGGER IF NOT EXISTS original_comments_insert_count
+    AFTER INSERT ON original_comments
+    WHEN NEW.status = 'published'
+    BEGIN
+      UPDATE original_articles SET comment_count = comment_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = NEW.article_id;
+    END;
+    CREATE TRIGGER IF NOT EXISTS original_comments_hide_count
+    AFTER UPDATE OF status ON original_comments
+    WHEN OLD.status <> NEW.status
+    BEGIN
+      UPDATE original_articles
+      SET comment_count = MAX(0, comment_count + CASE WHEN NEW.status = 'published' THEN 1 ELSE -1 END),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = NEW.article_id;
+    END;
+    CREATE TRIGGER IF NOT EXISTS original_comments_delete_count
+    AFTER DELETE ON original_comments
+    WHEN OLD.status = 'published'
+    BEGIN
+      UPDATE original_articles SET comment_count = MAX(0, comment_count - 1), updated_at = CURRENT_TIMESTAMP WHERE id = OLD.article_id;
+    END;
+  `);
+  addColumnIfMissing(
+    db,
+    "original_articles",
+    "paid_body_markdown",
+    "paid_body_markdown TEXT NOT NULL DEFAULT ''",
+  );
+  addColumnIfMissing(
+    db,
+    "original_articles",
+    "word_count",
+    "word_count INTEGER NOT NULL DEFAULT 0",
+  );
+  addColumnIfMissing(
+    db,
+    "original_articles",
+    "is_pinned",
+    "is_pinned INTEGER NOT NULL DEFAULT 0 CHECK(is_pinned IN (0, 1))",
+  );
+  addColumnIfMissing(db, "original_articles", "pinned_at", "pinned_at TEXT");
+  addColumnIfMissing(
+    db,
+    "original_reading_history",
+    "scroll_ratio",
+    "scroll_ratio REAL NOT NULL DEFAULT 0 CHECK(scroll_ratio >= 0 AND scroll_ratio <= 1)",
+  );
+  addColumnIfMissing(
+    db,
+    "original_reading_history",
+    "progress_percent",
+    "progress_percent REAL NOT NULL DEFAULT 0 CHECK(progress_percent >= 0 AND progress_percent <= 100)",
+  );
+  addColumnIfMissing(
+    db,
+    "original_reading_history",
+    "completed",
+    "completed INTEGER NOT NULL DEFAULT 0 CHECK(completed IN (0, 1))",
+  );
+  addColumnIfMissing(
+    db,
+    "original_reading_history",
+    "recorded_in_history",
+    "recorded_in_history INTEGER NOT NULL DEFAULT 1 CHECK(recorded_in_history IN (0, 1))",
+  );
+  addColumnIfMissing(
+    db,
+    "original_reading_history",
+    "updated_at",
+    "updated_at TEXT NOT NULL DEFAULT ''",
+  );
+  db.exec(`
+    UPDATE original_reading_history
+    SET updated_at = last_read_at
+    WHERE TRIM(updated_at) = '';
+  `);
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_original_articles_pinned_time
+      ON original_articles(status, is_pinned DESC, pinned_at DESC, published_at DESC, id DESC);
+  `);
+  // Older test databases exposed reply-only access modes.  Keep the column
+  // constraint for a non-destructive migration, but make price the only
+  // source of truth so legacy rows behave as free/paid articles immediately.
+  db.exec(`
+    UPDATE original_articles
+    SET access_mode = CASE WHEN unlock_soda_price > 0 THEN 'paid' ELSE 'free' END
+    WHERE access_mode NOT IN ('free', 'paid');
+
+    UPDATE original_articles
+    SET paid_body_markdown = body_markdown,
+        body_markdown = excerpt
+    WHERE unlock_soda_price > 0
+      AND TRIM(paid_body_markdown) = '';
+
+    UPDATE original_articles
+    SET word_count = LENGTH(COALESCE(body_markdown, '')) + LENGTH(COALESCE(paid_body_markdown, ''))
+    WHERE word_count <= 0;
+
+    INSERT INTO original_comment_daily_usage (user_id, usage_date, used_count)
+    SELECT author_id, date(created_at, '+8 hours'), COUNT(*)
+    FROM original_comments
+    GROUP BY author_id, date(created_at, '+8 hours')
+    ON CONFLICT(user_id, usage_date) DO UPDATE SET
+      used_count = MAX(used_count, excluded.used_count),
+      updated_at = CURRENT_TIMESTAMP;
+  `);
+}
+
+function migrateOriginalReadingHistoryPreference(db: DatabaseSync) {
+  const columns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+  if (columns.some((column) => column.name === "original_reading_history_enabled")) {
+    return;
+  }
+  db.exec(
+    "ALTER TABLE users ADD COLUMN original_reading_history_enabled INTEGER NOT NULL DEFAULT 1 CHECK(original_reading_history_enabled IN (0, 1))",
+  );
+  db.exec("UPDATE users SET original_reading_history_enabled = reading_history_enabled");
+}
+
 function migrateVideoPlaybackSessions(db: DatabaseSync) {
   const columns = db.prepare("PRAGMA table_info(video_playback_sessions)").all() as Array<{
     name: string;
@@ -904,11 +1179,11 @@ function seedUserLevels(db: DatabaseSync) {
   const defaults = [
     [0, "访客", 0, 0, []],
     [1, "初见", 0, 3, ["video_download"]],
-    [2, "熟客", 50, 5, ["advanced_search", "market_access", "market_purchase", "video_download"]],
-    [3, "常驻", 200, 8, ["advanced_search", "market_access", "market_purchase", "video_download"]],
-    [4, "活跃", 500, 12, ["advanced_search", "market_access", "market_purchase", "video_download"]],
-    [5, "资深", 1200, 20, ["advanced_search", "market_access", "market_purchase", "video_download"]],
-    [6, "核心", 2500, 30, ["advanced_search", "market_access", "market_purchase", "video_download"]],
+    [2, "熟客", 50, 5, ["advanced_search", "market_access", "video_download"]],
+    [3, "常驻", 200, 8, ["advanced_search", "market_access", "video_download"]],
+    [4, "活跃", 500, 12, ["advanced_search", "market_access", "video_download"]],
+    [5, "资深", 1200, 20, ["advanced_search", "market_access", "video_download"]],
+    [6, "核心", 2500, 30, ["advanced_search", "market_access", "video_download"]],
   ] as const;
   const insert = db.prepare(
     "INSERT OR IGNORE INTO user_levels (level, name, soda_required, daily_video_download_limit, permissions) VALUES (?, ?, ?, ?, ?)",
@@ -951,10 +1226,27 @@ function seedUserLevels(db: DatabaseSync) {
       } catch {
         // Invalid legacy permissions are replaced by the explicit defaults below.
       }
-      permissions = [...new Set([...permissions, "market_access", "market_purchase"])];
+      permissions = [...new Set([...permissions, "market_access"])]
       update.run(JSON.stringify(permissions), row.level >= 5 ? 3 : 2, row.level);
     }
     db.prepare("INSERT INTO app_metadata (key, value) VALUES (?, '1')").run(marketDefaultsKey);
+  }
+
+  const marketPurchaseCleanupKey = "user_level_remove_market_purchase_v1";
+  if (!db.prepare("SELECT 1 AS found FROM app_metadata WHERE key = ?").get(marketPurchaseCleanupKey)) {
+    const rows = db.prepare("SELECT level, permissions FROM user_levels").all() as Array<{ level: number; permissions: string }>;
+    const update = db.prepare("UPDATE user_levels SET permissions = ?, updated_at = CURRENT_TIMESTAMP WHERE level = ?");
+    for (const row of rows) {
+      let permissions: string[] = [];
+      try {
+        const parsed = JSON.parse(row.permissions);
+        if (Array.isArray(parsed)) permissions = parsed.filter((item): item is string => typeof item === "string" && item !== "market_purchase");
+      } catch {
+        permissions = [];
+      }
+      update.run(JSON.stringify([...new Set(permissions)]), row.level);
+    }
+    db.prepare("INSERT INTO app_metadata (key, value) VALUES (?, '1')").run(marketPurchaseCleanupKey);
   }
 
   const capabilityCleanupKey = "user_level_capabilities_v3";
@@ -1162,6 +1454,7 @@ function initialize(db: DatabaseSync) {
       search_rate_limit_per_minute INTEGER,
       locale_preference TEXT NOT NULL DEFAULT 'zh-Hans' CHECK(locale_preference IN ('zh-Hans', 'zh-Hant')),
       reading_history_enabled INTEGER NOT NULL DEFAULT 1 CHECK(reading_history_enabled IN (0, 1)),
+      original_reading_history_enabled INTEGER NOT NULL DEFAULT 1 CHECK(original_reading_history_enabled IN (0, 1)),
       reading_progress_enabled INTEGER NOT NULL DEFAULT 1 CHECK(reading_progress_enabled IN (0, 1)),
       registration_ip TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1340,6 +1633,7 @@ function initialize(db: DatabaseSync) {
       user_id INTEGER NOT NULL,
       novel_id INTEGER,
       media_id INTEGER,
+      original_article_id INTEGER,
       category TEXT NOT NULL CHECK(category IN ('title_error', 'tag_error', 'hotword_error', 'playback_error', 'spam', 'other')),
       details TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'resolved')),
@@ -1348,12 +1642,14 @@ function initialize(db: DatabaseSync) {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       CHECK(
-        (novel_id IS NOT NULL AND media_id IS NULL) OR
-        (novel_id IS NULL AND media_id IS NOT NULL)
+        (novel_id IS NOT NULL AND media_id IS NULL AND original_article_id IS NULL) OR
+        (novel_id IS NULL AND media_id IS NOT NULL AND original_article_id IS NULL) OR
+        (novel_id IS NULL AND media_id IS NULL AND original_article_id IS NOT NULL)
       ),
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY(novel_id) REFERENCES novels(id) ON DELETE CASCADE,
-      FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE CASCADE
+      FOREIGN KEY(media_id) REFERENCES media_assets(id) ON DELETE CASCADE,
+      FOREIGN KEY(original_article_id) REFERENCES original_articles(id) ON DELETE CASCADE
     );
 
     CREATE INDEX IF NOT EXISTS idx_content_reports_status_time ON content_reports(status, created_at DESC);
@@ -1749,7 +2045,6 @@ function initialize(db: DatabaseSync) {
   migrateLegacySearchRateLimitBans(db);
   migrateTagVisibility(db);
   dropLegacyContentAccessBans(db);
-  migrateContentReports(db);
   migrateContentAccessSchema(db);
   addColumnIfMissing(
     db,
@@ -1771,6 +2066,8 @@ function initialize(db: DatabaseSync) {
   `);
   migrateUserEconomy(db);
   migrateMarketplaceAndRegistration(db);
+  migrateOriginalChannel(db);
+  migrateContentReports(db);
   addColumnIfMissing(db, "user_entitlements", "granted_by", "granted_by TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(db, "user_entitlements", "updated_at", "updated_at TEXT NOT NULL DEFAULT ''");
   db.exec("UPDATE user_entitlements SET updated_at = created_at WHERE updated_at = '';");
@@ -1867,6 +2164,7 @@ function initialize(db: DatabaseSync) {
     "reading_history_enabled",
     "reading_history_enabled INTEGER NOT NULL DEFAULT 1 CHECK(reading_history_enabled IN (0, 1))",
   );
+  migrateOriginalReadingHistoryPreference(db);
   addColumnIfMissing(
     db,
     "users",
@@ -1935,6 +2233,7 @@ function initialize(db: DatabaseSync) {
   db.exec("CREATE INDEX IF NOT EXISTS idx_content_reports_user_time ON content_reports(user_id, created_at DESC);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_content_reports_novel_time ON content_reports(novel_id, created_at DESC);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_content_reports_media_time ON content_reports(media_id, created_at DESC);");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_content_reports_original_time ON content_reports(original_article_id, created_at DESC);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_analytics_events_media_time ON analytics_events(media_id, created_at);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_analytics_events_tag_time ON analytics_events(tag_id, created_at);");
   db.exec("CREATE INDEX IF NOT EXISTS idx_media_assets_video_category ON media_assets(kind, category_id, updated_at DESC);");

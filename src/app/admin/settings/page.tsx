@@ -1,6 +1,6 @@
 ﻿import { Settings } from "lucide-react";
 import type { Metadata } from "next";
-import { BookOpen, ChevronRight, Clapperboard, File, Globe2, Headphones, ListFilter, Megaphone, Search, Tags, Trash2, Upload } from "lucide-react";
+import { BookOpen, ChevronRight, Clapperboard, File, FilePenLine, Globe2, Headphones, ListFilter, Megaphone, PenLine, Search, Tags, Trash2, Upload } from "lucide-react";
 import { AdminPaletteField } from "@/components/AdminPaletteField";
 import { AdminSelect } from "@/components/AdminSelect";
 import { AdminSwitchRow } from "@/components/AdminSwitchRow";
@@ -404,6 +404,81 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
               </label>
             </div>
             <div className="adminSettingsGroup">
+              <h4><PenLine size={15} aria-hidden="true" />原创频道</h4>
+              <p className="adminSettingsHint">用户可发布 Markdown 文章、添加独立标签并进行评论互动；价格为 0 表示免费，频道开关统一在下方“前台资源访问”中调整。</p>
+              <div className="adminFieldGrid">
+                <label>
+                  <span>发布门槛 / 苏打</span>
+                  <input name="originalPublishMinSoda" type="number" min="0" max="2000000000" defaultValue={settings.originalPublishMinSoda} />
+                  <small>与等级门槛满足其一即可；曲奇按当前兑换比例折算。</small>
+                </label>
+                <label>
+                  <span>发布门槛 / 等级</span>
+                  <input name="originalPublishMinLevel" type="number" min="1" max="6" defaultValue={settings.originalPublishMinLevel} />
+                </label>
+              </div>
+              <div className="adminFieldGrid">
+                <label>
+                  <span>发布扣除 / 苏打</span>
+                  <input name="originalPublishFeeSoda" type="number" min="0" max="10000" defaultValue={settings.originalPublishFeeSoda} />
+                </label>
+                <label>
+                  <span>编辑扣除 / 苏打</span>
+                  <input name="originalEditFeeSoda" type="number" min="0" max="10000" defaultValue={settings.originalEditFeeSoda} />
+                </label>
+                <label>
+                  <span>文章最高售价 / 苏打</span>
+                  <input name="originalMaxArticlePrice" type="number" min="1" max="2000000000" defaultValue={settings.originalMaxArticlePrice} />
+                </label>
+                <label>
+                  <span>每日免费回复 / 等级</span>
+                  <input name="originalFreeCommentsPerLevel" type="number" min="0" max="100" defaultValue={settings.originalFreeCommentsPerLevel} />
+                  <small>每个等级每天的免费回复次数，例如 3 表示 3 × 等级。</small>
+                </label>
+                <label>
+                  <span>超额回复扣除 / 苏打</span>
+                  <input name="originalCommentCostSoda" type="number" min="0" max="10000" defaultValue={settings.originalCommentCostSoda} />
+                </label>
+              </div>
+              <h5>内容规范与展示</h5>
+              <div className="adminFieldGrid">
+                <label>
+                  <span>文章最少字数</span>
+                  <input name="originalArticleMinWords" type="number" min="1" max="200000" defaultValue={settings.originalArticleMinWords} />
+                  <small>默认 2000 字，仅校验新发布和用户编辑，不改写已有文章。</small>
+                </label>
+                <label>
+                  <span>回复最少字数</span>
+                  <input name="originalCommentMinChars" type="number" min="1" max="200" defaultValue={settings.originalCommentMinChars} />
+                </label>
+                <label>
+                  <span>每篇最多标签</span>
+                  <input name="originalMaxTags" type="number" min="1" max="20" defaultValue={settings.originalMaxTags} />
+                  <small>中文标签 2–6 字；英文标签为 2–15 个字母的单个单词。</small>
+                </label>
+                <label>
+                  <span>原创列表每页篇数</span>
+                  <input name="originalPageSize" type="number" min="5" max="100" defaultValue={settings.originalPageSize} />
+                </label>
+              </div>
+              <h5>发布前提示</h5>
+              <div className="adminFieldGrid">
+                <label className="isFull">
+                  <span>提示文字</span>
+                  <input name="originalPublishNoticeText" maxLength={120} defaultValue={settings.originalPublishNoticeText} placeholder="请在发表文章前仔细阅读" />
+                </label>
+                <label>
+                  <span>链接文字</span>
+                  <input name="originalPublishNoticeLinkLabel" maxLength={40} defaultValue={settings.originalPublishNoticeLinkLabel} placeholder="社区准则" />
+                </label>
+                <label>
+                  <span>链接地址</span>
+                  <input name="originalPublishNoticeUrl" maxLength={500} defaultValue={settings.originalPublishNoticeUrl} placeholder="/announcements" />
+                  <small>支持站内路径或 http(s) 地址；留空则仅显示提示文字。</small>
+                </label>
+              </div>
+            </div>
+            <div className="adminSettingsGroup">
               <h4>前台资源访问</h4>
               <div className="adminAccessModeGrid">
                 <label className="adminAccessModeRow">
@@ -445,6 +520,15 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 <label className="adminAccessModeRow">
                   <span><Tags size={16} aria-hidden="true" /><strong>标签</strong></span>
                   <AdminSelect name="tagAccessMode" defaultValue={settings.homePortalAccessModes.tags}>
+                    <option value="public">公开可用</option>
+                    <option value="browse">公开展示</option>
+                    <option value="member">登录可用</option>
+                    <option value="off">关闭</option>
+                  </AdminSelect>
+                </label>
+                <label className="adminAccessModeRow">
+                  <span><FilePenLine size={16} aria-hidden="true" /><strong>原创</strong></span>
+                  <AdminSelect name="originalAccessMode" defaultValue={settings.homePortalAccessModes.original}>
                     <option value="public">公开可用</option>
                     <option value="browse">公开展示</option>
                     <option value="member">登录可用</option>
@@ -502,7 +586,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
 
           <details className="adminSettingsSection adminSettingsDisclosure">
             <summary>索引策略</summary>
-            <AdminSwitchRow name="showProgressBars" title="显示搜索进度条" description="前台全文搜索和后台全文索引构建会显示处理进度。" defaultChecked={settings.showProgressBars} />
+            <AdminSwitchRow name="showProgressBars" title="显示索引进度条" description="仅控制后台索引构建的详细进度；前台搜索固定使用轻量状态提示。" defaultChecked={settings.showProgressBars} />
             <div className="adminFieldGrid">
               <label>
                 <span>前台全文最多显示 / 条</span>

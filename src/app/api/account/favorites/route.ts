@@ -1,11 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { removeMediaFavorites, removeNovelFavorites } from "@/lib/favorites";
+import { removeMediaFavorites, removeNovelFavorites, removeOriginalFavorites } from "@/lib/favorites";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 
-type FavoriteKind = "novel" | "video" | "audio";
+type FavoriteKind = "novel" | "original" | "video" | "audio";
 
 function isFavoriteKind(value: unknown): value is FavoriteKind {
-  return value === "novel" || value === "video" || value === "audio";
+  return value === "novel" || value === "original" || value === "video" || value === "audio";
 }
 
 export async function DELETE(request: NextRequest) {
@@ -30,7 +30,9 @@ export async function DELETE(request: NextRequest) {
   const ids = body.ids.map(Number);
   const removed = body.kind === "novel"
     ? removeNovelFavorites(user.id, ids)
-    : removeMediaFavorites(user.id, body.kind, ids);
+    : body.kind === "original"
+      ? removeOriginalFavorites(user.id, ids)
+      : removeMediaFavorites(user.id, body.kind, ids);
   return NextResponse.json(
     { ok: true, removed },
     { headers: { "Cache-Control": "private, no-store" } },

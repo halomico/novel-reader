@@ -4,6 +4,7 @@ import { Check, ChevronDown, Minus, Plus, RotateCcw, Search, Tags } from "lucide
 import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState, useTransition } from "react";
 import { beginNavigationProgress } from "./NavigationProgress";
+import { SelectControl } from "./SelectControl";
 import { uiText, withLocalePath, type AppLocale } from "@/lib/locale";
 import { ALL_NOVEL_LIBRARIES_SLUG, DEFAULT_NOVEL_LIBRARY_SLUG } from "@/lib/novel-library-scope";
 
@@ -141,17 +142,14 @@ export function TagIntersectionSearchForm({
       <div className="advancedTagSearchToolbar">
         <label className="advancedLibraryField">
           <span>{tr("来源")}</span>
-          <span className="advancedLibrarySelect">
-            <select value={sourceLibrary} onChange={(event) => { setSourceLibrary(event.target.value); setMessage(""); }} aria-label={tr("选择来源")}>
+          <SelectControl wrapperClassName="advancedLibrarySelect" value={sourceLibrary} onChange={(event) => { setSourceLibrary(event.target.value); setMessage(""); }} aria-label={tr("选择来源")}>
               {sources.map((source) => (
                 <option value={source.slug} key={source.id}>
                   {source.slug === DEFAULT_NOVEL_LIBRARY_SLUG ? tr("默认") : source.name}（{source.novelCount}）
                 </option>
               ))}
               <option value={ALL_NOVEL_LIBRARIES_SLUG}>{tr("全部")}</option>
-            </select>
-            <ChevronDown size={15} aria-hidden="true" />
-          </span>
+          </SelectControl>
         </label>
         <label>
           <span>{tr("标题关键词")}</span>

@@ -181,6 +181,61 @@ export function isBidirectionalCurrencyExchangeEnabled(): boolean {
   return readSiteSettings().bidirectionalCurrencyExchangeEnabled;
 }
 
+export function isOriginalChannelEnabled(): boolean {
+  const settings = readSiteSettings();
+  return settings.originalChannelEnabled && settings.homePortalAccessModes.original !== "off";
+}
+
+export function canAccessOriginalChannel(authenticated: boolean): boolean {
+  const settings = readSiteSettings();
+  return settings.originalChannelEnabled && canBrowseHomePortal(settings.homePortalAccessModes.original, authenticated);
+}
+
+export function canConsumeOriginalChannel(authenticated: boolean): boolean {
+  const settings = readSiteSettings();
+  return settings.originalChannelEnabled && canConsumeHomePortal(settings.homePortalAccessModes.original, authenticated);
+}
+
+export function isOriginalChannelEntryVisible(authenticated: boolean): boolean {
+  const settings = readSiteSettings();
+  return settings.originalChannelEnabled && isHomePortalEntryVisible(settings.homePortalAccessModes.original, authenticated);
+}
+
+export function getOriginalPublishingSettings(): {
+  minSoda: number;
+  minLevel: number;
+  publishFeeSoda: number;
+  editFeeSoda: number;
+  maxArticlePrice: number;
+  freeCommentsPerLevel: number;
+  commentCostSoda: number;
+  articleMinWords: number;
+  commentMinChars: number;
+  maxTags: number;
+  pageSize: number;
+  publishNoticeText: string;
+  publishNoticeLinkLabel: string;
+  publishNoticeUrl: string;
+} {
+  const settings = readSiteSettings();
+  return {
+    minSoda: settings.originalPublishMinSoda,
+    minLevel: settings.originalPublishMinLevel,
+    publishFeeSoda: settings.originalPublishFeeSoda,
+    editFeeSoda: settings.originalEditFeeSoda,
+    maxArticlePrice: settings.originalMaxArticlePrice,
+    freeCommentsPerLevel: settings.originalFreeCommentsPerLevel,
+    commentCostSoda: settings.originalCommentCostSoda,
+    articleMinWords: settings.originalArticleMinWords,
+    commentMinChars: settings.originalCommentMinChars,
+    maxTags: settings.originalMaxTags,
+    pageSize: settings.originalPageSize,
+    publishNoticeText: settings.originalPublishNoticeText,
+    publishNoticeLinkLabel: settings.originalPublishNoticeLinkLabel,
+    publishNoticeUrl: settings.originalPublishNoticeUrl,
+  };
+}
+
 export function getUserDailyRegistrationLimitPerIp(): number {
   return readSettingInt(readSiteSettings().userDailyRegistrationLimitPerIp, "USER_DAILY_REGISTRATION_LIMIT_PER_IP", 2, 0, 100);
 }

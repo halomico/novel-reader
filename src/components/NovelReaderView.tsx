@@ -6,6 +6,7 @@ import { NovelAccessGate } from "@/components/NovelAccessGate";
 import { ReadingProgressTracker } from "@/components/ReadingProgressTracker";
 import { ReaderTagLinks } from "@/components/ReaderTagLinks";
 import { ReaderExperienceControls } from "@/components/ReaderExperienceControls";
+import { ReaderPageTurnController } from "@/components/ReaderPageTurnController";
 import { NovelViewTracker } from "@/components/NovelViewTracker";
 import { SiteHeader } from "@/components/SiteHeader";
 import { AdminReaderActions } from "@/components/AdminReaderActions";
@@ -39,6 +40,7 @@ import { listHotwordsForNovel, listTagsForNovel } from "@/lib/tags";
 import { hasUserPermission } from "@/lib/user-levels";
 import type { UserProfile } from "@/lib/users";
 import { recordNovelVisit, recordReadingHistory } from "@/lib/users";
+import { splitReaderParagraphs } from "@/lib/reader-layout";
 
 export type NovelReaderQuery = {
   from?: string;
@@ -54,9 +56,6 @@ type ChapterContext = {
   next: NovelChapter | null;
 };
 
-const INITIAL_READER_SEGMENTS = 4;
-const READER_STREAM_THRESHOLD = 8;
-
 function safeReturnHref(value: string | undefined, fallback = "/novels"): string {
   return value?.startsWith("/") && !value.startsWith("//") && !value.includes("\\") ? value : fallback;
 }
@@ -69,29 +68,42 @@ function ReaderContentLoading() {
   );
 }
 
-function ReaderSegments({ segments, hitSegment }: { segments: NovelSegment[]; hitSegment: number }) {
-  return segments.map((segment) => (
-    <section
-      className="readerSegment"
-      data-segment-index={segment.segmentIndex}
-      data-search-target={segment.segmentIndex === hitSegment ? "true" : undefined}
-      id={`seg-${segment.segmentIndex}`}
-      key={segment.segmentIndex}
-    >
-      {segment.content}
-    </section>
-  ));
-}
-
-async function DeferredReaderSegments({
+function ReaderSegments({
   segments,
   hitSegment,
+  previousContent,
 }: {
   segments: NovelSegment[];
   hitSegment: number;
+  previousContent?: string;
 }) {
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
-  return <ReaderSegments segments={segments} hitSegment={hitSegment} />;
+  let previousEndedParagraph = previousContent ? /\r?\n\s*$/.test(previousContent) : true;
+  return segments.map((segment) => {
+    const continued = !previousEndedParagraph;
+    const paragraphs = splitReaderParagraphs(segment.content, continued);
+    previousEndedParagraph = /\r?\n\s*$/.test(segment.content);
+    return (
+      <section
+        className="readerSegment"
+        data-reader-continuation={continued ? "true" : undefined}
+        data-segment-index={segment.segmentIndex}
+        data-search-target={segment.segmentIndex === hitSegment ? "true" : undefined}
+        id={`seg-${segment.segmentIndex}`}
+        key={segment.segmentIndex}
+      >
+        {paragraphs.map((paragraph, index) => (
+          <p
+            aria-level={paragraph.sectionHeading ? 2 : undefined}
+            className={`readerParagraph${paragraph.continued ? " isContinuation" : ""}${paragraph.sectionHeading ? " isSectionHeading" : ""}`}
+            key={index}
+            role={paragraph.sectionHeading ? "heading" : undefined}
+          >
+            {paragraph.text}
+          </p>
+        ))}
+      </section>
+    );
+  });
 }
 
 function ReaderHotwordLinks({ hotwords, novelId, library }: { hotwords: string[]; novelId: number; library: string }) {
@@ -149,13 +161,13 @@ function ReaderNovelNavigation({
   return (
     <nav className={`readerNovelNavigation${isSingle ? " isSingle" : ""}`} aria-label="小说导航">
       {previous ? (
-        <Link className="readerNovelLink readerNovelPrevious" href={href(previous.id)} prefetch={false} aria-label={`上一篇：${previous.title}`} title={`上一篇：${previous.title}`}>
+        <Link className="readerNovelLink readerNovelPrevious" href={href(previous.id)} aria-label={`上一篇：${previous.title}`} title={`上一篇：${previous.title}`}>
           <span className="readerNovelArrow"><ChevronLeft size={20} strokeWidth={1.8} aria-hidden="true" /></span>
           <span className="readerNovelTitle"><strong>{previous.title}</strong></span>
         </Link>
       ) : null}
       {next ? (
-        <Link className="readerNovelLink readerNovelNext" href={href(next.id)} prefetch={false} aria-label={`下一篇：${next.title}`} title={`下一篇：${next.title}`}>
+        <Link className="readerNovelLink readerNovelNext" href={href(next.id)} aria-label={`下一篇：${next.title}`} title={`下一篇：${next.title}`}>
           <span className="readerNovelTitle"><strong>{next.title}</strong></span>
           <span className="readerNovelArrow"><ChevronRight size={20} strokeWidth={1.8} aria-hidden="true" /></span>
         </Link>
@@ -174,6 +186,8 @@ async function ReaderContent({
   initialProgress,
   resume,
   preview,
+  previousHref,
+  nextHref,
 }: {
   book: Novel;
   chapterContext: ChapterContext | null;
@@ -184,6 +198,8 @@ async function ReaderContent({
   initialProgress: ReadingProgress | null;
   resume: boolean;
   preview: boolean;
+  previousHref?: string | null;
+  nextHref?: string | null;
 }) {
   const chapter = chapterContext?.chapter || null;
   const sourceSegments = chapter ? await readNovelChapterSegments(chapter) : await readNovelSegments(book);
@@ -194,9 +210,6 @@ async function ReaderContent({
     locale,
     preview && !chapter ? `${contentVersion}:soda-preview-30` : contentVersion,
   );
-  const streamInitialSegments = !Number.isInteger(hitSegment) && !resume && segments.length > READER_STREAM_THRESHOLD;
-  const initialSegments = streamInitialSegments ? segments.slice(0, INITIAL_READER_SEGMENTS) : segments;
-  const deferredSegments = streamInitialSegments ? segments.slice(INITIAL_READER_SEGMENTS) : [];
   const path = chapter ? `/books/${book.id}/chapters/${chapter.id}` : `/books/${book.id}`;
   if (user) {
     after(() => {
@@ -215,15 +228,13 @@ async function ReaderContent({
 
   return (
     <>
-      <div className="readerText">
-        <ReaderSegments segments={initialSegments} hitSegment={hitSegment} />
-        {deferredSegments.length ? (
-          <Suspense fallback={null}>
-            <DeferredReaderSegments segments={deferredSegments} hitSegment={hitSegment} />
-          </Suspense>
-        ) : null}
+      <div className="readerPagedStage">
+        <div className="readerText">
+          <ReaderSegments segments={segments} hitSegment={hitSegment} />
+        </div>
+        <ReaderPageTurnController previousHref={previousHref} nextHref={nextHref} />
       </div>
-      {user && !preview ? (
+      {user?.readingHistoryEnabled && !preview ? (
         <ReadingProgressTracker
           novelId={book.id}
           chapterId={chapter?.id || null}
@@ -304,9 +315,15 @@ export async function NovelReaderView({
           : null,
       ])
     : [null, null];
+  const previousReaderHref = chapter
+    ? chapterContext?.previous ? chapterHref(book.id, chapterContext.previous.id, query.from) : null
+    : displayPreviousNovel ? `/books/${displayPreviousNovel.id}?from=${encodeURIComponent(catalogHref)}` : null;
+  const nextReaderHref = chapter
+    ? chapterContext?.next ? chapterHref(book.id, chapterContext.next.id, query.from) : null
+    : displayNextNovel ? `/books/${displayNextNovel.id}?from=${encodeURIComponent(catalogHref)}` : null;
 
   return (
-    <main className="readerShell">
+    <main className="readerShell novelReaderShell">
       <SiteHeader
         defaultSearchMode="current"
         showCurrentSearch
@@ -326,9 +343,15 @@ export async function NovelReaderView({
         chapterCount={book.chapter_count}
         chapters={chapters}
         currentChapterId={chapter?.id}
-        previous={chapterContext?.previous ? { id: chapterContext.previous.id, title: chapterContext.previous.title, wordCount: chapterContext.previous.wordCount } : null}
-        next={chapterContext?.next ? { id: chapterContext.next.id, title: chapterContext.next.title, wordCount: chapterContext.next.wordCount } : null}
+        navigationKind={chapter ? "chapter" : "novel"}
+        previous={chapter
+          ? chapterContext?.previous ? { id: chapterContext.previous.id, title: chapterContext.previous.title } : null
+          : displayPreviousNovel}
+        next={chapter
+          ? chapterContext?.next ? { id: chapterContext.next.id, title: chapterContext.next.title } : null
+          : displayNextNovel}
         from={query.from}
+        returnHref={catalogHref}
         authenticated={authenticated}
         initialInGrove={Boolean(grove?.planted)}
         initialFavorite={favorite}
@@ -375,7 +398,27 @@ export async function NovelReaderView({
               initialProgress={initialProgress}
               resume={query.resume === "1"}
               preview={preview}
+              previousHref={previousReaderHref}
+              nextHref={nextReaderHref}
             />
+            {preview ? (
+              <NovelAccessGate
+                novelId={book.id}
+                price={readAccess.price}
+                loginRequired={!authenticated}
+              />
+            ) : null}
+            {chapterContext ? (
+              <ChapterNavigation bookId={book.id} context={chapterContext} from={query.from} />
+            ) : null}
+            <ReaderHotwordLinks hotwords={localizedHotwords} novelId={book.id} library={library} />
+            {!chapter ? (
+              <ReaderNovelNavigation
+                previous={displayPreviousNovel}
+                next={displayNextNovel}
+                returnHref={catalogHref}
+              />
+            ) : null}
           </Suspense>
         ) : (
           <NovelAccessGate
@@ -384,23 +427,8 @@ export async function NovelReaderView({
             loginRequired={readAccess.reason === "login_required"}
           />
         )}
-        {preview ? (
-          <NovelAccessGate
-            novelId={book.id}
-            price={readAccess.price}
-            loginRequired={!authenticated}
-          />
-        ) : null}
-        {chapterContext && readAccess.allowed ? (
-          <ChapterNavigation bookId={book.id} context={chapterContext} from={query.from} />
-        ) : null}
-        <ReaderHotwordLinks hotwords={localizedHotwords} novelId={book.id} library={library} />
-        {!chapter ? (
-          <ReaderNovelNavigation
-            previous={displayPreviousNovel}
-            next={displayNextNovel}
-            returnHref={catalogHref}
-          />
+        {!readAccess.allowed ? (
+          <ReaderNovelNavigation previous={displayPreviousNovel} next={displayNextNovel} returnHref={catalogHref} />
         ) : null}
       </article>
     </main>

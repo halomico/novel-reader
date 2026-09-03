@@ -12,6 +12,13 @@ type FormatCompactUpdateDateOptions = {
   timeZone?: string;
 };
 
+type RelativeTimeLabels = {
+  justNow: string;
+  minutesAgo: string;
+  hoursAgo: string;
+  daysAgo: string;
+};
+
 const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1_000;
 
 function normalizeMilliseconds(value: string | undefined): number {
@@ -94,4 +101,18 @@ export function formatCompactUpdateDate(
   return includeYear
     ? `${value.year}-${value.month}-${value.day}`
     : `${value.month}-${value.day}`;
+}
+
+export function formatRelativeUpdateTime(
+  timestamp: number,
+  labels: RelativeTimeLabels,
+  now = Date.now(),
+): string {
+  if (!Number.isFinite(timestamp)) return "-";
+  const elapsed = Math.max(0, now - timestamp);
+  if (elapsed < 60_000) return labels.justNow;
+  if (elapsed < 60 * 60_000) return `${Math.max(1, Math.floor(elapsed / 60_000))}${labels.minutesAgo}`;
+  if (elapsed < 24 * 60 * 60_000) return `${Math.max(1, Math.floor(elapsed / (60 * 60_000)))}${labels.hoursAgo}`;
+  if (elapsed < 7 * 24 * 60 * 60_000) return `${Math.max(1, Math.floor(elapsed / (24 * 60 * 60_000)))}${labels.daysAgo}`;
+  return formatCompactUpdateDate(timestamp, { now });
 }

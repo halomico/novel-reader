@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserDailyReportLimit } from "@/lib/config";
-import { createContentReport, isContentReportCategory, isMediaReportCategory } from "@/lib/reports";
+import { createContentReport, isContentReportCategory, isMediaReportCategory, isOriginalReportCategory } from "@/lib/reports";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 import { hasUserPermission } from "@/lib/user-levels";
 
@@ -29,10 +29,13 @@ export async function POST(request: NextRequest) {
   const details = String(body.details || "").trim();
   const novelId = Number(body.novelId || 0);
   const mediaId = Number(body.mediaId || 0);
+  const originalArticleId = Number(body.originalArticleId || 0);
   const mediaTarget = Number.isInteger(mediaId) && mediaId > 0;
+  const originalTarget = Number.isInteger(originalArticleId) && originalArticleId > 0;
   if (
     !isContentReportCategory(category) ||
     (mediaTarget && !isMediaReportCategory(category)) ||
+    (originalTarget && !isOriginalReportCategory(category)) ||
     details.length > 200 ||
     (category === "other" && !details)
   ) {
@@ -44,6 +47,7 @@ export async function POST(request: NextRequest) {
       userId: user.id,
       novelId,
       mediaId,
+      originalArticleId,
       category,
       details,
       dailyLimit: getUserDailyReportLimit(),

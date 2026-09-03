@@ -10,6 +10,7 @@ import { getUserLevelForExperience } from "./user-levels";
 
 export type UserStatus = "active" | "disabled" | "pending";
 export type UserRole = "user" | "admin";
+export type ReadingHistoryKind = "novel" | "original";
 
 export type UserProfile = {
   id: number;
@@ -26,6 +27,7 @@ export type UserProfile = {
   cookieBalance: number;
   localePreference: AppLocale;
   readingHistoryEnabled: boolean;
+  originalReadingHistoryEnabled: boolean;
   registrationIp: string | null;
   createdAt: string;
   updatedAt: string;
@@ -93,6 +95,7 @@ type UserRow = {
   cookie_balance: number;
   locale_preference: string;
   reading_history_enabled: number;
+  original_reading_history_enabled: number;
   registration_ip: string | null;
   created_at: string;
   updated_at: string;
@@ -165,6 +168,7 @@ function toUserProfile(row: UserRow): UserProfile {
     cookieBalance: Math.max(Math.floor(row.cookie_balance || 0), 0),
     localePreference: normalizeLocale(row.locale_preference),
     readingHistoryEnabled: row.reading_history_enabled !== 0,
+    originalReadingHistoryEnabled: row.original_reading_history_enabled !== 0,
     registrationIp: row.registration_ip,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -178,7 +182,7 @@ export function getUserById(id: number): UserProfile | null {
     .prepare(
       `SELECT id, username, display_name, email, email_verified_at, avatar_path, status, role,
               trust_level, soda_balance, soda_experience, cookie_balance,
-              locale_preference, reading_history_enabled, registration_ip,
+              locale_preference, reading_history_enabled, original_reading_history_enabled, registration_ip,
               created_at, updated_at, last_login_at, last_login_ip
        FROM users
        WHERE id = ?`,
@@ -193,7 +197,7 @@ export function getUserPasswordRow(username: string): (UserRow & { password_hash
     .prepare(
       `SELECT id, username, display_name, email, email_verified_at, password_hash, avatar_path, status, role,
               trust_level, soda_balance, soda_experience, cookie_balance,
-              locale_preference, reading_history_enabled, registration_ip,
+              locale_preference, reading_history_enabled, original_reading_history_enabled, registration_ip,
               created_at, updated_at, last_login_at, last_login_ip
        FROM users
        WHERE username = ?`,
@@ -271,7 +275,7 @@ export function listUsers(params: { page?: number; q?: string; pageSize?: number
     .prepare(
       `SELECT id, username, display_name, email, email_verified_at, avatar_path, status, role,
               trust_level, soda_balance, soda_experience, cookie_balance,
-              locale_preference, reading_history_enabled, registration_ip,
+              locale_preference, reading_history_enabled, original_reading_history_enabled, registration_ip,
               created_at, updated_at, last_login_at, last_login_ip
        FROM users
        ${where}
@@ -344,9 +348,14 @@ export function updateUserLocalePreference(userId: number, locale: AppLocale): b
   return Number(info.changes) > 0;
 }
 
-export function updateUserReadingHistoryPreference(userId: number, enabled: boolean): boolean {
+export function updateUserReadingHistoryPreference(
+  userId: number,
+  kind: ReadingHistoryKind,
+  enabled: boolean,
+): boolean {
+  const column = kind === "original" ? "original_reading_history_enabled" : "reading_history_enabled";
   const info = getDb()
-    .prepare("UPDATE users SET reading_history_enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .prepare(`UPDATE users SET ${column} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
     .run(enabled ? 1 : 0, userId);
   return Number(info.changes) > 0;
 }

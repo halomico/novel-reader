@@ -313,7 +313,11 @@ export function AdminReportList({ reports: initialReports }: { reports: ContentR
             {reports.length ? reports.map((report) => (
               <tr key={report.id}>
                 <td>
-                  <Link href={report.targetType === "media" ? `/media/${report.targetId}` : `/books/${report.targetId}`}>
+                  <Link href={report.targetType === "media"
+                    ? `/media/${report.targetId}`
+                    : report.targetType === "original"
+                      ? `/original/${encodeURIComponent(report.targetSlug || String(report.targetId))}`
+                      : `/books/${report.targetId}`}>
                     {report.targetTitle}
                   </Link>
                 </td>

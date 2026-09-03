@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "@/components/LocalizedLink";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { CatalogRandomButton } from "@/components/CatalogRandomButton";
@@ -10,7 +9,6 @@ import { PageContextBar } from "@/components/PageContextBar";
 import { Pagination } from "@/components/Pagination";
 import { ResultCount } from "@/components/ResultCount";
 import { SiteHeader } from "@/components/SiteHeader";
-import { TagPreferenceToggle } from "@/components/TagPreferenceToggle";
 import {
   canAccessTagLibrary,
   getCatalogPageSize,
@@ -22,8 +20,6 @@ import { getTagBySlug, listNovelsByTag, listTagsForNovels } from "@/lib/tags";
 import { canonicalPagePath, NO_INDEX_ROBOTS } from "@/lib/seo";
 import {
   filterTagsByNovelForUser,
-  listEffectivelyHiddenTagIds,
-  listExplicitlyHiddenTagIds,
 } from "@/lib/tag-preferences";
 import { getCurrentUser } from "@/lib/user-auth";
 import { checkContentAccess } from "@/lib/content-access";
@@ -132,10 +128,6 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
   if (sortOrder !== defaultNovelCatalogSortOrder(sortBy)) returnParams.set("order", sortOrder);
   if (randomSeed) returnParams.set("random", randomSeed);
   const returnHref = `/tags/${tag.slug}?${returnParams}`;
-  const effectiveHidden = user ? listEffectivelyHiddenTagIds(user.id) : new Set<number>();
-  const explicitHidden = user ? listExplicitlyHiddenTagIds(user.id) : new Set<number>();
-  const isExplicitlyHidden = explicitHidden.has(tag.id);
-  const isHiddenByGroup = effectiveHidden.has(tag.id) && !isExplicitlyHidden;
   const displayTag = {
     ...tag,
     name: await localizeText(tag.name, locale),
@@ -165,20 +157,6 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
         <div className="tagDetailHeadingRow">
           <h1>{displayTag.name}</h1>
           <div className="tagDetailActions">
-            {user ? (
-              isHiddenByGroup ? (
-                <Link className="tagInheritedVisibility" href="/tags?hidden=1" title={uiText(locale, "前往已隐藏标签")}>
-                  {uiText(locale, "随分组隐藏")}
-                </Link>
-              ) : (
-                <TagPreferenceToggle
-                  tagId={tag.id}
-                  initialVisible={!isExplicitlyHidden}
-                  showLabel={uiText(locale, "显示此标签")}
-                  hideLabel={uiText(locale, "隐藏此标签")}
-                />
-              )
-            ) : null}
             <NovelCatalogSort sortBy={sortBy} sortOrder={sortOrder} locale={locale} />
             {result.totalBooks > 1 ? <CatalogRandomButton basePath={`/tags/${tag.slug}`} /> : null}
           </div>

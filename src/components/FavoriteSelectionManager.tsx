@@ -11,7 +11,7 @@ import {
 } from "react";
 import { uiText, type AppLocale } from "@/lib/locale";
 
-type FavoriteKind = "novel" | "video" | "audio";
+type FavoriteKind = "novel" | "original" | "video" | "audio";
 
 type FavoriteSelectionContextValue = {
   managing: boolean;
@@ -112,29 +112,30 @@ export function FavoriteSelectionManager({
 
   return (
     <FavoriteSelectionContext.Provider value={contextValue}>
-      <div className="favoriteManageToolbar">
-        <p className="readingHistoryNotice" role="status">{message}</p>
-        <div className="favoriteManageControls">
-          {managing ? (
-            <label className="activitySelectAll">
-              <input
-                type="checkbox"
-                checked={allVisibleSelected}
-                disabled={!activeVisibleIds.length}
-                onChange={toggleVisible}
-              />
-              <span aria-hidden="true"><Check size={12} /></span>
-              <em>{tr("全选")}</em>
-            </label>
-          ) : null}
+      <div className="favoriteManageToolbar readingHistoryToolbar">
+        {managing ? (
+          <label className="activitySelectAll">
+            <input
+              type="checkbox"
+              checked={allVisibleSelected}
+              disabled={!activeVisibleIds.length}
+              onChange={toggleVisible}
+            />
+            <span aria-hidden="true"><Check size={12} /></span>
+            <em>{tr("全选")}</em>
+          </label>
+        ) : <span aria-hidden="true" />}
+        <div className="readingHistoryManageActions">
+          {message ? <span className="readingHistorySelectedCount" role="status">{message}</span> : null}
           <button
-            className={managing ? "iconLink isActive" : "iconLink"}
+            className={managing ? "activityManageButton isActive" : "activityManageButton"}
             type="button"
             aria-label={tr(managing ? "完成管理" : "管理收藏")}
             title={tr(managing ? "完成" : "管理")}
             onClick={toggleManaging}
           >
-            {managing ? <Check size={18} aria-hidden="true" /> : <ListChecks size={18} aria-hidden="true" />}
+            {managing ? <Check size={16} aria-hidden="true" /> : <ListChecks size={16} aria-hidden="true" />}
+            <span>{tr(managing ? "完成" : "管理")}</span>
           </button>
         </div>
       </div>

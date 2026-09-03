@@ -129,6 +129,19 @@ function uploadCors(origin: string): Record<string, string> {
   };
 }
 
+/** Headers required by HTMLMediaElement when the storage node is on another origin. */
+function mediaCors(request: IncomingMessage, publiclyAccessible: boolean): Record<string, string> {
+  const origin = publiclyAccessible ? "*" : request.headers.origin || "*";
+  return {
+    "Access-Control-Allow-Headers": "Range, If-None-Match, If-Range, Content-Type",
+    "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Expose-Headers": "Accept-Ranges, Content-Length, Content-Range, ETag, Last-Modified",
+    "Access-Control-Max-Age": "600",
+    ...(origin === "*" ? {} : { Vary: "Origin" }),
+  };
+}
+
 async function serveSignedMedia(
   request: IncomingMessage,
   response: ServerResponse,
@@ -168,6 +181,11 @@ async function serveSignedMedia(
     empty(response, 404);
     return;
   }
+  const corsHeaders = mediaCors(request, payload.publiclyAccessible);
+  if (request.method === "OPTIONS") {
+    empty(response, 204, corsHeaders);
+    return;
+  }
   const etag = `"media-${Math.floor(stat.mtimeMs)}-${stat.size}"`;
   const lastModified = stat.mtime.toUTCString();
   let rangeHeader = request.headers.range;
@@ -177,7 +195,7 @@ async function serveSignedMedia(
   }
   const range = parseRange(rangeHeader, stat.size);
   if (range === "invalid") {
-    empty(response, 416, { "Content-Range": `bytes */${stat.size}` });
+    empty(response, 416, { ...corsHeaders, "Content-Range": `bytes */${stat.size}` });
     return;
   }
   const start = range?.start ?? 0;
@@ -188,6 +206,7 @@ async function serveSignedMedia(
   );
   const headers: Record<string, string> = {
     "Accept-Ranges": "bytes",
+    ...corsHeaders,
     "Cache-Control": payload.publiclyAccessible
       ? `public, max-age=${publicMaxAge}, immutable, no-transform`
       : "private, max-age=300, no-transform",
@@ -214,7 +233,7 @@ async function serveSignedMedia(
     (runtime.maxVideoStreams > 0 && runtime.activeVideoStreams >= runtime.maxVideoStreams) ||
     (runtime.videoBandwidthKbps > 0 && runtime.reservedVideoKbps + reservedKbps > runtime.videoBandwidthKbps)
   )) {
-    empty(response, 503, { "Cache-Control": "no-store", "Retry-After": "15" });
+    empty(response, 503, { ...corsHeaders, "Cache-Control": "no-store", "Retry-After": "15" });
     return;
   }
   response.writeHead(range ? 206 : 200, headers);
@@ -804,7 +823,7 @@ export function createMediaNodeServer(options: MediaNodeServerOptions): http.Ser
         return;
       }
       if (
-        (request.method === "GET" || request.method === "HEAD") &&
+        (request.method === "GET" || request.method === "HEAD" || request.method === "OPTIONS") &&
         url.pathname.startsWith("/media-file/")
       ) {
         await serveSignedMedia(request, response, url, store.root, options.signingSecret, runtime);

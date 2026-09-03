@@ -28,6 +28,7 @@ type SessionUserRow = {
   cookie_balance: number;
   locale_preference: string;
   reading_history_enabled: number;
+  original_reading_history_enabled: number;
   registration_ip: string | null;
   created_at: string;
   updated_at: string;
@@ -55,6 +56,7 @@ function toUserProfile(row: SessionUserRow): UserProfile {
     cookieBalance: Math.max(Math.floor(row.cookie_balance || 0), 0),
     localePreference: normalizeLocale(row.locale_preference),
     readingHistoryEnabled: row.reading_history_enabled !== 0,
+    originalReadingHistoryEnabled: row.original_reading_history_enabled !== 0,
     registrationIp: row.registration_ip,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -85,7 +87,7 @@ function readUserFromSessionValue(value: string | undefined): UserProfile | null
     .prepare(
       `SELECT u.id, u.username, u.display_name, u.email, u.email_verified_at, u.avatar_path, u.status, u.role,
               u.trust_level, u.soda_balance, u.soda_experience, u.cookie_balance,
-              u.locale_preference, u.reading_history_enabled,
+              u.locale_preference, u.reading_history_enabled, u.original_reading_history_enabled,
               u.registration_ip, u.created_at, u.updated_at, u.last_login_at, u.last_login_ip
        FROM user_sessions s
        JOIN users u ON u.id = s.user_id

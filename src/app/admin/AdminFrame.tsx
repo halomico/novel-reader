@@ -38,6 +38,9 @@ function titleFor(active: AdminFrameProps["active"]): string {
   if (active === "tags") {
     return "标签管理";
   }
+  if (active === "original") {
+    return "原创管理";
+  }
   if (active === "access") {
     return "内容访问";
   }

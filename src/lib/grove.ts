@@ -1,8 +1,9 @@
 import { listNovelsByIds, type Novel } from "./books";
 import { getDb } from "./db";
 import { listMediaAssetsByIds, type FeedbackMediaKind, type MediaAsset } from "./media";
+import { listOriginalArticlesByIds } from "./original";
 
-export type GroveKind = "novel" | FeedbackMediaKind;
+export type GroveKind = "novel" | "original" | FeedbackMediaKind;
 export type GroveStage = "seed" | "sprout" | "tree";
 
 export type GroveState = {
@@ -33,7 +34,17 @@ export type GroveMediaItem = GroveItemBase & {
   durationSeconds: number | null;
 };
 
-export type GroveItem = GroveNovelItem | GroveMediaItem;
+export type GroveOriginalItem = GroveItemBase & {
+  kind: "original";
+  slug: string;
+  authorId: number;
+  authorName: string;
+  authorAvatarPath: string | null;
+  wordCount: number;
+  unlockSodaPrice: number;
+};
+
+export type GroveItem = GroveNovelItem | GroveOriginalItem | GroveMediaItem;
 
 export type GroveStats = {
   all: number;
@@ -61,6 +72,10 @@ type GroveIndexRow = {
 const GROVE_CTE = `WITH grove AS (
   SELECT 'novel' AS kind, novel_id AS item_id, visit_count, created_at
   FROM user_novel_grove
+  WHERE user_id = ?
+  UNION ALL
+  SELECT 'original' AS kind, article_id AS item_id, visit_count, created_at
+  FROM user_original_grove
   WHERE user_id = ?
   UNION ALL
   SELECT m.kind AS kind, g.media_id AS item_id, g.visit_count, g.created_at
@@ -123,6 +138,34 @@ export function recordNovelGroveVisit(userId: number, novelId: number): boolean 
     .run(userId, novelId).changes > 0;
 }
 
+export function getOriginalGroveState(userId: number, articleId: number): GroveState {
+  const row = getDb()
+    .prepare("SELECT visit_count FROM user_original_grove WHERE user_id = ? AND article_id = ?")
+    .get(userId, articleId) as { visit_count: number } | undefined;
+  return stateFromRow(row);
+}
+
+export function toggleOriginalGrove(userId: number, articleId: number): { ok: boolean } & GroveState {
+  const db = getDb();
+  const removed = db
+    .prepare("DELETE FROM user_original_grove WHERE user_id = ? AND article_id = ?")
+    .run(userId, articleId);
+  if (removed.changes > 0) return { ok: true, ...stateFromRow(undefined) };
+  const added = db.prepare(
+    `INSERT INTO user_original_grove (user_id, article_id, visit_count)
+     SELECT ?, id, 0 FROM original_articles WHERE id = ? AND status = 'published'`,
+  ).run(userId, articleId);
+  return { ok: added.changes > 0, ...getOriginalGroveState(userId, articleId) };
+}
+
+export function recordOriginalGroveVisit(userId: number, articleId: number): boolean {
+  return getDb().prepare(
+    `UPDATE user_original_grove
+     SET visit_count = visit_count + 1
+     WHERE user_id = ? AND article_id = ?`,
+  ).run(userId, articleId).changes > 0;
+}
+
 export function getMediaGroveState(userId: number, mediaId: number): GroveState {
   const row = getDb()
     .prepare("SELECT visit_count FROM user_media_grove WHERE user_id = ? AND media_id = ?")
@@ -158,9 +201,9 @@ export function recordMediaGroveVisit(userId: number, mediaId: number): boolean 
 }
 
 function normalizeAllowedKinds(values: readonly GroveKind[] | undefined): GroveKind[] {
-  const allowed = values === undefined ? ["novel", "video", "audio"] : values;
+  const allowed = values === undefined ? ["novel", "original", "video", "audio"] : values;
   return Array.from(new Set(allowed)).filter(
-    (kind): kind is GroveKind => kind === "novel" || kind === "video" || kind === "audio",
+    (kind): kind is GroveKind => kind === "novel" || kind === "original" || kind === "video" || kind === "audio",
   );
 }
 
@@ -176,8 +219,11 @@ function mapGroveItems(rows: GroveIndexRow[]): GroveItem[] {
     rows.filter((row) => row.kind === "novel").map((row) => row.item_id),
   ).map((book) => [book.id, book]));
   const media = new Map(listMediaAssetsByIds(
-    rows.filter((row) => row.kind !== "novel").map((row) => row.item_id),
+    rows.filter((row) => row.kind === "video" || row.kind === "audio").map((row) => row.item_id),
   ).map((asset) => [asset.id, asset]));
+  const originals = new Map(listOriginalArticlesByIds(
+    rows.filter((row) => row.kind === "original").map((row) => row.item_id),
+  ).map((article) => [article.id, article]));
 
   const items: GroveItem[] = [];
   for (const row of rows) {
@@ -198,6 +244,23 @@ function mapGroveItems(rows: GroveIndexRow[]): GroveItem[] {
           storageMode: book.storage_mode,
           chapterCount: book.chapter_count,
           wordCount: book.word_count,
+        });
+      }
+      continue;
+    }
+    if (row.kind === "original") {
+      const article = originals.get(row.item_id);
+      if (article) {
+        items.push({
+          ...base,
+          kind: "original",
+          title: article.title,
+          slug: article.slug,
+          authorId: article.authorId,
+          authorName: article.authorName,
+          authorAvatarPath: article.authorAvatarPath,
+          wordCount: article.wordCount,
+          unlockSodaPrice: article.unlockSodaPrice,
         });
       }
       continue;
@@ -241,7 +304,7 @@ export function listGrovePage(
   }
 
   const kindPlaceholders = allowedKinds.map(() => "?").join(", ");
-  const baseValues = [userId, userId, ...allowedKinds];
+  const baseValues = [userId, userId, userId, ...allowedKinds];
   const stats = db.prepare(
     `${GROVE_CTE}
      SELECT COUNT(*) AS all_count,

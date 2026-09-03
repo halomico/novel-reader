@@ -120,11 +120,11 @@ export function MediaPublicSort({
                   onClick={() => selectSort(option.value)}
                   key={option.value}
                 >
-                  <span>{option.label}</span>
                   {active ? sortOrder === "asc"
                     ? <ArrowUp size={14} aria-hidden="true" />
                     : <ArrowDown size={14} aria-hidden="true" />
-                  : null}
+                  : <i className="catalogMenuItemMarker" aria-hidden="true" />}
+                  <span>{option.label}</span>
                 </button>
               );
             })}

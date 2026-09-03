@@ -72,6 +72,9 @@ export function MediaAudioPlayer({
   const [audioStatus, setAudioStatus] = useState<AudioStatus>("ready");
   const [audioStatusMessage, setAudioStatusMessage] = useState("");
   const waitingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recoveryAttemptRef = useRef(false);
+  const pendingSeekTimeRef = useRef<number | null>(null);
   activeTrackIdRef.current = activeTrack.id;
 
   function clearWaitingTimer() {
@@ -81,10 +84,34 @@ export function MediaAudioPlayer({
     }
   }
 
+  function clearRecoveryTimer() {
+    if (recoveryTimerRef.current) {
+      clearTimeout(recoveryTimerRef.current);
+      recoveryTimerRef.current = null;
+    }
+  }
+
   function markReady() {
     clearWaitingTimer();
+    clearRecoveryTimer();
     setAudioStatus("ready");
     setAudioStatusMessage("");
+  }
+
+  function restorePendingSeek(audio: HTMLAudioElement) {
+    const target = pendingSeekTimeRef.current;
+    if (target == null) return;
+    if (!Number.isFinite(target)) {
+      pendingSeekTimeRef.current = null;
+      return;
+    }
+    try {
+      audio.currentTime = target;
+      pendingSeekTimeRef.current = null;
+    } catch {
+      // Metadata may be present before the browser accepts a seek. Keep the
+      // target for the next canplay event instead of losing the user's place.
+    }
   }
 
   /** Only show “loading…” if buffering lasts a moment — avoid flicker when nearly ready. */
@@ -98,6 +125,19 @@ export function MediaAudioPlayer({
       setAudioStatus("loading");
       setAudioStatusMessage(message);
     }, 450);
+    // A remote node can leave a media element in HAVE_METADATA after an
+    // interrupted range request. Give the browser one bounded retry instead
+    // of repeatedly calling load() on every `stalled` event.
+    clearRecoveryTimer();
+    recoveryTimerRef.current = setTimeout(() => {
+      recoveryTimerRef.current = null;
+      const audio = audioRef.current;
+      if (!audio || audio.paused || audio.ended || audio.readyState >= 3 || recoveryAttemptRef.current) return;
+      recoveryAttemptRef.current = true;
+      pendingSeekTimeRef.current = Number.isFinite(audio.currentTime) ? audio.currentTime : null;
+      pendingAutoPlayTrackIdRef.current = activeTrackIdRef.current;
+      audio.load();
+    }, 12_000);
   }
   const activeIndex = tracks.findIndex((track) => track.id === activeTrack.id);
   const visibleStart = Math.max(0, Math.floor(queueScrollTop / QUEUE_ROW_HEIGHT) - QUEUE_OVERSCAN);
@@ -114,6 +154,9 @@ export function MediaAudioPlayer({
     if (!audio || loadedTrackIdRef.current === activeTrack.id) return;
     const shouldAutoPlay = autoPlayRef.current;
     autoPlayRef.current = false;
+    recoveryAttemptRef.current = false;
+    pendingSeekTimeRef.current = null;
+    clearRecoveryTimer();
     audio.pause();
     loadedTrackIdRef.current = activeTrack.id;
     pendingAutoPlayTrackIdRef.current = shouldAutoPlay ? activeTrack.id : null;
@@ -127,7 +170,10 @@ export function MediaAudioPlayer({
     audio.load();
   }, [activeTrack.id, locale]);
 
-  useEffect(() => () => clearWaitingTimer(), []);
+  useEffect(() => () => {
+    clearWaitingTimer();
+    clearRecoveryTimer();
+  }, []);
 
   useEffect(() => {
     const queue = queueRef.current;
@@ -168,6 +214,7 @@ export function MediaAudioPlayer({
   function handleCanPlay() {
     const audio = audioRef.current;
     if (!audio) return;
+    restorePendingSeek(audio);
     markReady();
     if (pendingAutoPlayTrackIdRef.current !== activeTrack.id) return;
     pendingAutoPlayTrackIdRef.current = null;
@@ -216,6 +263,7 @@ export function MediaAudioPlayer({
           ref={audioRef}
           className="mediaAudioPlayer"
           controls
+          crossOrigin="anonymous"
           preload="metadata"
           src={`${basePathPrefix}/${activeTrack.id}/stream?v=${Math.floor(activeTrack.version)}`}
           onLoadStart={() => {
@@ -225,10 +273,27 @@ export function MediaAudioPlayer({
             setAudioStatus("loading");
             setAudioStatusMessage(uiText(locale, "正在加载音频…"));
           }}
-          onLoadedMetadata={markReady}
+          onLoadedMetadata={() => {
+            if (audioRef.current) restorePendingSeek(audioRef.current);
+            markReady();
+          }}
+          onLoadedData={markReady}
           onCanPlay={handleCanPlay}
           onCanPlayThrough={markReady}
           onPlaying={markReady}
+          onProgress={() => {
+            const audio = audioRef.current;
+            if (audio && audio.readyState >= 3) markReady();
+          }}
+          onSeeking={() => {
+            clearWaitingTimer();
+            markBuffering(uiText(locale, "正在定位音频…"));
+          }}
+          onSeeked={() => {
+            const audio = audioRef.current;
+            if (audio && audio.readyState >= 2) markReady();
+            else markBuffering(uiText(locale, "音频加载较慢，正在继续尝试…"));
+          }}
           onWaiting={() => {
             markBuffering(uiText(locale, "网络较慢，音频仍在加载…"));
           }}
@@ -241,6 +306,7 @@ export function MediaAudioPlayer({
             autoPlayRef.current = false;
             pendingAutoPlayTrackIdRef.current = null;
             clearWaitingTimer();
+            clearRecoveryTimer();
           }}
           onEnded={handleEnded}
           aria-label={`${uiText(locale, "播放")} ${activeTrack.title}`}

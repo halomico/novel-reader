@@ -8,12 +8,16 @@ import { getDb } from "./db";
 import {
   isMediaFavorite,
   isNovelFavorite,
+  isOriginalFavorite,
   listFavoriteMedia,
   listFavoriteNovels,
+  listFavoriteOriginals,
   removeMediaFavorites,
   removeNovelFavorites,
+  removeOriginalFavorites,
   toggleMediaFavorite,
   toggleNovelFavorite,
+  toggleOriginalFavorite,
 } from "./favorites";
 
 function withTempDatabase(t: TestContext) {
@@ -93,4 +97,27 @@ test("toggles and lists video and audio favorites separately", (t) => {
   assert.deepEqual(toggleMediaFavorite(userId, videoId), { ok: true, favorite: true });
   assert.equal(removeMediaFavorites(userId, "video", [videoId]), 1);
   assert.deepEqual(toggleMediaFavorite(userId, audioId), { ok: true, favorite: false });
+});
+
+test("toggles, lists, and batch-removes published original favorites", (t) => {
+  withTempDatabase(t);
+  const db = getDb();
+  const userId = Number(db.prepare(
+    "INSERT INTO users (username, display_name, password_hash) VALUES ('original-reader', '原创读者', 'hash')",
+  ).run().lastInsertRowid);
+  const articleId = Number(db.prepare(
+    `INSERT INTO original_articles (slug, author_id, title, body_markdown, word_count, status, published_at)
+     VALUES ('favorite-original', ?, '收藏原创', '正文', 2, 'published', CURRENT_TIMESTAMP)`,
+  ).run(userId).lastInsertRowid);
+  const hiddenId = Number(db.prepare(
+    `INSERT INTO original_articles (slug, author_id, title, body_markdown, status)
+     VALUES ('hidden-original', ?, '隐藏原创', '正文', 'hidden')`,
+  ).run(userId).lastInsertRowid);
+
+  assert.deepEqual(toggleOriginalFavorite(userId, articleId), { ok: true, favorite: true });
+  assert.equal(isOriginalFavorite(userId, articleId), true);
+  assert.deepEqual(listFavoriteOriginals(userId).articles.map((article) => article.id), [articleId]);
+  assert.deepEqual(toggleOriginalFavorite(userId, hiddenId), { ok: false, favorite: false });
+  assert.equal(removeOriginalFavorites(userId, [articleId, articleId, 999]), 1);
+  assert.equal(listFavoriteOriginals(userId).totalArticles, 0);
 });

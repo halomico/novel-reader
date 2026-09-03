@@ -61,9 +61,6 @@ export async function purchaseMarketProductAction(formData: FormData) {
   const productId = Number(formData.get("productId"));
   const slug = String(formData.get("slug") || "");
   const returnPath = slug ? `/market/${encodeURIComponent(slug)}` : "/market";
-  if (!hasUserPermission(user, "market_purchase")) {
-    marketNotice(returnPath, "当前等级暂不能购买商品", "warning");
-  }
   const currencyValue = String(formData.get("currency"));
   const currency: UserCurrency = currencyValue === "soda" ? "soda" : "cookie";
   let orderNo: string;

@@ -1,4 +1,4 @@
-import { Check, CupSoda, History, Save, ShieldCheck, Sparkles, UserRound } from "lucide-react";
+import { Check, History, ShieldCheck, Sparkles } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "@/components/LocalizedLink";
@@ -25,6 +25,7 @@ import {
 } from "./actions";
 import { getRequestLocale, localizeText } from "@/lib/locale-server";
 import { uiText, withLocalePath } from "@/lib/locale";
+import { CurrencyBalance } from "@/components/CurrencyBalance";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
@@ -102,28 +103,27 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
 
       {view === "profile" ? (
         <article className="userPanel accountPanel accountProfile">
-          <div className="accountProfileHeader">
-            <div className="accountAvatar" aria-hidden="true">
-              {user.avatarPath ? <img src={user.avatarPath} alt="" /> : <UserRound size={32} />}
-            </div>
-            <div className="accountIdentity">
-              <h1>{user.displayName}</h1>
-              <p>@{user.username}</p>
-            </div>
-            <AvatarUploadForm maxAvatarMb={maxAvatarMb} locale={locale} />
-          </div>
-
+          <header className="accountIdentityHeader">
+            <AvatarUploadForm
+              maxAvatarMb={maxAvatarMb}
+              locale={locale}
+              currentAvatarPath={user.avatarPath}
+              displayName={user.displayName}
+              levelName={displayLevelName}
+              trustLevel={user.trustLevel}
+              username={user.username}
+              userId={user.id}
+            />
+          </header>
           <div className="accountFormSections">
             <section className="accountFormSection">
-              <header>
-                <h2>{tr("资料")}</h2>
-              </header>
+              <header><h2>{tr("账户")}</h2></header>
               <form className="accountProfileForm" action={updateAccountDisplayNameAction}>
                 <label>
-                  <span>{tr("显示名称")}</span>
+                  <span>{tr("昵称")}</span>
                   <input name="displayName" defaultValue={user.displayName} maxLength={40} required />
                 </label>
-                <button className="accountActionButton" type="submit"><Save size={14} aria-hidden="true" />{tr("保存")}</button>
+                <button className="accountActionButton" type="submit">{tr("保存")}</button>
               </form>
             </section>
 
@@ -144,7 +144,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
                   <span>{tr("确认密码")}</span>
                   <input name="confirmPassword" type="password" autoComplete="new-password" minLength={6} maxLength={72} required />
                 </label>
-                <button className="accountActionButton" type="submit"><Save size={14} aria-hidden="true" />{tr("更新")}</button>
+                <button className="accountActionButton" type="submit">{tr("更新")}</button>
               </form>
             </section>
           </div>
@@ -159,11 +159,12 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
               <h1>{displayLevelName}</h1>
               <span className="accountGrowthLevel">Lv.{user.trustLevel}</span>
             </div>
-            <div className="accountGrowthBalance">
-              <CupSoda size={18} aria-hidden="true" />
-              <span>{tr("苏打")}</span>
-              <strong>{user.sodaBalance}</strong>
-            </div>
+            <CurrencyBalance
+              className="accountGrowthBalance"
+              currency="soda"
+              label={tr("苏打")}
+              amount={user.sodaBalance}
+            />
           </header>
 
           <section className="accountLevelProgress" aria-label={tr("等级进度")}>

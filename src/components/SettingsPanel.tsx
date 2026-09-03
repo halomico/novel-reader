@@ -1,7 +1,6 @@
 "use client";
 
-import { ChevronDown, Dices, Monitor, Moon, Sun } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Dices } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   DEFAULT_LOCALE,
@@ -14,28 +13,36 @@ import {
 import {
   COLOR_PALETTES,
   DEFAULT_READER_LINE_HEIGHT,
+  getReaderThemeSystemTheme,
   getColorPalette,
   isColorPalette,
+  isReaderTheme,
+  normalizeReaderJustify,
   normalizeReaderLineHeight,
   normalizeReaderTagsMode,
   NOVEL_CATALOG_SEARCH_COOKIE,
   PALETTE_STORAGE_KEY,
   READER_HOTWORDS_STORAGE_KEY,
+  READER_JUSTIFY_STORAGE_KEY,
   READER_LINE_HEIGHT_STORAGE_KEY,
+  READER_PAPER_STORAGE_KEY,
   READER_TAGS_STORAGE_KEY,
   type ColorPalette,
   type ReaderLineHeight,
+  type ReaderTheme,
   type ReaderTagsMode,
 } from "@/lib/ui-preferences";
 import { clearReaderPaperPreference } from "@/lib/reader-theme-client";
+import { ReaderJustifyToggle, ReaderThemePicker } from "./ReaderDisplayPreferences";
 import { ReaderFontSizeStepper, ReaderLineHeightStepper } from "./ReaderTypographyControls";
+import { SelectControl } from "./SelectControl";
 
 type ThemeChoice = "system" | "light" | "dark";
 
-const themes: Array<{ value: ThemeChoice; label: string; icon: LucideIcon }> = [
-  { value: "system", label: "跟随系统", icon: Monitor },
-  { value: "light", label: "浅色", icon: Sun },
-  { value: "dark", label: "暗色", icon: Moon },
+const themes: Array<{ value: ThemeChoice; label: string }> = [
+  { value: "system", label: "系统" },
+  { value: "light", label: "浅色" },
+  { value: "dark", label: "暗色" },
 ];
 
 function readLocalSetting(key: string): string | null {
@@ -127,6 +134,8 @@ export function SettingsPanel({
   const [palette, setPalette] = useState<ColorPalette>(defaultPalette);
   const [fontSize, setFontSize] = useState(defaultFontSize);
   const [lineHeight, setLineHeight] = useState<ReaderLineHeight>(defaultLineHeight);
+  const [readerTheme, setReaderTheme] = useState<ReaderTheme | null>(null);
+  const [justified, setJustified] = useState(true);
   const [readerTagsMode, setReaderTagsMode] = useState<ReaderTagsMode>(defaultReaderTagsMode);
   const [showReaderHotwords, setShowReaderHotwords] = useState(true);
   const [catalogSearchExpanded, setCatalogSearchExpanded] = useState(novelCatalogSearchExpanded);
@@ -143,7 +152,11 @@ export function SettingsPanel({
     const nextLineHeight = normalizeReaderLineHeight(readLocalSetting(READER_LINE_HEIGHT_STORAGE_KEY), defaultLineHeight);
     const savedTags = readLocalSetting(READER_TAGS_STORAGE_KEY);
     const savedHotwords = readLocalSetting(READER_HOTWORDS_STORAGE_KEY);
-    const nextTheme = savedTheme === "light" || savedTheme === "dark" || savedTheme === "system" ? savedTheme : defaultTheme;
+    const savedReaderTheme = readLocalSetting(READER_PAPER_STORAGE_KEY);
+    const nextReaderTheme = isReaderTheme(savedReaderTheme) ? savedReaderTheme : null;
+    const savedJustified = normalizeReaderJustify(readLocalSetting(READER_JUSTIFY_STORAGE_KEY));
+    const storedTheme = savedTheme === "light" || savedTheme === "dark" || savedTheme === "system" ? savedTheme : defaultTheme;
+    const nextTheme = nextReaderTheme ? getReaderThemeSystemTheme(nextReaderTheme) : storedTheme;
     const nextPalette = isColorPalette(savedPalette) ? savedPalette : defaultPalette;
     const nextFontSize = Number.isFinite(savedFontSize) && savedFontSize >= 8 && savedFontSize <= 25 ? savedFontSize : defaultFontSize;
     const nextReaderTagsMode = normalizeReaderTagsMode(savedTags, defaultReaderTagsMode);
@@ -154,6 +167,8 @@ export function SettingsPanel({
     setPalette(nextPalette);
     setFontSize(nextFontSize);
     setLineHeight(nextLineHeight);
+    setReaderTheme(nextReaderTheme);
+    setJustified(savedJustified);
     setReaderTagsMode(nextReaderTagsMode);
     setShowReaderHotwords(nextShowHotwords);
     setCatalogSearchExpanded(novelCatalogSearchExpanded);
@@ -165,11 +180,15 @@ export function SettingsPanel({
     removeLocalSetting("novel-reader-top-menu");
     document.documentElement.removeAttribute("data-ui-mode");
     document.documentElement.removeAttribute("data-top-menu");
+    if (nextReaderTheme) document.documentElement.dataset.readerTheme = nextReaderTheme;
+    else document.documentElement.removeAttribute("data-reader-theme");
+    document.documentElement.dataset.readerJustify = savedJustified ? "on" : "off";
     applySettings(nextTheme, nextFontSize, nextLineHeight, nextPalette, nextReaderTagsMode, nextShowHotwords, false);
   }, [defaultFontSize, defaultLineHeight, defaultPalette, defaultReaderTagsMode, defaultTheme, novelCatalogSearchExpanded]);
 
   function changeTheme(value: ThemeChoice) {
     setTheme(value);
+    setReaderTheme(null);
     clearReaderPaperPreference();
     if (value === "system") {
       document.documentElement.removeAttribute("data-theme");
@@ -190,6 +209,30 @@ export function SettingsPanel({
     setLineHeight(value);
     document.documentElement.style.setProperty("--reader-line-height", String(value));
     writeLocalSetting(READER_LINE_HEIGHT_STORAGE_KEY, String(value));
+  }
+
+  function changeReaderTheme(value: ReaderTheme) {
+    const selectedTheme = readerTheme === value ? null : value;
+    const root = document.documentElement;
+    setReaderTheme(selectedTheme);
+    if (!selectedTheme) {
+      root.removeAttribute("data-reader-theme");
+      removeLocalSetting(READER_PAPER_STORAGE_KEY);
+      return;
+    }
+    const nextTheme = getReaderThemeSystemTheme(selectedTheme);
+    setTheme(nextTheme);
+    root.dataset.theme = nextTheme;
+    root.dataset.readerTheme = selectedTheme;
+    writeLocalSetting("novel-theme", nextTheme);
+    writeLocalSetting(READER_PAPER_STORAGE_KEY, selectedTheme);
+  }
+
+  function changeJustified(value: boolean) {
+    setJustified(value);
+    const storedValue = value ? "on" : "off";
+    document.documentElement.dataset.readerJustify = storedValue;
+    writeLocalSetting(READER_JUSTIFY_STORAGE_KEY, storedValue);
   }
 
   function changePalette(value: ColorPalette) {
@@ -284,15 +327,11 @@ export function SettingsPanel({
                 <strong>{tr(themes.find((item) => item.value === theme)?.label || "")}</strong>
               </div>
               <div className="segmentedControl settingCompactSegments" role="group" aria-label="主题模式">
-                {themes.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <button className={theme === item.value ? "isActive" : ""} key={item.value} type="button" onClick={() => changeTheme(item.value)}>
-                      <Icon size={17} aria-hidden="true" />
-                      <span>{tr(item.label)}</span>
-                    </button>
-                  );
-                })}
+                {themes.map((item) => (
+                  <button className={theme === item.value ? "isActive" : ""} key={item.value} type="button" onClick={() => changeTheme(item.value)}>
+                    {tr(item.label)}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -305,10 +344,9 @@ export function SettingsPanel({
                   <span style={{ backgroundColor: getColorPalette(palette).lightAccent }} />
                   <span style={{ backgroundColor: getColorPalette(palette).darkAccent }} />
                 </span>
-                <select aria-label="配色风格" value={palette} onChange={(event) => changePalette(event.target.value as ColorPalette)}>
+                <SelectControl wrapperClassName="settingPaletteSelect" aria-label="配色风格" value={palette} onChange={(event) => changePalette(event.target.value as ColorPalette)}>
                   {COLOR_PALETTES.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}
-                </select>
-                <ChevronDown className="settingPaletteChevron" size={15} aria-hidden="true" />
+                </SelectControl>
                 <button
                   className="settingPaletteRandomButton"
                   type="button"
@@ -328,6 +366,18 @@ export function SettingsPanel({
             <h2>{tr("阅读")}</h2>
           </div>
           <div className="settingRows">
+            <div className="settingRow settingReaderThemeRow">
+              <div className="settingRowTitle">
+                <span>{tr("主题")}</span>
+              </div>
+              <ReaderThemePicker
+                className="settingsReaderThemePicker"
+                value={readerTheme}
+                onChange={changeReaderTheme}
+                labelFor={tr}
+              />
+            </div>
+
             <div className="settingRow">
               <div className="settingRowTitle">
                 <span>{tr("字号")}</span>
@@ -340,6 +390,18 @@ export function SettingsPanel({
                 <span>{tr("行距")}</span>
               </div>
               <ReaderLineHeightStepper value={lineHeight} onChange={changeLineHeight} />
+            </div>
+
+            <div className="settingRow">
+              <div className="settingRowTitle">
+                <span>{tr("两端对齐")}</span>
+              </div>
+              <ReaderJustifyToggle
+                checked={justified}
+                onChange={changeJustified}
+                label={tr("两端对齐")}
+                className="settingsReaderJustifyToggle"
+              />
             </div>
           </div>
         </section>

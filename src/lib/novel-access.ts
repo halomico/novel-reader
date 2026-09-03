@@ -119,6 +119,16 @@ export function listReadableNovelIds(user: NovelAccessUser): number[] {
   ).all(user.id) as Array<{ id: number }>).map((row) => row.id);
 }
 
+/**
+ * Full-text search deliberately includes locked novels.  Search results expose
+ * only a short matching snippet; opening the result still goes through the
+ * normal novel access gate and requires an unlock when the book is protected.
+ */
+export function listSearchableNovelIds(user: NovelAccessUser): number[] {
+  if (!canConsumeNovelLibrary(Boolean(user))) return [];
+  return (getDb().prepare("SELECT id FROM novels ORDER BY id").all() as Array<{ id: number }>).map((row) => row.id);
+}
+
 export type NovelUnlockResult =
   | { ok: true; charged: boolean; sodaBalance: number }
   | { ok: false; reason: "not_found" | "account_unavailable" | "insufficient_soda" };

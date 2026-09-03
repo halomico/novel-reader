@@ -4,17 +4,24 @@ import { clearReaderPaperPreference } from "./reader-theme-client";
 import {
   COLOR_PALETTES,
   DEFAULT_READER_LINE_HEIGHT,
+  DEFAULT_READER_WIDTH,
   getReaderThemeSystemTheme,
   getColorPalette,
   isColorPalette,
   normalizeReaderLineHeight,
+  normalizeReaderJustify,
+  normalizeReaderPageTurn,
+  normalizeReaderWidth,
   normalizeNovelCatalogSearchExpanded,
   normalizeReaderTagsMode,
   isReaderTheme,
   READER_THEME_OPTIONS,
   READER_LINE_HEIGHTS,
+  READER_PAGE_TURN_OPTIONS,
+  READER_WIDTHS,
   resolveDefaultPalette,
 } from "./ui-preferences";
+import { splitReaderParagraphs } from "./reader-layout";
 
 test("ships 21 unique local palettes with Default first and Cinnabar available", () => {
   const values = COLOR_PALETTES.map((palette) => palette.value);
@@ -64,6 +71,46 @@ test("provides 0.8 through 2.5 reader line heights in 0.1 steps", () => {
   assert.equal(normalizeReaderLineHeight("2.5"), 2.5);
   assert.equal(normalizeReaderLineHeight("invalid"), 1.7);
   assert.equal(normalizeReaderLineHeight("invalid", 1.4), 1.4);
+});
+
+test("keeps reader width and page-turn preferences within the supported lightweight options", () => {
+  assert.deepEqual(READER_WIDTHS, ["auto", 640, 800, 900, 1000, 1280]);
+  assert.equal(DEFAULT_READER_WIDTH, 800);
+  assert.equal(normalizeReaderWidth("auto"), "auto");
+  assert.equal(normalizeReaderWidth("1000"), 1000);
+  assert.equal(normalizeReaderWidth("777"), 800);
+  assert.deepEqual(READER_PAGE_TURN_OPTIONS.map((option) => option.value), ["scroll", "slide", "instant"]);
+  assert.equal(normalizeReaderPageTurn("slide"), "slide");
+  assert.equal(normalizeReaderPageTurn("instant"), "instant");
+  assert.equal(normalizeReaderPageTurn("unknown"), "scroll");
+});
+
+test("normalizes the first-paint reader justification preference", () => {
+  assert.equal(normalizeReaderJustify("on"), true);
+  assert.equal(normalizeReaderJustify("off"), false);
+  assert.equal(normalizeReaderJustify(null), true);
+  assert.equal(normalizeReaderJustify("unknown", false), false);
+});
+
+test("normalizes Chinese novel paragraphs while preserving a split segment continuation", () => {
+  assert.deepEqual(
+    splitReaderParagraphs("　第一段。\r\n\r\n  第二段。"),
+    [
+      { text: "第一段。", continued: false, sectionHeading: false },
+      { text: "第二段。", continued: false, sectionHeading: false },
+    ],
+  );
+  assert.deepEqual(
+    splitReaderParagraphs("接续文字。\n下一段。", true),
+    [
+      { text: "接续文字。", continued: true, sectionHeading: false },
+      { text: "下一段。", continued: false, sectionHeading: false },
+    ],
+  );
+  assert.deepEqual(splitReaderParagraphs("序章\n第12章 风从海上来"), [
+    { text: "序章", continued: false, sectionHeading: true },
+    { text: "第12章 风从海上来", continued: false, sectionHeading: true },
+  ]);
 });
 
 test("uses a browser catalog-search preference only when it is valid", () => {

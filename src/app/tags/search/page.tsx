@@ -1,4 +1,4 @@
-import { ListFilter } from "lucide-react";
+import { Filter } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
@@ -15,7 +15,6 @@ import {
   getCatalogPageSize,
   getDefaultNovelLibrarySlug,
   getSearchResultsPageSize,
-  shouldShowProgressBars,
 } from "@/lib/config";
 import { validateSearchKeyword } from "@/lib/search";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
@@ -72,6 +71,12 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
   const audience = user?.role === "admin" ? "admin" : user ? "member" : "public";
   const novelSources = listNovelSources({ includeEmpty: true })
     .filter((source) => source.slug === DEFAULT_NOVEL_LIBRARY_SLUG || source.novelCount > 0);
+  const localizedNovelSources = await Promise.all(novelSources.map(async (source) => ({
+    ...source,
+    // Source names are stored content, not UI keys; localize them explicitly
+    // so the traditional advanced-search picker cannot leak simplified text.
+    name: await localizeText(source.name, locale),
+  })));
   const libraryScope = resolveNovelLibraryScope(
     params.library || params.sourceLibrary || getDefaultNovelLibrarySlug(),
   );
@@ -155,7 +160,7 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
       <SiteHeader currentUser={user} library={libraryScope.slug} />
       <Breadcrumbs items={[{ label: homeLabel, href: "/" }, { label: tagsLabel, href: "/tags" }, { label: advancedLabel }]} />
       <header className="advancedTagSearchHeader userContentHeader">
-        <span><ListFilter size={19} aria-hidden="true" /><h1>{advancedLabel}</h1></span>
+        <span><Filter size={19} aria-hidden="true" /><h1>{advancedLabel}</h1></span>
       </header>
 
       <TagIntersectionSearchForm
@@ -164,7 +169,7 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
         initialExcluded={excludedSlugs}
         initialTitleQuery={titleInput}
         initialContentQuery={contentInput}
-        sources={novelSources}
+        sources={localizedNovelSources}
         initialSourceLibrary={libraryScope.slug}
         locale={locale}
       />
@@ -180,7 +185,6 @@ export default async function AdvancedTagSearchPage({ searchParams }: AdvancedTa
           hasExplicitPage={Boolean(params.page)}
           pageSize={getSearchResultsPageSize()}
           highlightTerms={contentValidation.query.highlightTerms}
-          showProgressBars={shouldShowProgressBars()}
           searchEventKey={searchEventKey}
           searchSource="advanced_tags"
           originNovelId={null}

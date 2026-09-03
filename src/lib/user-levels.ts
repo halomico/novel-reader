@@ -3,7 +3,6 @@ import { getDb } from "./db";
 export const USER_PERMISSION_DEFINITIONS = [
   { key: "advanced_search", label: "高级搜索" },
   { key: "market_access", label: "访问集市" },
-  { key: "market_purchase", label: "购买商品" },
   { key: "video_download", label: "视频下载" },
 ] as const;
 

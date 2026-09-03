@@ -1,37 +1,24 @@
 import crypto from "node:crypto";
 import { getDb } from "./db";
+import { generatedAvatarPath } from "./default-avatar-data";
 
-export const DEFAULT_AVATAR_PATHS = [
-  "/default-avatars/01.svg",
-  "/default-avatars/02.svg",
-  "/default-avatars/03.svg",
-  "/default-avatars/04.svg",
-  "/default-avatars/05.svg",
-  "/default-avatars/06.svg",
-  "/default-avatars/07.svg",
-  "/default-avatars/08.svg",
-  "/default-avatars/09.svg",
-  "/default-avatars/10.svg",
-  "/default-avatars/11.svg",
-  "/default-avatars/12.svg",
-] as const;
+type RandomBytes = (size: number) => Buffer;
 
-type RandomInt = (maxExclusive: number) => number;
-
-export function pickDefaultAvatar(randomInt: RandomInt = crypto.randomInt): string {
-  return DEFAULT_AVATAR_PATHS[randomInt(DEFAULT_AVATAR_PATHS.length)];
+/** Use 64 bits of entropy: enough variety without expanding stored markers. */
+export function pickDefaultAvatar(randomBytes: RandomBytes = (size) => crypto.randomBytes(size)): string {
+  return generatedAvatarPath(randomBytes(8).toString("hex"));
 }
 
 export function assignDefaultAvatarIfMissing(
   userId: number,
   currentAvatarPath: string | null,
-  randomInt: RandomInt = crypto.randomInt,
+  randomBytes: RandomBytes = (size) => crypto.randomBytes(size),
 ): string {
   if (currentAvatarPath?.trim()) {
     return currentAvatarPath;
   }
 
-  const candidate = pickDefaultAvatar(randomInt);
+  const candidate = pickDefaultAvatar(randomBytes);
   const db = getDb();
   db.prepare(
     `UPDATE users

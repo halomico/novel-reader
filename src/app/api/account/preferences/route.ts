@@ -10,11 +10,13 @@ import { getCurrentUser } from "@/lib/user-auth";
 import {
   updateUserLocalePreference,
   updateUserReadingHistoryPreference,
+  type ReadingHistoryKind,
 } from "@/lib/users";
 
 type PreferencePayload = {
   locale?: string;
   readingHistoryEnabled?: boolean;
+  readingHistoryKind?: ReadingHistoryKind;
 };
 
 export async function PATCH(request: Request) {
@@ -26,7 +28,15 @@ export async function PATCH(request: Request) {
   }
 
   const hasLocale = payload.locale === "zh-Hans" || payload.locale === TRADITIONAL_LOCALE;
-  const hasReadingHistoryPreference = typeof payload.readingHistoryEnabled === "boolean";
+  const readingHistoryKind = payload.readingHistoryKind === "original"
+    ? "original"
+    : payload.readingHistoryKind === undefined || payload.readingHistoryKind === "novel"
+      ? "novel"
+      : null;
+  if (typeof payload.readingHistoryEnabled === "boolean" && readingHistoryKind === null) {
+    return NextResponse.json({ ok: false, message: "阅读类型无效" }, { status: 400 });
+  }
+  const hasReadingHistoryPreference = typeof payload.readingHistoryEnabled === "boolean" && readingHistoryKind !== null;
   if (!hasLocale && !hasReadingHistoryPreference) {
     return NextResponse.json({ ok: false, message: "没有可更新的设置" }, { status: 400 });
   }
@@ -42,7 +52,7 @@ export async function PATCH(request: Request) {
       updateUserLocalePreference(user.id, locale);
     }
     if (hasReadingHistoryPreference) {
-      updateUserReadingHistoryPreference(user.id, Boolean(payload.readingHistoryEnabled));
+      updateUserReadingHistoryPreference(user.id, readingHistoryKind, Boolean(payload.readingHistoryEnabled));
     }
   }
 
@@ -62,7 +72,8 @@ export async function PATCH(request: Request) {
       locale,
       readingHistoryEnabled: hasReadingHistoryPreference
         ? Boolean(payload.readingHistoryEnabled)
-        : user?.readingHistoryEnabled,
+        : undefined,
+      readingHistoryKind: hasReadingHistoryPreference ? readingHistoryKind : undefined,
     },
     { headers: { "Cache-Control": "private, no-store" } },
   );

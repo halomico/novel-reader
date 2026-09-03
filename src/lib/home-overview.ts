@@ -19,7 +19,10 @@ export function formatHomeUpdateTime(timestamp: number | null, now = Date.now())
   return `${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-export function getHomeOverview(authenticated: boolean): Partial<Record<HomePortalCardKey, HomeOverviewItem>> {
+export function getHomeOverview(
+  authenticated: boolean,
+  options: { includeOriginal?: boolean } = {},
+): Partial<Record<HomePortalCardKey, HomeOverviewItem>> {
   const db = getDb();
   const novel = db.prepare(
     "SELECT COUNT(*) AS count, MAX(mtime_ms) AS updated FROM novels",
@@ -41,6 +44,14 @@ export function getHomeOverview(authenticated: boolean): Partial<Record<HomePort
     announcement: { count: announcement.count, updatedAt: parseSqliteTime(announcement.updated) },
     tags: { count: tags.count, updatedAt: parseSqliteTime(tags.updated) },
   };
+  if (options.includeOriginal) {
+    const original = db.prepare(
+      `SELECT COUNT(*) AS count, MAX(COALESCE(published_at, updated_at)) AS updated
+       FROM original_articles
+       WHERE status = 'published'`,
+    ).get() as { count: number; updated: string | null };
+    overview.original = { count: original.count, updatedAt: parseSqliteTime(original.updated) };
+  }
   for (const kind of ["video", "audio", "file"] as const) {
     const row = db.prepare("SELECT COUNT(*) AS count, MAX(content_updated_at) AS updated FROM media_assets WHERE kind = ?")
       .get(kind) as { count: number; updated: string | null };

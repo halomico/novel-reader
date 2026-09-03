@@ -1,9 +1,10 @@
 "use client";
 
-import { LoaderCircle, Trophy, UserRound, X } from "lucide-react";
+import { LoaderCircle, Trophy, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { DailyCheckinLeaderboardEntry } from "@/lib/user-economy";
 import { DEFAULT_LOCALE, uiText, type AppLocale } from "@/lib/locale";
+import { UserAvatar } from "./UserAvatar";
 
 type CheckinLeaderboardDialogProps = {
   reward: number;
@@ -130,9 +131,7 @@ export function CheckinLeaderboardDialog({
                   return (
                     <li className={isCurrent ? "isCurrent" : ""} key={entry.userId}>
                       <span className="checkinLeaderboardRank">{index + 1}</span>
-                      <span className="checkinLeaderboardAvatar" aria-hidden="true">
-                        {entry.avatarPath ? <img src={entry.avatarPath} alt="" /> : <UserRound size={16} />}
-                      </span>
+                      <UserAvatar className="checkinLeaderboardAvatar" userId={entry.userId} displayName={entry.displayName} avatarPath={entry.avatarPath} />
                       <span className="checkinLeaderboardName">
                         <strong>{entry.displayName}</strong>
                         {isCurrent ? <small>{uiText(locale, "我")}</small> : null}

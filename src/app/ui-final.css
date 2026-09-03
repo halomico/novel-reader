@@ -12,6 +12,31 @@
   white-space: nowrap;
 }
 
+/* Running search status stays informative without making the result area jump
+   or showing a stale-looking percentage bar.  Index administration keeps its
+   own detailed progress panel. */
+.contentProgressPanelCompact {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.contentProgressPanelCompact small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Product-wide alignment and the final original-channel surface pass. */
+.headerActions > .userMenu .userMenuButton svg { transform: none; }
+
 /* Entry notice */
 .siteEntryNoticeLayer {
   position: fixed;
@@ -665,11 +690,6 @@
   }
 }
 
-.userMenuPanel.hasIdentity {
-  width: min(104px, calc(100vw - 24px));
-  max-width: min(104px, calc(100vw - 24px));
-}
-
 .userMenuPanel a,
 .userMenuPanel button {
   min-height: 34px;
@@ -685,11 +705,13 @@
   font-family: var(--font-ui);
   font-size: 14px;
   font-weight: 600;
+  line-height: 17px;
 }
 
 .userMenuIdentity small {
   font-size: 11px;
   font-weight: 400;
+  line-height: 15px;
 }
 
 .homePortalGrid {
@@ -698,8 +720,12 @@
   align-self: center;
   align-content: start;
   gap: 0 30px;
-  border-top: 1px solid var(--border);
+  border-top: 0;
   padding: 0;
+}
+
+.homePortalCard:nth-child(-n + 2) {
+  border-top: 1px solid var(--border);
 }
 
 @media (min-width: 821px) {
@@ -730,6 +756,10 @@
   background: color-mix(in srgb, var(--portal-accent) 3%, transparent);
   box-shadow: none;
   transform: none;
+}
+
+.homePortalCard.is-original {
+  --portal-accent: color-mix(in srgb, #b56b25 84%, var(--text));
 }
 
 /* Lightweight icon only — slightly larger for balance with two text lines */
@@ -852,7 +882,7 @@
 }
 
 .readerShell {
-  --reader-paper-width: 800px;
+  --reader-paper-width: var(--reader-preferred-paper-width, 800px);
   --reader-bg: var(--bg);
   --reader-paper: var(--surface);
   --reader-text: var(--text);
@@ -862,6 +892,7 @@
   --reader-accent: var(--accent);
 }
 
+:root[data-reader-width="auto"] .readerShell > .readerPage,
 .readerShell[data-reader-width="auto"] > .readerPage {
   width: min(1000px, calc(100vw - 180px));
 }
@@ -938,6 +969,7 @@
 }
 
 .readerShell > .readerPage {
+  position: relative;
   box-sizing: border-box;
   transition: width 180ms ease, background-color 180ms ease, color 180ms ease;
 }
@@ -961,6 +993,9 @@
 .readerShell .readerText {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
   color: var(--reader-text);
+  font-kerning: normal;
+  line-break: strict;
+  text-rendering: optimizeLegibility;
 }
 
 .readerShell .readerSegment {
@@ -970,7 +1005,133 @@
 }
 
 .readerShell .readerSegment + .readerSegment {
+  margin-top: .6em;
+}
+
+.readerShell .readerSegment[data-reader-continuation="true"] {
   margin-top: 0;
+}
+
+.readerShell .readerParagraph {
+  margin: 0;
+  letter-spacing: .015em;
+  overflow-wrap: break-word;
+  text-align: justify;
+  text-indent: 2em;
+  text-justify: inter-ideograph;
+  word-break: normal;
+}
+
+:root[data-reader-justify="off"] .novelReaderShell .readerParagraph,
+.novelReaderShell[data-reader-justify="off"] .readerParagraph {
+  text-align: start;
+  text-justify: auto;
+}
+
+.readerShell .readerParagraph + .readerParagraph {
+  margin-top: .6em;
+}
+
+.readerShell .readerParagraph.isContinuation {
+  text-indent: 0;
+}
+
+.readerShell .readerParagraph.isSectionHeading {
+  margin-top: 1.2em;
+  font-weight: 650;
+  text-align: left;
+  text-indent: 0;
+}
+
+.readerShell .readerParagraph.isSectionHeading:first-child {
+  margin-top: 0;
+}
+
+.readerShell .readerParagraph.isSectionHeading + .readerParagraph {
+  margin-top: .75em;
+}
+
+@media (max-width: 820px) {
+  :root[data-reader-page-turn="slide"]:has(.novelReaderShell),
+  :root[data-reader-page-turn="instant"]:has(.novelReaderShell) {
+    overflow: hidden;
+    scrollbar-gutter: auto;
+  }
+
+  :root[data-reader-page-turn="slide"] body:has(.novelReaderShell),
+  :root[data-reader-page-turn="instant"] body:has(.novelReaderShell) {
+    overflow: hidden;
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell .readerText,
+  :root[data-reader-page-turn="instant"] .novelReaderShell .readerText {
+    --reader-page-gap: calc(var(--reader-page-inline-gutter) * 2);
+    box-sizing: border-box;
+    width: 100vw;
+    height: max(320px, calc(100dvh - var(--reader-page-block-start) - var(--reader-page-block-end)));
+    column-fill: auto;
+    column-gap: var(--reader-page-gap);
+    column-rule: 8px solid var(--reader-bg);
+    column-width: var(--reader-page-column-width, calc(100vw - 44px));
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: none;
+    padding-inline: var(--reader-page-inline-gutter);
+    scroll-behavior: auto;
+    scrollbar-width: none;
+    touch-action: pan-y pinch-zoom;
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell .readerPagedStage,
+  :root[data-reader-page-turn="instant"] .novelReaderShell .readerPagedStage {
+    width: 100vw;
+    margin-inline: calc(var(--reader-page-inline-gutter) * -1);
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell .readerBreadcrumbs,
+  :root[data-reader-page-turn="slide"] .novelReaderShell .readerTitle,
+  :root[data-reader-page-turn="slide"] .novelReaderShell .readerTagsBlock,
+  :root[data-reader-page-turn="instant"] .novelReaderShell .readerBreadcrumbs,
+  :root[data-reader-page-turn="instant"] .novelReaderShell .readerTitle,
+  :root[data-reader-page-turn="instant"] .novelReaderShell .readerTagsBlock {
+    display: none;
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell .readerText::-webkit-scrollbar,
+  :root[data-reader-page-turn="instant"] .novelReaderShell .readerText::-webkit-scrollbar {
+    display: none;
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell .readerSegment,
+  :root[data-reader-page-turn="instant"] .novelReaderShell .readerSegment {
+    content-visibility: visible;
+    contain-intrinsic-size: none;
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell:not(.isReaderPageEnd) .readerChapterNavigation,
+  :root[data-reader-page-turn="slide"] .novelReaderShell:not(.isReaderPageEnd) .readerHotwordLinks,
+  :root[data-reader-page-turn="slide"] .novelReaderShell:not(.isReaderPageEnd) .readerNovelNavigation,
+  :root[data-reader-page-turn="slide"] .novelReaderShell:not(.isReaderPageEnd) .readerPagedStage ~ .novelAccessGate,
+  :root[data-reader-page-turn="instant"] .novelReaderShell:not(.isReaderPageEnd) .readerChapterNavigation,
+  :root[data-reader-page-turn="instant"] .novelReaderShell:not(.isReaderPageEnd) .readerHotwordLinks,
+  :root[data-reader-page-turn="instant"] .novelReaderShell:not(.isReaderPageEnd) .readerNovelNavigation,
+  :root[data-reader-page-turn="instant"] .novelReaderShell:not(.isReaderPageEnd) .readerPagedStage ~ .novelAccessGate {
+    display: none;
+  }
+}
+
+.readerPagedStage {
+  position: relative;
+}
+
+.readerContentLoading {
+  min-height: clamp(420px, 68svh, 760px);
+}
+
+.readerText.isReaderPageDragging {
+  cursor: grabbing;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .bookTitle,
@@ -993,36 +1154,24 @@
   gap: 5px 8px;
 }
 
-.readerShell .readerTagLinks a {
-  min-height: 29px;
-  border: 0;
-  border-radius: 5px;
-  padding: 3px 7px;
-  background: transparent;
-  color: var(--reader-muted);
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1.3;
+.readerShell .readerTagMeasure {
+  gap: 5px 8px;
 }
 
-.readerShell .readerTagLinks a:hover,
-.readerShell .readerTagLinks a:focus-visible {
-  background: color-mix(in srgb, var(--reader-accent) 8%, transparent);
-  color: var(--reader-accent);
-}
-
-.readerShell .readerTagsCountToggle,
-.readerShell .readerTagsInlineToggle,
-.readerShell .readerTagsCountToggle:hover,
-.readerShell .readerTagsInlineToggle:hover,
-.readerShell .readerTagsCountToggle:focus-visible,
-.readerShell .readerTagsInlineToggle:focus-visible {
+.readerShell .readerTagsInlineToggle {
   border: 0;
   border-radius: 0;
   padding: 4px;
   background: transparent;
   color: var(--reader-muted);
   box-shadow: none;
+}
+
+.readerShell .readerTagsInlineToggle:hover,
+.readerShell .readerTagsInlineToggle:focus-visible {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--reader-accent) 8%, transparent);
+  color: var(--reader-accent);
 }
 
 .readerToolRail {
@@ -1038,7 +1187,16 @@
   box-shadow: none;
 }
 
+@media (min-width: 821px) {
+  .readerToolRail {
+    max-height: calc(100dvh - 156px);
+    overflow: visible;
+  }
+
+}
+
 .readerToolItem {
+  flex: 0 0 56px;
   height: 56px;
   border: 0;
   background: transparent;
@@ -1100,50 +1258,61 @@
   border: 0;
 }
 
+@media (min-width: 821px) {
+  .readerToolItem {
+    height: clamp(36px, calc((100dvh - 156px) / 9), 56px);
+    min-height: 36px;
+    flex: 0 0 auto;
+  }
+}
+
 .readerPanelBackdrop {
   background: transparent;
 }
 
 .readerSidePanel {
+  --reader-panel-inline: 24px;
   position: fixed;
   top: 120px;
   right: max(76px, calc((100vw - var(--reader-paper-width)) / 2 - 14px));
   bottom: auto;
   left: auto;
-  width: min(480px, calc(100vw - 96px));
+  width: min(420px, calc(100vw - 96px));
   max-height: calc(100dvh - 144px);
   border-radius: 2px;
   background: var(--reader-panel);
   box-shadow: 0 16px 48px rgb(20 18 15 / 16%);
 }
 
-.readerSidePanel.is-directory,
-.readerSidePanel.is-info {
-  width: min(420px, calc(100vw - 96px));
-}
-
 .readerSidePanel > header {
-  min-height: 70px;
+  min-height: 60px;
   border-bottom: 0;
-  padding: 0 32px;
+  padding: 0 var(--reader-panel-inline);
 }
 
 .readerSidePanel > header strong {
   font-family: var(--font-content-title);
-  font-size: 23px;
-  font-weight: 500;
+  font-size: 18px;
+  font-weight: 600;
 }
 
 .readerSidePanel > header button {
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--reader-muted) 16%, transparent);
+  width: 32px;
+  height: 32px;
+  margin-right: -7px;
+  border-radius: 7px;
+  background: transparent;
+}
+
+.readerDirectoryList {
+  padding: 0 var(--reader-panel-inline) 24px;
 }
 
 .readerBookInfo {
   display: grid;
   gap: 0;
   overflow-y: auto;
-  padding: 4px 28px 30px;
+  padding: 0 var(--reader-panel-inline) 28px;
 }
 
 .readerBookInfo h2 {
@@ -1199,7 +1368,7 @@
 .readerSettingsPanel {
   display: grid;
   gap: 20px;
-  padding: 8px 32px 36px;
+  padding: 0 var(--reader-panel-inline) 28px;
 }
 
 .readerSettingRow {
@@ -1296,6 +1465,71 @@
   padding-inline: 6px;
 }
 
+.readerSettingRow.isPageTurn > div {
+  display: inline-grid;
+  justify-self: end;
+  gap: 2px;
+  border: 1px solid var(--reader-border);
+  border-radius: 999px;
+  padding: 3px;
+  background: color-mix(in srgb, var(--reader-border) 28%, transparent);
+}
+
+.readerSettingRow.isPageTurn > div {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.readerSettingRow .readerJustifyToggle {
+  justify-self: end;
+  margin-left: auto;
+}
+
+.readerJustifyToggle .settingToggleTrack {
+  width: 36px;
+  height: 21px;
+  background: var(--reader-border);
+}
+
+.readerJustifyToggle .settingToggleTrack > span {
+  width: 15px;
+  height: 15px;
+  background: var(--reader-panel);
+}
+
+.readerJustifyToggle input:checked ~ .settingToggleTrack {
+  background: var(--reader-accent);
+}
+
+.readerJustifyToggle input:checked ~ .settingToggleTrack > span {
+  transform: translateX(15px);
+}
+
+@media (min-width: 821px) {
+  .readerSettingRow.isPageTurn {
+    display: none;
+  }
+}
+
+.readerSettingRow.isPageTurn button {
+  height: 30px;
+  border: 0;
+  border-radius: 999px;
+  padding-inline: 12px;
+  background: transparent;
+  white-space: nowrap;
+}
+
+.readerSettingRow.isPageTurn button:hover,
+.readerSettingRow.isPageTurn button:focus-visible {
+  border: 0;
+}
+
+.readerSettingRow.isPageTurn button.isActive {
+  border: 0;
+  background: var(--reader-accent);
+  color: #fff;
+}
+
 @media (min-width: 761px) {
   .readerSettingRow.isThemes > div {
     justify-content: flex-end;
@@ -1316,25 +1550,30 @@
   min-width: 0;
 }
 
+.selectControl,
 .advancedLibrarySelect {
   position: relative;
   display: block;
   min-width: 0;
+  width: 100%;
 }
 
-.advancedLibrarySelect select {
+.selectControl select,
+.advancedLibrarySelect select,
+.adminShell select:not([multiple]) {
   width: 100%;
   min-height: 36px;
   appearance: none;
   border: 1px solid var(--border);
   border-radius: 7px;
   padding: 7px 32px 7px 10px;
-  background: var(--surface);
+  background-color: var(--surface);
   color: var(--text);
   font: inherit;
   font-size: 13px;
 }
 
+.selectControl > svg,
 .advancedLibrarySelect > svg {
   position: absolute;
   top: 50%;
@@ -1342,19 +1581,6 @@
   color: var(--muted);
   pointer-events: none;
   transform: translateY(-50%);
-}
-
-.adminSelectControl select,
-.adminShell select:not([multiple]) {
-  min-height: 36px;
-  appearance: none;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 7px 32px 7px 10px !important;
-  background-color: var(--surface);
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
 }
 
 .adminShell select:not([multiple]) {
@@ -1368,8 +1594,8 @@
   background-image: none;
 }
 
-.adminSelectControl > svg {
-  right: 10px;
+.selectControl:focus-within > svg {
+  color: var(--accent);
 }
 
 .mediaFeedbackRail {
@@ -1831,20 +2057,6 @@
   font-weight: 600;
 }
 
-.accountGrowthBalance {
-  gap: 5px;
-}
-
-.accountGrowthBalance svg {
-  width: 16px;
-  height: 16px;
-  stroke-width: 1.8;
-}
-
-.accountGrowthBalance strong {
-  font-size: 14px;
-}
-
 .accountLevelProgress {
   padding: 14px 2px 16px;
   border-bottom: 1px solid var(--border);
@@ -1996,6 +2208,10 @@ nav.accountGrowthTools > a + a {
     padding: 0;
   }
 
+  .homePortalCard:nth-child(2) {
+    border-top: 0;
+  }
+
   .homePortalCard {
     min-height: 78px;
     padding: 11px 4px;
@@ -2111,10 +2327,10 @@ nav.accountGrowthTools > a + a {
   .readerShell .readerSiteHeader.hasMobileContext {
     min-height: 48px;
     padding-top: 4px;
-    padding-right: max(6px, env(safe-area-inset-right));
+    padding-right: max(11px, env(safe-area-inset-right));
     padding-bottom: 4px;
-    padding-left: max(6px, env(safe-area-inset-left));
-    border-color: var(--reader-border);
+    padding-left: max(11px, env(safe-area-inset-left));
+    border: 0;
     background: var(--reader-paper);
   }
 
@@ -2130,18 +2346,25 @@ nav.accountGrowthTools > a + a {
   .readerShell .readerSiteHeader.isReaderHeaderOverlay {
     padding: 7px 10px;
     background: color-mix(in srgb, var(--reader-paper) 96%, transparent);
-    box-shadow: 0 1px 0 var(--reader-border);
+    box-shadow: none;
     backdrop-filter: blur(12px);
   }
 
   .readerShell .readerSiteHeader.hasMobileContext.isReaderHeaderOverlay {
     padding-top: 4px;
-    padding-right: max(6px, env(safe-area-inset-right));
+    padding-right: max(11px, env(safe-area-inset-right));
     padding-bottom: 4px;
-    padding-left: max(6px, env(safe-area-inset-left));
+    padding-left: max(11px, env(safe-area-inset-left));
   }
 
-  .readerShell:not(.isReaderChromeReady) .readerSiteHeader,
+  /* ThemeScript decides the initial mobile chrome state before first paint.
+     Keep-chrome navigations therefore stay visible while React hydrates. */
+  .readerShell:not(.isReaderChromeReady) .readerSiteHeader {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
+
   .isReaderChromeHidden .readerShell .readerSiteHeader {
     opacity: 0;
     pointer-events: none;
@@ -2157,8 +2380,21 @@ nav.accountGrowthTools > a + a {
     left: 0;
     width: 100%;
     grid-template-columns: repeat(5, minmax(0, 1fr));
+    border: 0;
     background: color-mix(in srgb, var(--reader-paper) 97%, transparent);
     box-shadow: 0 -8px 26px rgb(20 18 15 / 8%);
+  }
+
+  .readerShell:not(.isReaderChromeReady) .readerToolRail {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
+
+  .isReaderChromeHidden .readerShell .readerToolRail {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(100%);
   }
 
   .readerToolItem.isPrevious { order: 1; }
@@ -2171,6 +2407,11 @@ nav.accountGrowthTools > a + a {
   .readerToolItem.isGrove { order: 7; }
   .readerToolItem.isFavorite { order: 8; }
   .readerToolItem.isReport { order: 9; }
+
+  .readerToolItem:disabled {
+    cursor: default;
+    opacity: .35;
+  }
 
   .readerToolItem.isBackTop {
     position: static;
@@ -2198,11 +2439,12 @@ nav.accountGrowthTools > a + a {
     width: 100%;
     max-height: min(82dvh, 700px);
     border-radius: 14px 14px 0 0;
+    --reader-panel-inline: 20px;
   }
 
   .readerSidePanel > header {
-    min-height: 62px;
-    padding-inline: 20px;
+    min-height: 58px;
+    padding-inline: var(--reader-panel-inline);
   }
 
   .readerSidePanel > header strong {
@@ -2212,7 +2454,7 @@ nav.accountGrowthTools > a + a {
   .readerSettingsPanel {
     gap: 0;
     overflow-y: auto;
-    padding: 0 18px calc(18px + env(safe-area-inset-bottom));
+    padding: 0 var(--reader-panel-inline) calc(18px + env(safe-area-inset-bottom));
   }
 
   /*
@@ -2250,7 +2492,7 @@ nav.accountGrowthTools > a + a {
     flex: 0 0 auto;
     align-items: center;
     justify-content: flex-end;
-    gap: 6px;
+    gap: 8px;
     width: auto;
     min-width: 0;
     margin-left: auto;
@@ -2282,12 +2524,30 @@ nav.accountGrowthTools > a + a {
     display: none;
   }
 
-  .readerSettingRow.isLineHeight {
+  .readerSettingRow.isPageTurn {
+    display: flex;
     border-bottom: 0;
   }
 
+  .readerSettingRow.isPageTurn > div {
+    display: inline-grid;
+    width: auto;
+    max-width: none;
+    margin-left: auto;
+  }
+
+  .readerSettingRow .readerJustifyToggle {
+    max-width: none;
+    margin-left: auto;
+  }
+
+  .readerSettingRow.isPageTurn button {
+    height: 30px;
+    padding-inline: 10px;
+  }
+
   .readerBookInfo {
-    padding: 2px 20px 28px;
+    padding: 0 var(--reader-panel-inline) calc(24px + env(safe-area-inset-bottom));
   }
 
   .readerBookInfo h2 {
@@ -2484,51 +2744,6 @@ nav.accountGrowthTools > a + a {
   left: 0;
 }
 
-.messagesHeader {
-  min-height: 60px;
-  align-items: center;
-}
-
-.messagesHeader > span {
-  display: flex;
-  min-height: 60px;
-  align-items: center;
-}
-
-.messagesHeader .messagesTabs {
-  align-self: stretch;
-}
-
-.messagesTabs a {
-  position: relative;
-  min-height: 0;
-  border-bottom: 0;
-  padding: 8px 1px;
-}
-
-.messagesTabs a::after {
-  position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
-  height: 2px;
-  border-radius: 999px;
-  background: transparent;
-  content: "";
-}
-
-.messagesTabs a:hover,
-.messagesTabs a:focus-visible,
-.messagesTabs a.isActive {
-  border-bottom-color: transparent;
-}
-
-.messagesTabs a.isActive::after {
-  background: var(--accent);
-}
-
-.messagesHeader.userContentHeader,
-.marketPageHeader.userContentHeader,
 .settingsHero.userContentHeader,
 .advancedTagSearchHeader.userContentHeader {
   min-height: 48px;
@@ -2537,8 +2752,6 @@ nav.accountGrowthTools > a + a {
   padding: 0;
 }
 
-.messagesHeader.userContentHeader > span,
-.marketPageHeader.userContentHeader > span,
 .settingsHero.userContentHeader > span,
 .advancedTagSearchHeader.userContentHeader > span {
   display: inline-flex;
@@ -2547,8 +2760,6 @@ nav.accountGrowthTools > a + a {
   gap: 8px;
 }
 
-.messagesHeader.userContentHeader h1,
-.marketPageHeader.userContentHeader h1,
 .settingsHero.userContentHeader h1,
 .advancedTagSearchHeader.userContentHeader h1 {
   margin: 0;
@@ -2556,20 +2767,6 @@ nav.accountGrowthTools > a + a {
   font-size: 18px;
   font-weight: 700;
   line-height: 1.3;
-}
-
-.userWorkspaceContent .messagesPage {
-  border-top: 0;
-}
-
-.marketPageHeader.userContentHeader {
-  display: flex;
-}
-
-.marketPageHeader.userContentHeader .marketBalances {
-  width: auto;
-  margin-left: auto;
-  justify-content: flex-end;
 }
 
 .settingsPanel {
@@ -2584,10 +2781,13 @@ nav.accountGrowthTools > a + a {
 .settingBlock,
 .previewReader {
   border: 0;
-  border-bottom: 1px solid var(--border);
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.settingsGrid > .settingBlock + .settingBlock {
+  border-top: 1px solid var(--border);
 }
 
 .settingBlockHeader {
@@ -2604,26 +2804,102 @@ nav.accountGrowthTools > a + a {
 
 .settingRow {
   padding-inline: 2px;
+  border: 0;
+}
+
+.settingsReaderThemePicker {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-self: end;
+  gap: 9px;
+}
+
+.settingsReaderThemePicker button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--text) 15%, transparent);
+  border-radius: 50%;
+  padding: 0;
+  background: var(--reader-theme-swatch);
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.settingsReaderThemePicker button:hover,
+.settingsReaderThemePicker button:focus-visible,
+.settingsReaderThemePicker button.isActive {
+  border-color: var(--accent);
+  outline: 0;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 11%, transparent);
+}
+
+:root[data-reader-theme="gray"] .settingsReaderThemePicker [data-reader-theme-value="gray"],
+:root[data-reader-theme="warm"] .settingsReaderThemePicker [data-reader-theme-value="warm"],
+:root[data-reader-theme="sepia"] .settingsReaderThemePicker [data-reader-theme-value="sepia"],
+:root[data-reader-theme="green"] .settingsReaderThemePicker [data-reader-theme-value="green"],
+:root[data-reader-theme="blue"] .settingsReaderThemePicker [data-reader-theme-value="blue"],
+:root[data-reader-theme="night"] .settingsReaderThemePicker [data-reader-theme-value="night"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 11%, transparent);
+}
+
+.settingsReaderJustifyToggle {
+  justify-self: end;
+}
+
+.settingsReaderJustifyToggle .settingToggleTrack {
+  width: 36px;
+  height: 21px;
+}
+
+.settingsReaderJustifyToggle .settingToggleTrack > span {
+  width: 15px;
+  height: 15px;
+}
+
+.settingsReaderJustifyToggle input:checked ~ .settingToggleTrack > span {
+  transform: translateX(15px);
+}
+
+:root[data-reader-justify="off"] .settingsReaderJustifyToggle .settingToggleTrack {
+  background: var(--border);
+}
+
+:root[data-reader-justify="off"] .settingsReaderJustifyToggle .settingToggleTrack > span {
+  transform: translateX(0);
+}
+
+:root[data-reader-justify="on"] .settingsReaderJustifyToggle .settingToggleTrack {
+  background: var(--accent);
+}
+
+:root[data-reader-justify="on"] .settingsReaderJustifyToggle .settingToggleTrack > span {
+  transform: translateX(15px);
 }
 
 .previewReader {
   padding: 16px 2px;
 }
 
-.activityLibrary {
-  gap: 10px;
+:root[data-reader-justify="on"] .settingsPanel .previewReader {
+  text-align: justify;
 }
 
-.activityTabs,
-.favoriteTabs {
-  align-self: auto;
-  gap: 18px;
-  border-bottom: 1px solid var(--border);
-}
+:root[data-reader-theme="gray"] .settingsPanel .previewReader { background: #f5f5f5; color: #282828; }
+:root[data-reader-theme="warm"] .settingsPanel .previewReader { background: #f5f1e8; color: #322d26; }
+:root[data-reader-theme="sepia"] .settingsPanel .previewReader { background: #efe2c0; color: #3b3020; }
+:root[data-reader-theme="green"] .settingsPanel .previewReader { background: #e0eee1; color: #243229; }
+:root[data-reader-theme="blue"] .settingsPanel .previewReader { background: #dcebef; color: #24333a; }
+:root[data-reader-theme="night"] .settingsPanel .previewReader { background: #111; color: #d6d6d6; }
 
-.activityTabs a,
-.favoriteTabs a {
-  padding: 6px 1px 8px;
+.settingsPanel .previewReader {
+  margin-top: 12px;
+  border-radius: 6px;
+  padding-inline: 14px;
 }
 
 .mediaVideoByline {
@@ -2718,7 +2994,33 @@ nav.accountGrowthTools > a + a {
   .siteHeader.hasPrimaryNav:not(.hasMobileContext) {
     min-height: 0;
     gap: 4px 12px;
-    padding: max(4px, env(safe-area-inset-top)) 0 2px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: max(4px, env(safe-area-inset-top)) 0 2px 4px;
+  }
+
+  .siteHeader.isHomeHeader:not(.hasMobileContext) > .headerTools,
+  .siteHeader.hasPrimaryNav:not(.hasMobileContext):not(.readerSiteHeader) > .headerTools {
+    margin-right: -6px;
+  }
+
+  .siteHeader.isHomeHeader:not(.hasMobileContext) .headerActions,
+  .siteHeader.hasPrimaryNav:not(.hasMobileContext):not(.readerSiteHeader) .headerActions {
+    gap: 2px;
+  }
+
+  .siteHeader.isHomeHeader:not(.hasMobileContext) .iconLink,
+  .siteHeader.hasPrimaryNav:not(.hasMobileContext):not(.readerSiteHeader) .iconLink,
+  .siteHeader.hasPrimaryNav:not(.hasMobileContext):not(.readerSiteHeader) .searchForm:not(.isPinnedOpen):not(.isDefaultOpen),
+  .siteHeader.hasPrimaryNav:not(.hasMobileContext):not(.readerSiteHeader) .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) .searchIconButton {
+    width: 36px;
+    height: 40px;
+  }
+
+  .siteHeader.hasPrimaryNav:not(.hasMobileContext):not(.readerSiteHeader) .headerTools:not(.hasNoSearch) {
+    width: 112px;
+    min-width: 112px;
+    grid-template-columns: 36px 74px;
+    gap: 2px;
   }
 
   .siteHeader.hasPrimaryNav:not(.hasMobileContext) .headerPrimaryNav {
@@ -2770,38 +3072,13 @@ nav.accountGrowthTools > a + a {
   }
 
   .tagGroupBlock {
-    padding-block: 14px;
+    --tag-group-space: 14px;
   }
 
-  .messagesHeader,
-  .messagesHeader > span {
-    min-height: 48px;
-  }
-
-  .messagesHeader {
-    align-items: center;
-  }
-
-  .messagesHeader .messagesTabs {
-    min-height: 48px;
-  }
-
-  .messagesHeader .messagesTabs a {
-    min-height: 0;
-    padding-block: 7px;
-  }
-
-  .publicAnnouncementsPage .messagesHeader h1 {
-    align-self: center;
-  }
-
-  .marketPageHeader.userContentHeader {
-    display: flex;
-    gap: 12px;
-  }
-
-  .marketPageHeader.userContentHeader .marketBalances {
-    width: auto;
+  .pageContextBar.hasMediaSearch .pageContextActions .tagLibrarySearch,
+  .tagLibraryTools .tagLibrarySearch {
+    width: clamp(118px, 31vw, 124px);
+    flex: 0 0 clamp(118px, 31vw, 124px);
   }
 
   .settingRow {
@@ -2816,6 +3093,17 @@ nav.accountGrowthTools > a + a {
     gap: 10px;
     margin-top: 32px;
     padding-top: 14px;
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell > .readerPage,
+  :root[data-reader-page-turn="instant"] .novelReaderShell > .readerPage {
+    --reader-page-inline-gutter: clamp(20px, 5.65vw, 24px);
+    --reader-page-block-start: max(28px, env(safe-area-inset-top));
+    --reader-page-block-end: max(28px, env(safe-area-inset-bottom));
+    width: 100vw;
+    height: 100dvh;
+    min-height: 100dvh;
+    padding: var(--reader-page-block-start) var(--reader-page-inline-gutter) var(--reader-page-block-end);
   }
 
   .readerNovelLink {
@@ -2905,7 +3193,7 @@ nav.accountGrowthTools > a + a {
 }
 
 .readingProgressSetting {
-  border-width: 1px 0;
+  border-width: 0 0 1px;
 }
 
 .marketWalletTools {
@@ -3041,12 +3329,8 @@ nav.accountGrowthTools > a + a {
     gap: 14px;
   }
 
-  .tagPreferenceTabs {
-    margin-bottom: 0;
-  }
-
   .tagGroupBlock {
-    padding-block: 12px;
+    --tag-group-space: 14px;
   }
 
   .publicAnnouncementsPage {
@@ -3143,5 +3427,513 @@ nav.accountGrowthTools > a + a {
   .stationChatWorkspace.hasSelection .stationConversation {
     width: 100%;
     grid-column: 1;
+  }
+}
+
+/* Final shared primitives. Keep the catalog, activity, market, and original
+ * surfaces on the same quiet rhythm: one separator per list and controls that
+ * read as lightweight tools instead of raised buttons. */
+.headerTools .searchForm:not(.isPinnedOpen):not(.isDefaultOpen) {
+  height: 42px;
+  min-height: 42px;
+}
+
+.headerTools:has(.searchForm:not(.isPinnedOpen):not(.isDefaultOpen)) {
+  gap: 2px;
+}
+
+.catalogMenuTrigger {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.catalogMenuTrigger:hover,
+.catalogMenuTrigger:focus-visible,
+.catalogMenuTrigger.isActive {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
+.bookGrid {
+  border-top: 0;
+}
+
+.bookGrid > .bookCard:nth-child(-n + 3) {
+  border-top: 1px solid var(--border);
+}
+
+.mediaTagGrid {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mediaTagItem {
+  display: inline-flex;
+  min-height: 31px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 10px;
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+}
+
+.mediaTagItem strong {
+  max-width: 20ch;
+  font-size: 12px;
+}
+
+.mediaTagItem span {
+  font-size: 11px;
+}
+
+.mediaTagItem:hover,
+.mediaTagItem:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 56%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--accent);
+}
+
+.readingHistoryToolbar {
+  min-height: 34px;
+  margin-top: 0;
+  border-top: 0;
+  padding: 0 2px;
+}
+
+.favoriteManageToolbar {
+  min-height: 34px;
+  padding: 0 2px;
+}
+
+.favoriteCollection.isManaging .favoriteSelectableItem {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.favoriteCollection.isManaging .favoriteSelectControl {
+  position: static;
+  z-index: auto;
+  width: 34px;
+  min-height: 100%;
+  grid-column: 1;
+  grid-row: 1;
+  place-items: center;
+  transform: none;
+}
+
+.favoriteCollection.isManaging .favoriteSelectableItem > .bookCard,
+.favoriteCollection.isManaging .favoriteSelectableItem > .mediaVideoCard,
+.favoriteCollection.isManaging .favoriteSelectableItem > .mediaResourceRow {
+  min-width: 0;
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.favoriteCollection.isManaging .favoriteAudioList .favoriteSelectableItem > .mediaResourceRow {
+  padding-left: 0;
+}
+
+.accountAvatarEditorEntry {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.userAvatar.accountAvatarImage {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  border-radius: 8px;
+}
+
+.accountAvatarIdentity {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.accountAvatarIdentity strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountAvatarIdentity small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountProfile .accountAvatarEditButton {
+  min-height: 30px;
+  border: 0;
+  border-radius: var(--action-radius);
+  padding: 0 8px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.accountProfile .accountAvatarEditButton:hover,
+.accountProfile .accountAvatarEditButton:focus-visible {
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  color: var(--accent);
+  outline: 0;
+}
+
+.avatarEditorBackdrop {
+  position: fixed;
+  z-index: 360;
+  inset: 0;
+  width: 100vw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgb(0 0 0 / 34%);
+  backdrop-filter: blur(2px);
+}
+
+.avatarEditorDrawer {
+  display: grid;
+  width: min(420px, 100%);
+  max-height: calc(100dvh - 40px);
+  grid-template-rows: auto minmax(0, auto);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 24%);
+  animation: avatarDialogEnter 140ms ease-out;
+}
+
+.avatarEditorDrawer > header {
+  display: flex;
+  min-height: 60px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 14px 0 20px;
+}
+
+.avatarEditorDrawer > header strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.accountProfile .avatarEditorDrawer > header > button {
+  display: grid;
+  width: 32px;
+  min-height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.accountProfile .avatarEditorDrawer > header > button:hover,
+.accountProfile .avatarEditorDrawer > header > button:focus-visible {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--accent);
+  outline: 0;
+}
+
+.avatarEditorBody {
+  display: grid;
+  align-content: start;
+  overflow-y: auto;
+  padding: 24px 20px;
+}
+
+.avatarEditorForm {
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+  gap: 18px;
+}
+
+.avatarEditorPreview {
+  width: 96px;
+  height: 96px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+}
+
+.avatarEditorPreview > .userAvatar,
+.avatarEditorPreview > .userAvatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.avatarEditorActions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.accountProfile .avatarRandomizeButton,
+.accountProfile .avatarUploadButton {
+  display: grid;
+  min-height: var(--action-height);
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--action-radius);
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.accountProfile .avatarRandomizeButton {
+  width: var(--action-height);
+}
+
+.accountProfile .avatarUploadButton {
+  display: inline-flex;
+  padding: 0 11px;
+  gap: 5px;
+  font-size: var(--action-font-size);
+  font-weight: 650;
+}
+
+.avatarUploadButton input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.accountProfile .avatarRandomizeButton:hover,
+.accountProfile .avatarRandomizeButton:focus-visible,
+.accountProfile .avatarUploadButton:hover,
+.accountProfile .avatarUploadButton:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border));
+  color: var(--accent);
+  outline: 0;
+}
+
+.avatarRandomizeButton:disabled,
+.avatarUploadButton.isPending {
+  cursor: wait;
+  opacity: .55;
+}
+
+.accountProfile .avatarEditorSave {
+  white-space: nowrap;
+}
+
+@keyframes avatarDialogEnter {
+  from { opacity: .7; transform: translateY(6px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 620px) {
+  .avatarEditorBackdrop {
+    padding: 10px;
+  }
+
+  .avatarEditorDrawer {
+    width: 100%;
+    max-height: calc(100dvh - 20px);
+  }
+
+  .avatarEditorDrawer > header {
+    min-height: 58px;
+  }
+
+  .avatarEditorBody {
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avatarEditorDrawer { animation: none; }
+}
+
+.readerSidePanel > header button {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none;
+}
+
+@media (min-width: 821px) and (max-width: 1060px) {
+  .bookGrid > .bookCard:nth-child(-n + 3) {
+    border-top: 0;
+  }
+
+  .bookGrid > .bookCard:nth-child(-n + 2) {
+    border-top: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 820px) {
+  .readerShell {
+    padding-bottom: 0;
+  }
+
+  .readerShell > .readerPage {
+    padding-bottom: max(28px, env(safe-area-inset-bottom));
+  }
+
+  .readerNovelNavigation {
+    margin-top: 24px;
+    margin-bottom: 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .bookGrid > .bookCard:nth-child(-n + 3) {
+    border-top: 0;
+  }
+
+  .bookGrid > .bookCard:first-child {
+    border-top: 1px solid var(--border);
+  }
+}
+
+/* Last cascade: keep shared controls and original surfaces aligned after the
+ * legacy theme rules above. */
+.headerActions > .userMenu .userMenuButton svg { transform: none; }
+/* Shared UI authority: keep this final after legacy channel rules. */
+.userAvatar { display: grid; flex: 0 0 auto; place-items: center; overflow: hidden; border-radius: 7px; background: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--text); font-size: .42em; font-weight: 720; line-height: 1; text-transform: uppercase; user-select: none; }
+.userAvatar.isGenerated { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.userAvatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.userAvatar.userMenuAvatar, .userAvatar.userWorkspaceAvatar, .userAvatar.checkinLeaderboardAvatar { border-radius: 7px; }
+.adminSettingsGroup > h5 { margin: 14px 0 2px; color: var(--text); font-size: 12px; font-weight: 680; }
+.tagChip, .mediaTagItem, .mediaVideoTags .contentTagLink { border-radius: 6px !important; font-size: 12px; font-weight: 560; line-height: 1.2; }
+.mediaVideoTags .contentTagLink { border: 1px solid color-mix(in srgb, var(--border) 88%, transparent); background: color-mix(in srgb, var(--accent) 7%, transparent); text-decoration: none; }
+/* Original activity integration reuses the shared segmented control and
+ * history row; only its placement and author projection are specialized. */
+.activityContentTypeTabs + .readingHistory { margin-top: 4px; }
+.readingHistoryItem > .readingHistoryMain:first-child { grid-column: 1 / -1; }
+.readingHistoryMain.hasAuthor { grid-template-columns: 28px minmax(0, 1fr); column-gap: 10px; }
+.userAvatar.readingHistoryAuthorAvatar { width: 28px; height: 28px; grid-column: 1; grid-row: 1 / 3; align-self: center; border-radius: 6px; font-size: 11px; }
+.readingHistoryMain.hasAuthor .readingHistoryCopy, .readingHistoryMain.hasAuthor .readingHistoryProgress { grid-column: 2; }
+.readingHistoryMain.hasAuthor .readingHistoryCopy small > span:first-child { max-width: 15ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.groveTimeTypeIcon.is-original { color: var(--accent); }
+
+@media (max-width: 700px) {
+  .readingHistoryMain.hasAuthor { grid-template-columns: 26px minmax(0, 1fr); column-gap: 8px; }
+  .userAvatar.readingHistoryAuthorAvatar { width: 26px; height: 26px; }
+}
+
+/* Exchange is intentionally vertical on desktop as well as mobile.  The
+ * order of reading is heading → pay/receive stack → submit, with the code
+ * redemption row separated once underneath. */
+.marketWalletTools {
+  display: grid;
+  width: min(100%, 620px);
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+  background: transparent;
+}
+
+.marketExchangeLine {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 9px;
+  padding: 14px 0 15px;
+}
+
+.marketExchangeName strong,
+.marketCodeLine > strong {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.marketExchangeStack {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.marketExchangePanel {
+  min-height: 62px;
+  border-radius: 8px;
+  padding: 8px 12px 9px;
+}
+
+.marketExchangeRow input,
+.marketExchangeRow output {
+  font-size: 21px;
+}
+
+.marketExchangeSwap {
+  margin: -14px auto -14px;
+}
+
+.marketExchangeLine > .marketExchangeSubmit {
+  width: fit-content;
+  min-width: 88px;
+  min-height: 35px;
+  justify-self: start;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.marketCodeLine {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  border-left: 0;
+  padding: 14px 0 0;
+}
+
+.marketOrdersSection {
+  gap: 0;
+  border-top: 0;
+  padding-top: 0;
+}
+
+.marketOrdersSection > header {
+  min-height: 38px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 0 8px;
+}
+
+.marketOrdersSection > div {
+  border-top: 0;
+}
+
+@media (max-width: 420px) {
+  .marketWalletTools {
+    width: 100%;
   }
 }

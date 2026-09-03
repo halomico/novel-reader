@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Bell, BookOpen, Clapperboard, File, Headphones, Tags, type LucideIcon } from "lucide-react";
+import { Bell, BookOpen, Clapperboard, File, FilePenLine, Headphones, Tags, type LucideIcon } from "lucide-react";
 import { redirect } from "next/navigation";
 import { IntentPrefetchLink as Link } from "@/components/IntentPrefetchLink";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -8,6 +8,7 @@ import {
   getHomePortalOrder,
   getSiteTitle,
   canAccessHomeAnnouncementCard,
+  isOriginalChannelEnabled,
 } from "@/lib/config";
 import {
   isHomePortalCardVisible,
@@ -115,13 +116,22 @@ export default async function Home({ searchParams }: HomeProps) {
       accessMode: accessModes.tags,
     });
   }
+  if (isOriginalChannelEnabled() && isHomePortalCardVisible(accessModes.original, authenticated)) {
+    cards.set("original", {
+      href: "/original",
+      label: "原创",
+      kind: "original",
+      icon: FilePenLine,
+      accessMode: accessModes.original,
+    });
+  }
   for (const kind of Object.keys(MEDIA_CARDS) as MediaKind[]) {
     if (isHomePortalCardVisible(accessModes[kind], authenticated)) {
       cards.set(kind, { ...MEDIA_CARDS[kind], kind, accessMode: accessModes[kind] });
     }
   }
   const homePortalOrder = getHomePortalOrder();
-  const overview = getHomeOverview(authenticated);
+  const overview = getHomeOverview(authenticated, { includeOriginal: cards.has("original") });
 
   return (
     <main className="appShell homePortalShell">
@@ -141,7 +151,7 @@ export default async function Home({ searchParams }: HomeProps) {
               <span className="homePortalCardIcon" aria-hidden="true">
                 <Icon size={26} strokeWidth={1.7} />
               </span>
-              <span className="homePortalCardCopy"><strong>{label}</strong><small>{overview[card.kind]?.count || 0} {card.kind === "announcement" ? "条" : card.kind === "novels" ? "本" : "个"}{label}　最近更新：{formatHomeUpdateTime(overview[card.kind]?.updatedAt || null)}</small></span>
+              <span className="homePortalCardCopy"><strong>{label}</strong><small>{overview[card.kind]?.count || 0} {card.kind === "announcement" ? "条" : card.kind === "novels" ? "本" : card.kind === "original" ? "篇" : "个"}{label}　最近更新：{formatHomeUpdateTime(overview[card.kind]?.updatedAt || null)}</small></span>
             </Link>
           );
         })}

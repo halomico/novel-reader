@@ -9,11 +9,14 @@ import { getDb } from "./db";
 import {
   getMediaGroveState,
   getNovelGroveState,
+  getOriginalGroveState,
   groveStageForVisitCount,
   listGrovePage,
   toggleMediaGrove,
   toggleNovelGrove,
+  toggleOriginalGrove,
 } from "./grove";
+import { recordOriginalReadingOpen } from "./original";
 import { recordReadingOpen } from "./reading-progress";
 import { recordMediaHistory } from "./users";
 
@@ -78,7 +81,7 @@ test("counts visits after planting and resets after removal", (t) => {
   });
 });
 
-test("mixes novels, videos, and audio while excluding generic files", (t) => {
+test("mixes novels, originals, videos, and audio while excluding generic files", (t) => {
   withTempDatabase(t);
   const db = getDb();
   const userId = Number(db
@@ -88,6 +91,10 @@ test("mixes novels, videos, and audio while excluding generic files", (t) => {
     `INSERT INTO novels (title, file_name, relative_path, size_bytes, mtime_ms, word_count)
      VALUES ('回声小说', 'echo.txt', 'echo.txt', 10, 1, 2000)`,
   ).run().lastInsertRowid);
+  const originalId = Number(db.prepare(
+    `INSERT INTO original_articles (slug, author_id, title, body_markdown, word_count, status, published_at)
+     VALUES ('echo-original', ?, '回声原创', '正文', 2, 'published', CURRENT_TIMESTAMP)`,
+  ).run(userId).lastInsertRowid);
   const insertMedia = db.prepare(
     `INSERT INTO media_assets
       (kind, title, artist, file_name, stored_name, mime_type, size_bytes, mtime_ms, duration_seconds)
@@ -104,6 +111,7 @@ test("mixes novels, videos, and audio while excluding generic files", (t) => {
     .lastInsertRowid);
 
   assert.equal(toggleNovelGrove(userId, novelId).planted, true);
+  assert.equal(toggleOriginalGrove(userId, originalId).planted, true);
   assert.equal(toggleMediaGrove(userId, videoId).planted, true);
   assert.equal(toggleMediaGrove(userId, audioId).planted, true);
   assert.deepEqual(toggleMediaGrove(userId, fileId), {
@@ -117,17 +125,23 @@ test("mixes novels, videos, and audio while excluding generic files", (t) => {
   }
   for (let visit = 0; visit < 3; visit += 1) {
     recordMediaHistory(userId, { id: audioId, kind: "audio", title: "回声音频" });
+    recordOriginalReadingOpen(userId, originalId);
   }
 
   assert.equal(getMediaGroveState(userId, videoId).stage, "tree");
   assert.equal(getMediaGroveState(userId, audioId).stage, "sprout");
+  assert.equal(getOriginalGroveState(userId, originalId).stage, "sprout");
   const all = listGrovePage(userId);
-  assert.equal(all.totalItems, 3);
-  assert.deepEqual(all.stats, { all: 3, seed: 1, sprout: 1, tree: 1 });
+  assert.equal(all.totalItems, 4);
+  assert.deepEqual(all.stats, { all: 4, seed: 1, sprout: 2, tree: 1 });
   assert.deepEqual(listGrovePage(userId, { stage: "tree" }).items.map((item) => item.id), [videoId]);
   assert.deepEqual(
     listGrovePage(userId, { allowedKinds: ["audio"] }).items.map((item) => item.kind),
     ["audio"],
+  );
+  assert.deepEqual(
+    listGrovePage(userId, { allowedKinds: ["original"] }).items.map((item) => item.kind),
+    ["original"],
   );
   assert.equal(listGrovePage(userId, { allowedKinds: [] }).totalItems, 0);
 });

@@ -14,6 +14,8 @@ import {
   canAccessAdvancedTagSearch,
   canAccessHomeAnnouncementCard,
   canAccessNovelLibrary,
+  canAccessOriginalChannel,
+  canConsumeOriginalChannel,
   canConsumeNovelLibrary,
   getDefaultNovelLibrarySlug,
   getSettingsPreviewText,
@@ -33,6 +35,7 @@ test("atomically replaces an existing settings file", () => {
       announcement: "public",
       novels: "member",
       tags: "member",
+      original: "public",
       video: "member",
       audio: "member",
       file: "member",
@@ -60,6 +63,13 @@ test("atomically replaces an existing settings file", () => {
     assert.equal(defaults.catalogPromotionOrder, "manual-first");
     assert.equal(defaults.audioDefaultPlaybackMode, "next");
     assert.equal(defaults.bidirectionalCurrencyExchangeEnabled, false);
+    assert.equal(defaults.originalArticleMinWords, 2_000);
+    assert.equal(defaults.originalCommentMinChars, 4);
+    assert.equal(defaults.originalMaxTags, 8);
+    assert.equal(defaults.originalPageSize, 20);
+    assert.equal(defaults.originalPublishNoticeText, "请在发表文章前仔细阅读");
+    assert.equal(defaults.originalPublishNoticeLinkLabel, "社区准则");
+    assert.equal(defaults.originalPublishNoticeUrl, "/announcements");
     assert.equal(defaults.userDailyReportLimit, 50);
     assert.equal(defaults.announcementCardTarget, "list");
     assert.equal(defaults.adminTheme, "system");
@@ -97,6 +107,37 @@ test("normalizes the configured user default palette", () => {
     } else {
       process.env.ADMIN_SETTINGS_PATH = previousPath;
     }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("adds the original channel to legacy home portal settings", () => {
+  const previousPath = process.env.ADMIN_SETTINGS_PATH;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-legacy-original-channel-"));
+  process.env.ADMIN_SETTINGS_PATH = path.join(tempDir, "admin-settings.json");
+
+  try {
+    fs.writeFileSync(
+      process.env.ADMIN_SETTINGS_PATH,
+      JSON.stringify({
+        originalChannelEnabled: true,
+        homePortalOrder: ["novels", "video"],
+        homePortalAccessModes: { novels: "member", video: "public" },
+      }),
+      "utf8",
+    );
+    const settings = readSiteSettings();
+    assert.equal(settings.homePortalAccessModes.original, "public");
+    assert.equal(settings.homePortalOrder.includes("original"), true);
+    assert.equal(settings.homePortalOrder.at(-1), "file");
+    assert.equal(settings.originalPublishNoticeText, "请在发表文章前仔细阅读");
+    assert.equal(settings.originalPublishNoticeLinkLabel, "社区准则");
+    assert.equal(settings.originalPublishNoticeUrl, "/announcements");
+    writeSiteSettings({ ...settings, originalPublishNoticeText: "", originalPublishNoticeLinkLabel: "" });
+    assert.equal(readSiteSettings().originalPublishNoticeText, "", "管理员应能用空值关闭发布须知");
+  } finally {
+    if (previousPath === undefined) delete process.env.ADMIN_SETTINGS_PATH;
+    else process.env.ADMIN_SETTINGS_PATH = previousPath;
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
@@ -342,6 +383,41 @@ test("applies disabled, signed-in, and public novel access modes", () => {
     } else {
       process.env.ADMIN_SETTINGS_PATH = previousPath;
     }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("applies the same access contract to the original channel", () => {
+  const previousPath = process.env.ADMIN_SETTINGS_PATH;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-original-access-mode-"));
+  process.env.ADMIN_SETTINGS_PATH = path.join(tempDir, "admin-settings.json");
+
+  try {
+    const defaults = readSiteSettings();
+    writeSiteSettings({ ...defaults, originalChannelEnabled: true, homePortalAccessModes: { ...defaults.homePortalAccessModes, original: "off" } });
+    assert.equal(canAccessOriginalChannel(false), false);
+    assert.equal(canAccessOriginalChannel(true), false);
+
+    writeSiteSettings({ ...readSiteSettings(), homePortalAccessModes: { ...readSiteSettings().homePortalAccessModes, original: "member" } });
+    assert.equal(canAccessOriginalChannel(false), false);
+    assert.equal(canAccessOriginalChannel(true), true);
+    assert.equal(canConsumeOriginalChannel(false), false);
+    assert.equal(canConsumeOriginalChannel(true), true);
+
+    writeSiteSettings({ ...readSiteSettings(), homePortalAccessModes: { ...readSiteSettings().homePortalAccessModes, original: "browse" } });
+    assert.equal(canAccessOriginalChannel(false), true);
+    assert.equal(canConsumeOriginalChannel(false), false);
+    assert.equal(canConsumeOriginalChannel(true), true);
+
+    writeSiteSettings({ ...readSiteSettings(), homePortalAccessModes: { ...readSiteSettings().homePortalAccessModes, original: "public" } });
+    assert.equal(canConsumeOriginalChannel(false), true);
+
+    writeSiteSettings({ ...readSiteSettings(), homePortalAccessModes: { ...readSiteSettings().homePortalAccessModes, original: "off" } });
+    assert.equal(canAccessOriginalChannel(true), false);
+    assert.equal(canConsumeOriginalChannel(true), false);
+  } finally {
+    if (previousPath === undefined) delete process.env.ADMIN_SETTINGS_PATH;
+    else process.env.ADMIN_SETTINGS_PATH = previousPath;
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });

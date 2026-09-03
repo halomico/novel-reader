@@ -15,7 +15,6 @@ import {
   getDefaultNovelLibrarySlug,
   getSearchResultsPageSize,
   isGuestLibraryNavEnabled,
-  shouldShowProgressBars,
 } from "@/lib/config";
 import { validateSearchKeyword } from "@/lib/search";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
@@ -111,7 +110,6 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           hasExplicitPage={hasExplicitPage}
           pageSize={pageSize}
           highlightTerms={validation.query.highlightTerms}
-          showProgressBars={shouldShowProgressBars()}
           searchEventKey={searchEventKey}
           searchSource={source}
           originNovelId={Number.isInteger(originNovelId) && originNovelId > 0 ? originNovelId : null}

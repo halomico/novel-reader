@@ -31,8 +31,8 @@ export function ThemeToggle() {
       aria-label="切换明暗模式"
       title="切换明暗模式"
     >
-      <Sun className="themeToggleSun" size={21} aria-hidden="true" />
-      <Moon className="themeToggleMoon" size={21} aria-hidden="true" />
+      <Sun className="themeToggleSun" size={20} aria-hidden="true" />
+      <Moon className="themeToggleMoon" size={20} aria-hidden="true" />
     </button>
   );
 }

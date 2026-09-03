@@ -15,6 +15,7 @@ import {
   isUserLoginEnabled,
 } from "@/lib/config";
 import { getDb } from "@/lib/db";
+import { isGeneratedAvatarPath } from "@/lib/default-avatar-data";
 import { isEmailVerificationConfigured, sendUserVerificationEmail } from "@/lib/email-verification";
 import { verifyHumanRequest } from "@/lib/human-verification";
 import { LOCALE_REQUEST_HEADER, normalizeLocale } from "@/lib/locale";
@@ -314,6 +315,20 @@ export async function uploadAvatarAction(formData: FormData) {
     authNotice("/account", "头像信息保存失败，请稍后重试", "error");
   }
   removeAvatarFile(user.avatarPath);
+  revalidatePath("/account");
+  authNotice("/account", "头像已更新");
+}
+
+/** Persist a locally generated avatar marker without accepting arbitrary paths. */
+export async function selectDefaultAvatarAction(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const avatarPath = String(formData.get("avatarPath") || "");
+  if (!isGeneratedAvatarPath(avatarPath)) {
+    authNotice("/account", "默认头像无效，请重新选择", "warning");
+  }
+  removeAvatarFile(user.avatarPath);
+  updateUserAvatar(user.id, avatarPath);
   revalidatePath("/account");
   authNotice("/account", "头像已更新");
 }

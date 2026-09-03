@@ -21,6 +21,8 @@ import { getCurrentUser } from "@/lib/user-auth";
 import { resolveDefaultPalette } from "@/lib/ui-preferences";
 import "./globals.css";
 import "./ui-final.css";
+import "./workspace.css";
+import "./original.css";
 
 export const dynamic = "force-dynamic";
 

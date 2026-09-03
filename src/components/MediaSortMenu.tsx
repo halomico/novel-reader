@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ListFilter } from "lucide-react";
+import { ArrowUpDown, Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { MediaSortBy, MediaSortOrder } from "@/lib/media";
 
@@ -64,7 +64,7 @@ export function MediaSortMenu({
         title={`排序：${currentLabel}`}
         onClick={() => setOpen((value) => !value)}
       >
-        <ListFilter size={17} aria-hidden="true" />
+        <ArrowUpDown size={17} aria-hidden="true" />
       </button>
       {open ? (
         <div className="mediaSortPopover" role="menu" aria-label="资源排序方式">

@@ -82,7 +82,7 @@ export function MarketWalletTools({
   return (
     <div className="marketWalletTools">
       <form className="marketExchangeLine" action={exchangeCurrencyAction}>
-        <header className="marketExchangeName"><strong>兑换</strong></header>
+        <header className="marketExchangeName"><strong>闪兑</strong></header>
         <div className="marketExchangeStack">
           <label className="marketExchangePanel">
             <span className="marketExchangeSide">支付</span>

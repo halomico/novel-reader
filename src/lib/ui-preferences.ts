@@ -3,6 +3,10 @@ export const READER_TAGS_STORAGE_KEY = "novel-reader-tags";
 export const READER_HOTWORDS_STORAGE_KEY = "novel-reader-hotwords";
 export const READER_LINE_HEIGHT_STORAGE_KEY = "novel-reader-line-height";
 export const READER_PAPER_STORAGE_KEY = "novel-reader-paper-v2";
+export const READER_FONT_SIZE_STORAGE_KEY = "novel-font-size";
+export const READER_WIDTH_STORAGE_KEY = "novel-reader-width";
+export const READER_PAGE_TURN_STORAGE_KEY = "novel-reader-page-turn";
+export const READER_JUSTIFY_STORAGE_KEY = "novel-reader-justify";
 export const NOVEL_CATALOG_SEARCH_COOKIE = "novel-catalog-search";
 export const LEGACY_READER_THEME_STORAGE_KEYS = ["novel-reader-theme", "novel-reader-light-theme"] as const;
 export const ADMIN_SIDEBAR_STORAGE_KEY = "novel-reader-admin-sidebar-collapsed";
@@ -11,6 +15,13 @@ export const READER_LINE_HEIGHTS = [
   1.7, 1.8, 1.9, 2, 2.1, 2.2, 2.3, 2.4, 2.5,
 ] as const;
 export const DEFAULT_READER_LINE_HEIGHT = 1.7;
+export const DEFAULT_READER_WIDTH = 800;
+export const READER_WIDTHS = ["auto", 640, 800, 900, 1000, 1280] as const;
+export const READER_PAGE_TURN_OPTIONS = [
+  { value: "scroll", label: "滚动" },
+  { value: "slide", label: "平移" },
+  { value: "instant", label: "无动画" },
+] as const;
 export const READER_THEME_OPTIONS = [
   { value: "gray", label: "灰白", swatch: "#f5f5f5", paper: "#f5f5f5", outer: "#ebebeb" },
   { value: "warm", label: "暖白", swatch: "#f5f1e8", paper: "#f5f1e8", outer: "#ebe6da" },
@@ -48,6 +59,8 @@ export type ColorPalette = (typeof COLOR_PALETTES)[number]["value"];
 export type ColorPaletteOption = (typeof COLOR_PALETTES)[number];
 export type ReaderTagsMode = "expanded" | "collapsed" | "hidden";
 export type ReaderLineHeight = (typeof READER_LINE_HEIGHTS)[number];
+export type ReaderWidth = (typeof READER_WIDTHS)[number];
+export type ReaderPageTurn = (typeof READER_PAGE_TURN_OPTIONS)[number]["value"];
 export type ReaderTheme = (typeof READER_THEME_OPTIONS)[number]["value"];
 export type SystemTheme = "light" | "dark";
 
@@ -70,6 +83,33 @@ export function normalizeReaderLineHeight(
   return READER_LINE_HEIGHTS.reduce((nearest, item) => (
     Math.abs(item - numeric) < Math.abs(nearest - numeric) ? item : nearest
   ));
+}
+
+export function normalizeReaderWidth(
+  value: string | number | null | undefined,
+  fallback: ReaderWidth = DEFAULT_READER_WIDTH,
+): ReaderWidth {
+  if (value === "auto") return "auto";
+  const numeric = Number(value);
+  return READER_WIDTHS.includes(numeric as ReaderWidth) ? numeric as ReaderWidth : fallback;
+}
+
+export function normalizeReaderPageTurn(
+  value: string | null | undefined,
+  fallback: ReaderPageTurn = "scroll",
+): ReaderPageTurn {
+  return READER_PAGE_TURN_OPTIONS.some((option) => option.value === value)
+    ? value as ReaderPageTurn
+    : fallback;
+}
+
+export function normalizeReaderJustify(
+  value: string | null | undefined,
+  fallback = true,
+): boolean {
+  if (value === "on") return true;
+  if (value === "off") return false;
+  return fallback;
 }
 
 export function normalizeNovelCatalogSearchExpanded(

@@ -10,7 +10,7 @@ export type ContentReportCategory =
   | "spam"
   | "other";
 export type ContentReportStatus = "open" | "resolved";
-export type ContentReportTargetType = "novel" | "media";
+export type ContentReportTargetType = "novel" | "media" | "original";
 
 export type ContentReport = {
   id: number;
@@ -20,6 +20,7 @@ export type ContentReport = {
   targetType: ContentReportTargetType;
   targetId: number;
   targetTitle: string;
+  targetSlug: string | null;
   mediaKind: MediaKind | null;
   category: ContentReportCategory;
   details: string;
@@ -46,7 +47,9 @@ type ContentReportRow = {
   user_display_name: string;
   novel_id: number | null;
   media_id: number | null;
+  original_article_id: number | null;
   target_title: string;
+  target_slug: string | null;
   media_kind: MediaKind | null;
   category: string;
   details: string;
@@ -66,6 +69,7 @@ const CATEGORIES = new Set<ContentReportCategory>([
   "other",
 ]);
 const MEDIA_CATEGORIES = new Set<ContentReportCategory>(["title_error", "playback_error", "spam", "other"]);
+const ORIGINAL_CATEGORIES = new Set<ContentReportCategory>(["title_error", "tag_error", "spam", "other"]);
 
 function toContentReport(row: ContentReportRow): ContentReport {
   return {
@@ -73,9 +77,10 @@ function toContentReport(row: ContentReportRow): ContentReport {
     userId: row.user_id,
     username: row.username,
     userDisplayName: row.user_display_name,
-    targetType: row.media_id ? "media" : "novel",
-    targetId: row.media_id || row.novel_id || 0,
+    targetType: row.media_id ? "media" : row.original_article_id ? "original" : "novel",
+    targetId: row.media_id || row.original_article_id || row.novel_id || 0,
     targetTitle: row.target_title,
+    targetSlug: row.target_slug,
     mediaKind: row.media_kind,
     category: CATEGORIES.has(row.category as ContentReportCategory) ? row.category as ContentReportCategory : "other",
     details: row.details,
@@ -95,10 +100,15 @@ export function isMediaReportCategory(value: unknown): value is ContentReportCat
   return MEDIA_CATEGORIES.has(value as ContentReportCategory);
 }
 
+export function isOriginalReportCategory(value: unknown): value is ContentReportCategory {
+  return ORIGINAL_CATEGORIES.has(value as ContentReportCategory);
+}
+
 export function createContentReport(params: {
   userId: number;
   novelId?: number | null;
   mediaId?: number | null;
+  originalArticleId?: number | null;
   category: ContentReportCategory;
   details: string;
   dailyLimit: number;
@@ -106,16 +116,20 @@ export function createContentReport(params: {
   const userId = Number(params.userId);
   const novelId = Number(params.novelId || 0);
   const mediaId = Number(params.mediaId || 0);
+  const originalArticleId = Number(params.originalArticleId || 0);
   const details = params.details.trim();
   const dailyLimit = Math.min(Math.max(Math.floor(params.dailyLimit), 1), 500);
   const hasNovel = Number.isInteger(novelId) && novelId > 0;
   const hasMedia = Number.isInteger(mediaId) && mediaId > 0;
+  const hasOriginal = Number.isInteger(originalArticleId) && originalArticleId > 0;
+  const targetCount = Number(hasNovel) + Number(hasMedia) + Number(hasOriginal);
   if (
     !Number.isInteger(userId) ||
     userId < 1 ||
-    hasNovel === hasMedia ||
+    targetCount !== 1 ||
     details.length > 200 ||
-    (hasMedia && !MEDIA_CATEGORIES.has(params.category))
+    (hasMedia && !MEDIA_CATEGORIES.has(params.category)) ||
+    (hasOriginal && !ORIGINAL_CATEGORIES.has(params.category))
   ) {
     return { ok: false, reason: "invalid" };
   }
@@ -134,14 +148,23 @@ export function createContentReport(params: {
              WHERE u.id = ? AND u.status = 'active' AND u.role = 'user' AND n.id = ?`,
           )
           .get(userId, novelId)
-      : db
+      : hasMedia
+        ? db
           .prepare(
              `SELECT 1 AS found
              FROM users u, media_assets m
              WHERE u.id = ? AND u.status = 'active' AND u.role = 'user'
                AND m.id = ? AND m.kind IN ('video', 'audio')`,
           )
-          .get(userId, mediaId);
+          .get(userId, mediaId)
+        : db
+          .prepare(
+            `SELECT 1 AS found
+             FROM users u, original_articles a
+             WHERE u.id = ? AND u.status = 'active' AND u.role = 'user'
+               AND a.id = ? AND a.status = 'published'`,
+          )
+          .get(userId, originalArticleId);
     if (!eligible) {
       db.exec("ROLLBACK");
       return { ok: false, reason: "invalid" };
@@ -155,10 +178,17 @@ export function createContentReport(params: {
     }
     const result = db
       .prepare(
-        `INSERT INTO content_reports (user_id, novel_id, media_id, category, details)
-         VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO content_reports (user_id, novel_id, media_id, original_article_id, category, details)
+         VALUES (?, ?, ?, ?, ?, ?)`,
       )
-      .run(userId, hasNovel ? novelId : null, hasMedia ? mediaId : null, params.category, details);
+      .run(
+        userId,
+        hasNovel ? novelId : null,
+        hasMedia ? mediaId : null,
+        hasOriginal ? originalArticleId : null,
+        params.category,
+        details,
+      );
     db.exec("COMMIT");
     const id = Number(result.lastInsertRowid);
     try {
@@ -190,13 +220,16 @@ export function listContentReports(params: {
   const rows = db
     .prepare(
       `SELECT r.id, r.user_id, u.username, u.display_name AS user_display_name,
-              r.novel_id, r.media_id, COALESCE(n.title, m.title, '已删除内容') AS target_title,
+              r.novel_id, r.media_id, r.original_article_id,
+              COALESCE(n.title, m.title, a.title, '已删除内容') AS target_title,
+              a.slug AS target_slug,
               m.kind AS media_kind, r.category, r.details, r.status,
               r.resolved_by, r.resolved_at, r.created_at, r.updated_at
        FROM content_reports r
        INNER JOIN users u ON u.id = r.user_id
        LEFT JOIN novels n ON n.id = r.novel_id
        LEFT JOIN media_assets m ON m.id = r.media_id
+       LEFT JOIN original_articles a ON a.id = r.original_article_id
        ${where}
        ORDER BY CASE r.status WHEN 'open' THEN 0 ELSE 1 END, r.created_at DESC, r.id DESC
        LIMIT ? OFFSET ?`,

@@ -187,6 +187,9 @@ export function updateReadingProgress(
   const preferences = readingPreferences(userId);
   const db = getDb();
   const existing = getReadingProgress(userId, book.id);
+  if (!preferences.historyEnabled) {
+    return { saved: false, progress: existing };
+  }
   const chapterId = Number.isInteger(update.chapterId) && Number(update.chapterId) > 0
     ? Number(update.chapterId)
     : null;
@@ -248,7 +251,7 @@ export function updateReadingProgress(
       progressPercent,
       contentVersion,
       nextCompleted ? 1 : 0,
-      preferences.historyEnabled ? 1 : 0,
+      1,
     );
     db.prepare(
       `INSERT INTO novel_read_daily_stats (

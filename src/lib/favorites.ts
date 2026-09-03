@@ -6,6 +6,7 @@ import {
   type MediaAsset,
   type MediaKind,
 } from "./media";
+import { listOriginalArticlesByIds, type OriginalArticle } from "./original";
 
 export type FavoriteNovelPage = {
   books: Novel[];
@@ -20,6 +21,14 @@ export type FavoriteMediaPage = {
   page: number;
   pageSize: number;
   totalAssets: number;
+  totalPages: number;
+};
+
+export type FavoriteOriginalPage = {
+  articles: OriginalArticle[];
+  page: number;
+  pageSize: number;
+  totalArticles: number;
   totalPages: number;
 };
 
@@ -89,6 +98,66 @@ export function listFavoriteNovels(userId: number, pageValue = 1, pageSizeValue 
     )
     .all(userId, pageSize, (page - 1) * pageSize) as Novel[];
   return { books, page, pageSize, totalBooks: total.count, totalPages };
+}
+
+export function isOriginalFavorite(userId: number, articleId: number): boolean {
+  return Boolean(getDb()
+    .prepare("SELECT 1 AS found FROM user_original_favorites WHERE user_id = ? AND article_id = ?")
+    .get(userId, articleId));
+}
+
+export function toggleOriginalFavorite(userId: number, articleId: number): { ok: boolean; favorite: boolean } {
+  const db = getDb();
+  const removed = db
+    .prepare("DELETE FROM user_original_favorites WHERE user_id = ? AND article_id = ?")
+    .run(userId, articleId);
+  if (removed.changes > 0) return { ok: true, favorite: false };
+  const added = db.prepare(
+    `INSERT INTO user_original_favorites (user_id, article_id)
+     SELECT ?, id FROM original_articles WHERE id = ? AND status = 'published'`,
+  ).run(userId, articleId);
+  return { ok: added.changes > 0, favorite: added.changes > 0 };
+}
+
+export function removeOriginalFavorites(userId: number, articleIds: readonly number[]): number {
+  const ids = normalizeFavoriteIds(articleIds);
+  if (!ids.length) return 0;
+  return Number(getDb().prepare(
+    `DELETE FROM user_original_favorites
+     WHERE user_id = ? AND article_id IN (${ids.map(() => "?").join(",")})`,
+  ).run(userId, ...ids).changes);
+}
+
+export function listFavoriteOriginals(
+  userId: number,
+  pageValue = 1,
+  pageSizeValue = 20,
+): FavoriteOriginalPage {
+  const db = getDb();
+  const pageSize = Math.min(Math.max(Math.floor(pageSizeValue), 1), 100);
+  const totalArticles = Number((db.prepare(
+    `SELECT COUNT(*) AS count
+     FROM user_original_favorites f
+     JOIN original_articles a ON a.id = f.article_id
+     WHERE f.user_id = ? AND a.status = 'published'`,
+  ).get(userId) as { count: number }).count || 0);
+  const totalPages = Math.max(Math.ceil(totalArticles / pageSize), 1);
+  const page = Math.min(Math.max(Number.isFinite(pageValue) ? Math.floor(pageValue) : 1, 1), totalPages);
+  const rows = db.prepare(
+    `SELECT f.article_id
+     FROM user_original_favorites f
+     JOIN original_articles a ON a.id = f.article_id
+     WHERE f.user_id = ? AND a.status = 'published'
+     ORDER BY f.created_at DESC, f.article_id DESC
+     LIMIT ? OFFSET ?`,
+  ).all(userId, pageSize, (page - 1) * pageSize) as Array<{ article_id: number }>;
+  return {
+    articles: listOriginalArticlesByIds(rows.map((row) => row.article_id)),
+    page,
+    pageSize,
+    totalArticles,
+    totalPages,
+  };
 }
 
 export function isMediaFavorite(userId: number, mediaId: number): boolean {

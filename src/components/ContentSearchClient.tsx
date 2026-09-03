@@ -16,7 +16,6 @@ type ContentSearchClientProps = {
   hasExplicitPage: boolean;
   pageSize: number;
   highlightTerms: SearchTermPattern[];
-  showProgressBars: boolean;
   searchEventKey: string | null;
   searchSource: string;
   originNovelId: number | null;
@@ -37,13 +36,11 @@ type SearchApiResponse = {
   message?: string;
   job?: ContentJobSnapshot;
   jobId?: string;
-  showProgressBars?: boolean;
 };
 
 type CachedContentSearch = {
   savedAt: number;
   page: number;
-  showProgressBars: boolean;
   job: ContentJobSnapshot;
 };
 
@@ -97,8 +94,8 @@ function readCachedSearch(key: string): CachedContentSearch | null {
   }
 }
 
-function writeCachedSearch(key: string, job: ContentJobSnapshot, page: number, showProgressBars: boolean) {
-  writeSessionValue(key, JSON.stringify({ savedAt: Date.now(), page, showProgressBars, job }));
+function writeCachedSearch(key: string, job: ContentJobSnapshot, page: number) {
+  writeSessionValue(key, JSON.stringify({ savedAt: Date.now(), page, job }));
 }
 
 function cancelSearchJob(jobId: string) {
@@ -135,14 +132,11 @@ function highlightSnippet(snippet: string, terms: SearchTermPattern[]) {
 
 function SearchProgress({
   job,
-  showProgressBars,
   locale,
 }: {
   job: ContentJobSnapshot | null;
-  showProgressBars: boolean;
   locale: AppLocale;
 }) {
-  const progress = job?.progress || 0;
   const scannedBooks = job?.scannedBooks || 0;
   const totalBooks = job?.totalBooks || 0;
 
@@ -150,24 +144,15 @@ function SearchProgress({
     return null;
   }
 
+  const detail = totalBooks
+    ? locale === "zh-Hant"
+      ? `已掃描 ${scannedBooks} / ${totalBooks} 本 · 符合 ${job.resultCount} 本`
+      : `已扫描 ${scannedBooks} / ${totalBooks} 本 · 匹配 ${job.resultCount} 本`
+    : uiText(locale, "正在启动搜索任务");
   return (
-    <section className="contentProgressPanel" aria-live="polite">
-      <div className="contentProgressHeader">
-        <span>{job.message || uiText(locale, "正在搜索正文")}</span>
-        {showProgressBars ? <strong>{progress}%</strong> : null}
-      </div>
-      {showProgressBars ? (
-        <div className="contentProgressTrack" aria-label={uiText(locale, "搜索进度")}>
-          <span style={{ width: `${progress}%` }} />
-        </div>
-      ) : null}
-      {totalBooks ? (
-        <p>{locale === "zh-Hant"
-          ? `已掃描 ${scannedBooks} / ${totalBooks} 本，目前符合 ${job.resultCount} 本`
-          : `已扫描 ${scannedBooks} / ${totalBooks} 本，当前匹配 ${job.resultCount} 本`}</p>
-      ) : (
-        <p>{uiText(locale, "正在启动搜索任务")}</p>
-      )}
+    <section className="contentProgressPanel contentProgressPanelCompact" aria-live="polite">
+      <span>{job.message || uiText(locale, "正在搜索正文")}</span>
+      <small>{detail}</small>
     </section>
   );
 }
@@ -178,7 +163,6 @@ export function ContentSearchClient({
   hasExplicitPage,
   pageSize,
   highlightTerms,
-  showProgressBars,
   searchEventKey,
   searchSource,
   originNovelId,
@@ -194,7 +178,6 @@ export function ContentSearchClient({
   const [job, setJob] = useState<ContentJobSnapshot | null>(null);
   const [message, setMessage] = useState("");
   const [page, setPage] = useState(initialPage);
-  const [displayProgress, setDisplayProgress] = useState(showProgressBars);
   const requestFiltersKey = useMemo(() => JSON.stringify(requestFilters || null), [requestFilters]);
   const searchIdentity = `${library}:${keyword}:${requestFiltersKey}`;
   const pageStateKey = useMemo(() => `content-search-page:${searchIdentity}`, [searchIdentity]);
@@ -231,13 +214,13 @@ export function ContentSearchClient({
     writeSessionValue(pageStateKey, String(nextPage));
   }
 
-  function rememberSnapshot(nextJob: ContentJobSnapshot, nextPage = currentPageRef.current, nextShowProgressBars = displayProgress) {
+  function rememberSnapshot(nextJob: ContentJobSnapshot, nextPage = currentPageRef.current) {
     activeJobIdRef.current = nextJob.id;
     activeJobStatusRef.current = nextJob.status;
-    const signature = `${nextJob.id}:${nextJob.status}:${nextJob.resultCount}:${nextPage}:${nextShowProgressBars}`;
+    const signature = `${nextJob.id}:${nextJob.status}:${nextJob.resultCount}:${nextPage}`;
     if (storedSnapshotSignatureRef.current !== signature) {
       storedSnapshotSignatureRef.current = signature;
-      writeCachedSearch(resultCacheKey, nextJob, nextPage, nextShowProgressBars);
+      writeCachedSearch(resultCacheKey, nextJob, nextPage);
     }
     reportSearchResults(nextJob);
   }
@@ -293,8 +276,7 @@ export function ContentSearchClient({
         nextJob = resultData.job;
       }
       setJob(nextJob);
-      setDisplayProgress(data.showProgressBars ?? showProgressBars);
-      rememberSnapshot(nextJob, currentPageRef.current, data.showProgressBars ?? showProgressBars);
+      rememberSnapshot(nextJob);
       if (nextJob.status === "running" || nextJob.status === "queued") {
         timer = setTimeout(() => {
           poll(jobId).catch((error) => setMessage(error instanceof Error ? error.message : tr("搜索失败")));
@@ -333,8 +315,7 @@ export function ContentSearchClient({
         currentPageRef.current = cachedPage;
         setPage(cachedPage);
         setJob(cached.job);
-        setDisplayProgress(cached.showProgressBars);
-        rememberSnapshot(cached.job, cachedPage, cached.showProgressBars);
+        rememberSnapshot(cached.job, cachedPage);
         if (cached.job.status === "done") {
           return;
         }
@@ -365,8 +346,7 @@ export function ContentSearchClient({
         return;
       }
       setJob(data.job);
-      setDisplayProgress(data.showProgressBars ?? showProgressBars);
-      rememberSnapshot(data.job, nextPage, data.showProgressBars ?? showProgressBars);
+      rememberSnapshot(data.job, nextPage);
       if (data.job.status === "running" || data.job.status === "queued") {
         poll(data.jobId).catch((error) => setMessage(error instanceof Error ? error.message : tr("搜索失败")));
       }
@@ -418,7 +398,7 @@ export function ContentSearchClient({
         scheduleCancelActiveJob();
       }
     };
-  }, [keyword, initialPage, hasExplicitPage, pageStateKey, requestFiltersKey, resultCacheKey, pageSize, searchIdentity, showProgressBars, searchEventKey]);
+  }, [keyword, initialPage, hasExplicitPage, pageStateKey, requestFiltersKey, resultCacheKey, pageSize, searchIdentity, searchEventKey]);
 
   const results = job?.results || [];
   const matchedBookCount = useMemo(() => new Set(results.map((result) => result.novelId)).size, [results]);
@@ -442,7 +422,7 @@ export function ContentSearchClient({
     setPage(normalized);
     rememberPage(normalized);
     if (job) {
-      writeCachedSearch(resultCacheKey, job, normalized, displayProgress);
+      writeCachedSearch(resultCacheKey, job, normalized);
     }
   }
 
@@ -473,7 +453,7 @@ export function ContentSearchClient({
         {message ? <p className="searchMessage">{message}</p> : null}
       </section>
 
-      <SearchProgress job={job} showProgressBars={displayProgress} locale={locale} />
+      <SearchProgress job={job} locale={locale} />
 
       {pagedResults.length > 0 ? (
         <section className="searchResults contentSearchResults">
@@ -500,7 +480,7 @@ export function ContentSearchClient({
                   keepJobOnUnmountRef.current = true;
                   rememberPage(currentPage);
                   if (job) {
-                    writeCachedSearch(resultCacheKey, job, currentPage, displayProgress);
+                    writeCachedSearch(resultCacheKey, job, currentPage);
                   }
                 }}
               >

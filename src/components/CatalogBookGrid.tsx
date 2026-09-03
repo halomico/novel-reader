@@ -27,12 +27,14 @@ export function CatalogBookCard({
   book,
   returnHref,
   searchEventKey,
+  resume = false,
   locale = DEFAULT_LOCALE,
 }: {
   book: Novel;
   returnHref: string;
   tags?: Tag[];
   searchEventKey?: string | null;
+  resume?: boolean;
   locale?: AppLocale;
 }) {
   const showSodaPrice = book.soda_price > 0;
@@ -40,11 +42,13 @@ export function CatalogBookCard({
   const bookPath = book.storage_mode === "chapters"
     ? `/books/${book.id}/chapters`
     : `/books/${book.id}`;
+  const query = new URLSearchParams({ from: returnHref });
+  if (resume) query.set("resume", "1");
   return (
     <SearchTrackedLink
       className="bookCard"
       eventKey={searchEventKey}
-      href={`${bookPath}?from=${encodeURIComponent(returnHref)}`}
+      href={`${bookPath}?${query.toString()}`}
       novelId={book.id}
       returnHref={returnHref}
     >
@@ -79,6 +83,7 @@ export function CatalogBookGrid({
   ariaLabel,
   tagsByNovel = new Map(),
   searchEventKey,
+  resume = false,
   locale = DEFAULT_LOCALE,
 }: {
   books: Novel[];
@@ -86,6 +91,7 @@ export function CatalogBookGrid({
   ariaLabel: string;
   tagsByNovel?: ReadonlyMap<number, Tag[]>;
   searchEventKey?: string | null;
+  resume?: boolean;
   locale?: AppLocale;
 }) {
   return (
@@ -98,6 +104,7 @@ export function CatalogBookGrid({
             returnHref={returnHref}
             tags={tags}
             searchEventKey={searchEventKey}
+            resume={resume}
             locale={locale}
             key={book.id}
           />
