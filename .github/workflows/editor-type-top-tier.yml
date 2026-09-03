@@ -1,0 +1,78 @@
+name: Editor typing and final validation
+
+on:
+  push:
+    branches:
+      - top-tier-rebuild-20260904
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    if: contains(github.event.head_commit.message, '[editor-type]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: top-tier-rebuild-20260904
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: node scripts/editor-type-repair.mjs
+      - run: npm install --no-audit --no-fund
+      - name: Typecheck
+        id: typecheck
+        continue-on-error: true
+        run: npm run typecheck > /tmp/typecheck.log 2>&1
+      - name: Tests
+        id: tests
+        continue-on-error: true
+        run: npm test > /tmp/tests.log 2>&1
+      - name: Production build
+        id: build
+        continue-on-error: true
+        run: npm run build > /tmp/build.log 2>&1
+      - name: Commit source and detailed report
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '# Editor typing verification'
+            echo "typecheck=${{ steps.typecheck.outcome }}"
+            echo "tests=${{ steps.tests.outcome }}"
+            echo "build=${{ steps.build.outcome }}"
+            echo '## Typecheck'
+            echo '```text'
+            cat /tmp/typecheck.log 2>/dev/null | tail -n 700 || true
+            echo '```'
+            echo '## Tests'
+            echo '```text'
+            cat /tmp/tests.log 2>/dev/null | tail -n 400 || true
+            echo '```'
+            echo '## Build'
+            echo '```text'
+            cat /tmp/build.log 2>/dev/null | tail -n 700 || true
+            echo '```'
+          } > TOP_TIER_CI_REPORT.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: tighten original editor runtime typing" || true
+          git push origin HEAD:top-tier-rebuild-20260904
+      - name: Enforce checks
+        if: steps.typecheck.outcome != 'success' || steps.tests.outcome != 'success' || steps.build.outcome != 'success'
+        run: exit 1
+      - name: Remove one-time delivery files
+        shell: bash
+        run: |
+          rm -f .github/workflows/*top-tier*.yml scripts/*top-tier-rebuild.mjs scripts/security-ops-finalize.mjs scripts/editor-type-repair.mjs
+          git add -A
+          git commit -m "chore: remove one-time delivery automation" || true
+          git push origin HEAD:top-tier-rebuild-20260904
+      - name: Fast-forward main
+        run: git push origin HEAD:main
