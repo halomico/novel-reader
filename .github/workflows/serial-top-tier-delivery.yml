@@ -1,0 +1,128 @@
+name: Serial top-tier source delivery
+
+on:
+  push:
+    branches:
+      - top-tier-rebuild-20260904
+
+concurrency:
+  group: top-tier-serial-delivery
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  deliver:
+    if: contains(github.event.head_commit.message, '[serial-delivery]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: top-tier-rebuild-20260904
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Resolve current dependency graph
+        run: npm install --no-audit --no-fund
+
+      - name: Apply every still-pending deterministic integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for script in \
+            scripts/apply-top-tier-rebuild.mjs \
+            scripts/repair-top-tier-rebuild.mjs \
+            scripts/finalize-top-tier-rebuild.mjs \
+            scripts/compat-top-tier-rebuild.mjs \
+            scripts/security-ops-finalize.mjs \
+            scripts/editor-type-repair.mjs
+          do
+            if [[ -f "$script" ]]; then
+              node "$script"
+            fi
+          done
+          npm install --no-audit --no-fund
+
+      - name: Verify lockfile from a clean dependency directory
+        run: |
+          rm -rf node_modules
+          npm ci
+          git diff --exit-code -- package.json package-lock.json
+
+      - name: Typecheck
+        id: typecheck
+        continue-on-error: true
+        run: npm run typecheck > /tmp/typecheck.log 2>&1
+      - name: Unit and migration tests
+        id: tests
+        continue-on-error: true
+        run: npm test > /tmp/tests.log 2>&1
+      - name: Production build
+        id: build
+        continue-on-error: true
+        run: npm run build > /tmp/build.log 2>&1
+
+      - name: Persist truthful verification result
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '# Serial top-tier verification'
+            echo
+            echo "typecheck=${{ steps.typecheck.outcome }}"
+            echo "tests=${{ steps.tests.outcome }}"
+            echo "build=${{ steps.build.outcome }}"
+            echo
+            echo '## Typecheck'
+            echo '```text'
+            tail -n 1000 /tmp/typecheck.log 2>/dev/null || true
+            echo '```'
+            echo
+            echo '## Tests'
+            echo '```text'
+            tail -n 600 /tmp/tests.log 2>/dev/null || true
+            echo '```'
+            echo
+            echo '## Build'
+            echo '```text'
+            tail -n 1000 /tmp/build.log 2>/dev/null || true
+            echo '```'
+          } > TOP_TIER_CI_REPORT.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: deliver actual hardened source and original composer" || true
+          git pull --rebase origin top-tier-rebuild-20260904
+          git push origin HEAD:top-tier-rebuild-20260904
+
+      - name: Refuse delivery when any mandatory gate failed
+        if: steps.typecheck.outcome != 'success' || steps.tests.outcome != 'success' || steps.build.outcome != 'success'
+        run: exit 1
+
+      - name: Remove one-time workflows and migration drivers
+        shell: bash
+        run: |
+          rm -f \
+            .github/workflows/*top-tier*.yml \
+            .github/workflows/apply-top-tier-rebuild.yml \
+            .github/workflows/finalize-top-tier.yml \
+            .github/workflows/compat-top-tier.yml \
+            .github/workflows/security-ops-top-tier.yml \
+            .github/workflows/editor-type-top-tier.yml \
+            scripts/apply-top-tier-rebuild.mjs \
+            scripts/repair-top-tier-rebuild.mjs \
+            scripts/finalize-top-tier-rebuild.mjs \
+            scripts/compat-top-tier-rebuild.mjs \
+            scripts/security-ops-finalize.mjs \
+            scripts/editor-type-repair.mjs
+          git add -A
+          git commit -m "chore: remove one-time source delivery automation" || true
+          git push origin HEAD:top-tier-rebuild-20260904
+
+      - name: Fast-forward main from the exact verified tree
+        run: git push origin HEAD:main
