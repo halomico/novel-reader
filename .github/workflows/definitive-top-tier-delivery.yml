@@ -1,0 +1,129 @@
+name: Definitive top-tier delivery
+
+on:
+  push:
+    branches:
+      - top-tier-rebuild-20260904
+
+concurrency:
+  group: definitive-top-tier-delivery
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-deliver:
+    if: contains(github.event.head_commit.message, '[definitive-delivery]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: top-tier-rebuild-20260904
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Resolve submitted dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Apply only missing integration stages
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! grep -q 'ensureCoreSchema(db)' src/lib/db.ts; then
+            test -f scripts/apply-top-tier-rebuild.mjs
+            node scripts/apply-top-tier-rebuild.mjs
+          fi
+          if ! grep -q 'guardBrowserApiMutation' src/middleware.ts; then
+            test -f scripts/repair-top-tier-rebuild.mjs
+            node scripts/repair-top-tier-rebuild.mjs
+          fi
+          if [[ ! -f src/components/MediaViewTracker.tsx ]]; then
+            test -f scripts/finalize-top-tier-rebuild.mjs
+            node scripts/finalize-top-tier-rebuild.mjs
+          fi
+          if ! grep -q 'hashUserPasswordAsync' src/lib/user-auth.ts; then
+            test -f scripts/compat-top-tier-rebuild.mjs
+            node scripts/compat-top-tier-rebuild.mjs
+          fi
+          if [[ ! -f src/app/verify-email/confirm-action.ts ]]; then
+            test -f scripts/security-ops-finalize.mjs
+            node scripts/security-ops-finalize.mjs
+          fi
+          node scripts/definitive-fixes.mjs
+          npm install --no-audit --no-fund
+
+      - name: Prove lockfile works in a clean tree
+        run: |
+          rm -rf node_modules
+          npm ci
+          git diff --exit-code -- package.json package-lock.json
+
+      - name: Typecheck exact candidate
+        id: typecheck
+        continue-on-error: true
+        run: npm run typecheck > /tmp/typecheck.log 2>&1
+      - name: Test exact candidate
+        id: tests
+        continue-on-error: true
+        run: npm test > /tmp/tests.log 2>&1
+      - name: Build exact candidate
+        id: build
+        continue-on-error: true
+        run: npm run build > /tmp/build.log 2>&1
+
+      - name: Commit exact candidate and truthful report
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '# Definitive verification'
+            echo "typecheck=${{ steps.typecheck.outcome }}"
+            echo "tests=${{ steps.tests.outcome }}"
+            echo "build=${{ steps.build.outcome }}"
+            echo '## Typecheck'
+            echo '```text'
+            tail -n 1200 /tmp/typecheck.log 2>/dev/null || true
+            echo '```'
+            echo '## Tests'
+            echo '```text'
+            tail -n 800 /tmp/tests.log 2>/dev/null || true
+            echo '```'
+            echo '## Build'
+            echo '```text'
+            tail -n 1200 /tmp/build.log 2>/dev/null || true
+            echo '```'
+          } > TOP_TIER_CI_REPORT.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: deliver real hardened source and original editor" || true
+          git pull --rebase origin top-tier-rebuild-20260904
+          git push origin HEAD:top-tier-rebuild-20260904
+
+      - name: Stop before main when any mandatory check failed
+        if: steps.typecheck.outcome != 'success' || steps.tests.outcome != 'success' || steps.build.outcome != 'success'
+        run: exit 1
+
+      - name: Remove every one-time delivery artifact
+        shell: bash
+        run: |
+          find .github/workflows -maxdepth 1 -type f \( -name '*top-tier*.yml' -o -name 'apply-top-tier-*.yml' -o -name 'finalize-top-tier.yml' -o -name 'compat-top-tier.yml' \) -delete
+          rm -f \
+            scripts/apply-top-tier-rebuild.mjs \
+            scripts/repair-top-tier-rebuild.mjs \
+            scripts/finalize-top-tier-rebuild.mjs \
+            scripts/compat-top-tier-rebuild.mjs \
+            scripts/security-ops-finalize.mjs \
+            scripts/editor-type-repair.mjs \
+            scripts/definitive-fixes.mjs
+          git add -A
+          git commit -m "chore: remove one-time delivery automation" || true
+          git push origin HEAD:top-tier-rebuild-20260904
+
+      - name: Fast-forward main from the exact verified commit
+        run: git push origin HEAD:main
