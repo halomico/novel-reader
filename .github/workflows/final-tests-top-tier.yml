@@ -1,0 +1,90 @@
+name: Final secure regression validation
+
+on:
+  push:
+    branches:
+      - top-tier-rebuild-20260904
+
+concurrency:
+  group: top-tier-final-tests
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    if: contains(github.event.head_commit.message, '[final-tests]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: top-tier-rebuild-20260904
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      - name: Apply regression alignment
+        run: node scripts/final-test-fixes.mjs
+      - run: npm install --no-audit --no-fund
+      - name: Clean npm ci
+        run: |
+          rm -rf node_modules
+          npm ci
+          git diff --exit-code -- package.json package-lock.json
+      - name: Typecheck
+        id: typecheck
+        continue-on-error: true
+        run: npm run typecheck > /tmp/typecheck.log 2>&1
+      - name: Tests
+        id: tests
+        continue-on-error: true
+        run: npm test > /tmp/tests.log 2>&1
+      - name: Build
+        id: build
+        continue-on-error: true
+        run: npm run build > /tmp/build.log 2>&1
+      - name: Commit candidate and report
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '# Final secure regression validation'
+            echo "typecheck=${{ steps.typecheck.outcome }}"
+            echo "tests=${{ steps.tests.outcome }}"
+            echo "build=${{ steps.build.outcome }}"
+            echo '## Typecheck'
+            echo '```text'
+            tail -n 1400 /tmp/typecheck.log 2>/dev/null || true
+            echo '```'
+            echo '## Tests'
+            echo '```text'
+            tail -n 900 /tmp/tests.log 2>/dev/null || true
+            echo '```'
+            echo '## Build'
+            echo '```text'
+            tail -n 1400 /tmp/build.log 2>/dev/null || true
+            echo '```'
+          } > TOP_TIER_CI_REPORT.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "test: align regression suite with secure defaults" || true
+          git pull --rebase origin top-tier-rebuild-20260904
+          git push origin HEAD:top-tier-rebuild-20260904
+      - name: Enforce all gates
+        if: steps.typecheck.outcome != 'success' || steps.tests.outcome != 'success' || steps.build.outcome != 'success'
+        run: exit 1
+      - name: Remove one-time delivery automation
+        shell: bash
+        run: |
+          find .github/workflows -maxdepth 1 -type f -name '*top-tier*.yml' -delete
+          rm -f scripts/*top-tier-rebuild.mjs scripts/security-ops-finalize.mjs scripts/editor-type-repair.mjs scripts/definitive-fixes.mjs scripts/final-test-fixes.mjs
+          git add -A
+          git commit -m "chore: remove one-time delivery automation" || true
+          git push origin HEAD:top-tier-rebuild-20260904
+      - name: Fast-forward main
+        run: git push origin HEAD:main
