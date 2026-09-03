@@ -1,0 +1,47 @@
+name: Top tier worktree export
+
+on:
+  push:
+    branches:
+      - top-tier-rebuild-20260904
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Pack source tree
+        run: |
+          tar \
+            --exclude=.git \
+            --exclude=node_modules \
+            --exclude=.next \
+            --exclude=data \
+            --exclude=library \
+            -czf /tmp/novel-reader-source.tgz .
+
+      - name: Pack dependencies
+        run: tar -czf /tmp/novel-reader-node-modules.tgz node_modules
+
+      - name: Upload source artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: top-tier-source-${{ github.sha }}
+          path: /tmp/novel-reader-source.tgz
+          retention-days: 1
+
+      - name: Upload dependencies artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: top-tier-node-modules-${{ github.sha }}
+          path: /tmp/novel-reader-node-modules.tgz
+          retention-days: 1
