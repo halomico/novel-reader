@@ -16,7 +16,7 @@ import {
   toggleNovelGrove,
   toggleOriginalGrove,
 } from "./grove";
-import { recordOriginalReadingOpen } from "./original";
+import { recordOriginalReadingOpen } from "@/domains/originals";
 import { recordReadingOpen } from "./reading-progress";
 import { recordMediaHistory } from "./users";
 

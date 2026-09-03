@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Bell, BookOpen, Clapperboard, File, FilePenLine, Headphones, Tags, type LucideIcon } from "lucide-react";
 import { redirect } from "next/navigation";
-import { IntentPrefetchLink as Link } from "@/components/IntentPrefetchLink";
+import { AppLink as Link } from "@/components/AppLink";
 import { SiteHeader } from "@/components/SiteHeader";
 import {
   getAnnouncementCardTarget,

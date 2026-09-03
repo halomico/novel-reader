@@ -39,9 +39,8 @@ export function SearchTrackedLink({
       contextReturnHref={returnHref}
       href={href}
       onClick={trackClick}
-      // Dense result grids must not prefetch every visible card. The wrapped
-      // IntentPrefetchLink still prefetches after real hover/focus/touch intent.
-      prefetch={false}
+      // Dense result grids only fetch after an explicit click.
+      prefetchPolicy="never"
     >
       {children}
     </ContextNavigationLink>

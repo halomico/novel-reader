@@ -7,9 +7,10 @@ import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
 import { OriginalAuthorBlockButton } from "@/components/OriginalAuthorBlockButton";
 import { OriginalCommentComposer } from "@/components/OriginalCommentComposer";
+import { OriginalArticleTracker } from "@/components/OriginalArticleTracker";
 import { OriginalMarkdown } from "@/components/OriginalMarkdown";
 import { OriginalReaderExperienceControls } from "@/components/OriginalReaderExperienceControls";
-import { OriginalReadingTracker } from "@/components/OriginalReadingTracker";
+import { Pagination } from "@/components/Pagination";
 import { SiteHeader } from "@/components/SiteHeader";
 import { UserAvatar } from "@/components/UserAvatar";
 import { canAccessOriginalChannel, canConsumeOriginalChannel, getNoticeDisplaySeconds, getOriginalPublishingSettings, isOriginalChannelEnabled, isOriginalChannelEntryVisible } from "@/lib/config";
@@ -23,10 +24,8 @@ import {
   getAdjacentOriginalArticles,
   getOriginalArticleBySlug,
   getOriginalCommentQuota,
-  incrementOriginalView,
   getOriginalReadingProgress,
-  recordOriginalReadingOpen,
-  listOriginalComments,
+  listOriginalCommentsPage,
   isOriginalAuthorBlocked,
 } from "@/lib/original";
 import { joinOriginalBodies } from "@/lib/original-constants";
@@ -40,7 +39,7 @@ export const dynamic = "force-dynamic";
 
 type OriginalDetailProps = {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ notice?: string; tone?: "success" | "warning" | "error"; resume?: string }>;
+  searchParams: Promise<{ comments?: string; notice?: string; tone?: "success" | "warning" | "error"; resume?: string }>;
 };
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -64,19 +63,20 @@ export default async function OriginalDetailPage({ params, searchParams }: Origi
   }
   const article = getOriginalArticleBySlug(slug);
   if (!article) notFound();
-  incrementOriginalView(article.id);
-  if (user) recordOriginalReadingOpen(user.id, article.id);
   const access = getOriginalAccess(article, user);
   const channelConsumable = canConsumeOriginalChannel(Boolean(user));
   const contentAllowed = channelConsumable && access.allowed;
-  const comments = channelConsumable ? listOriginalComments(article.id, { viewerId: user?.id }) : [];
+  const requestedCommentPage = Math.max(Math.floor(Number(query.comments || 1)) || 1, 1);
+  const commentPage = channelConsumable
+    ? listOriginalCommentsPage(article.id, { page: requestedCommentPage, pageSize: 30, viewerId: user?.id })
+    : { items: [], page: 1, pageSize: 30, totalItems: 0, totalPages: 1 };
   const [title, authorName, publicBody, paidBody] = await Promise.all([
     localizeText(article.title, locale),
     localizeText(article.authorName, locale),
     channelConsumable ? localizeText(article.bodyMarkdown, locale) : Promise.resolve(""),
     contentAllowed ? localizeText(article.paidBodyMarkdown, locale) : Promise.resolve(""),
   ]);
-  const displayComments = await Promise.all(comments.map(async (comment) => ({
+  const displayComments = await Promise.all(commentPage.items.map(async (comment) => ({
     ...comment,
     authorName: await localizeText(comment.authorName, locale),
     bodyMarkdown: await localizeText(comment.bodyMarkdown, locale),
@@ -113,10 +113,11 @@ export default async function OriginalDetailPage({ params, searchParams }: Origi
       <article className="readerPage originalDetail">
         <Breadcrumbs className="readerBreadcrumbs" items={[{ label: tr("首页"), href: "/" }, { label: tr("原创"), href: "/original" }, { label: title }]} />
         {query.notice ? <DismissibleNotice message={query.notice} tone={query.tone} variant="search" displaySeconds={getNoticeDisplaySeconds()} /> : null}
-        <OriginalReadingTracker
+        <OriginalArticleTracker
           articleId={article.id}
           slug={article.slug}
-          enabled={Boolean(user?.originalReadingHistoryEnabled && contentAllowed)}
+          engagementTargetId={channelConsumable ? "original-content" : "original-access-gate"}
+          readingProgressEnabled={Boolean(user?.originalReadingHistoryEnabled && contentAllowed)}
           resume={query.resume === "1"}
           initialRatio={readingProgress?.scrollRatio || 0}
         />
@@ -143,7 +144,7 @@ export default async function OriginalDetailPage({ params, searchParams }: Origi
         </header>
 
         {channelConsumable ? (
-          <div className="originalReadingLayout">
+          <div className="originalReadingLayout" id="original-content">
             <div className="originalReaderStage">
               <div className="readerText originalBody" id="original-body">
                 <OriginalMarkdown>{visibleBody}</OriginalMarkdown>
@@ -166,7 +167,7 @@ export default async function OriginalDetailPage({ params, searchParams }: Origi
         ) : null}
 
         {!contentAllowed ? (
-          <section className="originalGate" aria-live="polite">
+          <section className="originalGate" id="original-access-gate" aria-live="polite">
             <LockKeyhole size={23} aria-hidden="true" />
             <strong>{!channelConsumable
               ? tr("登录后查看完整内容")
@@ -217,6 +218,14 @@ export default async function OriginalDetailPage({ params, searchParams }: Origi
               ))}
               {!displayComments.length ? <p className="originalEmpty">{tr("暂无评论")}</p> : null}
             </div>
+            <Pagination
+              page={commentPage.page}
+              totalPages={commentPage.totalPages}
+              query=""
+              basePath={`/original/${encodeURIComponent(article.slug)}`}
+              pageParam="comments"
+              scrollTargetId="original-comments"
+            />
             {user && channelConsumable && commentQuota ? (
               <OriginalCommentComposer
                 action={addOriginalCommentAction}

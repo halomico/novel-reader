@@ -8,6 +8,11 @@ type ProgressState = "idle" | "loading" | "complete";
 const SHOW_DELAY_MS = 140;
 const FAILSAFE_MS = 12_000;
 
+function isReaderDestination(pathname: string): boolean {
+  return /(?:^|\/)books\/\d+(?:\/|$)/u.test(pathname) ||
+    /(?:^|\/)original\/(?!new(?:\/|$)|mine(?:\/|$)|tags(?:\/|$)|author(?:\/|$))[^/]+\/?$/u.test(pathname);
+}
+
 function dispatchNavigationProgress(readerNavigation: boolean) {
   window.dispatchEvent(new CustomEvent("novel:navigation-start", {
     detail: { readerNavigation },
@@ -72,7 +77,12 @@ export function NavigationProgress() {
         return;
       }
       const target = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
-      if (!target || target.target || target.hasAttribute("download")) return;
+      if (
+        !target ||
+        target.target ||
+        target.hasAttribute("download") ||
+        target.getAttribute("aria-disabled") === "true"
+      ) return;
 
       const destination = new URL(target.href, window.location.href);
       if (destination.origin !== window.location.origin) return;
@@ -84,7 +94,7 @@ export function NavigationProgress() {
         return;
       }
       if (destination.href !== window.location.href) {
-        start(Boolean(target.closest(".readerShell")) && destination.pathname.includes("/books/"));
+        start(Boolean(target.closest(".readerShell")) && isReaderDestination(destination.pathname));
       }
     }
 
@@ -93,11 +103,12 @@ export function NavigationProgress() {
       start(Boolean(detail?.readerNavigation));
     };
 
-    document.addEventListener("click", handleDocumentClick, true);
+    // Listen after component handlers so preventDefault() can cancel feedback.
+    document.addEventListener("click", handleDocumentClick);
     window.addEventListener("novel:navigation-start", handleManualStart);
     window.addEventListener("pageshow", finish);
     return () => {
-      document.removeEventListener("click", handleDocumentClick, true);
+      document.removeEventListener("click", handleDocumentClick);
       window.removeEventListener("novel:navigation-start", handleManualStart);
       window.removeEventListener("pageshow", finish);
       clearTimers();

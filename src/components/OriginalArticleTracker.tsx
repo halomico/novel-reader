@@ -5,6 +5,7 @@ import { READER_LAYOUT_CHANGE_EVENT } from "@/lib/reader-layout";
 
 const STORAGE_PREFIX = "novel-reader:original-reading-position:";
 const SAVE_DELAY_MS = 900;
+const ENGAGEMENT_DELAY_MS = 1_500;
 
 type StoredPosition = { ratio?: number; top?: number };
 
@@ -67,7 +68,7 @@ function writePosition(slug: string, ratio: number): void {
   }
 }
 
-function saveToServer(articleId: number, ratio: number, keepalive = false): void {
+function saveProgress(articleId: number, ratio: number, keepalive = false): void {
   void fetch("/api/account/original-reading-progress", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -76,28 +77,83 @@ function saveToServer(articleId: number, ratio: number, keepalive = false): void
   }).catch(() => undefined);
 }
 
-/** Persists a position relative to the article body, excluding comments and
- * surrounding page chrome, so the same ratio restores reliably on both
- * desktop and mobile layouts. */
-export function OriginalReadingTracker({
+function useVisibleEngagement(articleId: number, targetId: string) {
+  const sentRef = useRef(false);
+  useEffect(() => {
+    const target = document.getElementById(targetId);
+    if (!target) return;
+
+    let intersecting = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    function cancel() {
+      if (!timer) return;
+      clearTimeout(timer);
+      timer = null;
+    }
+
+    function schedule() {
+      cancel();
+      if (!intersecting || document.visibilityState !== "visible" || sentRef.current) return;
+      timer = setTimeout(() => {
+        timer = null;
+        if (!intersecting || document.visibilityState !== "visible" || sentRef.current) return;
+        sentRef.current = true;
+        void fetch(`/api/original/${articleId}/engagement`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+          keepalive: true,
+        }).catch(() => undefined);
+      }, ENGAGEMENT_DELAY_MS);
+    }
+
+    const observer = new IntersectionObserver(([entry]) => {
+      intersecting = Boolean(entry?.isIntersecting);
+      if (intersecting) schedule();
+      else cancel();
+    }, { threshold: 0.05 });
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") schedule();
+      else cancel();
+    };
+
+    observer.observe(target);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      cancel();
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [articleId, targetId]);
+}
+
+/**
+ * Owns the two client-side article signals: deliberate visible engagement and
+ * optional reading-position persistence. Server rendering remains read-only.
+ */
+export function OriginalArticleTracker({
   articleId,
   slug,
-  enabled,
+  engagementTargetId,
+  readingProgressEnabled,
   resume,
   initialRatio = 0,
 }: {
   articleId: number;
   slug: string;
-  enabled: boolean;
+  engagementTargetId: string;
+  readingProgressEnabled: boolean;
   resume: boolean;
   initialRatio?: number;
 }) {
   const frameRef = useRef<number | null>(null);
   const timerRef = useRef<number | null>(null);
   const lastSentRatioRef = useRef(initialRatio);
+  useVisibleEngagement(articleId, engagementTargetId);
 
   useEffect(() => {
-    if (!enabled) {
+    if (!readingProgressEnabled) {
       try {
         window.localStorage.removeItem(storageKey(slug));
       } catch {
@@ -132,7 +188,7 @@ export function OriginalReadingTracker({
       writePosition(slug, ratio);
       if (send && Math.abs(ratio - lastSentRatioRef.current) >= 0.002) {
         lastSentRatioRef.current = ratio;
-        saveToServer(articleId, ratio, keepalive);
+        saveProgress(articleId, ratio, keepalive);
       }
     }
 
@@ -147,10 +203,7 @@ export function OriginalReadingTracker({
       timerRef.current = window.setTimeout(() => flush(true), SAVE_DELAY_MS);
     }
 
-    function handlePageHide() {
-      flush(true, true);
-    }
-
+    const handlePageHide = () => flush(true, true);
     window.addEventListener("scroll", scheduleSave, { passive: true });
     window.addEventListener(READER_LAYOUT_CHANGE_EVENT, scheduleSave);
     window.addEventListener("pagehide", handlePageHide);
@@ -160,7 +213,7 @@ export function OriginalReadingTracker({
       window.removeEventListener("pagehide", handlePageHide);
       flush(true, true);
     };
-  }, [articleId, enabled, initialRatio, resume, slug]);
+  }, [articleId, initialRatio, readingProgressEnabled, resume, slug]);
 
   return null;
 }

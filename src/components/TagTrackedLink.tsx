@@ -1,6 +1,6 @@
 "use client";
 
-import { IntentPrefetchLink as Link } from "@/components/IntentPrefetchLink";
+import { AppLink as Link } from "@/components/AppLink";
 import { useLinkStatus } from "next/link";
 import type { ReactNode } from "react";
 

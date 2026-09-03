@@ -1,6 +1,6 @@
 "use client";
 
-import { IntentPrefetchLink as Link } from "@/components/IntentPrefetchLink";
+import { AppLink as Link } from "@/components/AppLink";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { MediaKind } from "@/lib/media";
 import { localeFromPathname, stripLocalePath, uiText } from "@/lib/locale";

@@ -8,7 +8,16 @@ export const READER_WIDTH_STORAGE_KEY = "novel-reader-width";
 export const READER_PAGE_TURN_STORAGE_KEY = "novel-reader-page-turn";
 export const READER_JUSTIFY_STORAGE_KEY = "novel-reader-justify";
 export const NOVEL_CATALOG_SEARCH_COOKIE = "novel-catalog-search";
-export const LEGACY_READER_THEME_STORAGE_KEYS = ["novel-reader-theme", "novel-reader-light-theme"] as const;
+export const UI_PREFERENCES_MIGRATION_KEY = "novel-ui-preferences-migration";
+export const UI_PREFERENCES_MIGRATION_VERSION = "1";
+export const LEGACY_UI_STORAGE_KEYS = [
+  "novel-palette",
+  "novel-page-size",
+  "novel-ui-mode",
+  "novel-reader-top-menu",
+  "novel-reader-theme",
+  "novel-reader-light-theme",
+] as const;
 export const ADMIN_SIDEBAR_STORAGE_KEY = "novel-reader-admin-sidebar-collapsed";
 export const READER_LINE_HEIGHTS = [
   0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6,

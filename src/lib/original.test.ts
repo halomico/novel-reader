@@ -20,12 +20,12 @@ import {
   listOriginalArticles,
   listBlockedOriginalAuthors,
   listOriginalComments,
+  listOriginalCommentsPage,
   listOriginalReadingHistory,
   listOriginalTags,
   normalizeOriginalSlug,
   OriginalInputError,
   purchaseOriginalArticle,
-  recordOriginalReadingOpen,
   setOriginalCommentStatus,
   setOriginalArticlePinned,
   setOriginalArticleStatus,
@@ -37,6 +37,7 @@ import {
   updateOriginalComment,
   updateOriginalReadingProgress,
 } from "./original";
+import { recordOriginalEngagement, recordOriginalReadingOpen } from "@/domains/originals";
 import { insertOriginalEditorBlock, MAX_ORIGINAL_BODY_LENGTH, ORIGINAL_PAID_MARKER, preserveOriginalMarkdownSpacing } from "./original-constants";
 import { extractOriginalOutline, originalHeadingId } from "./original-outline";
 
@@ -161,6 +162,9 @@ test("original articles derive access from price and transfer paid unlocks exact
   assert.equal(free.accessMode, "free");
   assert.equal(free.unlockSodaPrice, 0);
   assert.equal(getOriginalAccess(free, null).allowed, true, "零价格文章公开可读");
+  const initialViewCount = (db.prepare("SELECT view_count FROM original_articles WHERE id = ?").get(free.id) as { view_count: number }).view_count;
+  assert.deepEqual(recordOriginalEngagement(free.id), { recorded: true, readingHistoryRecorded: false });
+  assert.equal((db.prepare("SELECT view_count FROM original_articles WHERE id = ?").get(free.id) as { view_count: number }).view_count, initialViewCount + 1);
   assert.equal(setOriginalArticlePinned(paid.id, true), true);
   for (const sort of ["latest", "popular", "name"] as const) {
     assert.equal(listOriginalArticles({ sort }).items[0]?.id, paid.id, `${sort} 排序应优先展示置顶文章`);
@@ -208,6 +212,10 @@ test("original articles derive access from price and transfer paid unlocks exact
   assert.equal(clearOriginalReadingProgress(buyerId), 1);
   db.prepare("UPDATE users SET reading_history_enabled = 1 WHERE id = ?").run(buyerId);
   addOriginalComment(free.id, buyerId, "我的回复");
+  assert.deepEqual(
+    listOriginalCommentsPage(free.id, { pageSize: 1 }),
+    { items: listOriginalComments(free.id), page: 1, pageSize: 1, totalItems: 1, totalPages: 1 },
+  );
   assert.equal(getOriginalAccess(free, buyer).allowed, true, "评论不参与正文访问判定");
   assert.equal(listOriginalArticles({ query: "免费文章" }).totalItems, 1);
   assert.deepEqual(listOriginalArticles({ query: "免费 文章" }).items.map((item) => item.id), [free.id], "空格分隔关键词必须按 AND 匹配");

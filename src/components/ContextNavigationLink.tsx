@@ -1,7 +1,7 @@
 "use client";
 
 import type { ComponentProps, MouseEvent } from "react";
-import { IntentPrefetchLink as Link } from "@/components/IntentPrefetchLink";
+import { AppLink as Link } from "@/components/AppLink";
 import { rememberContextNavigation } from "@/lib/context-navigation";
 
 type ContextNavigationLinkProps = ComponentProps<typeof Link> & {

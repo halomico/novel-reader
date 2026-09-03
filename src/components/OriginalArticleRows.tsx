@@ -1,7 +1,7 @@
 import { CupSoda, MessageCircle, Pin, UserRound } from "lucide-react";
 import { Fragment } from "react";
 import Link from "@/components/LocalizedLink";
-import { IntentPrefetchLink } from "@/components/IntentPrefetchLink";
+import { AppLink } from "@/components/AppLink";
 import { formatNovelWordCount } from "@/components/CatalogBookGrid";
 import type { AppLocale } from "@/lib/locale";
 import { uiText } from "@/lib/locale";
@@ -51,7 +51,7 @@ export function OriginalArticleRows({
           {showAvatar ? <UserAvatar className="originalArticleAvatar" userId={article.authorId} displayName={article.authorName} avatarPath={article.authorAvatarPath} /> : null}
           <div className="originalArticleMain">
             <div className="originalArticleTitleLine">
-              <IntentPrefetchLink className="originalArticleTitle" href={articleHref}>{article.title}</IntentPrefetchLink>
+              <AppLink className="originalArticleTitle" href={articleHref}>{article.title}</AppLink>
               {article.isPinned ? (
                 <span className="originalArticlePinned" title={tr("置顶")} aria-label={tr("置顶")}>
                   <Pin size={12} fill="currentColor" aria-hidden="true" />

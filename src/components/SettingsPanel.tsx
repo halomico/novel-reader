@@ -173,11 +173,6 @@ export function SettingsPanel({
     setShowReaderHotwords(nextShowHotwords);
     setCatalogSearchExpanded(novelCatalogSearchExpanded);
     setHasHotwordPreference(nextHasHotwordPreference);
-    removeLocalSetting("novel-palette");
-    removeLocalSetting("novel-page-size");
-    document.cookie = "novel-page-size=; Path=/; Max-Age=0; SameSite=Lax";
-    removeLocalSetting("novel-ui-mode");
-    removeLocalSetting("novel-reader-top-menu");
     document.documentElement.removeAttribute("data-ui-mode");
     document.documentElement.removeAttribute("data-top-menu");
     if (nextReaderTheme) document.documentElement.dataset.readerTheme = nextReaderTheme;

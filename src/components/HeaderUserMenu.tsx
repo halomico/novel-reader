@@ -13,7 +13,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import Link from "@/components/LocalizedLink";
-import { IntentPrefetchLink } from "@/components/IntentPrefetchLink";
+import { AppLink } from "@/components/AppLink";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { logoutUserAction } from "@/app/account/actions";
@@ -96,32 +96,32 @@ export function HeaderUserMenu({
         <div className={user ? "userMenuPanel hasIdentity" : "userMenuPanel"}>
           {user ? (
             <>
-              <IntentPrefetchLink className="userMenuIdentity" href="/account" onClick={closeMenu}>
+              <AppLink className="userMenuIdentity" href="/account" onClick={closeMenu}>
                 <UserAvatar className="userMenuAvatar" userId={user.id} displayName={user.displayName} avatarPath={user.avatarPath} />
                 <span className="userMenuIdentityCopy">
                   <strong>{user.displayName}</strong>
                   <small>Lv.{user.trustLevel}</small>
                 </span>
-              </IntentPrefetchLink>
-              <IntentPrefetchLink href="/account?view=growth" onClick={closeMenu}>
+              </AppLink>
+              <AppLink href="/account?view=growth" onClick={closeMenu}>
                 <Sparkles size={16} aria-hidden="true" />
                 {tr("成长")}
-              </IntentPrefetchLink>
-              <IntentPrefetchLink href="/activity" onClick={closeMenu}>
+              </AppLink>
+              <AppLink href="/activity" onClick={closeMenu}>
                 <Activity size={16} aria-hidden="true" />
                 {tr("动态")}
-              </IntentPrefetchLink>
+              </AppLink>
               {showMarket ? (
-                <IntentPrefetchLink href="/market" onClick={closeMenu}>
+                <AppLink href="/market" onClick={closeMenu}>
                   <Store size={16} aria-hidden="true" />
                   {tr("集市")}
-                </IntentPrefetchLink>
+                </AppLink>
               ) : null}
               {showOriginal ? (
-                <IntentPrefetchLink href="/original/mine" onClick={closeMenu}>
+                <AppLink href="/original/mine" onClick={closeMenu}>
                   <FileText size={16} aria-hidden="true" />
                   {tr("文章")}
-                </IntentPrefetchLink>
+                </AppLink>
               ) : null}
               <Link href="/messages" onClick={closeMenu}>
                 <MessageCircle size={16} aria-hidden="true" />
@@ -132,23 +132,23 @@ export function HeaderUserMenu({
           ) : (
             <>
               {loginEnabled ? (
-                <IntentPrefetchLink href="/login" onClick={closeMenu}>
+                <AppLink href="/login" onClick={closeMenu}>
                   <KeyRound size={16} aria-hidden="true" />
                   {tr("登录")}
-                </IntentPrefetchLink>
+                </AppLink>
               ) : null}
               {registrationEnabled ? (
-                <IntentPrefetchLink href="/register" onClick={closeMenu}>
+                <AppLink href="/register" onClick={closeMenu}>
                   <UserPlus size={16} aria-hidden="true" />
                   {tr("注册")}
-                </IntentPrefetchLink>
+                </AppLink>
               ) : null}
             </>
           )}
-          <IntentPrefetchLink href="/settings" onClick={closeMenu}>
+          <AppLink href="/settings" onClick={closeMenu}>
             <Settings size={16} aria-hidden="true" />
             {tr("设置")}
-          </IntentPrefetchLink>
+          </AppLink>
           {user ? (
             <form action={logoutUserAction}>
               <button type="submit">

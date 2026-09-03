@@ -1,7 +1,7 @@
 "use client";
 
 import { Folder } from "lucide-react";
-import { IntentPrefetchLink as Link } from "@/components/IntentPrefetchLink";
+import { AppLink as Link } from "@/components/AppLink";
 import { uiText, type AppLocale } from "@/lib/locale";
 
 export function MediaFolderRow({

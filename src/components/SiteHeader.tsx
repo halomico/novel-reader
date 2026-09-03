@@ -1,4 +1,4 @@
-import { IntentPrefetchLink as Link } from "@/components/IntentPrefetchLink";
+import { AppLink as Link } from "@/components/AppLink";
 import { cookies } from "next/headers";
 import {
   canAccessAdvancedTagSearch,

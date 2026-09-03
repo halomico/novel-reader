@@ -133,6 +133,14 @@ export type OriginalReadingHistoryItem = {
   lastReadAt: string;
 };
 
+export type OriginalCommentPage = {
+  items: OriginalComment[];
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+};
+
 export type OriginalReadingProgress = Pick<
   OriginalReadingHistoryItem,
   "articleId" | "scrollRatio" | "progressPercent" | "completed" | "visitCount" | "lastReadAt"
@@ -571,48 +579,6 @@ export function listOriginalArticlesByIds(
   });
 }
 
-export function incrementOriginalView(articleId: number): void {
-  getDb().prepare("UPDATE original_articles SET view_count = view_count + 1 WHERE id = ? AND status = 'published'").run(articleId);
-}
-
-/** Record an article open and, when enabled, expose it in recent reading.
- * Grove growth is independent from the reading-history preference. */
-export function recordOriginalReadingOpen(userId: number, articleId: number): void {
-  if (!Number.isSafeInteger(userId) || userId <= 0 || !Number.isSafeInteger(articleId) || articleId <= 0) return;
-  const db = getDb();
-  const preferences = db.prepare(
-    "SELECT original_reading_history_enabled FROM users WHERE id = ? AND status = 'active'",
-  ).get(userId) as { original_reading_history_enabled: number } | undefined;
-  if (!preferences) return;
-  db.exec("BEGIN");
-  try {
-    if (preferences.original_reading_history_enabled !== 0) {
-      db.prepare(
-        `INSERT INTO original_reading_history (
-           user_id, article_id, visit_count, recorded_in_history, last_read_at, updated_at
-         )
-         SELECT ?, id, 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-         FROM original_articles
-         WHERE id = ? AND status = 'published'
-         ON CONFLICT(user_id, article_id) DO UPDATE SET
-           visit_count = original_reading_history.visit_count + 1,
-           recorded_in_history = 1,
-           last_read_at = CURRENT_TIMESTAMP,
-           updated_at = CURRENT_TIMESTAMP`,
-      ).run(userId, articleId);
-    }
-    db.prepare(
-      `UPDATE user_original_grove
-       SET visit_count = visit_count + 1
-       WHERE user_id = ? AND article_id = ?`,
-    ).run(userId, articleId);
-    db.exec("COMMIT");
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
-  }
-}
-
 function clampReadingValue(value: number, minimum: number, maximum: number): number {
   return Math.min(Math.max(Number.isFinite(value) ? value : minimum, minimum), maximum);
 }
@@ -784,25 +750,20 @@ export function listOriginalReadingHistory(
   };
 }
 
-export function listOriginalComments(articleId: number, options: { includeHidden?: boolean; viewerId?: number } = {}): OriginalComment[] {
-  if (!Number.isSafeInteger(articleId) || articleId <= 0) return [];
-  const visibility = options.includeHidden ? "" : "AND c.status = 'published'";
-  const blockFilter = Number.isSafeInteger(options.viewerId) && Number(options.viewerId) > 0
-    ? "AND NOT EXISTS (SELECT 1 FROM user_original_author_blocks b WHERE b.user_id = ? AND b.author_id = c.author_id)"
-    : "";
-  const args = blockFilter ? [articleId, Number(options.viewerId)] : [articleId];
-  const rows = getDb().prepare(
-    `SELECT c.id, c.article_id, c.author_id, u.display_name AS author_name,
-            u.avatar_path AS author_avatar_path,
-            c.body_markdown, c.status, c.created_at, c.updated_at
-     FROM original_comments c
-     JOIN users u ON u.id = c.author_id
-     WHERE c.article_id = ? ${visibility} ${blockFilter}
-     ORDER BY c.created_at ASC, c.id ASC`,
-  ).all(...args) as Array<{
-     id: number; article_id: number; author_id: number; author_name: string; author_avatar_path: string | null; body_markdown: string; status: "published" | "hidden"; created_at: string; updated_at: string;
-  }>;
-  return rows.map((row) => ({
+type OriginalCommentRow = {
+  id: number;
+  article_id: number;
+  author_id: number;
+  author_name: string;
+  author_avatar_path: string | null;
+  body_markdown: string;
+  status: "published" | "hidden";
+  created_at: string;
+  updated_at: string;
+};
+
+function toOriginalComment(row: OriginalCommentRow): OriginalComment {
+  return {
     id: row.id,
     articleId: row.article_id,
     authorId: row.author_id,
@@ -812,7 +773,67 @@ export function listOriginalComments(articleId: number, options: { includeHidden
     status: row.status === "hidden" ? "hidden" : "published",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  }));
+  };
+}
+
+function originalCommentVisibility(includeHidden?: boolean): string {
+  return includeHidden ? "" : "AND c.status = 'published'";
+}
+
+function originalCommentBlockFilter(viewerId?: number): string {
+  return Number.isSafeInteger(viewerId) && Number(viewerId) > 0
+    ? "AND NOT EXISTS (SELECT 1 FROM user_original_author_blocks b WHERE b.user_id = ? AND b.author_id = c.author_id)"
+    : "";
+}
+
+export function listOriginalComments(articleId: number, options: { includeHidden?: boolean; viewerId?: number } = {}): OriginalComment[] {
+  if (!Number.isSafeInteger(articleId) || articleId <= 0) return [];
+  const visibility = originalCommentVisibility(options.includeHidden);
+  const blockFilter = originalCommentBlockFilter(options.viewerId);
+  const args = blockFilter ? [articleId, Number(options.viewerId)] : [articleId];
+  const rows = getDb().prepare(
+    `SELECT c.id, c.article_id, c.author_id, u.display_name AS author_name,
+            u.avatar_path AS author_avatar_path,
+            c.body_markdown, c.status, c.created_at, c.updated_at
+     FROM original_comments c
+     JOIN users u ON u.id = c.author_id
+     WHERE c.article_id = ? ${visibility} ${blockFilter}
+     ORDER BY c.created_at ASC, c.id ASC`,
+  ).all(...args) as OriginalCommentRow[];
+  return rows.map(toOriginalComment);
+}
+
+/** Bounded public comment read model; detail pages never load an unbounded thread. */
+export function listOriginalCommentsPage(
+  articleId: number,
+  options: { page?: number; pageSize?: number; includeHidden?: boolean; viewerId?: number } = {},
+): OriginalCommentPage {
+  const pageSize = Math.min(Math.max(Math.floor(options.pageSize || 30), 1), 50);
+  if (!Number.isSafeInteger(articleId) || articleId <= 0) {
+    return { items: [], page: 1, pageSize, totalItems: 0, totalPages: 1 };
+  }
+  const visibility = originalCommentVisibility(options.includeHidden);
+  const blockFilter = originalCommentBlockFilter(options.viewerId);
+  const filterArgs = blockFilter ? [articleId, Number(options.viewerId)] : [articleId];
+  const db = getDb();
+  const totalItems = (db.prepare(
+    `SELECT COUNT(*) AS count
+     FROM original_comments c
+     WHERE c.article_id = ? ${visibility} ${blockFilter}`,
+  ).get(...filterArgs) as { count: number }).count;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const page = Math.min(Math.max(Math.floor(options.page || 1), 1), totalPages);
+  const rows = db.prepare(
+    `SELECT c.id, c.article_id, c.author_id, u.display_name AS author_name,
+            u.avatar_path AS author_avatar_path,
+            c.body_markdown, c.status, c.created_at, c.updated_at
+     FROM original_comments c
+     JOIN users u ON u.id = c.author_id
+     WHERE c.article_id = ? ${visibility} ${blockFilter}
+     ORDER BY c.created_at ASC, c.id ASC
+     LIMIT ? OFFSET ?`,
+  ).all(...filterArgs, pageSize, (page - 1) * pageSize) as OriginalCommentRow[];
+  return { items: rows.map(toOriginalComment), page, pageSize, totalItems, totalPages };
 }
 
 export function listOriginalCommentsByAuthor(
