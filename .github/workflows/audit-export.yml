@@ -1,0 +1,28 @@
+name: Audit worktree export
+
+on:
+  push:
+    branches:
+      - audit-hardening-20260904
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Pack source tree
+        run: |
+          tar --exclude=.git --exclude=node_modules -czf novel-reader-source.tgz .
+
+      - name: Upload source artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: novel-reader-source-${{ github.sha }}
+          path: novel-reader-source.tgz
+          retention-days: 1
