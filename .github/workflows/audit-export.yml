@@ -18,11 +18,11 @@ jobs:
 
       - name: Pack source tree
         run: |
-          tar --exclude=.git --exclude=node_modules -czf novel-reader-source.tgz .
+          tar --exclude=.git --exclude=node_modules -czf /tmp/novel-reader-source.tgz .
 
       - name: Upload source artifact
         uses: actions/upload-artifact@v4
         with:
           name: novel-reader-source-${{ github.sha }}
-          path: novel-reader-source.tgz
+          path: /tmp/novel-reader-source.tgz
           retention-days: 1
