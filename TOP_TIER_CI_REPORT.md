@@ -1,13 +1,17 @@
-# Compatibility verification
+# Serial top-tier verification
+
 typecheck=skipped
 tests=skipped
 build=skipped
+
 ## Typecheck
 ```text
 ```
+
 ## Tests
 ```text
 ```
+
 ## Build
 ```text
 ```
