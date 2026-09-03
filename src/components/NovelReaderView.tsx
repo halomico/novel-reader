@@ -1,4 +1,3 @@
-import { after } from "next/server";
 import { Suspense } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
@@ -11,8 +10,6 @@ import { NovelViewTracker } from "@/components/NovelViewTracker";
 import { SiteHeader } from "@/components/SiteHeader";
 import { AdminReaderActions } from "@/components/AdminReaderActions";
 import Link from "@/components/LocalizedLink";
-import { getClientIp } from "@/lib/admin-access";
-import { recordAnalyticsEvent } from "@/lib/analytics";
 import { getAdjacentNovels, readNovelSegments, type Novel } from "@/lib/books";
 import {
   areGuestHotwordLinksEnabled,
@@ -39,7 +36,6 @@ import { filterTagsForUser } from "@/lib/tag-preferences";
 import { listHotwordsForNovel, listTagsForNovel } from "@/lib/tags";
 import { hasUserPermission } from "@/lib/user-levels";
 import type { UserProfile } from "@/lib/users";
-import { recordNovelVisit, recordReadingHistory } from "@/lib/users";
 import { splitReaderParagraphs } from "@/lib/reader-layout";
 
 export type NovelReaderQuery = {
@@ -215,20 +211,6 @@ async function ReaderContent({
     preview && !chapter ? `${contentVersion}:soda-preview-30` : contentVersion,
   );
   const path = chapter ? `/books/${book.id}/chapters/${chapter.id}` : `/books/${book.id}`;
-  if (user) {
-    after(() => {
-      recordNovelVisit(book.id, getClientIp(requestHeaders), requestHeaders.get("user-agent") || "");
-      recordAnalyticsEvent({
-        headers: requestHeaders,
-        userId: user.id,
-        eventType: "book_view",
-        path,
-        referrer: requestHeaders.get("referer"),
-        novelId: book.id,
-      });
-      recordReadingHistory(user.id, book, hitSegment, { chapterId: chapter?.id || null, contentVersion });
-    });
-  }
 
   return (
     <>
@@ -361,8 +343,8 @@ export async function NovelReaderView({
         initialFavorite={favorite}
         canReport={canReport}
       />
-      <article className="readerPage hasReaderPreferences">
-        {!user && readAccess.allowed ? <NovelViewTracker novelId={book.id} /> : null}
+      <article className="readerPage hasReaderPreferences" id="reader-content">
+        {readAccess.allowed ? <NovelViewTracker novelId={book.id} /> : null}
         <Breadcrumbs
           className="readerBreadcrumbs"
           items={[

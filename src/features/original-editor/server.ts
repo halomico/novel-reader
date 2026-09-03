@@ -186,10 +186,15 @@ function existingArticleForAuthor(db: DatabaseSync, slug: string, authorId: numb
 
 export function listOriginalEditorTags(): Array<{ id: number; name: string }> {
   const db = getDb();
-  if (!tableExists(db, "tags")) return [];
-  const columns = tableColumns(db, "tags");
-  const where = columns.has("visibility") ? "WHERE visibility != 'hidden'" : columns.has("is_visible") ? "WHERE is_visible = 1" : "";
-  return (db.prepare(`SELECT id, name FROM tags ${where} ORDER BY name COLLATE NOCASE ASC, id ASC LIMIT 300`).all() as Array<{ id: number; name: string }>);
+  const table = tableExists(db, "original_tags") ? "original_tags" : tableExists(db, "tags") ? "tags" : "";
+  if (!table) return [];
+  const columns = tableColumns(db, table);
+  const where = columns.has("visibility")
+    ? "WHERE visibility != 'hidden'"
+    : columns.has("is_visible")
+      ? "WHERE is_visible = 1"
+      : "";
+  return db.prepare(`SELECT id, name FROM ${table} ${where} ORDER BY name COLLATE NOCASE ASC, id ASC LIMIT 300`).all() as Array<{ id: number; name: string }>;
 }
 
 export function getOriginalDraftForAuthor(draftId: number, authorId: number): OriginalDraft | null {

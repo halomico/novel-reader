@@ -614,6 +614,14 @@ export function OriginalComposerShell({
       const result = await response.json() as { slug?: string; error?: string };
       if (!response.ok || !result.slug) throw new Error(result.error || "发布失败");
       await deleteLocalOriginalDraft(initialDraft.id);
+      try {
+        for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
+          const key = sessionStorage.key(index);
+          if (key?.startsWith("novel-reader:original-draft-launch:")) sessionStorage.removeItem(key);
+        }
+      } catch {
+        // Session storage may be blocked; a published draft remains editable by its direct URL.
+      }
       router.replace(`/original/${encodeURIComponent(result.slug)}`);
       router.refresh();
     } catch (error) {

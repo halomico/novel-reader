@@ -2,35 +2,55 @@
 
 import { useEffect, useRef } from "react";
 
-function recordNovelView(novelId: number) {
-  const body = JSON.stringify({ novelId });
-  if (typeof navigator.sendBeacon === "function") {
-    const sent = navigator.sendBeacon(
-      "/api/analytics/novel-view",
-      new Blob([body], { type: "application/json" }),
-    );
-    if (sent) return;
+function eventId(novelId: number): string {
+  const key = `novel-reader:novel-view:${novelId}`;
+  try {
+    const current = sessionStorage.getItem(key);
+    if (current) return current;
+    const value = `event_${typeof crypto.randomUUID === "function" ? crypto.randomUUID().replace(/-/g, "") : `${Date.now()}_${Math.random().toString(36).slice(2)}`}`;
+    sessionStorage.setItem(key, value);
+    return value;
+  } catch {
+    return `event_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   }
+}
+
+function recordNovelView(novelId: number): void {
   void fetch("/api/analytics/novel-view", {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
-    body,
+    body: JSON.stringify({ novelId, eventId: eventId(novelId) }),
     keepalive: true,
+    credentials: "same-origin",
   }).catch(() => undefined);
 }
 
-export function NovelViewTracker({ novelId }: { novelId: number }) {
+export function NovelViewTracker({ novelId, targetId = "reader-content" }: { novelId: number; targetId?: string }) {
   const recordedRef = useRef(false);
-
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      if (!recordedRef.current && document.visibilityState !== "hidden") {
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    let visible = false;
+    let timer = 0;
+    const cancel = () => { if (timer) window.clearTimeout(timer); timer = 0; };
+    const schedule = () => {
+      cancel();
+      if (!visible || recordedRef.current || document.visibilityState !== "visible") return;
+      timer = window.setTimeout(() => {
+        timer = 0;
+        if (!visible || recordedRef.current || document.visibilityState !== "visible") return;
         recordedRef.current = true;
         recordNovelView(novelId);
-      }
-    }, 800);
-    return () => window.clearTimeout(timer);
-  }, [novelId]);
-
+      }, 1_500);
+    };
+    const observer = new IntersectionObserver(([entry]) => {
+      visible = Boolean(entry?.isIntersecting && entry.intersectionRatio >= 0.3);
+      if (visible) schedule(); else cancel();
+    }, { threshold: [0, 0.3, 0.5] });
+    const onVisibility = () => document.visibilityState === "visible" ? schedule() : cancel();
+    observer.observe(target);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => { cancel(); observer.disconnect(); document.removeEventListener("visibilitychange", onVisibility); };
+  }, [novelId, targetId]);
   return null;
 }

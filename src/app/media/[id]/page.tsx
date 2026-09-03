@@ -1,8 +1,8 @@
 import { Clapperboard, Clock3, Download, Eye, File, Headphones } from "lucide-react";
+import { MediaViewTracker } from "@/components/MediaViewTracker";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { after } from "next/server";
 import { cache } from "react";
 import { MediaAudioPlayer, type AudioQueueTrack } from "@/components/MediaAudioPlayer";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
@@ -15,7 +15,6 @@ import { MediaPlayer } from "@/components/MediaPlayer";
 import { MediaTextDocument } from "@/components/MediaTextDocument";
 import { MediaVideoCard } from "@/components/MediaVideoCard";
 import { SiteHeader } from "@/components/SiteHeader";
-import { recordAnalyticsEvent } from "@/lib/analytics";
 import { getAudioDefaultPlaybackMode, getRelatedVideoSettings, getVideoThumbnailSettings } from "@/lib/config";
 import { checkContentAccess, hasScopedContentAccessRules } from "@/lib/content-access";
 import { isMediaFavorite } from "@/lib/favorites";
@@ -42,7 +41,6 @@ import { getMediaRecommendationState } from "@/lib/recommendations";
 import { getCurrentUser } from "@/lib/user-auth";
 import { hasUserPermission } from "@/lib/user-levels";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
-import { recordMediaHistory } from "@/lib/users";
 import { getRequestLocale, localizeText } from "@/lib/locale-server";
 import { languageAlternates, uiText, withLocalePath, type AppLocale } from "@/lib/locale";
 
@@ -149,17 +147,6 @@ export default async function MediaDetailPage({
     rateLimit: false,
   });
   if (!access.allowed) notFound();
-  after(() => {
-    recordAnalyticsEvent({
-      headers: headerStore,
-      userId: user?.id ?? null,
-      eventType: `${asset.kind}_view`,
-      path: `/media/${asset.id}`,
-      referrer: headerStore.get("referer"),
-      mediaId: asset.id,
-    });
-    if (user) recordMediaHistory(user.id, asset);
-  });
 
   const Icon = KIND_ICONS[asset.kind];
   const title = await localizeText(displayTitle(asset.title, asset.fileName), locale);
@@ -220,7 +207,8 @@ export default async function MediaDetailPage({
         mobileBackLabel={asset.kind === "video" ? uiText(locale, "返回视频列表") : undefined}
         mediaSearchKind={asset.kind === "video" ? "video" : undefined}
       />
-      <article className={`mediaDetail is-${asset.kind}`}>
+      <article className={`mediaDetail is-${asset.kind}`} id="media-detail-primary">
+        <MediaViewTracker mediaId={asset.id} />
         <Breadcrumbs
           items={[
             { label: uiText(locale, "首页"), href: "/" },

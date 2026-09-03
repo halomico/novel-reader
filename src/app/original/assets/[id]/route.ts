@@ -72,7 +72,7 @@ export async function GET(
   const filePath = safeAssetPath(asset.storage_path);
   if (!filePath) return new NextResponse(null, { status: 404 });
   const body = fs.readFileSync(filePath);
-  return new NextResponse(body, {
+  return new NextResponse(new Uint8Array(body), {
     headers: {
       "Content-Type": asset.mime_type,
       "Content-Length": String(body.length),
