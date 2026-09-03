@@ -4,6 +4,13 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+const previousTrustProxyMode = process.env.TRUST_PROXY_MODE;
+process.env.TRUST_PROXY_MODE = "cloudflare";
+test.after(() => {
+  if (previousTrustProxyMode === undefined) delete process.env.TRUST_PROXY_MODE;
+  else process.env.TRUST_PROXY_MODE = previousTrustProxyMode;
+});
+
 test("records normalized search queries and aggregates hot terms by range", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "novel-reader-search-analytics-"));
   const previousDatabasePath = process.env.DATABASE_PATH;
@@ -46,7 +53,7 @@ test("records normalized search queries and aggregates hot terms by range", asyn
       .run();
     const analyticsHeaders = new Headers({
       "user-agent": "Mozilla/5.0",
-      "x-forwarded-for": "127.0.0.1",
+      "cf-connecting-ip": "127.0.0.1",
     });
     analytics.recordAnalyticsEvent({
       headers: analyticsHeaders,

@@ -43,8 +43,8 @@ test("legacy access controls are copied, media scopes expand, and migration is i
   const rules = db.prepare("SELECT target_type, target_value, scope, enabled FROM content_access_rules ORDER BY id").all() as Array<Record<string, unknown>>;
   const policies = db.prepare("SELECT name, scope FROM content_access_policies ORDER BY id").all() as Array<Record<string, unknown>>;
   assert.equal(rules.length, 6);
-  assert.deepEqual(rules.filter((row) => row.target_value === "cn,us").map((row) => row.scope).sort(), ["audio", "file", "video"]);
-  assert.equal(rules.find((row) => row.target_value === "cn,us")?.enabled, 0);
+  assert.deepEqual(rules.filter((row) => row.target_value === "CN,US").map((row) => row.scope).sort(), ["audio", "file", "video"]);
+  assert.equal(rules.find((row) => row.target_value === "CN,US")?.enabled, 0);
   assert.equal(policies.length, 4);
   assert.deepEqual(policies.filter((row) => row.name === "legacy media limit").map((row) => row.scope).sort(), ["audio", "file", "video"]);
   assert.equal((db.prepare("PRAGMA foreign_key_check").all()).length, 0);

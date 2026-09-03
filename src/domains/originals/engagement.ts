@@ -49,36 +49,45 @@ export function recordOriginalEngagement(input: {
   userId?: number | null;
   action?: EngagementAction;
   now?: number;
-}): OriginalEngagementResult {
-  if (!Number.isSafeInteger(input.articleId) || input.articleId <= 0) {
+} | number, legacyUserId?: number): OriginalEngagementResult {
+  const normalized = typeof input === "number"
+    ? {
+        eventId: `legacy_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        viewerKey: Number.isSafeInteger(legacyUserId) && Number(legacyUserId) > 0 ? `user:${legacyUserId}` : `legacy:${Math.random().toString(36).slice(2)}`,
+        articleId: input,
+        userId: legacyUserId,
+        action: "detail_view" as EngagementAction,
+      }
+    : input;
+  if (!Number.isSafeInteger(normalized.articleId) || normalized.articleId <= 0) {
     return { recorded: false, counted: false, readingHistoryRecorded: false, duplicateEvent: false };
   }
-  const action = input.action === "read_open" ? "read_open" : "detail_view";
+  const action = normalized.action === "read_open" ? "read_open" : "detail_view";
   const db = getDb();
   db.exec("BEGIN IMMEDIATE");
   try {
     let readingHistoryRecorded = false;
     let articleExists = false;
     const result = recordEngagementEvent(db, {
-      eventId: input.eventId,
-      viewerKey: input.viewerKey,
+      eventId: normalized.eventId,
+      viewerKey: normalized.viewerKey,
       contentType: "original",
-      contentId: input.articleId,
+      contentId: normalized.articleId,
       action,
-      now: input.now,
+      now: normalized.now,
       dedupeWindowMs: 30 * 60_000,
     }, (transaction) => {
       articleExists = transaction.prepare(
         "SELECT 1 AS found FROM original_articles WHERE id = ? AND status = 'published'",
-      ).get(input.articleId) !== undefined;
+      ).get(normalized.articleId) !== undefined;
       if (!articleExists) return;
       if (action === "detail_view") {
         transaction.prepare(
           "UPDATE original_articles SET view_count = view_count + 1 WHERE id = ? AND status = 'published'",
-        ).run(input.articleId);
+        ).run(normalized.articleId);
       }
-      if (action === "read_open" && Number.isSafeInteger(input.userId) && Number(input.userId) > 0) {
-        readingHistoryRecorded = recordReadingOpenInTransaction(transaction, Number(input.userId), input.articleId);
+      if (action === "read_open" && Number.isSafeInteger(normalized.userId) && Number(normalized.userId) > 0) {
+        readingHistoryRecorded = recordReadingOpenInTransaction(transaction, Number(normalized.userId), normalized.articleId);
       }
     });
     if (!articleExists && result.counted) {
