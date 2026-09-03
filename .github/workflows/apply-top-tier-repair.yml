@@ -1,0 +1,108 @@
+name: Validate and deliver top-tier rebuild
+
+on:
+  push:
+    branches:
+      - top-tier-rebuild-20260904
+
+permissions:
+  contents: write
+
+jobs:
+  repair-and-verify:
+    if: contains(github.event.head_commit.message, '[apply-repair]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out implementation branch
+        uses: actions/checkout@v6
+        with:
+          ref: top-tier-rebuild-20260904
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install submitted dependencies
+        run: npm ci
+
+      - name: Apply build-safe integration repair
+        run: node scripts/repair-top-tier-rebuild.mjs
+
+      - name: Refresh committed lockfile
+        run: npm install --no-audit --no-fund
+
+      - name: Typecheck
+        id: typecheck
+        continue-on-error: true
+        run: npm run typecheck > /tmp/typecheck.log 2>&1
+
+      - name: Unit and migration tests
+        id: tests
+        continue-on-error: true
+        run: npm test > /tmp/tests.log 2>&1
+
+      - name: Production build
+        id: build
+        continue-on-error: true
+        run: npm run build > /tmp/build.log 2>&1
+
+      - name: Record concise verification report
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '# Top-tier rebuild verification'
+            echo
+            echo "typecheck=${{ steps.typecheck.outcome }}"
+            echo "tests=${{ steps.tests.outcome }}"
+            echo "build=${{ steps.build.outcome }}"
+            echo
+            echo '## Typecheck tail'
+            echo '```text'
+            tail -n 240 /tmp/typecheck.log 2>/dev/null || true
+            echo '```'
+            echo
+            echo '## Test tail'
+            echo '```text'
+            tail -n 180 /tmp/tests.log 2>/dev/null || true
+            echo '```'
+            echo
+            echo '## Build tail'
+            echo '```text'
+            tail -n 240 /tmp/build.log 2>/dev/null || true
+            echo '```'
+          } > TOP_TIER_CI_REPORT.md
+
+      - name: Commit repaired implementation and report
+        if: always()
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: integrate hardening and original editor source" || true
+          git push origin HEAD:top-tier-rebuild-20260904
+
+      - name: Stop on failed verification
+        if: steps.typecheck.outcome != 'success' || steps.tests.outcome != 'success' || steps.build.outcome != 'success'
+        run: exit 1
+
+      - name: Remove delivery-only tooling
+        shell: bash
+        run: |
+          rm -f \
+            .github/workflows/apply-top-tier-rebuild.yml \
+            .github/workflows/apply-top-tier-repair.yml \
+            .github/workflows/top-tier-export.yml \
+            scripts/apply-top-tier-rebuild.mjs \
+            scripts/repair-top-tier-rebuild.mjs
+          git add -A
+          git commit -m "chore: remove one-time delivery tooling"
+          git push origin HEAD:top-tier-rebuild-20260904
+
+      - name: Fast-forward main only after all checks pass
+        run: git push origin HEAD:main
