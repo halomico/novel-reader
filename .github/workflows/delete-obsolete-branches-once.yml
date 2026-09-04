@@ -1,0 +1,43 @@
+name: Delete obsolete branches once
+
+on:
+  push:
+    branches:
+      - top-tier-rebuild-20260904
+
+permissions:
+  contents: write
+
+concurrency:
+  group: delete-obsolete-branches-once
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out retained branch
+        uses: actions/checkout@v6
+        with:
+          ref: top-tier-rebuild-20260904
+          fetch-depth: 0
+
+      - name: Delete obsolete remote branches
+        shell: bash
+        run: |
+          set -euo pipefail
+          for branch in audit-hardening-20260904 original-editor-rebuild-20260904; do
+            if git ls-remote --exit-code --heads origin "refs/heads/${branch}" >/dev/null 2>&1; then
+              git push origin --delete "${branch}"
+            fi
+          done
+
+      - name: Remove this one-time workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/delete-obsolete-branches-once.yml
+          git commit -m "chore: remove one-time branch cleanup workflow"
+          git push origin HEAD:top-tier-rebuild-20260904
