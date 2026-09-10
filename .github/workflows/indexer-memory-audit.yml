@@ -1,0 +1,75 @@
+name: GPT indexer memory audit
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  memory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      DATABASE_URL: postgresql://postgres:audit-only@127.0.0.1:55436/novel_reader
+      NOVEL_LIBRARY_DIR: /tmp/indexer-library
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: mkdir -p audit-indexer /tmp/indexer-library/default && npm ci
+      - name: Start PostgreSQL
+        shell: bash
+        run: |
+          set -e
+          docker build --pull -f docker/postgres/Dockerfile -t audit-indexer-pg . > audit-indexer/pg-build.log 2>&1
+          docker run -d --name audit-indexer-pg --memory=4g --cpus=2 -p 127.0.0.1:55436:5432 --env POSTGRES_PASSWORD=audit-only --env POSTGRES_DB=novel_reader --env POSTGRES_INITDB_ARGS='--encoding=UTF8 --locale=C' audit-indexer-pg
+          for i in $(seq 1 40); do docker exec audit-indexer-pg pg_isready -U postgres -d novel_reader && break; sleep 1; done
+          npm run db:pg:init > audit-indexer/db-init.log 2>&1
+      - name: Generate representative large Chinese files
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('/tmp/indexer-library/default')
+          # Four ~1.2 MiB UTF-8 files (~400k Chinese chars each), larger than almost all stated production articles.
+          for f in range(4):
+              out=[]
+              for i in range(400000):
+                  out.append(chr(0x4e00 + ((i*104729 + f*7919 + (i//97)*131) % 18000)))
+              (root/f'压力小说{f+1}.txt').write_text(''.join(out),encoding='utf-8')
+          PY
+          du -b /tmp/indexer-library/default/* > audit-indexer/files.txt
+      - name: Initial scan and publish memory
+        shell: bash
+        run: |
+          set +e
+          /usr/bin/time -v npm run scan:books -- --verify > audit-indexer/scan.log 2> audit-indexer/scan.time
+          echo $? > audit-indexer/scan.exit
+          docker stats --no-stream audit-indexer-pg > audit-indexer/pg-after-scan.txt 2>&1
+          exit 0
+      - name: Forced reindex concurrency 1
+        shell: bash
+        run: |
+          set +e
+          /usr/bin/time -v npm run index:search -- --force --concurrency=1 --no-cleanup > audit-indexer/reindex-c1.log 2> audit-indexer/reindex-c1.time
+          echo $? > audit-indexer/reindex-c1.exit
+          exit 0
+      - name: Forced reindex concurrency 2
+        shell: bash
+        run: |
+          set +e
+          /usr/bin/time -v npm run index:search -- --force --concurrency=2 --no-cleanup > audit-indexer/reindex-c2.log 2> audit-indexer/reindex-c2.time
+          echo $? > audit-indexer/reindex-c2.exit
+          docker stats --no-stream audit-indexer-pg > audit-indexer/pg-after-reindex.txt 2>&1
+          exit 0
+      - name: Storage summary
+        shell: bash
+        run: |
+          docker exec audit-indexer-pg psql -U postgres -d novel_reader -Atc "SELECT pg_relation_size('novel_content_blocks'),pg_indexes_size('novel_content_blocks'),pg_total_relation_size('novel_content_blocks'),count(*) FROM novel_content_blocks;" > audit-indexer/storage.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: indexer-memory-${{ github.sha }}
+          path: audit-indexer/
+          retention-days: 7
