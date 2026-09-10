@@ -286,7 +286,12 @@ test("navigation keeps the current surface while loading and paged readers avoid
   const contentSearch = read("src/components/ContentSearchClient.tsx");
   assert.match(contentSearch, /<ResultCount count=\{totalNovels\}/);
   assert.match(contentSearch, /<Pagination page=\{page\} totalPages=\{totalPages\}/);
-  assert.doesNotMatch(contentSearch, /nextCursor|cursorTrail|pageHistory/);
+  assert.match(contentSearch, /nextCursor/);
+  assert.match(contentSearch, /cursorsRef/);
+  assert.doesNotMatch(contentSearch, /if \(loading \|\| nextPage/);
+  const rootShell = read("src/lib/root-shell.ts");
+  assert.match(rootShell, /process\.env\.DOCKER_BUILD === "1"/);
+  assert.match(rootShell, /defaultSiteSettings\(\)/);
   assert.doesNotMatch(originalStyles, /readerSiteHeader\.hasMobileContext > \.brand/);
   assert.match(originalStyles, /readerSiteHeader \.mobileContextHeader\s*\{\s*align-self: center/);
   assert.doesNotMatch(read("src/components/OriginalReaderExperienceControls.tsx"), /originalDesktopOutline|目录大纲/);

@@ -6,6 +6,7 @@ export const CONTENT_BLOCK_CODE_POINTS = 1_200;
 export type SearchTextMode = "title" | "content" | "phrase";
 export type TextPosition = { text: string; start: number; end: number };
 export type ChineseSearchForms = { original: string; hans: string | null; version: number };
+export type ChineseSearchRange = { start: number; end: number };
 export type ContentBlock = {
   blockNo: number;
   charStart: number;
@@ -142,6 +143,61 @@ export async function normalizeChineseSearchForms(text: string, mode: SearchText
   const original = positions.original.map((position) => position.text).join("");
   const hans = positions.hans.map((position) => position.text).join("");
   return { original, hans: original === hans ? null : hans, version: CONTENT_NORMALIZATION_VERSION };
+}
+
+export async function normalizeChineseSearchNeedles(
+  values: readonly string[],
+  mode: SearchTextMode = "content",
+): Promise<string[]> {
+  const needles = new Set<string>();
+  for (const value of values) {
+    const forms = await normalizeChineseSearchForms(value, mode);
+    if (forms.original) needles.add(forms.original);
+    if (forms.hans) needles.add(forms.hans);
+  }
+  return [...needles];
+}
+
+/** Finds normalized matches while retaining offsets in the original UTF-16 text.
+ * This is shared by snippets and in-reader find, so punctuation, NFKC and
+ * Traditional-to-Hans conversion cannot make a database hit impossible to show. */
+export async function findNormalizedChineseSearchRanges(
+  text: string,
+  needles: readonly string[],
+  mode: SearchTextMode = "content",
+): Promise<ChineseSearchRange[]> {
+  if (!needles.length || !text) return [];
+  const forms = await normalizeChineseSearchPositions(text, mode);
+  const ranges = new Map<string, ChineseSearchRange>();
+  for (const positions of [forms.original, forms.hans]) {
+    const normalized = positions.map((position) => position.text).join("");
+    if (!normalized) continue;
+    const spans: Array<{ normalizedStart: number; normalizedEnd: number; sourceStart: number; sourceEnd: number }> = [];
+    let normalizedOffset = 0;
+    for (const position of positions) {
+      const normalizedEnd = normalizedOffset + position.text.length;
+      spans.push({ normalizedStart: normalizedOffset, normalizedEnd, sourceStart: position.start, sourceEnd: position.end });
+      normalizedOffset = normalizedEnd;
+    }
+    for (const needle of needles) {
+      if (!needle) continue;
+      for (let cursor = normalized.indexOf(needle); cursor >= 0;
+        cursor = normalized.indexOf(needle, cursor + Math.max(needle.length, 1))) {
+        const matchEnd = cursor + needle.length;
+        const first = spans.find((span) => span.normalizedStart <= cursor && cursor < span.normalizedEnd);
+        const last = spans.findLast((span) => span.normalizedStart < matchEnd && matchEnd <= span.normalizedEnd);
+        if (!first || !last) continue;
+        const range = { start: first.sourceStart, end: last.sourceEnd };
+        ranges.set(`${range.start}:${range.end}`, range);
+      }
+    }
+  }
+  const candidates = [...ranges.values()].sort((left, right) => left.start - right.start || right.end - left.end);
+  const selected: ChineseSearchRange[] = [];
+  for (const candidate of candidates) {
+    if (selected.every((range) => candidate.end <= range.start || candidate.start >= range.end)) selected.push(candidate);
+  }
+  return selected.sort((left, right) => left.start - right.start);
 }
 
 export async function normalizeContentQueryTerm(text: string, mode: "content" | "phrase" = "content"): Promise<ChineseSearchForms> {

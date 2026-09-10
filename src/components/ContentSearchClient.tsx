@@ -33,13 +33,18 @@ type SearchApiResponse = {
   ok: boolean;
   message?: string;
   items?: PostgresContentSearchItem[];
-  totalItems?: number;
-  totalNovels?: number;
-  totalPages?: number;
+  nextCursor?: string | null;
+  totalItems?: number | null;
+  totalNovels?: number | null;
+  totalPages?: number | null;
 };
 
-function highlightSnippet(snippet: string, terms: readonly SearchTermPattern[]) {
-  const ranges = findSearchTermRanges(snippet, terms);
+function highlightSnippet(
+  snippet: string,
+  serverRanges: readonly { start: number; end: number }[] | undefined,
+  terms: readonly SearchTermPattern[],
+) {
+  const ranges = serverRanges?.length ? serverRanges : findSearchTermRanges(snippet, terms);
   if (!ranges.length) return snippet;
   const nodes = [];
   let cursor = 0;
@@ -81,12 +86,17 @@ export function ContentSearchClient({
   const tr = (text: string) => uiText(locale, text);
   const requestFiltersKey = useMemo(() => JSON.stringify(requestFilters || null), [requestFilters]);
   const queryKey = `${keyword}::${library}::${novelId ?? ""}::${requestFiltersKey}`;
+  const cursorsRef = useRef<{ queryKey: string; values: Map<number, string | null> }>({
+    queryKey,
+    values: new Map([[1, null]]),
+  });
   const [prevQueryKey, setPrevQueryKey] = useState(queryKey);
   const [page, setPage] = useState(() => Math.max(1, initialPage));
 
   if (prevQueryKey !== queryKey) {
     setPrevQueryKey(queryKey);
     setPage(Math.max(1, initialPage));
+    cursorsRef.current = { queryKey, values: new Map([[1, null]]) };
   }
 
   const [items, setItems] = useState<PostgresContentSearchItem[]>([]);
@@ -98,6 +108,8 @@ export function ContentSearchClient({
 
   useEffect(() => {
     const controller = new AbortController();
+    const knownCursor = cursorsRef.current.values.get(page);
+    const useCursor = page > 1 && typeof knownCursor === "string";
     setLoading(true);
     setMessage("");
     void fetch("/api/search/content", {
@@ -107,29 +119,37 @@ export function ContentSearchClient({
         q: keyword,
         library,
         novelId,
-        page,
+        ...(useCursor ? { cursor: knownCursor } : { page }),
         ...(requestFiltersKey === "null" ? {} : { filters: JSON.parse(requestFiltersKey) }),
       }),
       cache: "no-store",
       signal: controller.signal,
     }).then(async (response) => {
       const data = await response.json() as SearchApiResponse;
+      if (controller.signal.aborted || cursorsRef.current.queryKey !== queryKey) return;
       if (!response.ok || !data.ok || !Array.isArray(data.items)) throw new Error(data.message || tr("搜索失败"));
-      if (
-        !Number.isSafeInteger(data.totalItems) || Number(data.totalItems) < 0 ||
-        !Number.isSafeInteger(data.totalNovels) || Number(data.totalNovels) < 0 ||
-        !Number.isSafeInteger(data.totalPages) || Number(data.totalPages) < 1
-      ) throw new Error(tr("搜索失败"));
-      const resultPages = Number(data.totalPages);
-      if (page > resultPages) {
-        updateHistory(resultPages, true);
-        setPage(resultPages);
-        return;
+      if (data.nextCursor !== null && data.nextCursor !== undefined && typeof data.nextCursor !== "string") {
+        throw new Error(tr("搜索失败"));
+      }
+      if (data.nextCursor) cursorsRef.current.values.set(page + 1, data.nextCursor);
+      else cursorsRef.current.values.delete(page + 1);
+      if (data.totalItems !== null && data.totalItems !== undefined) {
+        if (!Number.isSafeInteger(data.totalItems) || Number(data.totalItems) < 0 ||
+            !Number.isSafeInteger(data.totalNovels) || Number(data.totalNovels) < 0 ||
+            !Number.isSafeInteger(data.totalPages) || Number(data.totalPages) < 1) {
+          throw new Error(tr("搜索失败"));
+        }
+        const resultPages = Number(data.totalPages);
+        if (page > resultPages) {
+          updateHistory(resultPages, true);
+          setPage(resultPages);
+          return;
+        }
+        setTotalNovels(Number(data.totalNovels));
+        setTotalPages(resultPages);
       }
       setItems(data.items);
-      setTotalNovels(Number(data.totalNovels));
-      setTotalPages(resultPages);
-      if (searchEventKey && page === 1) {
+      if (searchEventKey && page === 1 && data.totalItems !== null && data.totalItems !== undefined) {
         const signature = `${searchEventKey}:${data.totalItems}:${data.totalNovels}`;
         if (reportedAnalyticsRef.current !== signature) {
           reportedAnalyticsRef.current = signature;
@@ -164,7 +184,7 @@ export function ContentSearchClient({
   }, []);
 
   function goToPage(nextPage: number) {
-    if (loading || nextPage === page || nextPage < 1 || nextPage > totalPages) return;
+    if (nextPage === page || nextPage < 1 || nextPage > totalPages) return;
     updateHistory(nextPage);
     setPage(nextPage);
   }
@@ -213,7 +233,7 @@ export function ContentSearchClient({
               >
                 <span className="searchResultBody">
                   <strong>{title}</strong>
-                  <span>{highlightSnippet(result.snippet, highlightTerms)}</span>
+                  <span>{highlightSnippet(result.snippet, result.highlightRanges, highlightTerms)}</span>
                 </span>
               </SearchTrackedLink>
             );

@@ -1552,7 +1552,6 @@ export function OriginalComposerShell({
         // Session storage may be blocked; a published draft remains editable by its direct URL.
       }
       router.replace(`/original/${encodeURIComponent(result.slug)}`);
-      router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "发布失败");
     } finally {

@@ -10,6 +10,10 @@ import {
   searchPostgresContent,
   type PostgresContentSearchCursor,
 } from "@/domains/reading/postgres-content-search";
+import {
+  findNormalizedChineseSearchRanges,
+  normalizeChineseSearchNeedles,
+} from "@/domains/reading/content-text";
 import { canBrowseHomePortal, canConsumeHomePortal } from "@/lib/home-portal";
 import { LOCALE_COOKIE, normalizeLocale, TRADITIONAL_LOCALE } from "@/lib/locale";
 import { localizeTexts, normalizeSearchText as normalizeLocaleSearchText } from "@/lib/locale-server";
@@ -198,6 +202,7 @@ export async function POST(request: NextRequest) {
   const excludedSourceSlugs = Object.entries(settings.novelSourceSearchModes)
     .filter(([, mode]) => mode === "book")
     .map(([slug]) => slug);
+  const usingCursor = parsed.value.page === undefined && cursor !== undefined;
   const page = await searchPostgresContent(database("web"), validation.query, {
     novelId,
     sourceSlug: library,
@@ -209,15 +214,20 @@ export async function POST(request: NextRequest) {
     cursor: parsed.value.page === undefined ? cursor : undefined,
     offset: parsed.value.page === undefined && cursor ? undefined : (pageInput - 1) * pageSize,
     limit: pageSize,
+    includeTotals: !usingCursor,
   });
   const locale = normalizeLocale(request.cookies.get(LOCALE_COOKIE)?.value);
+  const highlightNeedles = locale === TRADITIONAL_LOCALE
+    ? await normalizeChineseSearchNeedles(validation.query.highlightTerms.map((term) => term.value))
+    : null;
   const items = locale === TRADITIONAL_LOCALE
     ? await Promise.all(page.items.map(async (item) => {
         const [novelTitle, chapterTitle, snippet] = await localizeTexts(
           [item.novelTitle, item.chapterTitle || "", item.snippet] as const,
           locale,
         );
-        return { ...item, novelTitle, chapterTitle: chapterTitle || null, snippet };
+        const highlightRanges = await findNormalizedChineseSearchRanges(snippet, highlightNeedles!);
+        return { ...item, novelTitle, chapterTitle: chapterTitle || null, snippet, highlightRanges };
       }))
     : page.items;
 
@@ -227,6 +237,6 @@ export async function POST(request: NextRequest) {
     nextCursor: encodeCursor(page.nextCursor, scope),
     totalItems: page.totalItems,
     totalNovels: page.totalNovels,
-    totalPages: Math.max(1, Math.ceil(page.totalItems / pageSize)),
+    totalPages: page.totalItems === null ? null : Math.max(1, Math.ceil(page.totalItems / pageSize)),
   }, { headers: { "Cache-Control": "private, no-store" } });
 }

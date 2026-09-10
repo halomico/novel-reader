@@ -4,7 +4,9 @@ import {
   CONTENT_NORMALIZATION_VERSION,
   MAX_NORMALIZED_CONTENT_QUERY_CHARS,
   createContentBlocks,
+  findNormalizedChineseSearchRanges,
   normalizeChineseSearchForms,
+  normalizeChineseSearchNeedles,
   normalizeContentQueryTerm,
 } from "./content-text";
 
@@ -41,4 +43,11 @@ test("content normalization rejects invalid Unicode and oversized terms", async 
   await assert.rejects(normalizeChineseSearchForms("a\0b"), /valid Unicode/);
   await assert.rejects(normalizeChineseSearchForms("\ud800"), /valid Unicode/);
   await assert.rejects(normalizeContentQueryTerm("甲".repeat(MAX_NORMALIZED_CONTENT_QUERY_CHARS + 1)), /1–50/);
+});
+
+test("normalized matches map Traditional, punctuation and compatibility text back to source offsets", async () => {
+  const text = "前文 龍、門與ＡＢＣ 后文";
+  const needles = await normalizeChineseSearchNeedles(["龙门", "abc"]);
+  const ranges = await findNormalizedChineseSearchRanges(text, needles);
+  assert.deepEqual(ranges.map((range) => text.slice(range.start, range.end)), ["龍、門", "ＡＢＣ"]);
 });

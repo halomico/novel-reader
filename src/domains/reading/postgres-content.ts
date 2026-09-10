@@ -1,6 +1,7 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type { QueryResultRow } from "pg";
 import { withTransaction, type SqlExecutor } from "@/core/db/postgres";
+import { contentVersionForText } from "@/lib/content-version";
 import { CONTENT_NORMALIZATION_VERSION, createContentBlocks, type ContentBlock } from "./content-text";
 
 const MAX_BATCH_BLOCKS = 128;
@@ -243,7 +244,7 @@ export async function publishPostgresContent(
 ): Promise<ContentBuild> {
   input.signal?.throwIfAborted();
   const build = await beginContentBuild({ ...input, totalUtf16Length: input.text.length,
-    contentVersion: `sha256:${createHash("sha256").update(input.text, "utf8").digest("hex")}` }, transaction);
+    contentVersion: contentVersionForText(input.text) }, transaction);
   try {
     let batch: ContentBlock[] = [];
     let bytes = 0;
@@ -277,7 +278,10 @@ type PublishedNovelContentRow = QueryResultRow & {
   published_content_version: string | null;
   total_utf16_length: number | null;
   block_count: number | null;
-  blocks: PublishedContentBlock[];
+  block_no: number | null;
+  char_start: number | null;
+  char_end: number | null;
+  original_text: string | null;
 };
 
 function validatePublishedContentOwner(novelId: number, chapterId: number | null): void {
@@ -309,24 +313,22 @@ export async function readPublishedNovelContent(
     text: `SELECT d.id, d.active_content_version, d.active_generation,
       CASE WHEN d.chapter_id IS NULL THEN n.published_content_version ELSE c.published_content_version END AS published_content_version,
       g.total_utf16_length, g.block_count,
-      coalesce((
-        SELECT jsonb_agg(jsonb_build_object(
-          'blockNo', b.block_no,
-          'charStart', b.char_start,
-          'charEnd', b.char_end,
-          'originalText', b.original_text
-        ) ORDER BY b.block_no)
-        FROM novel_content_blocks b
-        WHERE b.document_id = d.id
-          AND b.generation = d.active_generation
-          AND ($3::double precision >= 1 OR b.char_start < ceil(g.total_utf16_length * $3))
-      ), '[]'::jsonb) AS blocks
+      b.block_no, b.char_start, b.char_end, b.original_text
       FROM novel_documents d
       JOIN novels n ON n.id = d.novel_id
       LEFT JOIN novel_chapters c ON c.id = d.chapter_id AND c.novel_id = d.novel_id
       LEFT JOIN novel_content_generations g
         ON g.document_id = d.id AND g.generation = d.active_generation AND g.state = 'published'
-      WHERE d.novel_id = $1 AND d.chapter_id IS NOT DISTINCT FROM $2::integer`,
+      LEFT JOIN LATERAL (
+        SELECT block.block_no, block.char_start, block.char_end, block.original_text
+        FROM novel_content_blocks block
+        WHERE block.document_id = d.id
+          AND block.generation = d.active_generation
+          AND ($3::double precision >= 1 OR block.char_start < ceil(g.total_utf16_length * $3))
+        ORDER BY block.block_no
+      ) b ON true
+      WHERE d.novel_id = $1 AND d.chapter_id IS NOT DISTINCT FROM $2::integer
+      ORDER BY b.block_no NULLS LAST`,
     values: [input.novelId, chapterId, previewRatio],
   });
   const row = result.rows[0];
@@ -337,7 +339,16 @@ export async function readPublishedNovelContent(
   const previewEnd = previewRatio < 1
     ? Math.max(1, Math.ceil(row.total_utf16_length * previewRatio))
     : row.total_utf16_length;
-  const blocks = row.blocks.flatMap((block) => {
+  const blocks = result.rows.flatMap((blockRow) => {
+    if (blockRow.block_no === null || blockRow.char_start === null || blockRow.char_end === null || blockRow.original_text === null) {
+      return [];
+    }
+    const block: PublishedContentBlock = {
+      blockNo: blockRow.block_no,
+      charStart: blockRow.char_start,
+      charEnd: blockRow.char_end,
+      originalText: blockRow.original_text,
+    };
     if (block.charStart >= previewEnd) return [];
     if (block.charEnd <= previewEnd) return [block];
     const originalText = block.originalText.slice(0, Math.max(previewEnd - block.charStart, 0));

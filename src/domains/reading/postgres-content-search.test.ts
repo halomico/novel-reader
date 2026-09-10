@@ -22,9 +22,9 @@ test("content candidate SQL uses active published generations and indexable null
     cursor: { mtimeMs: "9223372036854775807", documentId: "9" },
   }, 64);
   assert.match(sql.text, /g\.state = 'published'/);
-  assert.match(sql.text, /d\.active_generation = m\.generation/);
+  assert.match(sql.text, /e\.active_generation = m\.generation/);
   assert.match(sql.text, /matched_docs AS MATERIALIZED/);
-  assert.match(sql.text, /FROM novel_content_blocks b WHERE/);
+  assert.match(sql.text, /FROM eligible_documents e\s+JOIN novel_content_blocks b/su);
   assert.match(sql.text, /search_text_hans IS NOT NULL AND/);
   assert.doesNotMatch(sql.text, /COALESCE\(b\.search_text_hans|relative_path/iu);
   assert.equal(sql.name, undefined);
@@ -44,7 +44,14 @@ test("content search pagination counts the complete result set before applying i
   assert.match(query.text, /match_counts AS MATERIALIZED \(\s*SELECT COUNT\(\*\)::bigint AS total_items/su);
   assert.match(query.text, /COUNT\(DISTINCT novel_id\)::bigint AS total_novels/su);
   assert.match(query.text, /LIMIT \$\d+ OFFSET \$\d+/u);
+  assert.match(query.text, /FROM match_counts mc\s+LEFT JOIN page_rows p ON true/su);
   assert.ok(query.values?.includes(40));
+  const cursorQuery = await buildPostgresContentCandidateQuery(contentQuery("龍門"), {
+    cursor: { mtimeMs: "20", documentId: "2" },
+    includeTotals: false,
+  }, 20);
+  assert.doesNotMatch(cursorQuery.text, /COUNT\(/u);
+  assert.doesNotMatch(cursorQuery.text, /match_counts/u);
   await assert.rejects(buildPostgresContentCandidateQuery(contentQuery("龍門"), {
     offset: 20,
     cursor: { mtimeMs: "20", documentId: "2" },
@@ -58,7 +65,7 @@ test("simple AND search emits one index intersection per unique keyword", async 
   assert.equal(parsed.query.syntax, "simple-and");
   assert.doesNotMatch(sql.text, /\bOR\s+TRUE|NOT \(/u);
   assert.match(sql.text, /INTERSECT/u);
-  assert.match(sql.text, /FROM novel_content_blocks term_block_1/u);
+  assert.match(sql.text, /JOIN novel_content_blocks term_block_1/u);
   assert.match(sql.text, /JOIN LATERAL \(\s*SELECT hit\.block_no, hit\.char_start/u);
   assert.ok(sql.values?.includes("修仙"));
   assert.ok(sql.values?.includes("龍門"));
@@ -82,6 +89,7 @@ test("content search pushes source, title and visibility-aware tag filters into 
   assert.match(sql.text, /lower\(s\.slug\) =/u);
   assert.match(sql.text, /s\.id IS NULL OR lower\(s\.slug\) <> ALL/u);
   assert.match(sql.text, /n\.id =/u);
+  assert.ok(sql.text.indexOf("n.id =") < sql.text.indexOf("matched_docs AS MATERIALIZED"));
   assert.match(sql.text, /title_search_original LIKE/u);
   assert.match(sql.text, /tag\.visibility IN \('public', 'member'\)/u);
   assert.equal((sql.text.match(/SELECT 1 FROM novel_tags tagged/gu) || []).length, 3);
@@ -118,6 +126,7 @@ test("content search maps indexed rows without returning private storage paths",
   assert.equal(page.nextCursor, null);
   assert.equal(page.totalItems, 20);
   assert.equal(page.totalNovels, 12);
+  assert.deepEqual(page.items[0].highlightRanges.map((range) => page.items[0].snippet.slice(range.start, range.end)), ["繁體龍門", "修仙"]);
 });
 
 test("content search returns a snippet window around the first visible match", async () => {
@@ -135,4 +144,26 @@ test("content search returns a snippet window around the first visible match", a
   };
   const page = await searchPostgresContent(executor, contentQuery("龍門"), { limit: 10 });
   assert.equal(page.items[0].snippet, `...${"前".repeat(24)}龍門${"后".repeat(254)}...`);
+  assert.equal(page.items[0].charStart, 400);
+  assert.deepEqual(page.items[0].highlightRanges.map((range) => page.items[0].snippet.slice(range.start, range.end)), ["龍門"]);
+});
+
+test("content search keeps exact totals even when an OFFSET page has no rows", async () => {
+  const executor: SqlExecutor = {
+    async query<Row extends QueryResultRow>(_query: SqlQuery) {
+      return {
+        command: "SELECT", rowCount: 1, oid: 0, fields: [],
+        rows: [{
+          document_id: null, novel_id: null, chapter_id: null, novel_title: null, chapter_title: null,
+          content_version: null, mtime_ms: null, block_no: null, char_start: null, blocks: [],
+          total_items: "41", total_novels: "17",
+        }],
+      } as unknown as QueryResult<Row>;
+    },
+  };
+  const page = await searchPostgresContent(executor, contentQuery("龍門"), { offset: 10_000, limit: 20 });
+  assert.deepEqual(page.items, []);
+  assert.equal(page.totalItems, 41);
+  assert.equal(page.totalNovels, 17);
+  assert.equal(page.nextCursor, null);
 });

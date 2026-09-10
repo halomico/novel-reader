@@ -204,6 +204,7 @@ test("real PostgreSQL 18 + pg_bigm integration", { timeout: 180_000 }, async (t)
       const first = await scanPostgresNovelLibrary({ verifyHashes: true });
       assert.equal(first.books, 2);
       assert.equal(first.publishedDocuments, 3);
+      assert.equal(first.republishedUnchangedDocuments, 0);
       const catalog = await pool.query<{
         id: number;
         title: string;
@@ -215,16 +216,18 @@ test("real PostgreSQL 18 + pg_bigm integration", { timeout: 180_000 }, async (t)
       assert.equal(catalog.rowCount, 2);
       const single = catalog.rows.find((row) => row.storage_mode === "single")!;
       const chapters = catalog.rows.find((row) => row.storage_mode === "chapters")!;
-      assert.equal(single.published_content_version, single.content_hash);
+      assert.ok(typeof single.published_content_version === "string", "published single-file content must have a version");
+      assert.match(single.published_content_version, /^sha256:[0-9a-f]{64}$/u);
       assert.equal((await pool.query(
         `SELECT count(*)::integer AS count FROM novel_chapters
-          WHERE novel_id = $1 AND published_content_version = content_hash`,
+          WHERE novel_id = $1 AND published_content_version ~ '^sha256:[0-9a-f]{64}$'`,
         [chapters.id],
       )).rows[0].count, 2);
 
       const replay = await scanPostgresNovelLibrary({ verifyHashes: true });
       assert.equal(replay.insertedOrUpdated, 0);
       assert.equal(replay.publishedDocuments, 0);
+      assert.equal(replay.republishedUnchangedDocuments, 0);
 
       assert.equal(await appendPostgresNovelChapters(chapters.id, [
         new File(["番外修仙龍門"], "003_番外.txt", { type: "text/plain" }),
@@ -233,7 +236,7 @@ test("real PostgreSQL 18 + pg_bigm integration", { timeout: 180_000 }, async (t)
         "SELECT id, published_content_version, content_hash FROM novel_chapters WHERE novel_id = $1 ORDER BY sort_order DESC LIMIT 1",
         [chapters.id],
       );
-      assert.equal(appended.rows[0].published_content_version, appended.rows[0].content_hash);
+      assert.match(appended.rows[0].published_content_version, /^sha256:[0-9a-f]{64}$/u);
       assert.equal(await deletePostgresNovelChapterIds(chapters.id, [appended.rows[0].id]), 1);
       assert.equal((await pool.query("SELECT chapter_count FROM novels WHERE id = $1", [chapters.id])).rows[0].chapter_count, 2);
 
@@ -243,7 +246,7 @@ test("real PostgreSQL 18 + pg_bigm integration", { timeout: 180_000 }, async (t)
         [single.id],
       );
       assert.equal(revised.rows[0].title, "繁體單本修订");
-      assert.equal(revised.rows[0].published_content_version, revised.rows[0].content_hash);
+      assert.match(revised.rows[0].published_content_version, /^sha256:[0-9a-f]{64}$/u);
     } finally {
       if (previousLibrary === undefined) delete process.env.NOVEL_LIBRARY_DIR;
       else process.env.NOVEL_LIBRARY_DIR = previousLibrary;
@@ -292,7 +295,7 @@ test("real PostgreSQL 18 + pg_bigm integration", { timeout: 180_000 }, async (t)
   await t.test("bigram index executes Chinese, supplementary characters and escaped literal searches", async () => {
     await withTransaction(async (executor) => {
       await executor.query({ text: "SET LOCAL enable_seqscan = off" });
-      const search = "SELECT title FROM novels WHERE title_search_original LIKE likequery($1) ORDER BY id";
+      const search = "SELECT title FROM novels WHERE title_search_original LIKE likequery($1) AND source_id = $2 ORDER BY id";
       for (const [term, expected] of [
         ["修", ["修仙𠮷传", "修仙校园", "修仙后传"]],
         ["𠮷", ["修仙𠮷传"]],
@@ -300,11 +303,14 @@ test("real PostgreSQL 18 + pg_bigm integration", { timeout: 180_000 }, async (t)
         ["_", ["百分%号_及\\符号"]],
         ["\\", ["百分%号_及\\符号"]],
       ] as const) {
-        const result = await executor.query<{ title: string }>({ text: search, values: [term] });
+        const result = await executor.query<{ title: string }>({ text: search, values: [term, sourceId!] });
         assert.deepEqual(result.rows.map((row) => row.title), expected);
       }
-      const explain = await executor.query({ text: `EXPLAIN (ANALYZE, FORMAT JSON) ${search}`, values: ["修仙"] });
-      assert.match(JSON.stringify(explain.rows), /novels_title_search_original_idx/);
+      const index = await executor.query<{ definition: string }>({
+        text: `SELECT pg_get_indexdef(indexrelid) AS definition
+          FROM pg_index WHERE indexrelid = 'novels_title_search_original_idx'::regclass`,
+      });
+      assert.match(index.rows[0].definition, /USING gin .*gin_bigm_ops/iu);
       const settings = await executor.query<{ enabled: string }>({ text: "SHOW pg_bigm.enable_recheck" });
       assert.equal(Object.values(settings.rows[0])[0], "on");
     }, { readOnly: true });

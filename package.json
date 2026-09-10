@@ -19,7 +19,7 @@
     "check:push": "node scripts/check-repository-files.mjs --pending",
     "test:navigation": "node --import tsx --test src/lib/context-navigation.test.ts",
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
-    "test:postgres": "node --import tsx scripts/test-postgres-integration.ts",
+    "test:postgres": "node --import tsx --test scripts/test-postgres-integration.ts",
     "check": "npm run check:runtime && npm run typecheck && npm test && npm run build",
     "db:verify": "node --import tsx scripts/db-verify-postgres.ts",
     "db:pg:migrate": "node --import tsx scripts/db-migrate-postgres.ts",
@@ -41,14 +41,14 @@
     "iconv-lite": "^0.6.3",
     "lexical": "^0.38.2",
     "lucide-react": "^0.468.0",
-    "next": "^15.5.21",
+    "next": "^15.5.24",
     "opencc-js": "^1.0.5",
     "pg": "8.23.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.4"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
@@ -61,7 +61,7 @@
   },
   "overrides": {
     "postcss": "^8.5.23",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.4"
   },
   "keywords": [
     "novel",

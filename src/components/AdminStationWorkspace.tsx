@@ -69,7 +69,6 @@ export function AdminStationComposer({ initialUsername = "" }: { initialUsername
         setBody("");
         setOpen(false);
         router.replace(`/admin/station/${result.data.threadId}`, { scroll: false });
-        router.refresh();
       },
     );
   }

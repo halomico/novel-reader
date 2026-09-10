@@ -24,7 +24,6 @@ export function OriginalDraftDeleteButton({ draftId, title, locale }: { draftId:
       await deleteLocalOriginalDraft(draftId);
       dialog.current?.close();
       router.replace(withLocalePath(`/original/mine?view=drafts&notice=${encodeURIComponent(tr("草稿已删除"))}&tone=success`, locale), { scroll: false });
-      router.refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : tr("删除失败，请重试"));
     } finally { setPending(false); }

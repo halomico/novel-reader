@@ -4,6 +4,10 @@ import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import Form from "next/form";
 import { usePathname } from "next/navigation";
 import { FormEvent, useEffect, useId, useRef, useState } from "react";
+import {
+  findNormalizedChineseSearchRanges,
+  normalizeChineseSearchNeedles,
+} from "@/domains/reading/content-text";
 import { localeFromPathname, stripLocalePath, uiText, withLocalePath } from "@/lib/locale";
 import { NOVEL_CATALOG_SEARCH_COOKIE } from "@/lib/ui-preferences";
 import { beginNavigationProgress } from "./NavigationProgress";
@@ -38,9 +42,8 @@ function yieldToMainThread(): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, 0));
 }
 
-async function findLiteralMatches(segments: HTMLElement[], keyword: string, isCurrent: () => boolean): Promise<CurrentMatch[]> {
-  const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(escapedKeyword, "giu");
+async function findCurrentMatches(segments: HTMLElement[], keyword: string, isCurrent: () => boolean): Promise<CurrentMatch[]> {
+  const needles = await normalizeChineseSearchNeedles([keyword]);
   const matches: CurrentMatch[] = [];
 
   for (let index = 0; index < segments.length; index += 1) {
@@ -53,16 +56,14 @@ async function findLiteralMatches(segments: HTMLElement[], keyword: string, isCu
 
     for (const target of targets) {
       const text = target.textContent || "";
-      pattern.lastIndex = 0;
-      for (const match of text.matchAll(pattern)) {
-        if (match.index === undefined) {
-          continue;
-        }
+      const ranges = await findNormalizedChineseSearchRanges(text, needles);
+      if (!isCurrent()) return [];
+      for (const range of ranges) {
         matches.push({
           segment,
           target,
-          start: match.index,
-          end: match.index + match[0].length,
+          start: range.start,
+          end: range.end,
         });
       }
     }
@@ -312,7 +313,7 @@ export function HeaderSearch({
 
     const requestId = ++currentSearchRequestRef.current;
     setIsCurrentSearching(true);
-    const nextMatches = await findLiteralMatches(segments, nextKeyword, () => currentSearchRequestRef.current === requestId);
+    const nextMatches = await findCurrentMatches(segments, nextKeyword, () => currentSearchRequestRef.current === requestId);
     if (currentSearchRequestRef.current !== requestId) {
       return;
     }

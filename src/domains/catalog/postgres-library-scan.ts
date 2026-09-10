@@ -6,6 +6,7 @@ import { database, withTransaction, type SqlExecutor } from "@/core/db/postgres"
 import { normalizeChineseSearchForms } from "@/domains/reading/content-text";
 import { publishPostgresContent } from "@/domains/reading/postgres-content";
 import { getLibraryDir } from "@/lib/config";
+import { contentVersionForText, isContentVersion, type ContentVersion } from "@/lib/content-version";
 import { isNovelTextFile, parseNovelTitle } from "@/lib/filename";
 import { decodeNovelBuffer } from "@/lib/text";
 import { chapterAggregateHash } from "./postgres-admin-novels";
@@ -27,6 +28,7 @@ type ScannedFile = Readonly<{
   fileName: string;
   relativePath: string;
   contentHash: string;
+  contentVersion: ContentVersion;
   sizeBytes: number;
   mtimeMs: number;
   wordCount: number;
@@ -40,6 +42,7 @@ type ScannedNovel = Readonly<{
   sourceId: number;
   storageMode: "single" | "chapters";
   contentHash: string;
+  contentVersion: ContentVersion | null;
   sizeBytes: number;
   mtimeMs: number;
   wordCount: number;
@@ -51,6 +54,7 @@ export type PostgresLibraryScanResult = Readonly<{
   files: number;
   insertedOrUpdated: number;
   publishedDocuments: number;
+  republishedUnchangedDocuments: number;
   skipped: number;
   elapsedMs: number;
   records: readonly string[];
@@ -156,12 +160,14 @@ async function scanFile(
   const fileName = path.posix.basename(relativePath);
   const title = parseNovelTitle(fileName);
   if (!title) throw new Error("文件名解析后的标题为空");
-  if (!verifyHashes && existing?.contentHash && existing.sizeBytes === stat.size && existing.mtimeMs === mtimeMs) {
+  if (!verifyHashes && existing?.contentHash && isContentVersion(existing.publishedContentVersion)
+      && existing.sizeBytes === stat.size && existing.mtimeMs === mtimeMs) {
     return {
       title,
       fileName,
       relativePath,
       contentHash: existing.contentHash,
+      contentVersion: existing.publishedContentVersion,
       sizeBytes: existing.sizeBytes,
       mtimeMs,
       wordCount: existing.wordCount,
@@ -170,15 +176,17 @@ async function scanFile(
   }
   const buffer = await fs.readFile(absolutePath);
   if (!buffer.length) throw new Error("文件为空");
+  const text = decodeNovelBuffer(buffer);
   const contentHash = createHash("sha256").update(buffer).digest("hex");
   return {
     title,
     fileName,
     relativePath,
     contentHash,
+    contentVersion: contentVersionForText(text),
     sizeBytes: stat.size,
     mtimeMs,
-    wordCount: Array.from(decodeNovelBuffer(buffer).replace(/\s+/gu, "")).length,
+    wordCount: Array.from(text.replace(/\s+/gu, "")).length,
     contentChanged: existing?.contentHash !== contentHash,
   };
 }
@@ -254,6 +262,7 @@ async function discoverNovels(
         sourceId,
         storageMode: "chapters",
         contentHash: chapterAggregateHash(chapters.map((chapter) => ({ relativePath: chapter.relativePath, contentHash: chapter.contentHash }))),
+        contentVersion: null,
         sizeBytes: chapters.reduce((sum, chapter) => sum + chapter.sizeBytes, 0),
         mtimeMs: Math.max(...chapters.map((chapter) => chapter.mtimeMs)),
         wordCount: chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0),
@@ -294,9 +303,9 @@ async function upsertNovel(
     if (novel.storageMode === "single") {
       await tx.query({ text: "DELETE FROM novel_chapters WHERE novel_id = $1", values: [novelId] });
       const file: ScannedFile = { title: novel.title, fileName: novel.fileName, relativePath: novel.relativePath,
-        contentHash: novel.contentHash, sizeBytes: novel.sizeBytes, mtimeMs: novel.mtimeMs,
+        contentHash: novel.contentHash, contentVersion: novel.contentVersion!, sizeBytes: novel.sizeBytes, mtimeMs: novel.mtimeMs,
         wordCount: novel.wordCount, contentChanged: existingNovel?.contentHash !== novel.contentHash };
-      if (result.rows[0].published_content_version !== novel.contentHash) {
+      if (result.rows[0].published_content_version !== file.contentVersion) {
         publish.push({ novelId, chapterId: null, file, expectedVersion: result.rows[0].published_content_version });
       }
     } else {
@@ -325,7 +334,7 @@ async function upsertNovel(
       const files = new Map(novel.chapters.map((chapter) => [chapter.relativePath, chapter]));
       for (const row of chapterResult.rows) {
         const file = files.get(normalizeRelative(row.relative_path));
-        if (file && row.published_content_version !== row.content_hash) {
+        if (file && row.published_content_version !== file.contentVersion) {
           publish.push({ novelId, chapterId: safeInteger(row.id, "upserted chapter id", 1), file,
             expectedVersion: row.published_content_version });
         }
@@ -342,9 +351,13 @@ async function publishOwner(libraryRoot: string, owner: PublishedOwner): Promise
   const buffer = await fs.readFile(path.resolve(libraryRoot, owner.file.relativePath));
   const currentHash = createHash("sha256").update(buffer).digest("hex");
   if (currentHash !== owner.file.contentHash) throw new Error(`文件在扫描期间发生变化：${owner.file.relativePath}`);
+  const text = decodeNovelBuffer(buffer);
+  if (contentVersionForText(text) !== owner.file.contentVersion) {
+    throw new Error(`正文在扫描期间发生变化：${owner.file.relativePath}`);
+  }
   await publishPostgresContent({ novelId: owner.novelId, chapterId: owner.chapterId,
     sourceContentVersion: owner.file.contentHash, expectedPublishedVersion: owner.expectedVersion,
-    text: decodeNovelBuffer(buffer) });
+    text });
 }
 
 export async function scanPostgresNovelLibrary(options: { verifyHashes?: boolean } = {}): Promise<PostgresLibraryScanResult> {
@@ -357,6 +370,7 @@ export async function scanPostgresNovelLibrary(options: { verifyHashes?: boolean
   const discovery = await discoverNovels(executor, libraryRoot, known, options.verifyHashes === true, records);
   let insertedOrUpdated = 0;
   let publishedDocuments = 0;
+  let republishedUnchangedDocuments = 0;
   let duplicateCount = 0;
   const duplicateKeys = new Map<string, string>();
   for (const novel of discovery.novels) {
@@ -373,10 +387,12 @@ export async function scanPostgresNovelLibrary(options: { verifyHashes?: boolean
     const result = await upsertNovel(novel, known);
     if (result.changed) insertedOrUpdated += 1;
     for (const owner of result.publish) {
+      if (!owner.file.contentChanged) republishedUnchangedDocuments += 1;
       await publishOwner(libraryRoot, owner);
       publishedDocuments += 1;
     }
   }
   return { books: discovery.novels.length, files: discovery.files, insertedOrUpdated, publishedDocuments,
+    republishedUnchangedDocuments,
     skipped: discovery.skipped + duplicateCount, elapsedMs: Date.now() - startedAt, records };
 }
