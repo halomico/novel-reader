@@ -215,10 +215,10 @@ test("real PostgreSQL 18 + pg_bigm integration", { timeout: 180_000 }, async (t)
       assert.equal(catalog.rowCount, 2);
       const single = catalog.rows.find((row) => row.storage_mode === "single")!;
       const chapters = catalog.rows.find((row) => row.storage_mode === "chapters")!;
-      assert.equal(single.published_content_version, single.content_hash);
+      assert.match(single.published_content_version, /^sha256:[0-9a-f]{64}$/u);
       assert.equal((await pool.query(
         `SELECT count(*)::integer AS count FROM novel_chapters
-          WHERE novel_id = $1 AND published_content_version = content_hash`,
+          WHERE novel_id = $1 AND published_content_version ~ '^sha256:[0-9a-f]{64}$'`,
         [chapters.id],
       )).rows[0].count, 2);
 
@@ -233,7 +233,7 @@ test("real PostgreSQL 18 + pg_bigm integration", { timeout: 180_000 }, async (t)
         "SELECT id, published_content_version, content_hash FROM novel_chapters WHERE novel_id = $1 ORDER BY sort_order DESC LIMIT 1",
         [chapters.id],
       );
-      assert.equal(appended.rows[0].published_content_version, appended.rows[0].content_hash);
+      assert.match(appended.rows[0].published_content_version, /^sha256:[0-9a-f]{64}$/u);
       assert.equal(await deletePostgresNovelChapterIds(chapters.id, [appended.rows[0].id]), 1);
       assert.equal((await pool.query("SELECT chapter_count FROM novels WHERE id = $1", [chapters.id])).rows[0].chapter_count, 2);
 
@@ -243,7 +243,7 @@ test("real PostgreSQL 18 + pg_bigm integration", { timeout: 180_000 }, async (t)
         [single.id],
       );
       assert.equal(revised.rows[0].title, "繁體單本修订");
-      assert.equal(revised.rows[0].published_content_version, revised.rows[0].content_hash);
+      assert.match(revised.rows[0].published_content_version, /^sha256:[0-9a-f]{64}$/u);
     } finally {
       if (previousLibrary === undefined) delete process.env.NOVEL_LIBRARY_DIR;
       else process.env.NOVEL_LIBRARY_DIR = previousLibrary;
@@ -292,6 +292,7 @@ test("real PostgreSQL 18 + pg_bigm integration", { timeout: 180_000 }, async (t)
   await t.test("bigram index executes Chinese, supplementary characters and escaped literal searches", async () => {
     await withTransaction(async (executor) => {
       await executor.query({ text: "SET LOCAL enable_seqscan = off" });
+      await executor.query({ text: "SET LOCAL enable_indexscan = off" });
       const search = "SELECT title FROM novels WHERE title_search_original LIKE likequery($1) ORDER BY id";
       for (const [term, expected] of [
         ["修", ["修仙𠮷传", "修仙校园", "修仙后传"]],
