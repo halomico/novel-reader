@@ -37,7 +37,7 @@ jobs:
             [
               'assert.equal(appended.rows[0].published_content_version, appended.rows[0].content_hash);',
               'assert.match(appended.rows[0].published_content_version, /^sha256:[0-9a-f]{64}$/u);',
-              2
+              1
             ],
             [
               'assert.equal(revised.rows[0].published_content_version, revised.rows[0].content_hash);',
