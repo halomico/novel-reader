@@ -198,18 +198,31 @@ export async function POST(request: NextRequest) {
   const excludedSourceSlugs = Object.entries(settings.novelSourceSearchModes)
     .filter(([, mode]) => mode === "book")
     .map(([slug]) => slug);
-  const page = await searchPostgresContent(database("web"), validation.query, {
+  const searchOptions = {
     novelId,
     sourceSlug: library,
     excludedSourceSlugs,
     includeTagSlugs: filters?.includeTags,
     excludeTagSlugs: filters?.excludeTags,
     titleQuery: titleValidation?.ok ? titleValidation.query : undefined,
-    audience: user?.role === "admin" ? "admin" : user ? "member" : "public",
+    audience: user?.role === "admin" ? "admin" as const : user ? "member" as const : "public" as const,
     cursor: parsed.value.page === undefined ? cursor : undefined,
     offset: parsed.value.page === undefined && cursor ? undefined : (pageInput - 1) * pageSize,
     limit: pageSize,
-  });
+  };
+  let page = await searchPostgresContent(database("web"), validation.query, searchOptions);
+  // The candidate query carries exact totals on result rows. A deliberately
+  // out-of-range OFFSET has no rows, so recover the totals from the first
+  // candidate instead of falsely reporting zero and snapping the UI to page 1.
+  if (parsed.value.page !== undefined && pageInput > 1 && page.items.length === 0 && page.totalItems === 0) {
+    const countProbe = await searchPostgresContent(database("web"), validation.query, {
+      ...searchOptions,
+      cursor: undefined,
+      offset: 0,
+      limit: 1,
+    });
+    page = { ...page, totalItems: countProbe.totalItems, totalNovels: countProbe.totalNovels };
+  }
   const locale = normalizeLocale(request.cookies.get(LOCALE_COOKIE)?.value);
   const items = locale === TRADITIONAL_LOCALE
     ? await Promise.all(page.items.map(async (item) => {
