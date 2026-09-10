@@ -26,29 +26,34 @@ jobs:
           const replacements = [
             [
               'assert.equal(single.published_content_version, single.content_hash);',
-              'assert.match(single.published_content_version, /^sha256:[0-9a-f]{64}$/u);'
+              'assert.match(single.published_content_version, /^sha256:[0-9a-f]{64}$/u);',
+              1
             ],
             [
               "WHERE novel_id = $1 AND published_content_version = content_hash`,",
-              "WHERE novel_id = $1 AND published_content_version ~ '^sha256:[0-9a-f]{64}$'`,"
+              "WHERE novel_id = $1 AND published_content_version ~ '^sha256:[0-9a-f]{64}$'`,",
+              1
             ],
             [
               'assert.equal(appended.rows[0].published_content_version, appended.rows[0].content_hash);',
-              'assert.match(appended.rows[0].published_content_version, /^sha256:[0-9a-f]{64}$/u);'
+              'assert.match(appended.rows[0].published_content_version, /^sha256:[0-9a-f]{64}$/u);',
+              2
             ],
             [
               'assert.equal(revised.rows[0].published_content_version, revised.rows[0].content_hash);',
-              'assert.match(revised.rows[0].published_content_version, /^sha256:[0-9a-f]{64}$/u);'
+              'assert.match(revised.rows[0].published_content_version, /^sha256:[0-9a-f]{64}$/u);',
+              1
             ],
             [
               'await executor.query({ text: "SET LOCAL enable_seqscan = off" });',
-              'await executor.query({ text: "SET LOCAL enable_seqscan = off" });\n      await executor.query({ text: "SET LOCAL enable_indexscan = off" });'
+              'await executor.query({ text: "SET LOCAL enable_seqscan = off" });\n      await executor.query({ text: "SET LOCAL enable_indexscan = off" });',
+              1
             ],
           ];
-          for (const [from, to] of replacements) {
+          for (const [from, to, expected] of replacements) {
             const count = source.split(from).length - 1;
-            if (count !== 1) throw new Error(`Expected exactly one match for ${from}, found ${count}`);
-            source = source.replace(from, to);
+            if (count !== expected) throw new Error(`Expected ${expected} match(es) for ${from}, found ${count}`);
+            source = source.split(from).join(to);
           }
           fs.writeFileSync(path, source);
           NODE
