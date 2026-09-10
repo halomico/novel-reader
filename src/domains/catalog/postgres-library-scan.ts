@@ -27,6 +27,7 @@ type ScannedFile = Readonly<{
   fileName: string;
   relativePath: string;
   contentHash: string;
+  contentVersion: string;
   sizeBytes: number;
   mtimeMs: number;
   wordCount: number;
@@ -40,6 +41,7 @@ type ScannedNovel = Readonly<{
   sourceId: number;
   storageMode: "single" | "chapters";
   contentHash: string;
+  contentVersion: string | null;
   sizeBytes: number;
   mtimeMs: number;
   wordCount: number;
@@ -91,6 +93,14 @@ function sourceSlug(relativePath: string): string {
     .replace(/^-+|-+$/gu, "")
     .slice(0, 54);
   return `${readable || "source"}-${createHash("sha256").update(relativePath).digest("hex").slice(0, 8)}`;
+}
+
+function textContentVersion(text: string): string {
+  return `sha256:${createHash("sha256").update(text, "utf8").digest("hex")}`;
+}
+
+function isTextContentVersion(value: string | null): value is string {
+  return typeof value === "string" && /^sha256:[0-9a-f]{64}$/u.test(value);
 }
 
 async function directTextFiles(directory: string, relativeDirectory: string): Promise<string[]> {
@@ -156,12 +166,14 @@ async function scanFile(
   const fileName = path.posix.basename(relativePath);
   const title = parseNovelTitle(fileName);
   if (!title) throw new Error("文件名解析后的标题为空");
-  if (!verifyHashes && existing?.contentHash && existing.sizeBytes === stat.size && existing.mtimeMs === mtimeMs) {
+  if (!verifyHashes && existing?.contentHash && isTextContentVersion(existing.publishedContentVersion)
+      && existing.sizeBytes === stat.size && existing.mtimeMs === mtimeMs) {
     return {
       title,
       fileName,
       relativePath,
       contentHash: existing.contentHash,
+      contentVersion: existing.publishedContentVersion,
       sizeBytes: existing.sizeBytes,
       mtimeMs,
       wordCount: existing.wordCount,
@@ -170,15 +182,17 @@ async function scanFile(
   }
   const buffer = await fs.readFile(absolutePath);
   if (!buffer.length) throw new Error("文件为空");
+  const text = decodeNovelBuffer(buffer);
   const contentHash = createHash("sha256").update(buffer).digest("hex");
   return {
     title,
     fileName,
     relativePath,
     contentHash,
+    contentVersion: textContentVersion(text),
     sizeBytes: stat.size,
     mtimeMs,
-    wordCount: Array.from(decodeNovelBuffer(buffer).replace(/\s+/gu, "")).length,
+    wordCount: Array.from(text.replace(/\s+/gu, "")).length,
     contentChanged: existing?.contentHash !== contentHash,
   };
 }
@@ -254,6 +268,7 @@ async function discoverNovels(
         sourceId,
         storageMode: "chapters",
         contentHash: chapterAggregateHash(chapters.map((chapter) => ({ relativePath: chapter.relativePath, contentHash: chapter.contentHash }))),
+        contentVersion: null,
         sizeBytes: chapters.reduce((sum, chapter) => sum + chapter.sizeBytes, 0),
         mtimeMs: Math.max(...chapters.map((chapter) => chapter.mtimeMs)),
         wordCount: chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0),
@@ -294,9 +309,9 @@ async function upsertNovel(
     if (novel.storageMode === "single") {
       await tx.query({ text: "DELETE FROM novel_chapters WHERE novel_id = $1", values: [novelId] });
       const file: ScannedFile = { title: novel.title, fileName: novel.fileName, relativePath: novel.relativePath,
-        contentHash: novel.contentHash, sizeBytes: novel.sizeBytes, mtimeMs: novel.mtimeMs,
+        contentHash: novel.contentHash, contentVersion: novel.contentVersion!, sizeBytes: novel.sizeBytes, mtimeMs: novel.mtimeMs,
         wordCount: novel.wordCount, contentChanged: existingNovel?.contentHash !== novel.contentHash };
-      if (result.rows[0].published_content_version !== novel.contentHash) {
+      if (result.rows[0].published_content_version !== file.contentVersion) {
         publish.push({ novelId, chapterId: null, file, expectedVersion: result.rows[0].published_content_version });
       }
     } else {
@@ -325,7 +340,7 @@ async function upsertNovel(
       const files = new Map(novel.chapters.map((chapter) => [chapter.relativePath, chapter]));
       for (const row of chapterResult.rows) {
         const file = files.get(normalizeRelative(row.relative_path));
-        if (file && row.published_content_version !== row.content_hash) {
+        if (file && row.published_content_version !== file.contentVersion) {
           publish.push({ novelId, chapterId: safeInteger(row.id, "upserted chapter id", 1), file,
             expectedVersion: row.published_content_version });
         }
