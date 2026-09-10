@@ -1,0 +1,22 @@
+name: GPT source snapshot v2
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Archive checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD > "$RUNNER_TEMP/SNAPSHOT_HEAD.txt"
+          tar --exclude=.git --exclude=node_modules --exclude=.next -czf "$RUNNER_TEMP/source-snapshot.tgz" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-snapshot-v2-${{ github.sha }}
+          path: ${{ runner.temp }}/source-snapshot.tgz
+          retention-days: 7
