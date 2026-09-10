@@ -138,12 +138,52 @@ jobs:
           cat /tmp/novel-reader-server.log
           exit 1
 
-      - name: Run browser and search benchmark audit
+      - name: Run production browser and search benchmarks
         env:
           NODE_ENV: production
         run: |
           mkdir -p audit-artifacts
-          node scripts/full-system-runtime-audit.mjs | tee audit-artifacts/runtime-audit.log
+          cat > /tmp/runtime-audit.mjs <<'NODE'
+          import fs from 'node:fs/promises';
+          import { performance } from 'node:perf_hooks';
+          import { chromium } from 'playwright';
+          const base = 'http://127.0.0.1:3000';
+          const pct = (a,p) => { const s=[...a].sort((x,y)=>x-y); return s.length ? +s[Math.min(s.length-1,Math.ceil(s.length*p)-1)].toFixed(1) : null; };
+          const stats = a => ({n:a.length,p50Ms:pct(a,.5),p95Ms:pct(a,.95),maxMs:a.length?+Math.max(...a).toFixed(1):null});
+          const browser = await chromium.launch({headless:true});
+          const report={generatedAt:new Date().toISOString(),contexts:{}};
+          for (const c of [{name:'desktop',viewport:{width:1440,height:1000}},{name:'mobile',viewport:{width:390,height:844},isMobile:true,hasTouch:true}]) {
+            const context=await browser.newContext(c); const page=await context.newPage();
+            const consoleErrors=[],pageErrors=[],requestFailures=[];
+            page.on('console',m=>{if(m.type()==='error') consoleErrors.push({url:page.url(),text:m.text()});});
+            page.on('pageerror',e=>pageErrors.push({url:page.url(),message:e.message}));
+            page.on('requestfailed',r=>requestFailures.push({url:r.url(),failure:r.failure()?.errorText}));
+            const routes={};
+            for (const route of ['/', '/novels', '/tags', '/search?q=%E4%BF%AE%E4%BB%99', '/original', '/announcements']) {
+              const times=[],statuses=[];
+              for(let i=0;i<3;i++){const t=performance.now();const r=await page.goto(base+route,{waitUntil:'networkidle',timeout:30000});times.push(performance.now()-t);statuses.push(r?.status()??null);}
+              routes[route]={...stats(times),statuses};
+            }
+            const apiSearch=async body=>page.evaluate(async body=>{const t=performance.now();const r=await fetch('/api/search/content',{method:'POST',headers:{'Content-Type':'application/json','X-Novel-Mutation':'1'},body:JSON.stringify(body),cache:'no-store'});const d=await r.json().catch(()=>({}));return {elapsedMs:performance.now()-t,status:r.status,ok:r.ok&&d.ok===true,totalItems:d.totalItems??null,totalNovels:d.totalNovels??null,totalPages:d.totalPages??null,nextCursor:d.nextCursor??null,itemCount:Array.isArray(d.items)?d.items.length:null,message:d.message??null};},body);
+            await page.goto(base+'/search?q=%E4%BF%AE%E4%BB%99',{waitUntil:'networkidle',timeout:30000});
+            const offset={};
+            for(const p of [1,2,10,50,100]){const rs=[];for(let i=0;i<6;i++)rs.push(await apiSearch({q:'修仙',library:'default',page:p}));offset[p]={latency:stats(rs.map(x=>x.elapsedMs)),status:[...new Set(rs.map(x=>x.status))],ok:rs.every(x=>x.ok),totalPages:rs[0]?.totalPages};}
+            const cursorSamples={1:[],2:[],10:[],50:[],100:[]};
+            for(let pass=0;pass<3;pass++){let cursor=null;for(let p=1;p<=100;p++){const r=await apiSearch({q:'修仙',library:'default',...(cursor?{cursor}:{page:1})});if(cursorSamples[p])cursorSamples[p].push(r.elapsedMs);if(!r.ok||!r.nextCursor)break;cursor=r.nextCursor;}}
+            const cursor=Object.fromEntries(Object.entries(cursorSamples).map(([p,a])=>[p,stats(a)]));
+            const click={};
+            await page.goto(base,{waitUntil:'networkidle',timeout:30000});
+            const link=page.locator('a[href$="/novels"],a[href*="/novels?"]').first();
+            if(await link.count()){const t=performance.now();await Promise.all([page.waitForURL(u=>u.pathname.endsWith('/novels'),{timeout:15000}),link.click()]);click.homeToNovelsUrlMs=+(performance.now()-t).toFixed(1);await page.waitForLoadState('networkidle');}
+            report.contexts[c.name]={routes,searchOffset:offset,searchCursor:cursor,navigation:click,consoleErrors,pageErrors,requestFailures};
+            await context.close();
+          }
+          await browser.close();
+          await fs.writeFile('audit-artifacts/runtime-audit.json',JSON.stringify(report,null,2));
+          console.log(JSON.stringify(report,null,2));
+          if(Object.values(report.contexts).some(x=>x.pageErrors.length)) process.exitCode=2;
+          NODE
+          node /tmp/runtime-audit.mjs | tee audit-artifacts/runtime-audit.log
 
       - name: Capture database explain plans
         if: always()
