@@ -33,7 +33,6 @@ type SearchApiResponse = {
   ok: boolean;
   message?: string;
   items?: PostgresContentSearchItem[];
-  nextCursor?: string | null;
   totalItems?: number;
   totalNovels?: number;
   totalPages?: number;
@@ -84,12 +83,10 @@ export function ContentSearchClient({
   const queryKey = `${keyword}::${library}::${novelId ?? ""}::${requestFiltersKey}`;
   const [prevQueryKey, setPrevQueryKey] = useState(queryKey);
   const [page, setPage] = useState(() => Math.max(1, initialPage));
-  const cursorByPageRef = useRef<Map<number, string>>(new Map());
 
   if (prevQueryKey !== queryKey) {
     setPrevQueryKey(queryKey);
     setPage(Math.max(1, initialPage));
-    cursorByPageRef.current = new Map();
   }
 
   const [items, setItems] = useState<PostgresContentSearchItem[]>([]);
@@ -101,7 +98,6 @@ export function ContentSearchClient({
 
   useEffect(() => {
     const controller = new AbortController();
-    const cursor = page > 1 ? cursorByPageRef.current.get(page) : undefined;
     setLoading(true);
     setMessage("");
     void fetch("/api/search/content", {
@@ -111,7 +107,7 @@ export function ContentSearchClient({
         q: keyword,
         library,
         novelId,
-        ...(cursor ? { cursor } : { page }),
+        page,
         ...(requestFiltersKey === "null" ? {} : { filters: JSON.parse(requestFiltersKey) }),
       }),
       cache: "no-store",
@@ -129,11 +125,6 @@ export function ContentSearchClient({
         updateHistory(resultPages, true);
         setPage(resultPages);
         return;
-      }
-      if (typeof data.nextCursor === "string" && data.nextCursor) {
-        cursorByPageRef.current.set(page + 1, data.nextCursor);
-      } else {
-        cursorByPageRef.current.delete(page + 1);
       }
       setItems(data.items);
       setTotalNovels(Number(data.totalNovels));
