@@ -1,0 +1,116 @@
+name: GPT full audit v2
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  audit-v2:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      DATABASE_URL: postgresql://postgres:audit-only@127.0.0.1:55433/novel_reader
+      SITE_URL: http://127.0.0.1:3000
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: mkdir -p audit-results-v2 && npm ci
+
+      - name: Start PostgreSQL
+        shell: bash
+        run: |
+          set -e
+          docker build --pull -f docker/postgres/Dockerfile -t audit-pg-v2 . > audit-results-v2/pg-build.log 2>&1
+          docker run -d --name audit-pg-v2 --memory=4g --cpus=2 -p 127.0.0.1:55433:5432 --env POSTGRES_PASSWORD=audit-only --env POSTGRES_DB=novel_reader --env POSTGRES_INITDB_ARGS='--encoding=UTF8 --locale=C' audit-pg-v2
+          for i in $(seq 1 40); do docker exec audit-pg-v2 pg_isready -U postgres -d novel_reader && break; sleep 1; done
+          npm run db:pg:init > audit-results-v2/db-init.log 2>&1
+
+      - name: Seed representative Chinese corpus
+        shell: bash
+        run: |
+          set +e
+          cat > /tmp/seed.sql <<'SQL'
+          \timing on
+          SET statement_timeout='20min';
+          INSERT INTO novel_sources(id,slug,name,relative_path) OVERRIDING SYSTEM VALUE VALUES (900001,'audit','审计','audit') ON CONFLICT DO NOTHING;
+          INSERT INTO novels(id,title,title_search_original,title_search_hans,normalization_version,description,file_name,relative_path,source_id,storage_mode,content_hash,published_content_version,size_bytes,mtime_ms,word_count)
+          OVERRIDING SYSTEM VALUE VALUES (900001,'审计长篇','审计长篇',NULL,2,'','audit.txt','audit/audit.txt',900001,'single',repeat('a',64),'sha256:audit',180000000,999999999999,60000000) ON CONFLICT DO NOTHING;
+          INSERT INTO novel_documents(id,novel_id,chapter_id,active_generation,active_content_version,normalization_version,state,next_generation)
+          OVERRIDING SYSTEM VALUE VALUES (900001,900001,NULL,1,'sha256:audit',2,'ready',2) ON CONFLICT DO NOTHING;
+          INSERT INTO novel_content_generations(document_id,generation,build_token,source_content_version,expected_published_version,content_version,normalization_version,total_utf16_length,stored_utf16_length,block_count,state)
+          VALUES (900001,1,'00000000-0000-0000-0000-000000000001',repeat('a',64),NULL,'sha256:audit',2,60000000,60000000,50000,'published') ON CONFLICT DO NOTHING;
+          INSERT INTO novel_content_blocks(document_id,generation,block_no,char_start,char_end,search_window_start,search_window_end,original_text,search_text_original,search_text_hans)
+          SELECT 900001,1,g,g*1200,(g+1)*1200,g*1200,(g+1)*1200,
+                 left(repeat(CASE g%10 WHEN 0 THEN '天地玄黄宇宙洪荒修仙大道龙门江湖剑气长生' WHEN 1 THEN '春风秋月山河故人红尘烟雨神州故事少年归来' WHEN 2 THEN '宗门秘境灵石丹药境界突破仙人飞升天劫' WHEN 3 THEN '皇城天下将军谋士江山社稷烽火诸侯' WHEN 4 THEN '星河宇宙文明舰队未来科技人工智能' WHEN 5 THEN '爱情亲情友情生活城市校园青春岁月' WHEN 6 THEN '案件真相警察律师法医线索推理悬疑' WHEN 7 THEN '游戏副本玩家装备技能公会竞技比赛' WHEN 8 THEN '历史朝代帝王百姓战争和平改革制度' ELSE '海洋森林动物植物自然生态旅行世界' END,80),1200),
+                 left(repeat(CASE g%10 WHEN 0 THEN '天地玄黄宇宙洪荒修仙大道龙门江湖剑气长生' WHEN 1 THEN '春风秋月山河故人红尘烟雨神州故事少年归来' WHEN 2 THEN '宗门秘境灵石丹药境界突破仙人飞升天劫' WHEN 3 THEN '皇城天下将军谋士江山社稷烽火诸侯' WHEN 4 THEN '星河宇宙文明舰队未来科技人工智能' WHEN 5 THEN '爱情亲情友情生活城市校园青春岁月' WHEN 6 THEN '案件真相警察律师法医线索推理悬疑' WHEN 7 THEN '游戏副本玩家装备技能公会竞技比赛' WHEN 8 THEN '历史朝代帝王百姓战争和平改革制度' ELSE '海洋森林动物植物自然生态旅行世界' END,80),1200),NULL
+          FROM generate_series(0,49999) g ON CONFLICT DO NOTHING;
+          ANALYZE novel_content_blocks;
+          SELECT count(*) blocks FROM novel_content_blocks WHERE document_id=900001;
+          SELECT pg_relation_size('novel_content_blocks') heap_bytes,pg_indexes_size('novel_content_blocks') index_bytes,pg_total_relation_size('novel_content_blocks') total_bytes;
+          SELECT pg_size_pretty(pg_relation_size('novel_content_blocks')) heap,pg_size_pretty(pg_indexes_size('novel_content_blocks')) indexes,pg_size_pretty(pg_total_relation_size('novel_content_blocks')) total;
+          SQL
+          /usr/bin/time -v docker exec -i audit-pg-v2 psql -U postgres -d novel_reader < /tmp/seed.sql > audit-results-v2/seed.log 2> audit-results-v2/seed.time
+          echo $? > audit-results-v2/seed.exit
+          docker stats --no-stream audit-pg-v2 > audit-results-v2/pg-after-seed.txt 2>&1
+          exit 0
+
+      - name: Search latency EXPLAIN ANALYZE
+        shell: bash
+        run: |
+          set +e
+          cat > /tmp/search.sql <<'SQL'
+          \timing on
+          SET statement_timeout='60s';
+          \echo single_common
+          EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT DISTINCT document_id,generation FROM novel_content_blocks WHERE search_text_original LIKE '%修仙%';
+          \echo single_other
+          EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT DISTINCT document_id,generation FROM novel_content_blocks WHERE search_text_original LIKE '%法医%';
+          \echo two_terms
+          EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT document_id,generation FROM novel_content_blocks WHERE search_text_original LIKE '%修仙%' INTERSECT SELECT document_id,generation FROM novel_content_blocks WHERE search_text_original LIKE '%龙门%';
+          \echo three_terms
+          EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT document_id,generation FROM novel_content_blocks WHERE search_text_original LIKE '%修仙%' INTERSECT SELECT document_id,generation FROM novel_content_blocks WHERE search_text_original LIKE '%龙门%' INTERSECT SELECT document_id,generation FROM novel_content_blocks WHERE search_text_original LIKE '%长生%';
+          \echo qualified_count_shape
+          EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) WITH matched_docs AS MATERIALIZED (SELECT DISTINCT document_id,generation FROM novel_content_blocks WHERE search_text_original LIKE '%修仙%'), qualified AS MATERIALIZED (SELECT d.id document_id,d.novel_id,d.chapter_id,d.active_generation,n.mtime_ms FROM matched_docs m JOIN novel_documents d ON d.id=m.document_id AND d.active_generation=m.generation JOIN novels n ON n.id=d.novel_id JOIN novel_content_generations g ON g.document_id=d.id AND g.generation=d.active_generation AND g.state='published' WHERE d.state='ready' AND d.active_generation>0), match_counts AS MATERIALIZED (SELECT count(*) total_items,count(distinct novel_id) total_novels FROM qualified) SELECT * FROM match_counts;
+          SQL
+          for run in 1 2 3 4 5; do echo RUN=$run >> audit-results-v2/search.log; docker exec -i audit-pg-v2 psql -U postgres -d novel_reader < /tmp/search.sql >> audit-results-v2/search.log 2>&1; done
+          docker stats --no-stream audit-pg-v2 > audit-results-v2/pg-after-search.txt 2>&1
+          exit 0
+
+      - name: Start app in dev fallback and test pages
+        shell: bash
+        run: |
+          set +e
+          NODE_ENV=development PORT=3000 npm run dev > audit-results-v2/app.log 2>&1 &
+          echo $! > audit-results-v2/app.pid
+          for i in $(seq 1 80); do curl -fsS http://127.0.0.1:3000/api/live >/dev/null && break; sleep 1; done
+          ps -o pid,rss,vsz,pcpu,pmem,etime,cmd -p $(cat audit-results-v2/app.pid) > audit-results-v2/app-process.txt 2>&1
+          for path in / /search /original /api/live /api/health /api/ready /api/version; do
+            echo PATH=$path >> audit-results-v2/http.txt
+            for i in $(seq 1 10); do curl -sS -o /dev/null -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}\n' http://127.0.0.1:3000${path} >> audit-results-v2/http.txt; done
+          done
+          npm install --no-save --package-lock=false playwright@1.55.0 > audit-results-v2/playwright-install.log 2>&1
+          npx playwright install chromium >> audit-results-v2/playwright-install.log 2>&1
+          cat > browser-audit.cjs <<'JS'
+          const { chromium }=require('playwright'); const fs=require('fs');
+          (async()=>{const b=await chromium.launch({headless:true}); const p=await b.newPage(); const out={pageErrors:[],consoleErrors:[],routes:[],clicks:[]};
+          p.on('pageerror',e=>out.pageErrors.push(String(e))); p.on('console',m=>{if(m.type()==='error')out.consoleErrors.push(m.text())});
+          for(const route of ['/','/search','/original']){const s=performance.now();let status=null,err=null;try{const r=await p.goto('http://127.0.0.1:3000'+route,{waitUntil:'networkidle',timeout:30000});status=r?.status()}catch(e){err=String(e)} out.routes.push({route,status,ms:performance.now()-s,err});
+          const n=await p.locator('button:visible').count().catch(()=>0); for(let i=0;i<Math.min(n,40);i++){const q=p.locator('button:visible').nth(i); const label=(await q.innerText().catch(()=>'' )).slice(0,100); const t=performance.now(); try{await q.click({timeout:2000});await p.waitForTimeout(120);out.clicks.push({route,label,ms:performance.now()-t,ok:true})}catch(e){out.clicks.push({route,label,ms:performance.now()-t,ok:false,error:String(e).slice(0,200)})}}
+          } fs.writeFileSync('audit-results-v2/browser.json',JSON.stringify(out,null,2)); await b.close()})().catch(e=>fs.writeFileSync('audit-results-v2/browser-fatal.txt',String(e)));
+          JS
+          node browser-audit.cjs
+          exit 0
+
+      - name: Upload v2 results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpt-full-audit-v2-${{ github.sha }}
+          path: audit-results-v2/
+          retention-days: 7
