@@ -1,0 +1,205 @@
+name: GPT full audit
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://postgres:audit-only@127.0.0.1:55432/novel_reader
+      SITE_URL: http://127.0.0.1:3000
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - name: Host baseline
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p audit-results
+          { uname -a; echo; free -h; echo; df -h; echo; nproc; node -v; npm -v; } | tee audit-results/host.txt
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set +e
+          /usr/bin/time -v npm ci > audit-results/npm-ci.log 2> audit-results/npm-ci.time
+          echo $? > audit-results/npm-ci.exit
+          exit 0
+
+      - name: Dependency audit
+        shell: bash
+        run: |
+          set +e
+          npm audit --omit=dev --json > audit-results/npm-audit.json 2> audit-results/npm-audit.err
+          echo $? > audit-results/npm-audit.exit
+          exit 0
+
+      - name: Typecheck tests build
+        shell: bash
+        run: |
+          set +e
+          /usr/bin/time -v npm run typecheck > audit-results/typecheck.log 2> audit-results/typecheck.time
+          echo $? > audit-results/typecheck.exit
+          /usr/bin/time -v npm test > audit-results/tests.log 2> audit-results/tests.time
+          echo $? > audit-results/tests.exit
+          /usr/bin/time -v python3 -m unittest discover -s scripts -p 'test_*.py' -v > audit-results/python-tests.log 2>&1
+          echo $? > audit-results/python-tests.exit
+          /usr/bin/time -v npm run build > audit-results/build.log 2> audit-results/build.time
+          echo $? > audit-results/build.exit
+          exit 0
+
+      - name: Start PostgreSQL 18 plus pg_bigm
+        shell: bash
+        run: |
+          set +e
+          /usr/bin/time -v docker build --pull -f docker/postgres/Dockerfile -t audit-pg-image . > audit-results/pg-image-build.log 2> audit-results/pg-image-build.time
+          docker run -d --name audit-pg --memory=4g --cpus=2 -p 127.0.0.1:55432:5432 --env POSTGRES_PASSWORD=audit-only --env POSTGRES_DB=novel_reader --env POSTGRES_INITDB_ARGS='--encoding=UTF8 --locale=C' audit-pg-image > audit-results/pg-container.txt
+          for i in $(seq 1 40); do docker exec audit-pg pg_isready -U postgres -d novel_reader && break; sleep 1; done
+          docker stats --no-stream audit-pg > audit-results/pg-stats-start.txt 2>&1
+          exit 0
+
+      - name: PostgreSQL integration tests
+        shell: bash
+        run: |
+          set +e
+          export PG_INTEGRATION_ADMIN_URL=postgresql://postgres:audit-only@127.0.0.1:55432/postgres
+          /usr/bin/time -v npm run test:postgres > audit-results/postgres-tests.log 2> audit-results/postgres-tests.time
+          echo $? > audit-results/postgres-tests.exit
+          exit 0
+
+      - name: Initialize audit database
+        shell: bash
+        run: |
+          set +e
+          /usr/bin/time -v npm run db:pg:init > audit-results/db-init.log 2> audit-results/db-init.time
+          echo $? > audit-results/db-init.exit
+          exit 0
+
+      - name: Chinese search storage and latency benchmark
+        shell: bash
+        run: |
+          set +e
+          cat > /tmp/bench.sql <<'SQL'
+          \timing on
+          SET statement_timeout = '10min';
+          INSERT INTO novel_sources(id,slug,name,relative_path) OVERRIDING SYSTEM VALUE VALUES (900001,'audit','审计','audit') ON CONFLICT DO NOTHING;
+          INSERT INTO novels(id,title,title_search_original,title_search_hans,normalization_version,description,file_name,relative_path,source_id,storage_mode,content_hash,published_content_version,size_bytes,mtime_ms,word_count)
+          OVERRIDING SYSTEM VALUE VALUES (900001,'审计长篇','审计长篇',NULL,2,'','audit.txt','audit/audit.txt',900001,'single',repeat('a',64),'sha256:audit',0,999999999999,60000000) ON CONFLICT DO NOTHING;
+          INSERT INTO novel_documents(id,novel_id,chapter_id,active_generation,active_content_version,normalization_version,state,next_generation)
+          OVERRIDING SYSTEM VALUE VALUES (900001,900001,NULL,1,'sha256:audit',2,'ready',2) ON CONFLICT DO NOTHING;
+          INSERT INTO novel_content_generations(document_id,generation,build_token,source_content_version,expected_published_version,content_version,normalization_version,total_utf16_length,stored_utf16_length,block_count,state)
+          VALUES (900001,1,'00000000-0000-0000-0000-000000000001',repeat('a',64),NULL,'sha256:audit',2,60000000,60000000,50000,'published') ON CONFLICT DO NOTHING;
+          \echo seed_begin
+          INSERT INTO novel_content_blocks(document_id,generation,block_no,char_start,char_end,search_window_start,search_window_end,original_text,search_source_text,search_text_original,search_text_hans)
+          SELECT 900001,1,g,g*1200,(g+1)*1200,g*1200,(g+1)*1200,
+                 left(repeat(CASE g%10 WHEN 0 THEN '天地玄黄宇宙洪荒修仙大道龙门江湖剑气长生' WHEN 1 THEN '春风秋月山河故人红尘烟雨神州故事少年归来' WHEN 2 THEN '宗门秘境灵石丹药境界突破仙人飞升天劫' WHEN 3 THEN '皇城天下将军谋士江山社稷烽火诸侯' WHEN 4 THEN '星河宇宙文明舰队未来科技人工智能' WHEN 5 THEN '爱情亲情友情生活城市校园青春岁月' WHEN 6 THEN '案件真相警察律师法医线索推理悬疑' WHEN 7 THEN '游戏副本玩家装备技能公会竞技比赛' WHEN 8 THEN '历史朝代帝王百姓战争和平改革制度' ELSE '海洋森林动物植物自然生态旅行世界' END,80),1200),
+                 left(repeat(CASE g%10 WHEN 0 THEN '天地玄黄宇宙洪荒修仙大道龙门江湖剑气长生' WHEN 1 THEN '春风秋月山河故人红尘烟雨神州故事少年归来' WHEN 2 THEN '宗门秘境灵石丹药境界突破仙人飞升天劫' WHEN 3 THEN '皇城天下将军谋士江山社稷烽火诸侯' WHEN 4 THEN '星河宇宙文明舰队未来科技人工智能' WHEN 5 THEN '爱情亲情友情生活城市校园青春岁月' WHEN 6 THEN '案件真相警察律师法医线索推理悬疑' WHEN 7 THEN '游戏副本玩家装备技能公会竞技比赛' WHEN 8 THEN '历史朝代帝王百姓战争和平改革制度' ELSE '海洋森林动物植物自然生态旅行世界' END,80),1200),
+                 left(repeat(CASE g%10 WHEN 0 THEN '天地玄黄宇宙洪荒修仙大道龙门江湖剑气长生' WHEN 1 THEN '春风秋月山河故人红尘烟雨神州故事少年归来' WHEN 2 THEN '宗门秘境灵石丹药境界突破仙人飞升天劫' WHEN 3 THEN '皇城天下将军谋士江山社稷烽火诸侯' WHEN 4 THEN '星河宇宙文明舰队未来科技人工智能' WHEN 5 THEN '爱情亲情友情生活城市校园青春岁月' WHEN 6 THEN '案件真相警察律师法医线索推理悬疑' WHEN 7 THEN '游戏副本玩家装备技能公会竞技比赛' WHEN 8 THEN '历史朝代帝王百姓战争和平改革制度' ELSE '海洋森林动物植物自然生态旅行世界' END,80),1200),NULL
+          FROM generate_series(0,49999) g ON CONFLICT DO NOTHING;
+          \echo seed_done
+          ANALYZE novel_content_blocks;
+          SELECT pg_size_pretty(pg_relation_size('novel_content_blocks')) heap,
+                 pg_size_pretty(pg_indexes_size('novel_content_blocks')) indexes,
+                 pg_size_pretty(pg_total_relation_size('novel_content_blocks')) total,
+                 pg_relation_size('novel_content_blocks') heap_bytes,
+                 pg_indexes_size('novel_content_blocks') index_bytes,
+                 pg_total_relation_size('novel_content_blocks') total_bytes;
+          \echo common_single
+          EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT count(DISTINCT document_id) FROM novel_content_blocks WHERE search_text_original LIKE '%修仙%';
+          \echo uncommon_single
+          EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT count(DISTINCT document_id) FROM novel_content_blocks WHERE search_text_original LIKE '%法医%';
+          \echo two_terms
+          EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT document_id,generation FROM novel_content_blocks WHERE search_text_original LIKE '%修仙%' INTERSECT SELECT document_id,generation FROM novel_content_blocks WHERE search_text_original LIKE '%龙门%';
+          \echo three_terms
+          EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT document_id,generation FROM novel_content_blocks WHERE search_text_original LIKE '%修仙%' INTERSECT SELECT document_id,generation FROM novel_content_blocks WHERE search_text_original LIKE '%龙门%' INTERSECT SELECT document_id,generation FROM novel_content_blocks WHERE search_text_original LIKE '%长生%';
+          SQL
+          /usr/bin/time -v docker exec -i audit-pg psql -U postgres -d novel_reader < /tmp/bench.sql > audit-results/search-bench.log 2> audit-results/search-bench.time
+          echo $? > audit-results/search-bench.exit
+          docker stats --no-stream audit-pg > audit-results/pg-stats-after-search.txt 2>&1
+          docker exec audit-pg psql -U postgres -d novel_reader -Atc "select datname,pg_size_pretty(pg_database_size(datname)),pg_database_size(datname) from pg_database where datname='novel_reader'" > audit-results/db-size.txt 2>&1
+          exit 0
+
+      - name: Production app smoke and HTTP latency
+        shell: bash
+        run: |
+          set +e
+          if [ "$(cat audit-results/build.exit 2>/dev/null)" != "0" ]; then echo 'build failed; app smoke skipped' > audit-results/app-smoke.log; exit 0; fi
+          cat > .env <<EOF
+          DATABASE_URL=${DATABASE_URL}
+          SITE_URL=${SITE_URL}
+          NODE_ENV=production
+          EOF
+          PORT=3000 HOSTNAME=127.0.0.1 node .next/standalone/server.js > audit-results/app-server.log 2>&1 &
+          echo $! > audit-results/app.pid
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:3000/api/live >/dev/null && break; sleep 1; done
+          ps -o pid,rss,vsz,pcpu,pmem,etime,cmd -p $(cat audit-results/app.pid) > audit-results/app-process.txt 2>&1
+          for path in / /search /original /api/live /api/health /api/ready /api/version; do
+            echo "PATH $path" >> audit-results/http-latency.txt
+            for i in $(seq 1 10); do curl -sS -o /dev/null -w '%{http_code} %{time_namelookup} %{time_connect} %{time_starttransfer} %{time_total} %{size_download}\n' "http://127.0.0.1:3000${path}" >> audit-results/http-latency.txt; done
+          done
+          exit 0
+
+      - name: Browser interaction audit
+        shell: bash
+        run: |
+          set +e
+          if ! curl -fsS http://127.0.0.1:3000/api/live >/dev/null; then echo 'app unavailable' > audit-results/browser.json; exit 0; fi
+          npm install --no-save --package-lock=false playwright@1.55.0 > audit-results/playwright-install.log 2>&1
+          npx playwright install chromium >> audit-results/playwright-install.log 2>&1
+          cat > /tmp/browser-audit.cjs <<'JS'
+          const { chromium } = require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            const page=await browser.newPage();
+            const out={pageErrors:[],consoleErrors:[],routes:[],clicks:[]};
+            page.on('pageerror',e=>out.pageErrors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error')out.consoleErrors.push(m.text())});
+            const routes=['/','/search','/original'];
+            for(const route of routes){
+              const t=Date.now(); let status=null,err=null;
+              try{const r=await page.goto('http://127.0.0.1:3000'+route,{waitUntil:'networkidle',timeout:20000});status=r&&r.status();}catch(e){err=String(e)}
+              out.routes.push({route,status,ms:Date.now()-t,err});
+              const buttons=await page.locator('button:visible').count().catch(()=>0);
+              for(let i=0;i<Math.min(buttons,30);i++){
+                const b=page.locator('button:visible').nth(i); const label=(await b.innerText().catch(()=>'' )).slice(0,80); const start=Date.now();
+                try{await b.click({timeout:1500}); await page.waitForTimeout(100); out.clicks.push({route,label,ms:Date.now()-start,ok:true});}
+                catch(e){out.clicks.push({route,label,ms:Date.now()-start,ok:false,error:String(e).slice(0,180)});}
+              }
+            }
+            require('fs').writeFileSync('audit-results/browser.json',JSON.stringify(out,null,2));
+            await browser.close();
+          })().catch(e=>{require('fs').writeFileSync('audit-results/browser-fatal.txt',String(e));process.exitCode=0});
+          JS
+          node /tmp/browser-audit.cjs
+          exit 0
+
+      - name: Final resource snapshot
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          free -h > audit-results/free-final.txt
+          df -h > audit-results/df-final.txt
+          docker stats --no-stream > audit-results/docker-stats-final.txt 2>&1
+          docker logs audit-pg > audit-results/postgres-container.log 2>&1
+          exit 0
+
+      - name: Upload audit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpt-full-audit-${{ github.sha }}
+          path: audit-results/
+          retention-days: 7
