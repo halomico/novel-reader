@@ -20,7 +20,6 @@ jobs:
       NOVEL_LIBRARY_DIR: ${{ github.workspace }}/library/books
       DATABASE_URL: postgresql://postgres:integration-only@127.0.0.1:55432/postgres
       PG_MIGRATION_DATABASE_URL: postgresql://postgres:integration-only@127.0.0.1:55432/postgres
-      NODE_ENV: production
       RATE_LIMIT_IDENTITY_SECRET: audit-rate-limit-identity-secret-0123456789abcdef
       ENGAGEMENT_HASH_SECRET: audit-engagement-hash-secret-0123456789abcdef
       MARKET_SECRET_KEY: audit-market-secret-key-0123456789abcdef
@@ -115,6 +114,8 @@ jobs:
         run: npm run build
 
       - name: Start production server
+        env:
+          NODE_ENV: production
         run: |
           node .next/standalone/server.js > /tmp/novel-reader-server.log 2>&1 &
           echo $! > /tmp/novel-reader-server.pid
@@ -126,6 +127,8 @@ jobs:
           exit 1
 
       - name: Run browser and search benchmark audit
+        env:
+          NODE_ENV: production
         run: |
           mkdir -p audit-artifacts
           node scripts/full-system-runtime-audit.mjs | tee audit-artifacts/runtime-audit.log
@@ -133,12 +136,14 @@ jobs:
       - name: Capture database explain plans
         if: always()
         run: |
+          mkdir -p audit-artifacts
           docker exec novel-reader-pg-audit psql -U postgres -d postgres -c "EXPLAIN (ANALYZE, BUFFERS) SELECT count(*) FROM novel_content_blocks WHERE search_text_original LIKE '%修仙%';" > audit-artifacts/explain-bigram.txt || true
           docker exec novel-reader-pg-audit psql -U postgres -d postgres -c "SELECT relname, pg_size_pretty(pg_total_relation_size(oid)) FROM pg_class WHERE relname IN ('novels','novel_documents','novel_content_blocks','novel_content_blocks_original_idx') ORDER BY relname;" > audit-artifacts/db-sizes.txt || true
 
       - name: Capture server and database logs
         if: always()
         run: |
+          mkdir -p audit-artifacts
           cp /tmp/novel-reader-server.log audit-artifacts/server.log 2>/dev/null || true
           docker logs novel-reader-pg-audit > audit-artifacts/postgres.log 2>&1 || true
 
