@@ -1,4 +1,7 @@
-import { mediaFilePath, saveMediaDuration, type MediaAsset } from "./media";
+import { database } from "@/core/db/postgres";
+import type { MediaAsset } from "@/domains/media/media-model";
+import { mediaFilePath } from "@/domains/media/media-storage-model";
+import { savePostgresMediaDuration } from "@/domains/media/postgres-media-admin";
 import { probeRemoteMediaDuration } from "./media-node-client";
 import { probeMediaDurationFile } from "./media-processing";
 import {
@@ -36,7 +39,9 @@ export function ensureMediaDuration(asset: MediaAsset): Promise<number> {
           storageNodeId: resolveRemoteMediaNodeForAsset(asset.storageNodeId, asset.kind).id,
         })
       : await probeMediaDurationFile(mediaFilePath(asset.storedName));
-    saveMediaDuration(asset.id, duration);
+    if (!await savePostgresMediaDuration(database("jobs"), asset.id, duration)) {
+      throw new Error("媒体文件在时长探测期间发生变化");
+    }
     return duration;
   });
   state.mediaDurationQueue = job.then(() => undefined, () => undefined);

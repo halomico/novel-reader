@@ -4,9 +4,11 @@ import { clearReaderPaperPreference } from "./reader-theme-client";
 import {
   COLOR_PALETTES,
   DEFAULT_READER_LINE_HEIGHT,
+  DEFAULT_READER_PAGE_TURN,
   DEFAULT_READER_WIDTH,
   getReaderThemeSystemTheme,
   getColorPalette,
+  getColorPaletteTextTokens,
   isColorPalette,
   normalizeReaderLineHeight,
   normalizeReaderJustify,
@@ -23,20 +25,58 @@ import {
 } from "./ui-preferences";
 import { splitReaderParagraphs } from "./reader-layout";
 
-test("ships 21 unique local palettes with Default first and Cinnabar available", () => {
+function relativeLuminance(hex: string): number {
+  const channels = [1, 3, 5].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16) / 255);
+  const linear = channels.map((value) => (
+    value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  ));
+  return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+}
+
+function contrastRatio(foreground: string, background: string): number {
+  const foregroundLuminance = relativeLuminance(foreground);
+  const backgroundLuminance = relativeLuminance(background);
+  return (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) /
+    (Math.min(foregroundLuminance, backgroundLuminance) + 0.05);
+}
+
+test("ships 32 unique local palettes with Default first and Cinnabar and modern additions available", () => {
   const values = COLOR_PALETTES.map((palette) => palette.value);
 
-  assert.equal(COLOR_PALETTES.length, 21);
-  assert.equal(new Set(values).size, 21);
+  assert.equal(COLOR_PALETTES.length, 32);
+  assert.equal(new Set(values).size, 32);
   assert.equal(COLOR_PALETTES[0].value, "default");
-  assert.equal(COLOR_PALETTES[0].label, "Default");
-  assert.equal(getColorPalette("default").lightAccent, "#9f3142");
-  assert.equal(getColorPalette("default").darkAccent, "#b65d2d");
+  assert.equal(COLOR_PALETTES[0].label, "GitHub");
+  assert.equal(getColorPalette("default").lightAccent, "#0969da");
+  assert.equal(getColorPalette("default").darkAccent, "#4493f8");
   assert.equal(isColorPalette("journal"), false);
   assert.equal(isColorPalette("united"), false);
   assert.equal(isColorPalette("default"), true);
-  assert.equal(getColorPalette("cinnabar").lightAccent, "#e5353e");
+  assert.equal(getColorPalette("cinnabar").lightAccent, "#cb3a2a");
+  assert.equal(isColorPalette("nord"), true);
+  assert.equal(getColorPalette("nord").lightAccent, "#5e81ac");
+  assert.equal(isColorPalette("tokyo"), true);
+  assert.equal(isColorPalette("catppuccin"), true);
+  assert.equal(isColorPalette("gruvbox"), true);
+  assert.equal(isColorPalette("mintglass"), true);
+  assert.equal(getColorPalette("mintglass").lightAccent, "#087f5b");
   assert.equal(isColorPalette("unknown"), false);
+});
+
+test("keeps every palette's small-text accent at WCAG AA contrast on theme backgrounds and surfaces", () => {
+  for (const palette of COLOR_PALETTES) {
+    const tokens = getColorPaletteTextTokens(palette);
+    assert.equal(
+      Math.min(contrastRatio(tokens.lightText, "#f6f7f8"), contrastRatio(tokens.lightText, "#ffffff")) >= 4.5,
+      true,
+      `${palette.value} light text accent must reach 4.5:1`,
+    );
+    assert.equal(
+      Math.min(contrastRatio(tokens.darkText, "#15191c"), contrastRatio(tokens.darkText, "#20262a")) >= 4.5,
+      true,
+      `${palette.value} dark text accent must reach 4.5:1`,
+    );
+  }
 });
 
 test("resolves a stable default palette for each configured time bucket", () => {
@@ -76,6 +116,7 @@ test("provides 0.8 through 2.5 reader line heights in 0.1 steps", () => {
 test("keeps reader width and page-turn preferences within the supported lightweight options", () => {
   assert.deepEqual(READER_WIDTHS, ["auto", 640, 800, 900, 1000, 1280]);
   assert.equal(DEFAULT_READER_WIDTH, 800);
+  assert.equal(DEFAULT_READER_PAGE_TURN, "scroll");
   assert.equal(normalizeReaderWidth("auto"), "auto");
   assert.equal(normalizeReaderWidth("1000"), 1000);
   assert.equal(normalizeReaderWidth("777"), 800);

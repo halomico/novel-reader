@@ -2,10 +2,10 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
+import type { MediaAsset } from "@/domains/media/media-model";
 import { getMediaDir } from "./config";
 import { deleteRemoteMediaCover, writeRemoteMediaCover } from "./media-node-client";
 import { isRemoteMediaStorage, resolveRemoteMediaNodeForAsset } from "./media-storage-config";
-import type { MediaAsset } from "./media";
 
 export const MAX_CUSTOM_MEDIA_COVER_BYTES = 10 * 1024 * 1024;
 const MAX_NORMALIZED_COVER_BYTES = 2 * 1024 * 1024;

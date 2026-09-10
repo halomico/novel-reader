@@ -5,8 +5,8 @@ import {
   $applyNodeReplacement,
   DecoratorNode,
   type EditorConfig,
-  type LexicalNode,
-  type NodeKey,
+
+
   type SerializedLexicalNode,
   type Spread,
 } from "lexical";
@@ -50,8 +50,4 @@ export class DividerNode extends DecoratorNode<JSX.Element> {
 
 export function $createDividerNode(): DividerNode {
   return $applyNodeReplacement(new DividerNode());
-}
-
-export function $isDividerNode(node: LexicalNode | null | undefined): node is DividerNode {
-  return node instanceof DividerNode;
 }

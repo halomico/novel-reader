@@ -1,28 +1,28 @@
 import type { Metadata } from "next";
+import { readPostgresSiteSettings } from "@/core/config/site-settings";
+import { database } from "@/core/db/postgres";
+import {
+  listPostgresCatalogTagGroups,
+  listPostgresExplicitlyHiddenTagIds,
+  type PostgresCatalogTag,
+} from "@/domains/catalog/postgres-tags";
+import { hasPostgresUserPermission } from "@/domains/identity/postgres-permissions";
 import { notFound } from "next/navigation";
 import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import { SiteHeader } from "@/components/SiteHeader";
 import { TagLibraryManager, type ManagedTag } from "@/components/TagLibraryManager";
-import {
-  canAccessAdvancedTagSearch,
-  canAccessTagLibrary,
-  isGuestTagLibraryNavEnabled,
-  isTagLibraryEnabled,
-  isTagLibraryPublic,
-} from "@/lib/config";
+import { isGuestTagLibraryNavEnabled } from "@/lib/config";
+import { canBrowseHomePortal } from "@/lib/home-portal";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
-import { listExplicitlyHiddenTagIds } from "@/lib/tag-preferences";
-import { listTagGroups } from "@/lib/tags";
 import { getCurrentUser } from "@/lib/user-auth";
-import { hasUserPermission } from "@/lib/user-levels";
 import { getRequestLocale, localizeText, localizeTexts } from "@/lib/locale-server";
 import { languageAlternates, uiText, withLocalePath } from "@/lib/locale";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const locale = await getRequestLocale();
-  const isPublic = isTagLibraryEnabled() && isTagLibraryPublic();
+  const [locale, settings] = await Promise.all([getRequestLocale(), readPostgresSiteSettings()]);
+  const isPublic = canBrowseHomePortal(settings.homePortalAccessModes.tags, false);
   const [title, description] = await localizeTexts(
     ["所有标签", "按标签浏览小说。"] as const,
     locale,
@@ -38,11 +38,11 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-function tagSearchText(tag: ReturnType<typeof listTagGroups>[number]["tags"][number]): string {
+function tagSearchText(tag: PostgresCatalogTag): string {
   return [tag.name, ...tag.aliases, tag.description].filter(Boolean).join(" ");
 }
 
-function managedTag(tag: ReturnType<typeof listTagGroups>[number]["tags"][number]): ManagedTag {
+function managedTag(tag: PostgresCatalogTag): ManagedTag {
   return {
     id: tag.id,
     parentId: tag.parentId,
@@ -54,22 +54,27 @@ function managedTag(tag: ReturnType<typeof listTagGroups>[number]["tags"][number
 }
 
 export default async function TagsPage({ searchParams }: { searchParams: Promise<{ hidden?: string; q?: string }> }) {
-  const locale = await getRequestLocale();
-  if (!isTagLibraryEnabled()) {
+  const [locale, settings, user, params] = await Promise.all([
+    getRequestLocale(),
+    readPostgresSiteSettings(),
+    getCurrentUser(),
+    searchParams,
+  ]);
+  if (settings.homePortalAccessModes.tags === "off") {
     notFound();
   }
-  const user = await getCurrentUser();
-  if (!canAccessTagLibrary(Boolean(user))) {
+  if (!canBrowseHomePortal(settings.homePortalAccessModes.tags, Boolean(user))) {
     if (!user && isGuestTagLibraryNavEnabled()) {
       return <ContentEntryGatePage locale={locale} label={uiText(locale, "标签")} returnTo="/tags" />;
     }
     notFound();
   }
   const audience = user?.role === "admin" ? "admin" : user ? "member" : "public";
-  const params = await searchParams;
   const initialQuery = (params.q || "").normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, 80);
-  const explicitHidden = user ? listExplicitlyHiddenTagIds(user.id) : new Set<number>();
-  const sourceGroups = listTagGroups({ audience, omitEmpty: false });
+  const [explicitHidden, sourceGroups] = await Promise.all([
+    user ? listPostgresExplicitlyHiddenTagIds(database("web"), user.id) : Promise.resolve(new Set<number>()),
+    listPostgresCatalogTagGroups(database("web"), { audience, omitEmpty: false }),
+  ]);
   const localizedGroups = await Promise.all(sourceGroups.map(async (group) => ({
     ...group,
     group: group.group
@@ -87,8 +92,14 @@ export default async function TagsPage({ searchParams }: { searchParams: Promise
       description: await localizeText(tag.description, locale),
     }))),
   })));
-  const showAdvancedSearch = canAccessAdvancedTagSearch(false) ||
-    (canAccessAdvancedTagSearch(Boolean(user)) && hasUserPermission(user, "advanced_search"));
+  const guestAdvancedSearch = settings.advancedTagSearchEnabled && settings.guestAdvancedTagSearchEnabled &&
+    canBrowseHomePortal(settings.homePortalAccessModes.novels, false) &&
+    canBrowseHomePortal(settings.homePortalAccessModes.tags, false);
+  const memberAdvancedSearch = settings.advancedTagSearchEnabled &&
+    canBrowseHomePortal(settings.homePortalAccessModes.novels, Boolean(user)) &&
+    canBrowseHomePortal(settings.homePortalAccessModes.tags, Boolean(user));
+  const showAdvancedSearch = guestAdvancedSearch ||
+    (memberAdvancedSearch && await hasPostgresUserPermission(database("web"), user, "advanced_search"));
 
   return (
     <main className="appShell">

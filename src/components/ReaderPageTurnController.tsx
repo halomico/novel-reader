@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { beginReaderNavigationProgress } from "@/components/NavigationProgress";
 import { localeFromPathname, withLocalePath } from "@/lib/locale";
 import {
@@ -13,8 +13,12 @@ import {
   READER_PAGE_STATE_EVENT,
   READER_PAGE_STATE_REQUEST_EVENT,
   READER_PAGE_TURN_CHANGE_EVENT,
+  encodeReaderEntryEdge,
+  resolveReaderEntryEdge,
+  resolveReaderEntryPage,
   resolveReaderPageMetrics,
   resolveReaderDragTarget,
+  shouldPrefetchReaderRoute,
   type ReaderPageState,
 } from "@/lib/reader-layout";
 import { normalizeReaderPageTurn, type ReaderPageTurn } from "@/lib/ui-preferences";
@@ -44,10 +48,15 @@ function columnGeometry(content: HTMLElement) {
   const style = getComputedStyle(content);
   const paddingLeft = Number.parseFloat(style.paddingLeft) || 0;
   const paddingRight = Number.parseFloat(style.paddingRight) || 0;
+  const borderLeft = Number.parseFloat(style.borderLeftWidth) || 0;
+  const borderRight = Number.parseFloat(style.borderRightWidth) || 0;
   const pageGap = Number.parseFloat(style.columnGap);
   return {
     pageGap: Number.isFinite(pageGap) ? Math.max(pageGap, 0) : 0,
-    pageWidth: Math.max(content.clientWidth - paddingLeft - paddingRight, 1),
+    pageWidth: Math.max(
+      content.getBoundingClientRect().width - borderLeft - borderRight - paddingLeft - paddingRight,
+      1,
+    ),
     paddingInline: paddingLeft + paddingRight,
   };
 }
@@ -65,16 +74,23 @@ function pageMetrics(content: HTMLElement): ReaderPageMetrics {
 export function ReaderPageTurnController({
   previousHref,
   nextHref,
+  previousContentBytes,
+  nextContentBytes,
 }: {
   previousHref?: string | null;
   nextHref?: string | null;
+  previousContentBytes?: number | null;
+  nextContentBytes?: number | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const locale = localeFromPathname(pathname);
   const modeRef = useRef<ReaderPageTurn>("scroll");
+  const previousPathRef = useRef(pathname);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const routeChanged = previousPathRef.current !== pathname;
+    previousPathRef.current = pathname;
     const root = document.documentElement;
     const content = document.querySelector<HTMLElement>(".readerText");
     if (!content) return;
@@ -86,6 +102,11 @@ export function ReaderPageTurnController({
     let settleFrame = 0;
     let animationFrame = 0;
     let scrollFrame = 0;
+    let routeFrame = 0;
+    let enteringFrame = 0;
+    let entryAnchorTimer = 0;
+    let entryAnchor: "start" | "end" | null = null;
+    let navigating = false;
     let suppressClickUntil = 0;
     let lastSize = { width: content.getBoundingClientRect().width, height: content.clientHeight };
 
@@ -107,15 +128,21 @@ export function ReaderPageTurnController({
     }
 
     function configureColumns() {
-      content!.style.setProperty("--reader-page-column-width", `${columnGeometry(content!).pageWidth}px`);
+      if (!content) return;
+      const width = Math.round(columnGeometry(content).pageWidth);
+      if (width > 0 && content.style.getPropertyValue("--reader-page-column-width") !== `${width}px`) {
+        content.style.setProperty("--reader-page-column-width", `${width}px`);
+      }
     }
 
-    function afterLayout(callback: () => void) {
+    function afterLayout(callback: (settled: boolean) => void) {
       if (layoutFrame) cancelAnimationFrame(layoutFrame);
       if (settleFrame) cancelAnimationFrame(settleFrame);
-      layoutFrame = requestAnimationFrame(() => {
-        configureColumns();
-        settleFrame = requestAnimationFrame(callback);
+      configureColumns();
+      callback(false);
+      settleFrame = requestAnimationFrame(() => {
+        settleFrame = 0;
+        callback(true);
       });
     }
 
@@ -162,14 +189,33 @@ export function ReaderPageTurnController({
 
     function navigate(href: string | null | undefined, direction: -1 | 1, keepChrome: boolean): boolean {
       if (!href) return false;
+      if (navigating) return true;
+      navigating = true;
       if (keepChrome) {
         sessionStorage.setItem(READER_KEEP_CHROME_SESSION_KEY, "1");
         window.dispatchEvent(new Event(READER_CHROME_SHOW_EVENT));
       }
-      if (direction < 0) sessionStorage.setItem(READER_ENTRY_EDGE_SESSION_KEY, "end");
-      else sessionStorage.removeItem(READER_ENTRY_EDGE_SESSION_KEY);
-      beginReaderNavigationProgress();
-      router.push(withLocalePath(href, locale));
+      const destination = withLocalePath(href, locale);
+      sessionStorage.setItem(
+        READER_ENTRY_EDGE_SESSION_KEY,
+        encodeReaderEntryEdge(destination, direction < 0 ? "end" : "start"),
+      );
+      const push = () => {
+        beginReaderNavigationProgress();
+        router.push(destination, { scroll: false });
+      };
+      if (modeRef.current === "slide" && shell && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        shell.classList.add(direction < 0 ? "isReaderRouteLeavingPrevious" : "isReaderRouteLeavingNext");
+        // Let the browser paint the outgoing offset, then start the route
+        // request immediately. Waiting for the CSS transition here makes a
+        // boundary turn feel stuck while the next document is fetched.
+        routeFrame = requestAnimationFrame(() => {
+          routeFrame = 0;
+          push();
+        });
+      } else {
+        push();
+      }
       return true;
     }
 
@@ -194,6 +240,8 @@ export function ReaderPageTurnController({
     }
 
     function syncMode(progressRatio?: number) {
+      const wasPaged = isPaged();
+      const currentPagedRatio = wasPaged ? pagedRatio() : undefined;
       const requestedMode = normalizeReaderPageTurn(root.dataset.readerPageTurn);
       modeRef.current = mobile.matches ? requestedMode : "scroll";
       if (!isPaged()) {
@@ -201,23 +249,72 @@ export function ReaderPageTurnController({
         content!.classList.remove("isReaderPageDragging");
         content!.style.removeProperty("--reader-page-column-width");
         emitState();
+        root.classList.remove("isReaderPagePending");
+        if (routeChanged && progressRatio === undefined) window.scrollTo({ top: 0, behavior: "auto" });
         if (progressRatio !== undefined) requestAnimationFrame(() => restoreVerticalProgress(progressRatio));
         return;
       }
 
       window.scrollTo({ top: 0, behavior: "auto" });
-      afterLayout(() => {
+      const storedEntryEdge = sessionStorage.getItem(READER_ENTRY_EDGE_SESSION_KEY);
+      const entryEdge = resolveReaderEntryEdge(
+        storedEntryEdge,
+        `${window.location.pathname}${window.location.search}`,
+      );
+      if (storedEntryEdge && !entryEdge) sessionStorage.removeItem(READER_ENTRY_EDGE_SESSION_KEY);
+      if (entryEdge) entryAnchor = entryEdge;
+      const resolvedProgressRatio = progressRatio ?? currentPagedRatio;
+      const animateEntry = entryEdge && modeRef.current === "slide" && shell && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (animateEntry) {
+        shell.classList.add(entryEdge === "end" ? "isReaderRouteEnteringPrevious" : "isReaderRouteEnteringNext");
+      }
+      afterLayout((settled) => {
         metrics = pageMetrics(content!);
-        const enterAtEnd = sessionStorage.getItem(READER_ENTRY_EDGE_SESSION_KEY) === "end";
-        sessionStorage.removeItem(READER_ENTRY_EDGE_SESSION_KEY);
-        const targetIndex = enterAtEnd
-          ? metrics.count - 1
-          : progressRatio === undefined
-            ? metrics.index
-            : clamp(Math.round(progressRatio * Math.max(metrics.count - 1, 0)), 0, metrics.count - 1);
+        const targetIndex = resolveReaderEntryPage({
+          entryEdge: entryEdge === "start" || entryEdge === "end" ? entryEdge : null,
+          progressRatio: resolvedProgressRatio,
+          pageCount: metrics.count,
+        });
         setLeft(targetIndex * metrics.stride);
         metrics = { ...pageMetrics(content!), index: targetIndex };
         emitState();
+        if (!entryEdge) root.classList.remove("isReaderPagePending");
+        if (settled && entryEdge) {
+          if (
+            resolveReaderEntryEdge(
+              sessionStorage.getItem(READER_ENTRY_EDGE_SESSION_KEY),
+              `${window.location.pathname}${window.location.search}`,
+            ) !== entryEdge
+          ) return;
+          configureColumns();
+          metrics = pageMetrics(content!);
+          setLeft(entryEdge === "end" ? content!.scrollWidth - content!.clientWidth : 0);
+          metrics = pageMetrics(content!);
+          emitState();
+          if (entryAnchorTimer) window.clearTimeout(entryAnchorTimer);
+          entryAnchorTimer = window.setTimeout(() => {
+            entryAnchorTimer = 0;
+            if (!entryAnchor) return;
+            configureColumns();
+            metrics = pageMetrics(content!);
+            setLeft(entryAnchor === "end" ? content!.scrollWidth - content!.clientWidth : 0);
+            metrics = pageMetrics(content!);
+            emitState();
+            entryAnchor = null;
+            sessionStorage.removeItem(READER_ENTRY_EDGE_SESSION_KEY);
+          }, 120);
+          if (animateEntry && shell) {
+            // Establish the off-screen starting position before removing the
+            // class; otherwise the browser batches both style changes and
+            // skips the transition entirely.
+            void shell.offsetWidth;
+            enteringFrame = requestAnimationFrame(() => {
+              enteringFrame = 0;
+              shell.classList.remove("isReaderRouteEnteringPrevious", "isReaderRouteEnteringNext");
+            });
+          }
+          root.classList.remove("isReaderPagePending");
+        }
       });
     }
 
@@ -230,8 +327,15 @@ export function ReaderPageTurnController({
       if (!isPaged()) return;
       const detail = (event as CustomEvent<{ progressRatio?: number }>).detail;
       const progressRatio = detail?.progressRatio ?? pagedRatio();
+      const anchoredEdge = entryAnchor;
       afterLayout(() => {
         metrics = pageMetrics(content!);
+        if (anchoredEdge) {
+          setLeft(anchoredEdge === "end" ? content!.scrollWidth - content!.clientWidth : 0);
+          metrics = pageMetrics(content!);
+          emitState();
+          return;
+        }
         settleTo(Math.round(progressRatio * Math.max(metrics.count - 1, 0)), false);
       });
     }
@@ -246,8 +350,13 @@ export function ReaderPageTurnController({
 
     function handlePointerDown(event: PointerEvent) {
       if (!isPaged() || event.button !== 0) return;
+      if (entryAnchor) sessionStorage.removeItem(READER_ENTRY_EDGE_SESSION_KEY);
+      entryAnchor = null;
+      if (entryAnchorTimer) window.clearTimeout(entryAnchorTimer);
+      entryAnchorTimer = 0;
       cancelAnimation();
       metrics = pageMetrics(content!);
+      if (metrics.index <= 1 || metrics.index >= metrics.count - 2) prefetchAdjacent(true);
       drag = {
         pointerId: event.pointerId,
         startX: event.clientX,
@@ -328,8 +437,28 @@ export function ReaderPageTurnController({
       handleLayoutChange(new CustomEvent(READER_LAYOUT_CHANGE_EVENT, { detail: { progressRatio } }));
     });
 
-    if (previousHref) router.prefetch(withLocalePath(previousHref, locale));
-    if (nextHref) router.prefetch(withLocalePath(nextHref, locale));
+    const connection = (navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string };
+    }).connection;
+    const canPrefetch = (contentBytes: number | null | undefined, force = false) => force
+      ? document.visibilityState === "visible" && !connection?.saveData && connection?.effectiveType !== "slow-2g" && connection?.effectiveType !== "2g"
+      : shouldPrefetchReaderRoute({
+          contentBytes,
+          saveData: connection?.saveData,
+          effectiveType: connection?.effectiveType,
+          visible: document.visibilityState === "visible",
+        });
+    function prefetchAdjacent(force = false) {
+      if (nextHref && canPrefetch(nextContentBytes, force)) router.prefetch(withLocalePath(nextHref, locale));
+      if (previousHref && canPrefetch(previousContentBytes, force)) router.prefetch(withLocalePath(previousHref, locale));
+    }
+    const win = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    const idleTask = typeof win.requestIdleCallback === "function" && typeof win.cancelIdleCallback === "function"
+      ? { kind: "idle" as const, handle: win.requestIdleCallback(() => prefetchAdjacent(), { timeout: 500 }) }
+      : { kind: "timeout" as const, handle: window.setTimeout(() => prefetchAdjacent(), 250) };
     syncMode();
     resizeObserver.observe(content);
     content.addEventListener("scroll", handleScroll, { passive: true });
@@ -347,6 +476,9 @@ export function ReaderPageTurnController({
       if (layoutFrame) cancelAnimationFrame(layoutFrame);
       if (settleFrame) cancelAnimationFrame(settleFrame);
       if (scrollFrame) cancelAnimationFrame(scrollFrame);
+      if (routeFrame) cancelAnimationFrame(routeFrame);
+      if (enteringFrame) cancelAnimationFrame(enteringFrame);
+      if (entryAnchorTimer) window.clearTimeout(entryAnchorTimer);
       cancelAnimation();
       resizeObserver.disconnect();
       content.removeEventListener("scroll", handleScroll);
@@ -363,8 +495,11 @@ export function ReaderPageTurnController({
       content.style.removeProperty("--reader-page-column-width");
       content.classList.remove("isReaderPageDragging");
       shell?.classList.remove("isReaderPageEnd");
+      shell?.classList.remove("isReaderRouteLeavingPrevious", "isReaderRouteLeavingNext", "isReaderRouteEnteringPrevious", "isReaderRouteEnteringNext");
+      if (idleTask.kind === "idle") win.cancelIdleCallback?.(idleTask.handle);
+      else window.clearTimeout(idleTask.handle);
     };
-  }, [locale, nextHref, previousHref, router]);
+  }, [locale, nextContentBytes, nextHref, pathname, previousContentBytes, previousHref, router]);
 
   return null;
 }

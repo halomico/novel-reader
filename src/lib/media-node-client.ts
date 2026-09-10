@@ -252,44 +252,6 @@ export async function readRemoteMediaPlaybackManifest(nodeId: string, manifestPa
   return result.manifest;
 }
 
-export async function getRemoteMediaPlaybackFileInfo(
-  nodeId: string,
-  manifestPath: string,
-): Promise<{ sizeBytes: number; fileCount: number }> {
-  const params = new URLSearchParams({ path: manifestPath });
-  const result = await controlRequest<{ sizeBytes: number; fileCount: number }>(
-    nodeId,
-    `/control/playback/file-info?${params.toString()}`,
-    {},
-    30_000,
-  );
-  const sizeBytes = Math.floor(Number(result.sizeBytes));
-  const fileCount = Math.floor(Number(result.fileCount));
-  if (sizeBytes <= 0 || fileCount < 2) {
-    throw new MediaNodeClientError("媒体节点返回的 HLS 虚拟文件信息无效");
-  }
-  return { sizeBytes, fileCount };
-}
-
-export async function verifyRemoteMediaPlayback(
-  nodeId: string,
-  manifestPath: string,
-): Promise<{ sizeBytes: number; fileCount: number; durationSeconds: number }> {
-  const params = new URLSearchParams({ path: manifestPath });
-  const result = await controlRequest<{ sizeBytes: number; fileCount: number; durationSeconds: number }>(
-    nodeId,
-    `/control/playback/verify?${params.toString()}`,
-    {},
-    60_000,
-  );
-  const sizeBytes = Math.floor(Number(result.sizeBytes));
-  const fileCount = Math.floor(Number(result.fileCount));
-  const durationSeconds = Number(result.durationSeconds);
-  if (sizeBytes <= 0 || fileCount < 2 || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
-    throw new MediaNodeClientError("媒体节点返回的 HLS 校验结果无效");
-  }
-  return { sizeBytes, fileCount, durationSeconds };
-}
 
 export async function prepareRemoteMediaThumbnail(asset: {
   storageNodeId: string;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { NovelAccessMode, NovelStorageMode } from "@/lib/novel-library";
+import type { NovelAccessMode, NovelStorageMode } from "@/domains/catalog/postgres-admin-novels";
 import { AdminSelect } from "./AdminSelect";
 
 export function AdminNovelAccessFields({

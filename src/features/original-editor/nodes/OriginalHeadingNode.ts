@@ -38,7 +38,7 @@ export class OriginalHeadingNode extends HeadingNode {
       .updateFromJSON(serializedNode);
   }
 
-  constructor(tag: HeadingTagType = "h2", anchorId = newAnchorId(), key?: NodeKey) {
+  constructor(tag: HeadingTagType = "h1", anchorId = newAnchorId(), key?: NodeKey) {
     super(tag, key);
     this.__anchorId = /^heading_[A-Za-z0-9_-]{8,80}$/u.test(anchorId) ? anchorId : newAnchorId();
   }
@@ -65,7 +65,7 @@ export class OriginalHeadingNode extends HeadingNode {
   }
 }
 
-export function $createOriginalHeadingNode(tag: HeadingTagType = "h2", anchorId?: string): OriginalHeadingNode {
+export function $createOriginalHeadingNode(tag: HeadingTagType = "h1", anchorId?: string): OriginalHeadingNode {
   return $applyNodeReplacement(new OriginalHeadingNode(tag, anchorId));
 }
 

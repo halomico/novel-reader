@@ -2,8 +2,9 @@
 
 import { LoaderCircle, Trophy, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { DailyCheckinLeaderboardEntry } from "@/lib/user-economy";
+import type { PostgresDailyCheckinLeaderboardEntry as DailyCheckinLeaderboardEntry } from "@/domains/identity/postgres-user-economy";
 import { DEFAULT_LOCALE, uiText, type AppLocale } from "@/lib/locale";
+import { useFocusTrap } from "@/lib/focus-trap";
 import { UserAvatar } from "./UserAvatar";
 
 type CheckinLeaderboardDialogProps = {
@@ -36,15 +37,14 @@ export function CheckinLeaderboardDialog({
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
   }, [autoOpen]);
 
-  useEffect(() => {
-    if (!open) return;
-    closeButtonRef.current?.focus();
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [open]);
+  const dialogRef = useRef<HTMLElement>(null);
+
+  useFocusTrap({
+    active: open,
+    containerRef: dialogRef,
+    initialFocusRef: closeButtonRef,
+    onEscape: () => setOpen(false),
+  });
 
   async function showLeaderboard() {
     setOpen(true);
@@ -87,6 +87,7 @@ export function CheckinLeaderboardDialog({
           onMouseDown={(event) => event.target === event.currentTarget && setOpen(false)}
         >
           <section
+            ref={dialogRef}
             className="checkinLeaderboardDialog"
             role="dialog"
             aria-modal="true"

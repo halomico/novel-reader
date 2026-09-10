@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { getSiteSettingsPath, readSiteSettings, type SiteIconMimeType } from "./site-settings";
+import type { SiteIconMimeType, SiteSettings } from "@/core/config/site-settings-schema";
 
 export const MAX_SITE_ICON_BYTES = 15 * 1024 * 1024;
 
@@ -15,8 +15,11 @@ export type SiteIconAsset = {
   mimeType: Exclude<SiteIconMimeType, "">;
 };
 
+type SiteIconSettings = Pick<SiteSettings, "siteIconFileName" | "siteIconMimeType">;
+
 function siteIconStorageDir(): string {
-  return path.join(path.dirname(getSiteSettingsPath()), "site-assets");
+  const configured = process.env.SITE_ASSET_DIR?.trim();
+  return path.resolve(process.cwd(), configured || "./data/site-assets");
 }
 
 function siteIconFilePath(fileName: string): string | null {
@@ -77,8 +80,7 @@ export function removeSiteIconFile(fileName: string): boolean {
   }
 }
 
-export function readSiteIconAsset(requestedFileName?: string): SiteIconAsset | null {
-  const settings = readSiteSettings();
+export function readSiteIconAsset(settings: SiteIconSettings, requestedFileName?: string): SiteIconAsset | null {
   if (requestedFileName !== undefined && requestedFileName !== settings.siteIconFileName) {
     return null;
   }
@@ -96,8 +98,7 @@ export function readSiteIconAsset(requestedFileName?: string): SiteIconAsset | n
   }
 }
 
-export function getSiteIconHref(): string | undefined {
-  const settings = readSiteSettings();
+export function getSiteIconHref(settings: SiteIconSettings): string | undefined {
   const filePath = siteIconFilePath(settings.siteIconFileName);
   if (!filePath || !settings.siteIconMimeType || !fs.existsSync(filePath)) {
     return undefined;

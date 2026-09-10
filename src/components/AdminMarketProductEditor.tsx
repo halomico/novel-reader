@@ -25,7 +25,7 @@ import {
   setMarketProductStatusAction,
   updateMarketProductInlineAction,
 } from "@/app/admin/market/actions";
-import type { MarketAsset, MarketDeliveryItem, MarketDeliveryKind, MarketProduct } from "@/lib/market";
+import type { MarketAsset, MarketDeliveryItem, MarketDeliveryKind, MarketProduct } from "@/domains/market/postgres-market";
 import { decodeEntitlementDefinition } from "@/lib/entitlement-protocol";
 import { AdminEntitlementPicker } from "./AdminEntitlementPicker";
 import { AdminMarketCoverUploader, AdminMarketFilePicker } from "./AdminMarketTools";
@@ -72,7 +72,13 @@ export function AdminMarketProductHeader({
 }) {
   const router = useRouter();
   const mutation = useInlineMutation();
+  const [prevInitialId, setPrevInitialId] = useState(initialProduct.id);
   const [product, setProduct] = useState(initialProduct);
+
+  if (prevInitialId !== initialProduct.id) {
+    setPrevInitialId(initialProduct.id);
+    setProduct(initialProduct);
+  }
 
   useEffect(() => {
     const update = (event: Event) => setProduct((event as CustomEvent<MarketProduct>).detail);

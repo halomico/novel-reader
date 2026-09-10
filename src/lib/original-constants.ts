@@ -22,6 +22,18 @@ export function isValidOriginalTagName(value: unknown): boolean {
   return /^\p{Script=Han}{2,6}$/u.test(tag) || /^[A-Za-z]{2,15}$/.test(tag);
 }
 
+/** Tag slugs keep their Han characters, unlike article slugs, which are transliterated
+ * to ASCII. Routing a Chinese tag through the article rule collapsed every name to the
+ * same `article-<timestamp>` fallback, so tag URLs were neither stable nor readable.
+ * Both writers of `original_tags.slug` must use this one function. */
+export function originalTagSlug(name: string): string {
+  return normalizeOriginalTagName(name)
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+    .slice(0, 64) || "tag";
+}
+
 /** Markdown treats four leading ASCII spaces as a code block. Original
  * articles favor authored prose indentation, while explicit fenced blocks
  * remain available for code. Convert only plain-line indentation to visible
@@ -36,7 +48,12 @@ export function preserveOriginalMarkdownSpacing(value: string): string {
     if (inFence || !/^[ \t]+\S/u.test(line)) return line;
     const content = line.trimStart();
     if (/^(?:#{1,6}\s|>|[-+*]\s|\d+[.)]\s|<!--|\|)/u.test(content)) return line;
-    const indent = line.slice(0, line.length - content.length)
+    // Four leading spaces are valid Markdown for an indented code block.
+    // Preserve them instead of turning code into a non-breaking-space paragraph.
+    const leading = line.slice(0, line.length - content.length);
+    const indentWidth = Array.from(leading).reduce((width, character) => width + (character === "\t" ? 4 : 1), 0);
+    if (indentWidth >= 4) return line;
+    const indent = leading
       .replace(/ /gu, "\u00a0")
       .replace(/\t/gu, "\u00a0\u00a0");
     return `${indent}${content}`;

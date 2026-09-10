@@ -2,7 +2,6 @@
 
 import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import Form from "next/form";
-import Link from "@/components/LocalizedLink";
 import { usePathname } from "next/navigation";
 import { FormEvent, useEffect, useId, useRef, useState } from "react";
 import { localeFromPathname, stripLocalePath, uiText, withLocalePath } from "@/lib/locale";
@@ -14,6 +13,7 @@ type MessageTone = "success" | "warning" | "error";
 type SearchVisibility = "default" | "open" | "closed";
 type CurrentMatch = {
   segment: HTMLElement;
+  target: HTMLElement;
   start: number;
   end: number;
 };
@@ -30,30 +30,8 @@ const options: Array<{ value: SearchMode; label: string; action: string; placeho
   { value: "current", label: "本文", action: "/search", placeholder: "搜索本文" },
 ];
 
-const originalTextBySegment = new WeakMap<HTMLElement, string>();
-
 function getReaderSegments(): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>(".readerSegment"));
-}
-
-function getOriginalSegmentText(segment: HTMLElement): string {
-  const originalText = originalTextBySegment.get(segment);
-  if (originalText !== undefined) {
-    return originalText;
-  }
-
-  const text = segment.textContent || "";
-  originalTextBySegment.set(segment, text);
-  return text;
-}
-
-function restoreSegment(segment: HTMLElement) {
-  const originalText = originalTextBySegment.get(segment);
-  if (originalText === undefined) {
-    return;
-  }
-
-  segment.replaceChildren(document.createTextNode(originalText));
 }
 
 function yieldToMainThread(): Promise<void> {
@@ -70,17 +48,23 @@ async function findLiteralMatches(segments: HTMLElement[], keyword: string, isCu
       return [];
     }
     const segment = segments[index];
-    const text = getOriginalSegmentText(segment);
-    pattern.lastIndex = 0;
-    for (const match of text.matchAll(pattern)) {
-      if (match.index === undefined) {
-        continue;
+    const paragraphs = Array.from(segment.querySelectorAll<HTMLElement>("p"));
+    const targets = paragraphs.length > 0 ? paragraphs : [segment];
+
+    for (const target of targets) {
+      const text = target.textContent || "";
+      pattern.lastIndex = 0;
+      for (const match of text.matchAll(pattern)) {
+        if (match.index === undefined) {
+          continue;
+        }
+        matches.push({
+          segment,
+          target,
+          start: match.index,
+          end: match.index + match[0].length,
+        });
       }
-      matches.push({
-        segment,
-        start: match.index,
-        end: match.index + match[0].length,
-      });
     }
     if (index > 0 && index % 40 === 0) {
       await yieldToMainThread();
@@ -95,7 +79,6 @@ export function HeaderSearch({
   defaultMode = "title",
   defaultExpanded = false,
   showCurrentSearch = false,
-  showAdvancedSearch = false,
   noticeDisplaySeconds = 5,
   library = "default",
   contentSearchEnabled = true,
@@ -106,7 +89,6 @@ export function HeaderSearch({
   defaultMode?: SearchMode;
   defaultExpanded?: boolean;
   showCurrentSearch?: boolean;
-  showAdvancedSearch?: boolean;
   noticeDisplaySeconds?: number;
   library?: string;
   contentSearchEnabled?: boolean;
@@ -130,7 +112,7 @@ export function HeaderSearch({
   const [currentMatchCount, setCurrentMatchCount] = useState(0);
   const [isCurrentSearching, setIsCurrentSearching] = useState(false);
   const currentMatchesRef = useRef<CurrentMatch[]>([]);
-  const activeSegmentRef = useRef<HTMLElement | null>(null);
+  const activeTargetRef = useRef<{ element: HTMLElement; originalChildren: Node[] } | null>(null);
   const currentSearchRequestRef = useRef(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchInputId = useId();
@@ -147,14 +129,6 @@ export function HeaderSearch({
         }
       : option);
   const activeOption = visibleOptions.find((option) => option.value === mode) || visibleOptions[0];
-  const showAdvancedOption = showAdvancedSearch && normalizedPathname === "/novels";
-  const advancedSearchParams = new URLSearchParams();
-  const advancedKeyword = keyword.normalize("NFKC").replace(/\s+/gu, " ").trim();
-  if (advancedKeyword) {
-    advancedSearchParams.set(mode === "content" ? "content" : "q", advancedKeyword);
-  }
-  if (library && library !== "default") advancedSearchParams.set("library", library);
-  const advancedSearchHref = `/tags/search${advancedSearchParams.size ? `?${advancedSearchParams.toString()}` : ""}`;
   const originNovelId = Number(/^\/books\/(\d+)/.exec(normalizedPathname)?.[1] || 0);
   const searchSource = mode === "title" ? "header_title" : mode === "content" ? "header_content" : "reader_current";
   const isPinnedOpen = visibility === "open" || visibility === "default";
@@ -241,19 +215,18 @@ export function HeaderSearch({
 
   useEffect(() => {
     return () => {
-      if (activeSegmentRef.current) {
-        restoreSegment(activeSegmentRef.current);
-      }
+      restoreActiveMatch();
     };
   }, []);
 
   function restoreActiveMatch() {
-    if (!activeSegmentRef.current) {
+    if (!activeTargetRef.current) {
       return;
     }
 
-    restoreSegment(activeSegmentRef.current);
-    activeSegmentRef.current = null;
+    const { element, originalChildren } = activeTargetRef.current;
+    element.replaceChildren(...originalChildren);
+    activeTargetRef.current = null;
   }
 
   function resetCurrentMatches() {
@@ -273,18 +246,24 @@ export function HeaderSearch({
 
     const normalizedIndex = (nextIndex + matches.length) % matches.length;
     const match = matches[normalizedIndex];
-    const text = getOriginalSegmentText(match.segment);
+    restoreActiveMatch();
+
+    const target = match.target;
+    activeTargetRef.current = {
+      element: target,
+      originalChildren: Array.from(target.childNodes).map((node) => node.cloneNode(true)),
+    };
+
+    const text = target.textContent || "";
     const fragment = document.createDocumentFragment();
     const mark = document.createElement("mark");
 
-    restoreActiveMatch();
     fragment.append(document.createTextNode(text.slice(0, match.start)));
     mark.className = "readerSearchMark isActive";
     mark.textContent = text.slice(match.start, match.end);
     fragment.append(mark);
     fragment.append(document.createTextNode(text.slice(match.end)));
-    match.segment.replaceChildren(fragment);
-    activeSegmentRef.current = match.segment;
+    target.replaceChildren(fragment);
     setCurrentMatchIndex(normalizedIndex);
 
     window.requestAnimationFrame(() => {
@@ -529,18 +508,6 @@ export function HeaderSearch({
               {tr(option.label)}
             </button>
           ))}
-          {showAdvancedOption ? (
-            <Link
-              href={advancedSearchHref}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => {
-                setIsModeMenuOpen(false);
-                beginNavigationProgress();
-              }}
-            >
-              {tr("高级")}
-            </Link>
-          ) : null}
         </div>
       ) : null}
       {isMessageVisible && message ? (

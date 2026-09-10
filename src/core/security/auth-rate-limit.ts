@@ -58,12 +58,3 @@ export function recordLoginFailure(ip: string, username: string, now = Date.now(
 export function clearLoginFailures(ip: string, username: string): void {
   failures.delete(failureKey(ip, username));
 }
-
-export function loginChallengeRequired(ip: string, username: string, now = Date.now()): boolean {
-  const current = failures.get(failureKey(ip, username));
-  if (!current || current.expiresAt <= now) {
-    if (current) failures.delete(failureKey(ip, username));
-    return false;
-  }
-  return current.count >= 3;
-}

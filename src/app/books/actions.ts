@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
-import { deleteNovelIds } from "@/lib/novel-files";
-import { togglePinnedNovel } from "@/lib/pinned-novels";
+import { database } from "@/core/db/postgres";
+import { deletePostgresNovel, togglePostgresPinnedNovel } from "@/domains/reading/postgres-reader-catalog";
 import { getCurrentUser } from "@/lib/user-auth";
 
 async function requireReaderAdmin() {
@@ -31,7 +31,8 @@ export async function toggleReaderPinnedNovelAction(formData: FormData) {
   const bookId = validBookId(formData);
   if (!bookId) notFound();
 
-  togglePinnedNovel(bookId);
+  const result = await togglePostgresPinnedNovel(database("web"), bookId);
+  if (!result.found) notFound();
   revalidatePath("/");
   revalidatePath("/novels");
   revalidatePath(`/books/${bookId}`);
@@ -44,7 +45,7 @@ export async function deleteReaderNovelAction(formData: FormData) {
   if (!bookId) notFound();
 
   const returnPath = safeReaderReturnPath(formData);
-  deleteNovelIds([bookId]);
+  if (!await deletePostgresNovel(database("web"), bookId)) notFound();
   revalidatePath("/");
   revalidatePath("/novels");
   revalidatePath(`/books/${bookId}`);

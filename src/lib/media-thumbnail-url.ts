@@ -1,4 +1,4 @@
-import { mediaThumbnailVersion, type MediaAsset } from "./media";
+import { mediaThumbnailVersion, type MediaAsset } from "@/domains/media/media-model";
 import { createSignedMediaCoverUrl, createSignedMediaThumbnailUrl } from "./media-signing";
 import { isRemoteMediaStorage, resolveRemoteMediaNodeForAsset } from "./media-storage-config";
 

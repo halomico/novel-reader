@@ -1,18 +1,12 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
 function eventId(novelId: number): string {
-  const key = `novel-reader:novel-view:${novelId}`;
-  try {
-    const current = sessionStorage.getItem(key);
-    if (current) return current;
-    const value = `event_${typeof crypto.randomUUID === "function" ? crypto.randomUUID().replace(/-/g, "") : `${Date.now()}_${Math.random().toString(36).slice(2)}`}`;
-    sessionStorage.setItem(key, value);
-    return value;
-  } catch {
-    return `event_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  }
+  const nonce = typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID().replace(/-/g, "")
+    : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  return `event_novel_${novelId}_${nonce}`;
 }
 
 function recordNovelView(novelId: number): void {
@@ -26,8 +20,8 @@ function recordNovelView(novelId: number): void {
 }
 
 export function NovelViewTracker({ novelId, targetId = "reader-content" }: { novelId: number; targetId?: string }) {
-  const recordedRef = useRef(false);
   useEffect(() => {
+    let recorded = false;
     const target = document.getElementById(targetId);
     if (!target) return;
     let visible = false;
@@ -35,11 +29,11 @@ export function NovelViewTracker({ novelId, targetId = "reader-content" }: { nov
     const cancel = () => { if (timer) window.clearTimeout(timer); timer = 0; };
     const schedule = () => {
       cancel();
-      if (!visible || recordedRef.current || document.visibilityState !== "visible") return;
+      if (!visible || recorded || document.visibilityState !== "visible") return;
       timer = window.setTimeout(() => {
         timer = 0;
-        if (!visible || recordedRef.current || document.visibilityState !== "visible") return;
-        recordedRef.current = true;
+        if (!visible || recorded || document.visibilityState !== "visible") return;
+        recorded = true;
         recordNovelView(novelId);
       }, 1_500);
     };

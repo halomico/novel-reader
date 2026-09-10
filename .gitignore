@@ -1,39 +1,103 @@
-node_modules/
-.next/
-out/
+# Default deny. Only application code, formal tests and required build/deploy
+# inputs belong in Git. Local plans, operations scripts and data stay on disk.
+/*
+!/.gitignore
+!/.dockerignore
+!/.env.example
+!/Dockerfile
+!/docker-compose.yml
+!/docker-compose.postgres.yml
+!/docker-compose.media.yml
+!/package.json
+!/package-lock.json
+!/tsconfig.json
+!/next-env.d.ts
+!/next.config.ts
+# Retain the existing project entry point and required legal notices only.
+!/README.md
+!/LICENSE
+!/THIRD_PARTY_NOTICES.md
 
-.env
-.env.*
-!.env.example
+!/.github/
+/.github/*
+!/.github/workflows/
+/.github/workflows/*
+!/.github/workflows/*.yml
 
-*.pem
-*.key
-*.p12
-*.pfx
-id_rsa
-id_ed25519
+!/.githooks/
+/.githooks/*
+!/.githooks/pre-commit
+!/.githooks/pre-push
 
-data/
-library/
-docs/
-backups/
+!/src/
+/src/**
+!/src/**/
+!/src/**/*.ts
+!/src/**/*.tsx
+!/src/**/*.css
 
-# Host-only operations; keep private copies outside the repository.
-scripts/*.sh
-scripts/import-source-hls.py
-scripts/prune-source-hls-videos.ts
-scripts/reset-video-library.mjs
+!/migrations/
+/migrations/*
+!/migrations/postgres/
+/migrations/postgres/*
+!/migrations/postgres/*.sql
 
-*.db
-*.db-*
-*.sqlite
-*.sqlite-*
-*.txt
-public/avatars/
-progress.md
+!/docker/
+/docker/*
+!/docker/postgres/
+/docker/postgres/*
+!/docker/postgres/Dockerfile
+!/deploy/
+/deploy/*
+!/deploy/Caddyfile.media.example
 
-*.log
-*.tmp
-*.tsbuildinfo
-npm-debug.log*
-dev-server*.log
+!/scripts/
+/scripts/*
+!/scripts/scan-books.ts
+!/scripts/reindex-postgres-content.ts
+!/scripts/reindex-postgres-originals.ts
+!/scripts/optimize-media.ts
+!/scripts/media-node.ts
+!/scripts/postgres-content-worker.ts
+!/scripts/db-migrate-postgres.ts
+!/scripts/db-verify-postgres.ts
+!/scripts/init-postgres.ts
+# Reproducible build and CI tests, never host data or ad-hoc E2E runners.
+!/scripts/build-maintenance.mjs
+!/scripts/audit-runtime-dependencies.mjs
+!/scripts/sanitize-standalone.mjs
+!/scripts/test-postgres-integration.ts
+!/scripts/audit-container-image.py
+!/scripts/seed-image-canaries.py
+!/scripts/test_image_audit.py
+!/scripts/check-repository-files.mjs
+!/scripts/test_repository_files.py
+
+!/public/
+/public/**
+!/public/favicon.ico
+!/public/default-avatars/
+!/public/default-avatars/*.svg
+!/public/avatar-widgets/
+!/public/avatar-widgets/**/
+!/public/avatar-widgets/**/*.svg
+
+# Sensitive/generated files are excluded even inside allowed source folders.
+**/.env*
+!/.env.example
+**/.npmrc
+**/node_modules/
+**/__pycache__/
+**/.next/
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/id_rsa
+**/id_ed25519
+**/*.db
+**/*.db-*
+**/*.sqlite*
+**/*.log
+**/*.tmp
+**/*.tsbuildinfo

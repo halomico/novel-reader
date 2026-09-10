@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import { Readable } from "node:stream";
 import { NextRequest } from "next/server";
+import { database } from "@/core/db/postgres";
 import { findLocalStoredCover } from "@/lib/media-cover";
-import { getMarketProductById } from "@/lib/market";
+import { getPostgresMarketProductById } from "@/domains/market/postgres-market";
 import { createSignedMediaCoverUrl } from "@/lib/media-signing";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,10 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const product = getMarketProductById(Number((await params).id));
+  const productId = Number((await params).id);
+  const product = Number.isSafeInteger(productId) && productId > 0
+    ? await getPostgresMarketProductById(database(), productId)
+    : null;
   if (!product?.coverKey || request.nextUrl.searchParams.get("v") !== product.coverKey) {
     return new Response(null, { status: 404, headers: { "Cache-Control": "no-store" } });
   }

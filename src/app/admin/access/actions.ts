@@ -3,15 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { database } from "@/core/db/postgres";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
 import {
   ContentAccessInputError,
-  deleteContentAccessPolicy,
-  deleteContentAccessRule,
-  saveContentAccessPolicy,
-  saveContentAccessRule,
-} from "@/lib/content-access";
+  deletePostgresContentAccessPolicy,
+  deletePostgresContentAccessRule,
+  savePostgresContentAccessPolicy,
+  savePostgresContentAccessRule,
+} from "@/domains/access/postgres-content-access";
 
 function accessNotice(message: string, tone: "success" | "warning" | "error" = "success"): never {
   redirect(`/admin/access?notice=${encodeURIComponent(message)}&tone=${tone}`);
@@ -44,7 +45,7 @@ function optionalExpiryMinutes(value: FormDataEntryValue | null): number | null 
 export async function saveContentAccessRuleAction(formData: FormData) {
   const session = await requireAdmin();
   try {
-    saveContentAccessRule({
+    await savePostgresContentAccessRule(database("web"), {
       id: Number(formData.get("id") || 0),
       targetType: formData.get("targetType"),
       targetValue: formData.get("targetValue"),
@@ -66,7 +67,7 @@ export async function saveContentAccessRuleAction(formData: FormData) {
 
 export async function deleteContentAccessRuleAction(formData: FormData) {
   await requireAdmin();
-  const deleted = deleteContentAccessRule(Number(formData.get("id")));
+  const deleted = await deletePostgresContentAccessRule(database("web"), Number(formData.get("id")));
   revalidatePath("/admin/access");
   accessNotice(deleted ? "访问规则已删除" : "访问规则已不存在", deleted ? "success" : "warning");
 }
@@ -74,7 +75,7 @@ export async function deleteContentAccessRuleAction(formData: FormData) {
 export async function saveContentAccessPolicyAction(formData: FormData) {
   await requireAdmin();
   try {
-    saveContentAccessPolicy({
+    await savePostgresContentAccessPolicy(database("web"), {
       id: Number(formData.get("id") || 0),
       name: formData.get("name"),
       enabled: formData.get("enabled") === "on",
@@ -94,7 +95,7 @@ export async function saveContentAccessPolicyAction(formData: FormData) {
 
 export async function deleteContentAccessPolicyAction(formData: FormData) {
   await requireAdmin();
-  const deleted = deleteContentAccessPolicy(Number(formData.get("id")));
+  const deleted = await deletePostgresContentAccessPolicy(database("web"), Number(formData.get("id")));
   revalidatePath("/admin/access");
   accessNotice(deleted ? "频率规则已删除" : "频率规则已不存在", deleted ? "success" : "warning");
 }

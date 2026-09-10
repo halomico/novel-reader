@@ -3,6 +3,7 @@
 import { Check, ListX, SquareCheckBig, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { jsonMutationRequest } from "@/core/security/browser-mutation";
 import { uiText, type AppLocale } from "@/lib/locale";
 import Link from "./LocalizedLink";
 import { ContextNavigationLink } from "./ContextNavigationLink";
@@ -69,11 +70,11 @@ export function ReadingHistoryList({
   }
 
   function toggleAll() {
-    setSelected((current) => (
+    setSelected(
       allSelected
         ? new Set()
         : new Set(items.map((item) => item.id))
-    ));
+    );
     setConfirmClear(false);
   }
 
@@ -135,7 +136,7 @@ export function ReadingHistoryList({
       const endpoint = kind === "original"
         ? "/api/account/original-reading-progress?all=1"
         : "/api/account/reading-progress?all=1";
-      const response = await fetch(endpoint, { method: "DELETE" });
+      const response = await fetch(endpoint, jsonMutationRequest({ method: "DELETE" }));
       if (!response.ok) throw new Error("clear failed");
       setItems([]);
       setSelected(new Set());

@@ -3,6 +3,8 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
+import "../styles/common.css";
+import "../styles/routes/auth.css";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: NO_INDEX_ROBOTS };

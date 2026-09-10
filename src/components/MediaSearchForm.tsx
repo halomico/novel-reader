@@ -3,7 +3,7 @@
 import { Search, X } from "lucide-react";
 import Form from "next/form";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { beginNavigationProgress } from "./NavigationProgress";
 
 type HiddenField = {
@@ -32,11 +32,13 @@ export function MediaSearchForm({
 }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
+  const [prevQuery, setPrevQuery] = useState(query);
   const [keyword, setKeyword] = useState(query);
 
-  useEffect(() => {
+  if (prevQuery !== query) {
+    setPrevQuery(query);
     setKeyword(query);
-  }, [query]);
+  }
 
   return (
     <Form className={className} action={action} role="search" onSubmit={beginNavigationProgress}>

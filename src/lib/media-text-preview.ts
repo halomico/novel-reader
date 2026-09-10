@@ -2,9 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import iconv from "iconv-lite";
 import { isUtf8 } from "node:buffer";
+import type { MediaAsset } from "@/domains/media/media-model";
+import { getMediaDir } from "./config";
 import { mediaDeliveryUrl } from "./media-delivery";
-import { mediaFilePath, type MediaAsset } from "./media";
 import { isRemoteMediaStorage } from "./media-storage-config";
+import { resolveMediaStoragePath } from "./media-storage-path";
 
 export type MediaTextPreview = {
   format: "text" | "markdown";
@@ -70,7 +72,7 @@ async function readPreviewBytes(asset: MediaAsset): Promise<Buffer> {
   const end = Math.min(asset.sizeBytes, MAX_PREVIEW_BYTES) - 1;
   if (end < 0) return Buffer.alloc(0);
   if (!isRemoteMediaStorage() || !asset.storageNodeId) {
-    const handle = await fs.promises.open(mediaFilePath(asset.storedName), "r");
+    const handle = await fs.promises.open(resolveMediaStoragePath(getMediaDir(), asset.storedName), "r");
     try {
       const buffer = Buffer.alloc(end + 1);
       const result = await handle.read(buffer, 0, buffer.length, 0);

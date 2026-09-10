@@ -14,16 +14,10 @@ function storageKey(slug: string): string {
 }
 
 function eventId(articleId: number, action: "detail_view" | "read_open"): string {
-  const key = `novel-reader:original-event:${articleId}:${action}`;
-  try {
-    const current = sessionStorage.getItem(key);
-    if (current) return current;
-    const next = `event_${typeof crypto.randomUUID === "function" ? crypto.randomUUID().replace(/-/g, "") : `${Date.now()}_${Math.random().toString(36).slice(2)}`}`;
-    sessionStorage.setItem(key, next);
-    return next;
-  } catch {
-    return `event_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  }
+  const nonce = typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID().replace(/-/g, "")
+    : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  return `event_original_${articleId}_${action}_${nonce}`;
 }
 
 function readPosition(slug: string): StoredPosition | null {
@@ -101,8 +95,8 @@ function sendEngagement(articleId: number, action: "detail_view" | "read_open"):
 }
 
 function useVisibleEngagement(articleId: number, targetId: string) {
-  const sentRef = useRef(false);
   useEffect(() => {
+    let sent = false;
     const target = document.getElementById(targetId);
     if (!target) return;
     let intersecting = false;
@@ -114,11 +108,11 @@ function useVisibleEngagement(articleId: number, targetId: string) {
     }
     function schedule() {
       cancel();
-      if (!intersecting || document.visibilityState !== "visible" || sentRef.current) return;
+      if (!intersecting || document.visibilityState !== "visible" || sent) return;
       timer = setTimeout(() => {
         timer = null;
-        if (!intersecting || document.visibilityState !== "visible" || sentRef.current) return;
-        sentRef.current = true;
+        if (!intersecting || document.visibilityState !== "visible" || sent) return;
+        sent = true;
         sendEngagement(articleId, "detail_view");
       }, ENGAGEMENT_DELAY_MS);
     }
@@ -160,6 +154,14 @@ export function OriginalArticleTracker({
   const timerRef = useRef<number | null>(null);
   const lastSentRatioRef = useRef(initialRatio);
   const readOpenSentRef = useRef(false);
+  const prevArticleIdRef = useRef(articleId);
+
+  if (prevArticleIdRef.current !== articleId) {
+    prevArticleIdRef.current = articleId;
+    lastSentRatioRef.current = initialRatio;
+    readOpenSentRef.current = false;
+  }
+
   useVisibleEngagement(articleId, engagementTargetId);
 
   useEffect(() => {

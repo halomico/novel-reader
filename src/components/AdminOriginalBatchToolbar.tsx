@@ -7,7 +7,7 @@ type BatchAction = (formData: FormData) => void | Promise<void>;
 
 export function AdminOriginalBatchToolbar({
   formId,
-  inputName,
+
   returnPath,
   action,
   label,
@@ -15,7 +15,7 @@ export function AdminOriginalBatchToolbar({
   extraFields = {},
 }: {
   formId: string;
-  inputName: string;
+
   returnPath: string;
   action: BatchAction;
   label: string;
@@ -24,7 +24,12 @@ export function AdminOriginalBatchToolbar({
 }) {
   const [selected, setSelected] = useState(0);
   useEffect(() => {
-    const update = () => setSelected(document.querySelectorAll(`[data-batch-checkbox="${formId}"]:checked`).length);
+    const update = (event?: Event) => {
+      if (event?.target instanceof HTMLElement && !event.target.matches(`[data-batch-checkbox="${formId}"]`)) {
+        return;
+      }
+      setSelected(document.querySelectorAll(`[data-batch-checkbox="${formId}"]:checked`).length);
+    };
     document.addEventListener("change", update);
     update();
     return () => document.removeEventListener("change", update);

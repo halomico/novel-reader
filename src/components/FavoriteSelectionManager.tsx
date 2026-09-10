@@ -1,6 +1,6 @@
 "use client";
 
-import { BookmarkMinus, Check, ListChecks, X } from "lucide-react";
+import { Check, ListChecks } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   createContext,
@@ -153,7 +153,7 @@ export function FavoriteSelectionManager({
                 aria-label={tr("确认取消收藏")}
                 title={tr("确认取消收藏")}
               >
-                <Check size={16} aria-hidden="true" />
+                {tr(pending ? "处理中…" : "确认")}
               </button>
               <button
                 type="button"
@@ -162,7 +162,7 @@ export function FavoriteSelectionManager({
                 aria-label={tr("取消")}
                 title={tr("取消")}
               >
-                <X size={16} aria-hidden="true" />
+                {tr("取消")}
               </button>
             </span>
           ) : (
@@ -171,7 +171,6 @@ export function FavoriteSelectionManager({
               disabled={!selected.size || pending}
               onClick={() => setConfirming(true)}
             >
-              <BookmarkMinus size={16} aria-hidden="true" />
               {tr("取消收藏")}
             </button>
           )}

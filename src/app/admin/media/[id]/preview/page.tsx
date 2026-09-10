@@ -4,12 +4,17 @@ import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { AdminMediaCoverManager } from "@/components/AdminMediaCoverManager";
 import { MediaAudioPlayer, type AudioQueueTrack } from "@/components/MediaAudioPlayer";
 import { MediaPlayer } from "@/components/MediaPlayer";
+import { database } from "@/core/db/postgres";
+import type { MediaKind } from "@/domains/media/media-model";
+import { getPostgresMediaAsset, listPostgresMediaFolderAssets } from "@/domains/media/postgres-media-catalog";
+import {
+  getPostgresMediaPreparationJob,
+  postgresMediaAssetNeedsPreparation,
+} from "@/domains/media/postgres-media-preparation";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
 import { getAudioDefaultPlaybackMode, getVideoThumbnailSettings } from "@/lib/config";
 import { mediaCoverVersion } from "@/lib/media-cover-version";
-import { getMediaAsset, listMediaFolderAssets, type MediaKind } from "@/lib/media";
-import { getMediaPreparationJob, mediaAssetNeedsPreparation } from "@/lib/media-preparation-jobs";
 import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
@@ -28,14 +33,16 @@ export default async function AdminMediaPreviewPage({ params }: { params: Promis
   if (!access.allowed || !(await getAdminSession())) {
     notFound();
   }
-  const asset = getMediaAsset(Number((await params).id));
+  const asset = await getPostgresMediaAsset(database("web"), Number((await params).id));
   if (!asset || (asset.kind !== "video" && asset.kind !== "audio")) {
     notFound();
   }
 
   const Icon = KIND_ICONS[asset.kind];
   const title = displayTitle(asset.title, asset.fileName);
-  const folderAudio = asset.kind === "audio" ? listMediaFolderAssets("audio", asset.folder, 2_000) : [];
+  const folderAudio = asset.kind === "audio"
+    ? await listPostgresMediaFolderAssets(database("web"), "audio", asset.folder, 2_000)
+    : [];
   if (asset.kind === "audio" && !folderAudio.some((item) => item.id === asset.id)) {
     folderAudio.push(asset);
   }
@@ -50,9 +57,11 @@ export default async function AdminMediaPreviewPage({ params }: { params: Promis
     }));
   const thumbnailSettings = getVideoThumbnailSettings();
   const posterVersion = mediaCoverVersion(asset, thumbnailSettings.singlePercent);
-  const preparationJob = asset.kind === "video" ? getMediaPreparationJob(asset.id) : null;
+  const preparationJob = asset.kind === "video"
+    ? await getPostgresMediaPreparationJob(database("web"), asset.id)
+    : null;
   const preparationStatus = preparationJob?.status ||
-    (mediaAssetNeedsPreparation(asset, thumbnailSettings.singlePercent) ? "pending" : "ready");
+    (postgresMediaAssetNeedsPreparation(asset, thumbnailSettings.singlePercent) ? "pending" : "ready");
 
   return (
     <main className="adminShell adminPreviewShell">

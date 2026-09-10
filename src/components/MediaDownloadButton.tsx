@@ -1,7 +1,8 @@
 "use client";
 
 import { CupSoda, Download, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { useFocusTrap } from "@/lib/focus-trap";
 
 export function MediaDownloadButton({
   mediaId,
@@ -32,15 +33,14 @@ export function MediaDownloadButton({
   const normalizedPrice = Math.max(Math.floor(price || 0), 0);
   const accessActive = available && (accessExpiresAt === null || accessExpiresAt > Date.now());
 
-  useEffect(() => {
-    if (!open) return;
-    closeButtonRef.current?.focus();
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [open]);
+  const drawerRef = useRef<HTMLElement>(null);
+
+  useFocusTrap({
+    active: open,
+    containerRef: drawerRef,
+    initialFocusRef: closeButtonRef,
+    onEscape: () => setOpen(false),
+  });
 
   function startDownload(url = `/media/${mediaId}/download`) {
     const link = document.createElement("a");
@@ -92,7 +92,7 @@ export function MediaDownloadButton({
       </button>
       {open ? (
         <div className="mediaDownloadBackdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setOpen(false)}>
-          <section className="mediaDownloadDrawer" role="dialog" aria-modal="true" aria-labelledby="media-download-title">
+          <section ref={drawerRef} className="mediaDownloadDrawer" role="dialog" aria-modal="true" aria-labelledby="media-download-title">
             <span className="mediaDownloadHandle" aria-hidden="true" />
             <header>
               <div>

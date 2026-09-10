@@ -14,7 +14,7 @@ import {
   setOriginalCommentStatus,
   updateOriginalArticleAsAdmin,
   type OriginalArticleStatus,
-} from "@/lib/original";
+} from "@/domains/originals/postgres-originals";
 
 async function requireAdmin() {
   const headerStore = await headers();
@@ -53,7 +53,7 @@ export async function setOriginalArticleStatusAction(formData: FormData) {
   const articleId = Math.floor(Number(formData.get("articleId")));
   const statusValue = String(formData.get("status") || "");
   const status: OriginalArticleStatus = statusValue === "hidden" ? "hidden" : statusValue === "draft" ? "draft" : "published";
-  if (!Number.isSafeInteger(articleId) || articleId <= 0 || !setOriginalArticleStatus(articleId, status)) {
+  if (!Number.isSafeInteger(articleId) || articleId <= 0 || !await setOriginalArticleStatus(articleId, status)) {
     noticePath(returnPath(formData), "文章不存在或状态未改变", "warning");
   }
   revalidatePath("/original");
@@ -68,7 +68,7 @@ function formIds(formData: FormData, name: string): number[] {
 export async function deleteOriginalArticlesBatchAction(formData: FormData) {
   await requireAdmin();
   const ids = formIds(formData, "articleIds");
-  const deleted = deleteOriginalArticles(ids);
+  const deleted = await deleteOriginalArticles(ids);
   if (!deleted) noticePath(returnPath(formData), "请选择要删除的文章", "warning");
   revalidatePath("/original", "layout");
   revalidatePath("/admin/original", "layout");
@@ -78,7 +78,7 @@ export async function deleteOriginalArticlesBatchAction(formData: FormData) {
 export async function deleteOriginalCommentsBatchAction(formData: FormData) {
   await requireAdmin();
   const ids = formIds(formData, "commentIds");
-  const deleted = deleteOriginalComments(ids);
+  const deleted = await deleteOriginalComments(ids);
   if (!deleted) noticePath(returnPath(formData), "请选择要删除的评论", "warning");
   revalidatePath("/original", "layout");
   revalidatePath("/admin/original", "layout");
@@ -91,7 +91,7 @@ export async function setOriginalArticlePinnedAction(formData: FormData) {
   await requireAdmin();
   const articleId = Math.floor(Number(formData.get("articleId")));
   const pinned = String(formData.get("pinned")) === "1";
-  if (!Number.isSafeInteger(articleId) || articleId <= 0 || !setOriginalArticlePinned(articleId, pinned)) {
+  if (!Number.isSafeInteger(articleId) || articleId <= 0 || !await setOriginalArticlePinned(articleId, pinned)) {
     noticePath(returnPath(formData), pinned ? "只有已发布文章可以置顶，或状态未改变" : "文章不存在或置顶状态未改变", "warning");
   }
   revalidatePath("/original", "layout");
@@ -105,7 +105,7 @@ export async function updateOriginalArticleAdminAction(formData: FormData) {
   const articleId = Math.floor(Number(formData.get("articleId")));
   const path = articlePath(articleId);
   try {
-    updateOriginalArticleAsAdmin({
+    await updateOriginalArticleAsAdmin({
       articleId,
       title: formData.get("title"),
       bodyMarkdown: formData.get("bodyMarkdown"),
@@ -126,7 +126,7 @@ export async function setOriginalCommentStatusAdminAction(formData: FormData) {
   const commentId = Math.floor(Number(formData.get("commentId")));
   const articleId = Math.floor(Number(formData.get("articleId")));
   const status = String(formData.get("status")) === "hidden" ? "hidden" : "published";
-  if (!Number.isSafeInteger(commentId) || commentId <= 0 || !setOriginalCommentStatus(commentId, status)) {
+  if (!Number.isSafeInteger(commentId) || commentId <= 0 || !await setOriginalCommentStatus(commentId, status)) {
     noticePath(articlePath(articleId), "评论不存在或状态未改变", "warning");
   }
   revalidatePath("/original");

@@ -1,9 +1,11 @@
 "use client";
 
-import Hls, { type HlsConfig } from "hls.js";
+import type Hls from "hls.js";
+import type { HlsConfig } from "hls.js";
 import { CupSoda, LoaderCircle, Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "@/components/LocalizedLink";
+import { jsonMutationRequest } from "@/core/security/browser-mutation";
 
 type PlaybackLease = {
   sessionId: string;
@@ -17,6 +19,10 @@ type PlaybackLease = {
 type PlayerStatus = "idle" | "loading" | "ready" | "error";
 
 export const HLS_STALL_RECOVERY_MS = 30_000;
+
+function canLoadHlsEngine(): boolean {
+  return typeof window !== "undefined" && typeof MediaSource !== "undefined";
+}
 
 /** Single-bitrate VOD buffers. */
 export function createHlsConfig(): Partial<HlsConfig> {
@@ -216,7 +222,7 @@ export function MediaPlayer({
       body: JSON.stringify({
         mediaId: id,
         clientId: clientId(),
-        inlineHls: Hls.isSupported(),
+        inlineHls: canLoadHlsEngine(),
       }),
     });
     const body = await response.json().catch(() => ({})) as {
@@ -252,7 +258,10 @@ export function MediaPlayer({
       throw new Error("播放授权已到期，请重新解锁");
     }
     if (!authenticated) throw new Error("LOGIN_REQUIRED");
-    const response = await fetch(`/api/media/${id}/unlock`, { method: "POST" });
+    const response = await fetch(
+      `/api/media/${id}/unlock`,
+      jsonMutationRequest({ method: "POST" }),
+    );
     const body = await response.json().catch(() => ({})) as {
       ok?: boolean;
       message?: string;
@@ -351,79 +360,89 @@ export function MediaPlayer({
       };
     }
 
-    // WordPress / industry default: use hls.js on Chromium/Firefox first.
-    // Some Chromium builds return a non-empty canPlayType for mpegurl but still
-    // cannot play m3u8 natively (MEDIA_ERR_SRC_NOT_SUPPORTED). Prefer MSE.
-    if (Hls.isSupported()) {
-      const hls = new Hls(createHlsConfig());
-      const inlineManifest = inlineManifestRef.current;
-      const hlsSource = inlineManifest
-        ? URL.createObjectURL(new Blob(
-          [resolveInlineHlsUris(inlineManifest, window.location.href)],
-          { type: "application/vnd.apple.mpegurl" },
-        ))
-        : sourceUrl;
-      hlsRef.current = hls;
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        if (!cancelled) {
-          setStatus("ready");
-          setStatusMessage("");
-        }
-      });
-      hls.on(Hls.Events.FRAG_BUFFERED, () => {
-        hlsNetworkRecoveryRef.current = 0;
-        hlsMediaRecoveryRef.current = 0;
-      });
-      hls.on(Hls.Events.STALL_RESOLVED, () => {
-        hlsStallRecoveryRef.current = 0;
-        clearHlsStallRecovery();
-      });
-      hls.on(Hls.Events.ERROR, (_event, data) => {
+    // Load hls.js only after a server lease confirms this is an HLS source.
+    // Audio and MP4 pages never pull the engine into their client bundle.
+    let hls: Hls | null = null;
+    let inlineManifestUrl: string | null = null;
+    const attachNativeHls = () => {
+      if (cancelled) return;
+      const nativeHls = Boolean(video.canPlayType("application/vnd.apple.mpegurl"));
+      if (nativeHls) {
+        video.src = sourceUrl;
+        video.load();
+        return;
+      }
+      failPlayback("当前浏览器不支持 HLS 播放");
+    };
+
+    if (!canLoadHlsEngine()) {
+      attachNativeHls();
+    } else {
+      void import("hls.js").then(({ default: HlsEngine }) => {
         if (cancelled) return;
-        if (!data.fatal) {
-          if (data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {
-            scheduleHlsStallRecovery();
+        if (!HlsEngine.isSupported()) {
+          attachNativeHls();
+          return;
+        }
+        const engine = new HlsEngine(createHlsConfig());
+        hls = engine;
+        const inlineManifest = inlineManifestRef.current;
+        const hlsSource = inlineManifest
+          ? URL.createObjectURL(new Blob(
+            [resolveInlineHlsUris(inlineManifest, window.location.href)],
+            { type: "application/vnd.apple.mpegurl" },
+          ))
+          : sourceUrl;
+        if (inlineManifest) inlineManifestUrl = hlsSource;
+        hlsRef.current = engine;
+        engine.on(HlsEngine.Events.MANIFEST_PARSED, () => {
+          if (!cancelled) {
+            setStatus("ready");
+            setStatusMessage("");
           }
-          return;
-        }
-        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && hlsNetworkRecoveryRef.current < 3) {
-          hlsNetworkRecoveryRef.current += 1;
-          hls.startLoad(Math.max(0, video.currentTime), true);
-          void video.play().catch(() => undefined);
-          return;
-        }
-        if (data.type === Hls.ErrorTypes.MEDIA_ERROR && hlsMediaRecoveryRef.current < 2) {
-          hlsMediaRecoveryRef.current += 1;
-          hls.recoverMediaError();
-          return;
-        }
-        failPlayback("HLS 播放失败，请刷新后重试");
+        });
+        engine.on(HlsEngine.Events.FRAG_BUFFERED, () => {
+          hlsNetworkRecoveryRef.current = 0;
+          hlsMediaRecoveryRef.current = 0;
+        });
+        engine.on(HlsEngine.Events.STALL_RESOLVED, () => {
+          hlsStallRecoveryRef.current = 0;
+          clearHlsStallRecovery();
+        });
+        engine.on(HlsEngine.Events.ERROR, (_event, data) => {
+          if (cancelled) return;
+          if (!data.fatal) {
+            if (data.details === HlsEngine.ErrorDetails.BUFFER_STALLED_ERROR) {
+              scheduleHlsStallRecovery();
+            }
+            return;
+          }
+          if (data.type === HlsEngine.ErrorTypes.NETWORK_ERROR && hlsNetworkRecoveryRef.current < 3) {
+            hlsNetworkRecoveryRef.current += 1;
+            engine.startLoad(Math.max(0, video.currentTime), true);
+            void video.play().catch(() => undefined);
+            return;
+          }
+          if (data.type === HlsEngine.ErrorTypes.MEDIA_ERROR && hlsMediaRecoveryRef.current < 2) {
+            hlsMediaRecoveryRef.current += 1;
+            engine.recoverMediaError();
+            return;
+          }
+          failPlayback("HLS 播放失败，请刷新后重试");
+        });
+        // Recommended order for hls.js: loadSource then attachMedia.
+        engine.loadSource(hlsSource);
+        engine.attachMedia(video);
+      }).catch(() => {
+        attachNativeHls();
       });
-      // Recommended order for hls.js: loadSource then attachMedia.
-      hls.loadSource(hlsSource);
-      hls.attachMedia(video);
-
-      return () => {
-        cancelled = true;
-        hls.destroy();
-        if (inlineManifest) URL.revokeObjectURL(hlsSource);
-        if (hlsRef.current === hls) hlsRef.current = null;
-      };
     }
 
-    // Safari / iOS: native HLS only when hls.js MSE is unavailable.
-    const nativeHls = Boolean(video.canPlayType("application/vnd.apple.mpegurl"));
-    if (nativeHls) {
-      video.src = sourceUrl;
-      video.load();
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    failPlayback("当前浏览器不支持 HLS 播放");
     return () => {
       cancelled = true;
+      if (hls) hls.destroy();
+      if (inlineManifestUrl) URL.revokeObjectURL(inlineManifestUrl);
+      if (hlsRef.current === hls) hlsRef.current = null;
     };
   }, [clearHlsStallRecovery, destroyHls, failPlayback, scheduleHlsStallRecovery, sourceFormat, sourceUrl]);
 

@@ -25,7 +25,7 @@ import { deleteNovelsAction, togglePinnedNovelAction } from "@/app/admin/actions
 import { LocalDateTime } from "@/components/LocalDateTime";
 import { ResultCount } from "@/components/ResultCount";
 import { usePersistentSelection } from "@/components/usePersistentSelection";
-import type { AdminBookSortDir, AdminBookSortKey, AdminNovel } from "@/lib/admin-books";
+import type { AdminBookSortDir, AdminBookSortKey, AdminNovel } from "@/domains/catalog/postgres-admin-novels";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) {
@@ -242,13 +242,23 @@ export function AdminBookTable({
       return;
     }
     const activeResize = resizingColumn;
+    let frameId = 0;
 
     function handlePointerMove(event: PointerEvent) {
-      const nextWidth = Math.min(Math.max(activeResize.startWidth + event.clientX - activeResize.startX, MIN_BOOK_COLUMN_WIDTH), MAX_BOOK_COLUMN_WIDTH);
-      setColumnWidths((current) => ({ ...current, [activeResize.key]: Math.floor(nextWidth) }));
+      if (frameId) return;
+      const clientX = event.clientX;
+      frameId = window.requestAnimationFrame(() => {
+        frameId = 0;
+        const nextWidth = Math.min(Math.max(activeResize.startWidth + clientX - activeResize.startX, MIN_BOOK_COLUMN_WIDTH), MAX_BOOK_COLUMN_WIDTH);
+        setColumnWidths((current) => ({ ...current, [activeResize.key]: Math.floor(nextWidth) }));
+      });
     }
 
     function stopResize() {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+        frameId = 0;
+      }
       setResizingColumn(null);
     }
 
@@ -256,6 +266,9 @@ export function AdminBookTable({
     window.addEventListener("pointerup", stopResize);
     window.addEventListener("pointercancel", stopResize);
     return () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", stopResize);
       window.removeEventListener("pointercancel", stopResize);

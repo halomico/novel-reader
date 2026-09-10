@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkContentAccess } from "@/lib/content-access";
-import { getMediaAsset, isMediaKindConsumable } from "@/lib/media";
+import { database } from "@/core/db/postgres";
+import { checkPostgresContentAccess } from "@/domains/access/postgres-content-access";
+import { isMediaKindConsumable } from "@/domains/media/media-model";
+import { getPostgresMediaAsset } from "@/domains/media/postgres-media-catalog";
 import { getMediaTextPreview } from "@/lib/media-text-preview";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 
@@ -8,12 +10,12 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const user = getCurrentUserFromRequest(request);
-  const asset = getMediaAsset(Number((await params).id));
+  const user = await getCurrentUserFromRequest(request);
+  const asset = await getPostgresMediaAsset(database("web"), Number((await params).id));
   if (!asset || asset.kind !== "file" || !isMediaKindConsumable("file", Boolean(user))) {
     return new Response(null, { status: 404 });
   }
-  const access = checkContentAccess(request.headers, {
+  const access = await checkPostgresContentAccess(database("web"), request.headers, {
     scope: "file",
     authenticated: Boolean(user),
     admin: user?.role === "admin",

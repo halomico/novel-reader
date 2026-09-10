@@ -11,10 +11,6 @@ function TagLinkPendingState() {
 
 function recordTagClick(slug: string) {
   const body = JSON.stringify({ slug });
-  if (typeof navigator.sendBeacon === "function") {
-    const sent = navigator.sendBeacon("/api/analytics/tag-click", new Blob([body], { type: "application/json" }));
-    if (sent) return;
-  }
   void fetch("/api/analytics/tag-click", {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },

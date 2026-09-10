@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import type { MediaKind, MediaSortBy, MediaSortOrder } from "@/lib/media";
+import type { MediaKind, MediaSortBy, MediaSortOrder } from "@/domains/media/media-model";
 import { MediaSortMenu, type MediaSortOption } from "./MediaSortMenu";
 import { beginNavigationProgress } from "./NavigationProgress";
 

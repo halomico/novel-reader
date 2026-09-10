@@ -6,9 +6,17 @@ import { useState } from "react";
 type LoadState = "idle" | "loading" | "ready" | "error";
 
 export function AdminNovelContentEditor({ bookId }: { bookId: number }) {
+  const [prevBookId, setPrevBookId] = useState(bookId);
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<LoadState>("idle");
   const [content, setContent] = useState("");
+
+  if (prevBookId !== bookId) {
+    setPrevBookId(bookId);
+    setOpen(false);
+    setState("idle");
+    setContent("");
+  }
 
   async function loadContent() {
     setState("loading");
@@ -52,6 +60,7 @@ export function AdminNovelContentEditor({ bookId }: { bookId: number }) {
             </p>
           ) : state === "ready" ? (
             <textarea
+              key={bookId}
               className="adminNovelContentEditor"
               name="content"
               rows={30}

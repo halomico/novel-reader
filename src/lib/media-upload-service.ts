@@ -12,14 +12,17 @@ import {
   prepareMediaUpload,
   startMediaUpload,
 } from "./media-upload";
+import { database } from "@/core/db/postgres";
+import { mediaFolderFromStoredName, type MediaAsset } from "@/domains/media/media-model";
 import {
   availableIndexedMediaStoredName,
-  createMediaAsset,
-  getMediaAssetByStoredName,
   MediaFolderError,
-  mediaFolderFromStoredName,
-  type MediaAsset,
-} from "./media";
+} from "@/domains/media/media-storage-model";
+import {
+  createPostgresMediaAsset,
+  indexedPostgresMediaStoredNames,
+} from "@/domains/media/postgres-media-admin";
+import { getPostgresMediaAssetByStoredName } from "@/domains/media/postgres-media-catalog";
 import {
   getRemoteMediaNodeForKind,
   getRemoteMediaStorageConfig,
@@ -31,6 +34,18 @@ export type MediaStorageUploadStart = {
   chunkBytes: number;
   uploadUrl: string;
   uploadToken?: string;
+};
+
+export type MediaStorageUploadRepository = {
+  indexedStoredNames(kind: Parameters<typeof indexedPostgresMediaStoredNames>[1], folder: string, fileName: string): Promise<Set<string>>;
+  getAssetByStoredName(storedName: string, storageNodeId: string): Promise<MediaAsset | null>;
+  createAsset(params: Parameters<typeof createPostgresMediaAsset>[1]): Promise<MediaAsset>;
+};
+
+const postgresMediaStorageUploadRepository: MediaStorageUploadRepository = {
+  indexedStoredNames: (kind, folder, fileName) => indexedPostgresMediaStoredNames(database(), kind, folder, fileName),
+  getAssetByStoredName: (storedName, storageNodeId) => getPostgresMediaAssetByStoredName(database(), storedName, storageNodeId),
+  createAsset: (params) => createPostgresMediaAsset(database(), params),
 };
 
 type UploadInput = Parameters<typeof prepareMediaUpload>[0];
@@ -64,22 +79,26 @@ function parseRemoteUploadHandle(value: string): { nodeId: string; uploadId: str
 export async function startMediaStorageUpload(
   params: UploadInput,
   allowedOrigin: string,
+  repository: MediaStorageUploadRepository = postgresMediaStorageUploadRepository,
 ): Promise<MediaStorageUploadStart> {
   if (!isRemoteMediaStorage()) {
-    const result = startMediaUpload(params);
+    const result = await startMediaUpload(params);
     return {
       ...result,
       uploadUrl: `/admin/media/upload?action=chunk&uploadId=${result.uploadId}`,
     };
   }
-  const prepared = prepareMediaUpload(params, { requireLocalFolder: false });
+  const prepared = await prepareMediaUpload(params, { requireLocalFolder: false });
   try {
     const node = getRemoteMediaNodeForKind(prepared.kind);
     const requestedFileName = prepared.storedName.split("/").at(-1) || prepared.storedName;
+    const folder = mediaFolderFromStoredName(prepared.storedName, prepared.kind);
+    const indexedNames = await repository.indexedStoredNames(prepared.kind, folder, requestedFileName);
     const storedName = availableIndexedMediaStoredName(
       prepared.kind,
-      mediaFolderFromStoredName(prepared.storedName, prepared.kind),
+      folder,
       requestedFileName,
+      indexedNames,
     );
     const started = await startRemoteMediaUpload(
       node.id,
@@ -95,16 +114,19 @@ export async function startMediaStorageUpload(
   }
 }
 
-export async function finishMediaStorageUpload(uploadId: string): Promise<MediaAsset> {
+export async function finishMediaStorageUpload(
+  uploadId: string,
+  repository: MediaStorageUploadRepository = postgresMediaStorageUploadRepository,
+): Promise<MediaAsset> {
   if (!isRemoteMediaStorage()) {
     return await finishMediaUpload(uploadId);
   }
   try {
     const remoteUpload = parseRemoteUploadHandle(uploadId);
     const receipt = await finishRemoteMediaUpload(remoteUpload.nodeId, remoteUpload.uploadId);
-    const existing = getMediaAssetByStoredName(receipt.storedName, remoteUpload.nodeId);
+    const existing = await repository.getAssetByStoredName(receipt.storedName, remoteUpload.nodeId);
     if (existing) return existing;
-    return createMediaAsset({
+    return repository.createAsset({
       kind: receipt.kind,
       storageNodeId: remoteUpload.nodeId,
       categoryId: receipt.categoryId,

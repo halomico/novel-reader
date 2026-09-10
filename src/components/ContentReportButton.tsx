@@ -2,8 +2,10 @@
 
 import { Flag, X } from "lucide-react";
 import { FormEvent, useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { SelectControl } from "./SelectControl";
-import type { ContentReportCategory } from "@/lib/reports";
+import { useFocusTrap } from "@/lib/focus-trap";
+import type { ContentReportCategory } from "@/domains/activity/postgres-reports";
 
 export type ContentReportOption = { value: ContentReportCategory; label: string };
 type ReportTarget = { novelId: number } | { mediaId: number } | { originalArticleId: number };
@@ -40,15 +42,14 @@ export function ContentReportButton({
     setSubmitting(false);
   }
 
-  useEffect(() => {
-    if (!open) return;
-    closeButtonRef.current?.focus();
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") close();
-    }
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [open]);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  useFocusTrap({
+    active: open,
+    containerRef: formRef,
+    initialFocusRef: closeButtonRef,
+    onEscape: close,
+  });
 
   useEffect(() => {
     if (!notice) return;
@@ -91,9 +92,9 @@ export function ContentReportButton({
         {variant !== "icon" ? <span>反馈</span> : null}
       </button>
       {notice ? <span className="readerActionToast" role="status">{notice}</span> : null}
-      {open ? (
+      {open ? createPortal(
         <div className="readerReportBackdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && close()}>
-          <form className="readerReportDialog" role="dialog" aria-modal="true" aria-labelledby={dialogId} onSubmit={submit}>
+          <form ref={formRef} className="readerReportDialog" role="dialog" aria-modal="true" aria-labelledby={dialogId} onSubmit={submit}>
             <header>
               <div><h2 id={dialogId}>{dialogTitle}</h2><p>{title}</p></div>
               <button ref={closeButtonRef} type="button" onClick={close} aria-label="关闭" title="关闭"><X size={18} aria-hidden="true" /></button>
@@ -111,7 +112,8 @@ export function ContentReportButton({
             {message ? <p className="readerReportError" role="alert">{message}</p> : null}
             <footer><button type="submit" disabled={submitting}>提交</button></footer>
           </form>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );

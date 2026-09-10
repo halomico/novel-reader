@@ -1,5 +1,8 @@
 import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
+import { database } from "@/core/db/postgres";
+import { getPostgresMediaAsset, replacePostgresMediaCustomCoverKey } from "@/domains/media/postgres-media-catalog";
+import { schedulePostgresMediaPreparation } from "@/domains/media/postgres-media-preparation";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
 import {
@@ -10,11 +13,6 @@ import {
   normalizeMediaCover,
   writeMediaCustomCover,
 } from "@/lib/media-cover";
-import {
-  getMediaAsset,
-  replaceMediaCustomCoverKey,
-} from "@/lib/media";
-import { scheduleMediaPreparation } from "@/lib/media-maintenance";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -37,7 +35,7 @@ function refreshMediaPaths(id: number) {
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await authorize(request))) return new Response(null, { status: 404 });
   const id = Number((await params).id);
-  const asset = getMediaAsset(id);
+  const asset = await getPostgresMediaAsset(database("web"), id);
   if (!asset || asset.kind !== "video") return jsonError("视频不存在", 404);
   const contentLength = Number(request.headers.get("content-length") || "0");
   if (Number.isFinite(contentLength) && contentLength > MAX_CUSTOM_MEDIA_COVER_BYTES + 1024 * 1024) {
@@ -57,7 +55,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const normalized = await normalizeMediaCover(Buffer.from(await file.arrayBuffer()));
     key = createMediaCoverKey();
     await writeMediaCustomCover(asset, key, normalized);
-    const previousKey = replaceMediaCustomCoverKey(asset.id, key);
+    const previousKey = await replacePostgresMediaCustomCoverKey(asset.id, key);
     if (previousKey === undefined) {
       await deleteMediaCustomCover(asset, key).catch(() => undefined);
       return jsonError("视频不存在", 404);
@@ -85,17 +83,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await authorize(request))) return new Response(null, { status: 404 });
   const id = Number((await params).id);
-  const asset = getMediaAsset(id);
+  const asset = await getPostgresMediaAsset(database("web"), id);
   if (!asset || asset.kind !== "video") return jsonError("视频不存在", 404);
-  const previousKey = replaceMediaCustomCoverKey(asset.id, null);
+  const previousKey = await replacePostgresMediaCustomCoverKey(asset.id, null);
   if (previousKey === undefined) return jsonError("视频不存在", 404);
   if (previousKey) {
     await deleteMediaCustomCover(asset, previousKey).catch((error) => {
       console.warn(`[media] failed to remove custom cover for asset ${asset.id}`, error);
     });
   }
-  const updated = getMediaAsset(asset.id);
-  if (updated) scheduleMediaPreparation([updated]);
+  const updated = await getPostgresMediaAsset(database("web"), asset.id);
+  if (updated) await schedulePostgresMediaPreparation([updated]);
   refreshMediaPaths(asset.id);
   return NextResponse.json({ ok: true, message: "已恢复自动封面" });
 }

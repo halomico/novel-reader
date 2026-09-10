@@ -2,26 +2,37 @@
 
 import { Pencil, Save, Trash2, X } from "lucide-react";
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
+import { useFocusTrap } from "@/lib/focus-trap";
 import { deleteAdminUsersAction, updateAdminUserAction, updateAdminUserStatusAction } from "@/app/admin/actions";
 import { LocalDateTime } from "@/components/LocalDateTime";
 import { AdminSelect } from "@/components/AdminSelect";
 import { usePersistentSelection } from "@/components/usePersistentSelection";
 import { InlineMutationNotice, useInlineMutation } from "@/components/useInlineMutation";
-import type { UserProfile } from "@/lib/users";
+import type { PostgresUserProfile as UserProfile } from "@/domains/identity/postgres-users";
 
 export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; returnPath: string }) {
   const mutation = useInlineMutation();
   const { selectedIds, toggleOne, togglePage, clearSelection } = usePersistentSelection("novel-reader-admin-user-selection");
+  const userIdsKey = users.map((user) => user.id).join(",");
+  const [prevUserIdsKey, setPrevUserIdsKey] = useState(userIdsKey);
   const [visibleUsers, setVisibleUsers] = useState(users);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
-  const visibleIds = visibleUsers.map((user) => user.id);
-  const isAllSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+  const editDialogRef = useRef<HTMLFormElement>(null);
+  useFocusTrap({
+    active: Boolean(editingUser),
+    containerRef: editDialogRef,
+    onEscape: () => setEditingUser(null),
+  });
 
-  useEffect(() => {
+  if (prevUserIdsKey !== userIdsKey) {
+    setPrevUserIdsKey(userIdsKey);
     setVisibleUsers(users);
     setEditingUser(null);
-  }, [users]);
+  }
+
+  const visibleIds = visibleUsers.map((user) => user.id);
+  const isAllSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
 
   function toggleAll() {
     togglePage(visibleIds);
@@ -197,7 +208,7 @@ export function AdminUserTable({ users, returnPath }: { users: UserProfile[]; re
           role="presentation"
           onMouseDown={(event) => event.target === event.currentTarget && setEditingUser(null)}
         >
-          <form className="adminMediaEditDialog adminUserEditDialog" onSubmit={updateUser} role="dialog" aria-modal="true" aria-labelledby="admin-user-edit-title" key={editingUser.id}>
+          <form ref={editDialogRef} className="adminMediaEditDialog adminUserEditDialog" onSubmit={updateUser} role="dialog" aria-modal="true" aria-labelledby="admin-user-edit-title" key={editingUser.id}>
             <header>
               <div>
                 <h3 id="admin-user-edit-title">编辑用户</h3>

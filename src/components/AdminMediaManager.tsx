@@ -15,8 +15,9 @@ import { LocalDateTime } from "@/components/LocalDateTime";
 import { beginNavigationProgress } from "@/components/NavigationProgress";
 import { usePersistentSelection } from "@/components/usePersistentSelection";
 import { InlineMutationNotice, useInlineMutation } from "@/components/useInlineMutation";
+import { useFocusTrap } from "@/lib/focus-trap";
 import { VideoTagPicker } from "@/components/VideoTagPicker";
-import type { MediaAsset, MediaFolder, MediaKind, MediaSortBy, MediaSortOrder, VideoCategory, VideoTag } from "@/lib/media";
+import type { MediaAsset, MediaFolder, MediaKind, MediaSortBy, MediaSortOrder, VideoCategory, VideoTag } from "@/domains/media/media-model";
 
 const KIND_LABELS: Record<MediaKind, string> = { video: "视频", audio: "音频", file: "文件" };
 const KIND_ICONS = { video: Clapperboard, audio: Headphones, file: File };
@@ -188,6 +189,18 @@ export function AdminMediaManager({
   const [batchAssets, setBatchAssets] = useState<MediaAsset[]>([]);
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchError, setBatchError] = useState("");
+  const batchDialogRef = useRef<HTMLFormElement>(null);
+  const editDialogRef = useRef<HTMLFormElement>(null);
+  useFocusTrap({
+    active: batchEditing,
+    containerRef: batchDialogRef,
+    onEscape: () => setBatchEditing(false),
+  });
+  useFocusTrap({
+    active: Boolean(editingAsset),
+    containerRef: editDialogRef,
+    onEscape: () => setEditingAsset(null),
+  });
   const visibleIds = visibleAssets.map((asset) => asset.id);
   const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
   const categoryNames = useMemo(
@@ -209,9 +222,11 @@ export function AdminMediaManager({
     setBatchError("");
   }, [assets, tagsByAsset, totalAssets]);
 
-  useEffect(() => {
+  const [prevCategories, setPrevCategories] = useState(categories);
+  if (prevCategories !== categories) {
+    setPrevCategories(categories);
     setVideoCategories(categories);
-  }, [categories]);
+  }
 
   useEffect(() => {
     function updateCategories(event: Event) {
@@ -608,8 +623,8 @@ export function AdminMediaManager({
                           <>
                             <span>{asset.categoryId ? categoryNames.get(asset.categoryId) || "未分类" : "未分类"}</span>
                             {visibleTagsByAsset[asset.id]?.length ? (
-                              <small className="contentTag" title={visibleTagsByAsset[asset.id].map((tag) => `#${tag.name}`).join(" ")}>
-                                {visibleTagsByAsset[asset.id].slice(0, 3).map((tag) => `#${tag.name}`).join(" ")}
+                              <small className="contentTag" title={visibleTagsByAsset[asset.id].map((tag) => tag.name).join(" ")}>
+                                {visibleTagsByAsset[asset.id].slice(0, 3).map((tag) => tag.name).join(" ")}
                               </small>
                             ) : null}
                           </>
@@ -656,7 +671,7 @@ export function AdminMediaManager({
 
       {batchEditing ? (
         <div className="adminMediaEditBackdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setBatchEditing(false)}>
-          <form className="adminMediaEditDialog adminMediaBatchDialog" onSubmit={submitBatchEdit} role="dialog" aria-modal="true" aria-labelledby="admin-media-batch-title">
+          <form ref={batchDialogRef} className="adminMediaEditDialog adminMediaBatchDialog" onSubmit={submitBatchEdit} role="dialog" aria-modal="true" aria-labelledby="admin-media-batch-title">
             <header>
               <div>
                 <h3 id="admin-media-batch-title">批量编辑资源</h3>
@@ -757,7 +772,7 @@ export function AdminMediaManager({
 
       {editingAsset ? (
         <div className="adminMediaEditBackdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setEditingAsset(null)}>
-          <form className="adminMediaEditDialog" onSubmit={submitEdit} role="dialog" aria-modal="true" aria-labelledby="admin-media-edit-title" key={editingAsset.id}>
+          <form ref={editDialogRef} className="adminMediaEditDialog" onSubmit={submitEdit} role="dialog" aria-modal="true" aria-labelledby="admin-media-edit-title" key={editingAsset.id}>
             <header>
               <div>
                 <h3 id="admin-media-edit-title">编辑资源</h3>

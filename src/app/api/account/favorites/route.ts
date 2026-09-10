@@ -1,6 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { database } from "@/core/db/postgres";
 import { validateSameOriginMutation } from "@/core/security/origin";
-import { removeMediaFavorites, removeNovelFavorites, removeOriginalFavorites } from "@/lib/favorites";
+import { readJsonBody } from "@/core/security/request-body";
+import { removePostgresNovelFavorites } from "@/domains/reading/postgres-reader-interactions";
+import { removePostgresMediaFavorites, removePostgresOriginalFavorites } from "@/domains/activity/postgres-favorites";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 
 type FavoriteKind = "novel" | "original" | "video" | "audio";
@@ -16,26 +19,31 @@ export async function DELETE(request: NextRequest) {
   if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "same-site") {
     return NextResponse.json({ ok: false, message: "请求无效" }, { status: 403 });
   }
-  const user = getCurrentUserFromRequest(request);
+  const user = await getCurrentUserFromRequest(request);
   if (!user) {
     return NextResponse.json({ ok: false, message: "请先登录" }, { status: 401 });
   }
 
-  let body: { kind?: unknown; ids?: unknown };
-  try {
-    body = await request.json() as { kind?: unknown; ids?: unknown };
-  } catch {
-    return NextResponse.json({ ok: false, message: "请求内容无效" }, { status: 400 });
+  const parsed = await readJsonBody<{ kind?: unknown; ids?: unknown }>(request, 64 * 1024);
+  if (!parsed.ok) {
+    return NextResponse.json(
+      { ok: false, message: parsed.reason === "too_large" ? "请求内容过大" : "请求内容无效" },
+      { status: parsed.reason === "too_large" ? 413 : 400 },
+    );
   }
+  const body = parsed.value;
   if (!isFavoriteKind(body.kind) || !Array.isArray(body.ids)) {
     return NextResponse.json({ ok: false, message: "请选择收藏内容" }, { status: 400 });
   }
-  const ids = body.ids.map(Number);
+  if (body.ids.length > 500 || body.ids.some((id) => typeof id !== "number" || !Number.isSafeInteger(id) || id < 1)) {
+    return NextResponse.json({ ok: false, message: "收藏编号无效" }, { status: 400 });
+  }
+  const ids = [...new Set(body.ids)];
   const removed = body.kind === "novel"
-    ? removeNovelFavorites(user.id, ids)
+    ? await removePostgresNovelFavorites(database("web"), user.id, ids)
     : body.kind === "original"
-      ? removeOriginalFavorites(user.id, ids)
-      : removeMediaFavorites(user.id, body.kind, ids);
+      ? await removePostgresOriginalFavorites(database("web"), user.id, ids)
+      : await removePostgresMediaFavorites(database("web"), user.id, body.kind, ids);
   return NextResponse.json(
     { ok: true, removed },
     { headers: { "Cache-Control": "private, no-store" } },

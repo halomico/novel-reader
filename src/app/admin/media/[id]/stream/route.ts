@@ -1,7 +1,9 @@
 import { NextRequest } from "next/server";
+import { database } from "@/core/db/postgres";
+import { hasPublishedMediaHls } from "@/domains/media/media-model";
+import { getPostgresMediaAsset } from "@/domains/media/postgres-media-catalog";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
-import { getMediaAsset, hasPublishedMediaHls } from "@/lib/media";
 import { mediaDeliveryUrl, serveMediaDelivery } from "@/lib/media-delivery";
 import { mediaHlsFileUrl, serveLocalMediaHlsFile } from "@/lib/media-hls-delivery";
 import { isRemoteMediaStorage } from "@/lib/media-storage-config";
@@ -15,7 +17,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (!access.allowed || !(await getAdminSession())) {
     return new Response(null, { status: 404 });
   }
-  const asset = getMediaAsset(Number((await params).id));
+  const asset = await getPostgresMediaAsset(database("web"), Number((await params).id));
   if (!asset || (asset.kind !== "video" && asset.kind !== "audio")) {
     return new Response(null, { status: 404 });
   }

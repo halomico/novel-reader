@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
-import { getBuildInfo } from "@/lib/build-info";
+import { getPostgresSchemaStatus } from "@/core/db/postgres-migrations";
+import { createVersionResponse } from "./response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export function GET() {
-  return NextResponse.json(getBuildInfo(), {
-    headers: { "Cache-Control": "no-store" },
-  });
+export async function GET(): Promise<NextResponse> {
+  return createVersionResponse(getPostgresSchemaStatus);
 }

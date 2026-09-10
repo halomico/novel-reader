@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Send, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { useRef } from "react";
 import { createStationThreadAction } from "@/app/messages/actions";
 import { uiText, type AppLocale } from "@/lib/locale";
@@ -56,7 +56,7 @@ export function StationNewThreadDialog({
             <textarea name="body" rows={5} required />
           </label>
           <footer>
-            <button type="submit"><Send size={15} aria-hidden="true" />{tr("发送")}</button>
+            <button type="submit">{tr("发送")}</button>
           </footer>
         </form>
       </dialog>

@@ -4,8 +4,9 @@ import { AnnouncementMarkdown } from "@/components/AnnouncementMarkdown";
 import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import { PageContextBar } from "@/components/PageContextBar";
 import { SiteHeader } from "@/components/SiteHeader";
+import { database } from "@/core/db/postgres";
+import { getPostgresVisibleAnnouncement, markPostgresAnnouncementRead } from "@/domains/station/postgres-station";
 import { canAccessHomeAnnouncementCard, canSeeHomePortalContentEntry } from "@/lib/config";
-import { getVisibleAnnouncement, markAnnouncementRead } from "@/lib/station";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { getCurrentUser } from "@/lib/user-auth";
 import { getRequestLocale, localizeText, localizeTexts } from "@/lib/locale-server";
@@ -21,7 +22,7 @@ export async function generateMetadata({ params }: AnnouncementPageProps): Promi
   if (!canAccessHomeAnnouncementCard(Boolean(user))) {
     return { title: uiText(locale, "公告"), robots: NO_INDEX_ROBOTS };
   }
-  const announcement = getVisibleAnnouncement(Number((await params).id), { authenticated: Boolean(user) });
+  const announcement = await getPostgresVisibleAnnouncement(database("web"), Number((await params).id), { authenticated: Boolean(user) });
   if (!announcement) return { title: uiText(locale, "公告不存在"), robots: NO_INDEX_ROBOTS };
   const canonicalPath = `/announcements/${announcement.id}`;
   const canonical = withLocalePath(canonicalPath, locale);
@@ -46,9 +47,9 @@ export default async function AnnouncementPage({ params }: AnnouncementPageProps
     }
     notFound();
   }
-  const announcement = getVisibleAnnouncement(Number((await params).id), { authenticated: Boolean(user) });
+  const announcement = await getPostgresVisibleAnnouncement(database("web"), Number((await params).id), { authenticated: Boolean(user) });
   if (!announcement) notFound();
-  if (user) markAnnouncementRead(user.id, announcement.id);
+  if (user) await markPostgresAnnouncementRead(database("web"), user.id, announcement.id);
   const displayTitle = await localizeText(announcement.title, locale);
   const displayBody = await localizeText(announcement.body, locale);
   const [homeLabel, announcementLabel] = await localizeTexts(["首页", "公告"] as const, locale);

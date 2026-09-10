@@ -10,7 +10,7 @@ import {
   uiText,
   withLocalePath,
 } from "./locale";
-import { localizeText, normalizeSearchText } from "./locale-server";
+import { localizeNovelSegments, localizeText, normalizeSearchText } from "./locale-server";
 
 test("keeps simplified URLs canonical and prefixes traditional public pages", () => {
   assert.equal(withLocalePath("/novels?page=2#list", DEFAULT_LOCALE), "/novels?page=2#list");
@@ -45,4 +45,17 @@ test("converts display text and normalizes traditional search input on demand", 
   assert.equal(uiText(TRADITIONAL_LOCALE, "搜索视频"), "搜尋視頻");
   assert.equal(uiText(TRADITIONAL_LOCALE, "搜索音频"), "搜尋音頻");
   assert.equal(uiText(TRADITIONAL_LOCALE, "搜索文件"), "搜尋文件");
+});
+
+test("caches localized reader windows by their source range", async () => {
+  const first = await localizeNovelSegments([
+    { segmentIndex: 0, charStart: 0, charEnd: 2, content: "小说" },
+  ], TRADITIONAL_LOCALE, "book-v1");
+  const second = await localizeNovelSegments([
+    { segmentIndex: 1, charStart: 2, charEnd: 4, content: "标签" },
+  ], TRADITIONAL_LOCALE, "book-v1");
+
+  assert.equal(first[0]?.content, "小說");
+  assert.equal(second[0]?.content, "標籤");
+  assert.notStrictEqual(second, first);
 });

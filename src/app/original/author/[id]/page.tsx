@@ -9,8 +9,9 @@ import { canAccessOriginalChannel, isOriginalChannelEnabled, isOriginalChannelEn
 import { getRequestLocale, localizeText } from "@/lib/locale-server";
 import { uiText } from "@/lib/locale";
 import { getCurrentUser } from "@/lib/user-auth";
-import { getUserById } from "@/lib/users";
-import { isOriginalAuthorBlocked, listOriginalArticles } from "@/lib/original";
+import { database } from "@/core/db/postgres";
+import { getPostgresUserById } from "@/domains/identity/postgres-users";
+import { isOriginalAuthorBlocked, listOriginalArticles } from "@/domains/originals/postgres-originals";
 import { getOriginalPublishingSettings } from "@/lib/config";
 import { UserAvatar } from "@/components/UserAvatar";
 import { OriginalAuthorBlockButton } from "@/components/OriginalAuthorBlockButton";
@@ -20,7 +21,10 @@ export const dynamic = "force-dynamic";
 type AuthorPageProps = { params: Promise<{ id: string }>; searchParams: Promise<{ page?: string }> };
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
-  const author = getUserById(Number((await params).id));
+  const authorId = Number((await params).id);
+  const author = Number.isSafeInteger(authorId) && authorId > 0
+    ? await getPostgresUserById(database("web"), authorId)
+    : null;
   return { title: author ? `${author.displayName} · 原创` : "作者不存在" };
 }
 
@@ -30,7 +34,8 @@ export default async function OriginalAuthorPage({ params, searchParams }: Autho
   const tr = (text: string) => uiText(locale, text);
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const authorId = Number(id);
-  const author = getUserById(authorId);
+  if (!Number.isSafeInteger(authorId) || authorId <= 0) notFound();
+  const author = await getPostgresUserById(database("web"), authorId);
   if (!author || author.status !== "active") notFound();
   const currentUser = await getCurrentUser();
   if (!canAccessOriginalChannel(Boolean(currentUser))) {
@@ -39,13 +44,15 @@ export default async function OriginalAuthorPage({ params, searchParams }: Autho
     }
     notFound();
   }
-  const result = listOriginalArticles({
-    authorId,
-    viewerId: currentUser?.id,
-    page: Number(query.page || 1),
-    pageSize: getOriginalPublishingSettings().pageSize,
-  });
-  const blocked = currentUser ? isOriginalAuthorBlocked(currentUser.id, author.id) : false;
+  const [result, blocked] = await Promise.all([
+    listOriginalArticles({
+      authorId,
+      viewerId: currentUser?.id,
+      page: Number(query.page || 1),
+      pageSize: getOriginalPublishingSettings().pageSize,
+    }),
+    currentUser ? isOriginalAuthorBlocked(currentUser.id, author.id) : Promise.resolve(false),
+  ]);
   const displayName = await localizeText(author.displayName, locale);
   const items = await Promise.all(result.items.map(async (article) => ({
     ...article,

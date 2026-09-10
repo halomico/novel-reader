@@ -5,14 +5,16 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 export function AdminMessageLink({ unreadCount, active }: { unreadCount: number; active: boolean }) {
-  const shouldShowUnread = unreadCount > 0 && !active;
-  const [showUnread, setShowUnread] = useState(shouldShowUnread);
+  const [readThrough, setReadThrough] = useState(active ? unreadCount : 0);
+  const showUnread = unreadCount > readThrough && !active;
 
   useEffect(() => {
-    setShowUnread(shouldShowUnread);
-  }, [shouldShowUnread]);
+    if (active) {
+      setReadThrough((current) => Math.max(current, unreadCount));
+    }
+  }, [active, unreadCount]);
 
-  const label = unreadCount > 0 && !active
+  const label = showUnread
     ? `站务消息，${unreadCount} 条未读`
     : "站务消息";
 
@@ -22,7 +24,7 @@ export function AdminMessageLink({ unreadCount, active }: { unreadCount: number;
       href="/admin/station"
       aria-label={label}
       title={label}
-      onClick={() => setShowUnread(false)}
+      onClick={() => setReadThrough(unreadCount)}
     >
       <MessageCircle size={18} aria-hidden="true" />
       {showUnread ? <span className="adminUnreadDot" aria-hidden="true" /> : null}

@@ -1,5 +1,8 @@
 import { Cookie, CupSoda, Download, KeyRound, LockKeyhole, PackageCheck, ScrollText } from "lucide-react";
+import { randomUUID } from "node:crypto";
 import type { Metadata } from "next";
+import { database } from "@/core/db/postgres";
+import { hasPostgresUserPermission } from "@/domains/identity/postgres-permissions";
 import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import { notFound, redirect } from "next/navigation";
@@ -8,12 +11,11 @@ import { DismissibleNotice } from "@/components/DismissibleNotice";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getNoticeDisplaySeconds, isMarketEnabled } from "@/lib/config";
 import {
-  getMarketProductBySlug,
-  listMarketDeliveryItems,
+  getPostgresMarketProductBySlug,
+  listPostgresMarketDeliveryItems,
   marketProductCoverUrl,
-} from "@/lib/market";
+} from "@/domains/market/postgres-market";
 import { getCurrentUser } from "@/lib/user-auth";
-import { hasUserPermission } from "@/lib/user-levels";
 import { purchaseMarketProductAction } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +26,7 @@ type MarketProductPageProps = {
 };
 
 export async function generateMetadata({ params }: MarketProductPageProps): Promise<Metadata> {
-  const product = getMarketProductBySlug((await params).slug);
+  const product = await getPostgresMarketProductBySlug(database(), (await params).slug);
   return { title: product?.title || "商品", robots: { index: false, follow: false } };
 }
 
@@ -39,14 +41,16 @@ export default async function MarketProductPage({ params, searchParams }: Market
   const user = await getCurrentUser();
   const { slug } = await params;
   if (!user) redirect(`/login?returnTo=${encodeURIComponent(`/market/${slug}`)}`);
-  if (!isMarketEnabled() || !hasUserPermission(user, "market_access")) notFound();
-  const product = getMarketProductBySlug(slug);
+  if (!isMarketEnabled() || !await hasPostgresUserPermission(database("web"), user, "market_access")) notFound();
+  const product = await getPostgresMarketProductBySlug(database(), slug);
   if (!product || product.status !== "published") notFound();
   const query = await searchParams;
-  const deliveries = listMarketDeliveryItems(product.id);
+  const deliveries = await listPostgresMarketDeliveryItems(database(), product.id);
   const locked = user.trustLevel < product.minLevel;
   const canPurchase = !locked && deliveries.length > 0;
   const coverUrl = marketProductCoverUrl(product);
+  const cookiePurchaseMutationId = randomUUID();
+  const sodaPurchaseMutationId = randomUUID();
 
   return (
     <main className="appShell">
@@ -107,8 +111,9 @@ export default async function MarketProductPage({ params, searchParams }: Market
               <input type="hidden" name="productId" value={product.id} />
               <input type="hidden" name="slug" value={product.slug} />
               <input type="hidden" name="currency" value="cookie" />
+              <input type="hidden" name="mutationId" defaultValue={cookiePurchaseMutationId} />
               <button type="submit" disabled={!canPurchase || product.stock === 0}>
-                <Cookie size={16} aria-hidden="true" />用曲奇购买
+                购买
               </button>
             </form>
           ) : null}
@@ -117,8 +122,9 @@ export default async function MarketProductPage({ params, searchParams }: Market
               <input type="hidden" name="productId" value={product.id} />
               <input type="hidden" name="slug" value={product.slug} />
               <input type="hidden" name="currency" value="soda" />
+              <input type="hidden" name="mutationId" defaultValue={sodaPurchaseMutationId} />
               <button type="submit" disabled={!canPurchase || product.stock === 0}>
-                <CupSoda size={16} aria-hidden="true" />用苏打购买
+                购买
               </button>
             </form>
           ) : null}

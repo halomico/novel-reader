@@ -1,0 +1,70 @@
+name: PostgreSQL integration
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: postgres-integration-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Enforce repository submission scope
+        run: node scripts/check-repository-files.mjs
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build pinned PostgreSQL 18 and checksum-verified pg_bigm
+        run: docker build --pull --file docker/postgres/Dockerfile --tag novel-reader-pg-integration .
+
+      - name: Start isolated PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --detach --name novel-reader-pg-integration \
+            --publish 127.0.0.1::5432 \
+            --tmpfs /var/lib/postgresql:rw \
+            --env POSTGRES_PASSWORD=integration-only \
+            --env POSTGRES_INITDB_ARGS='--encoding=UTF8 --locale=C' \
+            novel-reader-pg-integration
+          for attempt in $(seq 1 30); do
+            if docker exec novel-reader-pg-integration pg_isready --username postgres --dbname postgres; then
+              port=$(docker port novel-reader-pg-integration 5432/tcp | cut -d: -f2)
+              echo "PG_INTEGRATION_ADMIN_URL=postgresql://postgres:integration-only@127.0.0.1:${port}/postgres" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs novel-reader-pg-integration
+          exit 1
+
+      - name: Verify real migrations, Chinese indexes, transactions and constraints
+        run: npm run test:postgres
+
+      - name: Capture database logs on failure
+        if: failure()
+        run: docker logs novel-reader-pg-integration || true
+
+      - name: Remove isolated test database server
+        if: always()
+        run: docker rm --force --volumes novel-reader-pg-integration || true

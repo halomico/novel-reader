@@ -271,9 +271,7 @@ export function getRemoteMediaStorageConfig(
   return getRemoteMediaNodeConfig(nodeId, env);
 }
 
-export function getMediaPublicUrl(env: NodeJS.ProcessEnv = process.env): string | null {
-  return getMediaPublicUrlForKind("video", env);
-}
+
 
 export function getMediaPublicUrlForKind(
   kind: MediaStorageKind,

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readPostgresSiteSettings } from "@/core/config/site-settings";
 import { readSiteIconAsset } from "@/lib/site-icon";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +10,8 @@ export async function GET(
   { params }: { params: Promise<{ fileName: string }> },
 ) {
   const { fileName } = await params;
-  const asset = readSiteIconAsset(fileName);
+  const settings = await readPostgresSiteSettings();
+  const asset = readSiteIconAsset(settings, fileName);
   if (!asset) {
     return new NextResponse(null, {
       status: 404,

@@ -1,9 +1,8 @@
-export const LEGACY_PAID_MARKER = "<!-- original-paid -->";
 export const PAID_GATE_TOKEN = "NOVEL_READER_PAID_GATE_NODE_V1";
 
 export type OriginalOutlineItem = {
   id: string;
-  level: 2 | 3;
+  level: number;
   text: string;
   paid: boolean;
 };
@@ -33,6 +32,7 @@ type SerializedNode = {
   width?: number;
   height?: number;
   language?: string;
+  headerState?: number;
   children?: SerializedNode[];
 };
 
@@ -78,8 +78,8 @@ function serializeInline(node: SerializedNode): string {
   let text = escapeMarkdown(normalizeText(node.text));
   const format = textFormat(node.format);
   if (format & 16) text = `\`${text.replace(/`/g, "\\`")}\``;
-  if (format & 8) text = `~~${text}~~`;
-  if (format & 4) text = `<u>${text}</u>`;
+  if (format & 4) text = `~~${text}~~`;
+  if (format & 8) text = `==${text}==`;
   if (format & 2) text = `*${text}*`;
   if (format & 1) text = `**${text}**`;
   return text;
@@ -112,7 +112,7 @@ function serializeBlock(
   if (node.type === "paragraph") return children.map(serializeInline).join("").trimEnd();
   if (node.type === "heading" || node.type === "original-heading") {
     const text = plainText(node).trim();
-    const level: 2 | 3 = node.tag === "h3" ? 3 : 2;
+    const level = /^h[1-6]$/u.test(String(node.tag)) ? Number(String(node.tag).slice(1)) : 1;
     const id = stableHeadingId(node.anchorId, state.headingIndex++);
     if (text) state.outline.push({ id, level, text, paid: state.paid });
     return text ? `<!-- original-heading:${id} -->\n${"#".repeat(level)} ${escapeMarkdown(text)}` : "";
@@ -149,23 +149,39 @@ function serializeBlock(
   if (node.type === "listitem") {
     return children.map((child) => serializeBlock(child, state, depth + 1)).filter(Boolean).join("\n\n");
   }
+  if (node.type === "table") {
+    const rows = children.filter((child) => child.type === "tablerow");
+    if (!rows.length) return "";
+    const cells = (row: SerializedNode) => (row.children || [])
+      .filter((cell) => cell.type === "tablecell")
+      .map((cell) => (cell.children || [])
+        .map((child) => serializeBlock(child, state, depth + 1))
+        .filter(Boolean)
+        .join("<br>")
+        .replace(/\|/gu, "\\|"));
+    const header = cells(rows[0]);
+    if (!header.length) return "";
+    const line = (values: string[]) => `| ${values.join(" | ")} |`;
+    return [line(header), line(header.map(() => "---")), ...rows.slice(1).map((row) => line(cells(row)))].join("\n");
+  }
   return children.map((child) => serializeBlock(child, state, depth + 1)).filter(Boolean).join("\n\n");
 }
 
-function countReadableCharacters(markdown: string): number {
+export function countOriginalMarkdownCharacters(markdown: string): number {
   const text = markdown
     .replace(/<!--[^]*?-->/g, " ")
     .replace(/```[^]*?```/g, (block) => block.replace(/^```[^\n]*|```$/g, ""))
     .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
     .replace(/\[[^\]]*\]\([^)]*\)/g, (match) => match.replace(/^\[|\]\([^)]*\)$/g, ""))
-    .replace(/[#>*_`~\-]+/g, " ")
+    .replace(/^\s*[-+*]\s+\[[ xX]\]\s+/gmu, "")
+    .replace(/[#>*_`~\-|]+/g, " ")
     .replace(/\s+/g, "")
     .trim();
   return Array.from(text).length;
 }
 
 export function parseEditorStateJson(value: string): SerializedEditorState {
-  if (Buffer.byteLength(value, "utf8") > MAX_EDITOR_JSON_BYTES) throw new Error("编辑器内容超过可保存上限");
+  if (new TextEncoder().encode(value).byteLength > MAX_EDITOR_JSON_BYTES) throw new Error("编辑器内容超过 4 MB 保存上限，请减少内容或拆分文章");
   let parsed: unknown;
   try {
     parsed = JSON.parse(value);
@@ -212,8 +228,8 @@ export function serializeOriginalEditorState(value: string): SerializedOriginalD
     outline: state.outline,
     publicAssetIds: [...state.publicAssets],
     paidAssetIds: [...state.paidAssets],
-    publicWordCount: countReadableCharacters(publicMarkdown),
-    paidWordCount: countReadableCharacters(paidMarkdown),
+    publicWordCount: countOriginalMarkdownCharacters(publicMarkdown),
+    paidWordCount: countOriginalMarkdownCharacters(paidMarkdown),
     paidGateCount,
   };
 }

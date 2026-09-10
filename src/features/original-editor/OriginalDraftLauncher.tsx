@@ -31,6 +31,8 @@ export function OriginalDraftLauncher({
   useEffect(() => {
     if (started.current) return;
     started.current = true;
+    // Fetch the editor bundle while the draft request is in flight.
+    void import("./OriginalComposerShell");
     void (async () => {
       try {
         const response = await fetch("/api/original/drafts", {
@@ -65,8 +67,8 @@ export function OriginalDraftLauncher({
           </>
         ) : (
           <>
-            <LoaderCircle size={24} aria-hidden="true" style={{ animation: "spin 1s linear infinite" }} />
-            <span>{mode === "edit" ? "正在载入文章草稿…" : "正在准备写作空间…"}</span>
+            <LoaderCircle size={18} aria-hidden="true" style={{ animation: "spin 1s linear infinite" }} />
+            <span style={{ fontSize: 13, color: "var(--muted)" }}>正在打开编辑器…</span>
           </>
         )}
       </div>

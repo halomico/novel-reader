@@ -4,7 +4,7 @@ import { Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { removeAdminMarketOrderAction } from "@/app/admin/market/actions";
-import type { MarketOrder } from "@/lib/market";
+import type { MarketOrder } from "@/domains/market/postgres-market";
 import { LocalDateTime } from "./LocalDateTime";
 import { InlineMutationNotice, useInlineMutation } from "./useInlineMutation";
 

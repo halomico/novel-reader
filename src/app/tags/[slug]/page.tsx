@@ -6,75 +6,69 @@ import { CatalogBookGrid } from "@/components/CatalogBookGrid";
 import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import { NovelCatalogSort } from "@/components/NovelCatalogSort";
 import { PageContextBar } from "@/components/PageContextBar";
-import { Pagination } from "@/components/Pagination";
 import { ResultCount } from "@/components/ResultCount";
+import { Pagination } from "@/components/Pagination";
 import { SiteHeader } from "@/components/SiteHeader";
+import { readPostgresSiteSettings } from "@/core/config/site-settings";
+import { database } from "@/core/db/postgres";
+import { checkPostgresContentAccess } from "@/domains/access/postgres-content-access";
 import {
-  canAccessTagLibrary,
-  getCatalogPageSize,
-  isGuestTagLibraryNavEnabled,
-  isTagLibraryEnabled,
-  isTagLibraryPublic,
-} from "@/lib/config";
-import { getTagBySlug, listNovelsByTag, listTagsForNovels } from "@/lib/tags";
-import { canonicalPagePath, NO_INDEX_ROBOTS } from "@/lib/seo";
+  defaultPostgresCatalogSortOrder,
+  listPostgresTagsForNovels,
+  normalizePostgresCatalogSort,
+  normalizePostgresCatalogSortOrder,
+} from "@/domains/catalog/postgres-catalog";
 import {
-  filterTagsByNovelForUser,
-} from "@/lib/tag-preferences";
-import { getCurrentUser } from "@/lib/user-auth";
-import { checkContentAccess } from "@/lib/content-access";
-import {
-  defaultNovelCatalogSortOrder,
-  normalizeNovelCatalogSort,
-  normalizeNovelCatalogSortOrder,
-} from "@/lib/books";
-import { getRequestLocale, localizeText, localizeTexts } from "@/lib/locale-server";
+  countPostgresAdvancedCatalog,
+  searchPostgresAdvancedCatalog,
+} from "@/domains/catalog/postgres-search";
+import { getPostgresCatalogTagBySlug } from "@/domains/catalog/postgres-tags";
+import { listPostgresEffectivelyHiddenTagIds } from "@/domains/reading/postgres-reader-catalog";
+import { isGuestTagLibraryNavEnabled } from "@/lib/config";
+import { canBrowseHomePortal } from "@/lib/home-portal";
 import { languageAlternates, uiText, withLocalePath } from "@/lib/locale";
+import { getRequestLocale, localizeText, localizeTexts } from "@/lib/locale-server";
+import { NO_INDEX_ROBOTS } from "@/lib/seo";
+import { getCurrentUser } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
 
 type TagPageProps = {
-  params: Promise<{
-    slug: string;
-  }>;
+  params: Promise<{ slug: string }>;
   searchParams: Promise<{
-    page?: string;
     sort?: string;
     order?: string;
     random?: string;
+    page?: string;
   }>;
 };
 
 export async function generateMetadata({ params, searchParams }: TagPageProps): Promise<Metadata> {
-  const locale = await getRequestLocale();
-  const user = await getCurrentUser();
-  if (!canAccessTagLibrary(Boolean(user))) {
+  const [locale, user, settings, route, query] = await Promise.all([
+    getRequestLocale(),
+    getCurrentUser(),
+    readPostgresSiteSettings(),
+    params,
+    searchParams,
+  ]);
+  if (!canBrowseHomePortal(settings.homePortalAccessModes.tags, Boolean(user))) {
     return { title: uiText(locale, "标签"), robots: NO_INDEX_ROBOTS };
   }
   const audience = user?.role === "admin" ? "admin" : user ? "member" : "public";
-  const tag = getTagBySlug((await params).slug, { audience });
-  if (!tag) {
-    return { title: uiText(locale, "标签不存在"), robots: NO_INDEX_ROBOTS };
-  }
-  const query = await searchParams;
-  const pageValue = Number(query.page || 1);
-  const page = Number.isInteger(pageValue) && pageValue > 1 ? pageValue : 1;
-  const sortBy = normalizeNovelCatalogSort(query.sort);
-  const sortOrder = normalizeNovelCatalogSortOrder(query.order, sortBy);
-  const isVariant = sortBy !== "updated" || sortOrder !== "desc" || Boolean(query.random?.trim());
-  const canonicalPath = isVariant ? `/tags/${tag.slug}` : canonicalPagePath(`/tags/${tag.slug}`, page);
+  const tag = await getPostgresCatalogTagBySlug(database("web"), route.slug, { audience });
+  if (!tag) return { title: uiText(locale, "标签不存在"), robots: NO_INDEX_ROBOTS };
+  const sortBy = normalizePostgresCatalogSort(query.sort);
+  const sortOrder = normalizePostgresCatalogSortOrder(query.order, sortBy);
+  const isVariant = sortBy !== "updated" || sortOrder !== "desc" || Boolean(query.random?.trim()) || Number(query.page || 1) > 1;
+  const canonicalPath = `/tags/${tag.slug}`;
   const canonical = withLocalePath(canonicalPath, locale);
-  const isPublic = tag.visibility === "public" && isTagLibraryEnabled() && isTagLibraryPublic();
+  const isPublic = tag.visibility === "public" && canBrowseHomePortal(settings.homePortalAccessModes.tags, false);
   const displayName = await localizeText(tag.name, locale);
   const description = tag.description
     ? await localizeText(tag.description, locale)
-    : locale === "zh-Hant"
-      ? `瀏覽「${displayName}」標籤下的小說。`
-      : `浏览“${displayName}”标签下的小说。`;
+    : locale === "zh-Hant" ? `瀏覽「${displayName}」標籤下的小說。` : `浏览“${displayName}”标签下的小说。`;
   return {
-    title: page > 1
-      ? locale === "zh-Hant" ? `${displayName} 第 ${page} 頁` : `${displayName} 第 ${page} 页`
-      : displayName,
+    title: displayName,
     description,
     alternates: { canonical, languages: languageAlternates(canonicalPath) },
     robots: isPublic && !isVariant ? { index: true, follow: true } : NO_INDEX_ROBOTS,
@@ -83,68 +77,81 @@ export async function generateMetadata({ params, searchParams }: TagPageProps): 
 }
 
 export default async function TagPage({ params, searchParams }: TagPageProps) {
-  const locale = await getRequestLocale();
-  if (!isTagLibraryEnabled()) {
-    notFound();
-  }
-  const user = await getCurrentUser();
-  if (!canAccessTagLibrary(Boolean(user))) {
+  const [locale, settings, user, route, query] = await Promise.all([
+    getRequestLocale(),
+    readPostgresSiteSettings(),
+    getCurrentUser(),
+    params,
+    searchParams,
+  ]);
+  if (settings.homePortalAccessModes.tags === "off") notFound();
+  if (!canBrowseHomePortal(settings.homePortalAccessModes.tags, Boolean(user))) {
     if (!user && isGuestTagLibraryNavEnabled()) {
       return <ContentEntryGatePage locale={locale} label={uiText(locale, "标签")} returnTo="/tags" />;
     }
     notFound();
   }
-  const access = checkContentAccess(await headers(), {
+  const access = await checkPostgresContentAccess(database("web"), await headers(), {
     scope: "novel",
     authenticated: Boolean(user),
     admin: user?.role === "admin",
     rateLimit: false,
   });
   if (!access.allowed) notFound();
-  const { slug } = await params;
-  const query = await searchParams;
   const audience = user?.role === "admin" ? "admin" : user ? "member" : "public";
-  const tag = getTagBySlug(slug, { audience });
-  if (!tag) {
-    notFound();
-  }
-  const sortBy = normalizeNovelCatalogSort(query.sort);
-  const sortOrder = normalizeNovelCatalogSortOrder(query.order, sortBy);
-  const randomSeed = query.random?.trim().slice(0, 64) || "";
-  const result = listNovelsByTag(tag.id, {
-    page: Number(query.page || "1"),
-    pageSize: getCatalogPageSize(),
+  const tag = await getPostgresCatalogTagBySlug(database("web"), route.slug, { audience });
+  if (!tag) notFound();
+  const sortBy = normalizePostgresCatalogSort(query.sort);
+  const sortOrder = normalizePostgresCatalogSortOrder(query.order, sortBy);
+  const randomSeed = query.random?.normalize("NFKC").trim().slice(0, 64) || "";
+  const rawPage = Math.floor(Number(query.page || 1));
+  const currentPage = Number.isSafeInteger(rawPage) && rawPage > 0
+    ? Math.min(rawPage, Math.floor(2_147_483_647 / settings.catalogPageSize) + 1)
+    : 1;
+  const searchOptions = {
+    includeTagSlugs: [tag.slug],
     audience,
     sortBy,
     sortOrder,
-    randomSeed,
-  });
-  const tagsByNovel = filterTagsByNovelForUser(
-    listTagsForNovels(result.books.map((book) => book.id), { audience }),
-    user?.id,
-  );
-  const returnParams = new URLSearchParams({ page: String(result.page) });
-  if (sortBy !== "updated") returnParams.set("sort", sortBy);
-  if (sortOrder !== defaultNovelCatalogSortOrder(sortBy)) returnParams.set("order", sortOrder);
-  if (randomSeed) returnParams.set("random", randomSeed);
-  const returnHref = `/tags/${tag.slug}?${returnParams}`;
+    randomSeed: randomSeed || undefined,
+  } as const;
+  const [result, totalBooks] = await Promise.all([
+    searchPostgresAdvancedCatalog(database("web"), undefined, {
+      ...searchOptions,
+      offset: (currentPage - 1) * settings.catalogPageSize,
+      limit: settings.catalogPageSize,
+    }),
+    countPostgresAdvancedCatalog(database("web"), undefined, searchOptions),
+  ]);
+  const [tagsByNovel, hiddenTagIds] = await Promise.all([
+    listPostgresTagsForNovels(database("web"), result.items.map((book) => book.id), { audience }),
+    listPostgresEffectivelyHiddenTagIds(database("web"), user?.id),
+  ]);
+  for (const [novelId, tags] of tagsByNovel) {
+    tagsByNovel.set(novelId, tags.filter((item) => !hiddenTagIds.has(item.id)));
+  }
+  const baseParams = new URLSearchParams();
+  if (sortBy !== "updated") baseParams.set("sort", sortBy);
+  if (sortOrder !== defaultPostgresCatalogSortOrder(sortBy)) baseParams.set("order", sortOrder);
+  if (randomSeed) baseParams.set("random", randomSeed);
+  if (currentPage > 1) baseParams.set("page", String(currentPage));
+  const returnHref = `/tags/${tag.slug}${baseParams.size ? `?${baseParams.toString()}` : ""}`;
+  baseParams.delete("page");
+  const totalPages = Math.max(1, Math.ceil(totalBooks / settings.catalogPageSize));
   const displayTag = {
     ...tag,
     name: await localizeText(tag.name, locale),
     description: await localizeText(tag.description, locale),
     aliases: await Promise.all(tag.aliases.map((alias) => localizeText(alias, locale))),
   };
-  const displayBooks = await Promise.all(result.books.map(async (book) => ({
+  const displayBooks = await Promise.all(result.items.map(async (book) => ({
     ...book,
     title: await localizeText(book.title, locale),
   })));
   const displayTagsByNovel = new Map(
     await Promise.all(Array.from(tagsByNovel, async ([novelId, tags]) => [
       novelId,
-      await Promise.all(tags.map(async (item) => ({
-        ...item,
-        name: await localizeText(item.name, locale),
-      }))),
+      await Promise.all(tags.map(async (item) => ({ ...item, name: await localizeText(item.name, locale) }))),
     ] as const)),
   );
   const [homeLabel, tagsLabel] = await localizeTexts(["首页", "标签"] as const, locale);
@@ -158,22 +165,19 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
           <h1>{displayTag.name}</h1>
           <div className="tagDetailActions">
             <NovelCatalogSort sortBy={sortBy} sortOrder={sortOrder} locale={locale} />
-            {result.totalBooks > 1 ? <CatalogRandomButton basePath={`/tags/${tag.slug}`} /> : null}
+            {totalBooks > 1 ? <CatalogRandomButton basePath={`/tags/${tag.slug}`} /> : null}
           </div>
         </div>
         {displayTag.description ? <p className="tagDetailDescription">{displayTag.description}</p> : null}
         <div className="tagDetailMeta">
           {displayTag.aliases.length ? (
-            <span>
-              <small>{uiText(locale, "别名")}</small>
-              <strong>{displayTag.aliases.join("、")}</strong>
-            </span>
+            <span><small>{uiText(locale, "别名")}</small><strong>{displayTag.aliases.join("、")}</strong></span>
           ) : null}
-          <ResultCount count={result.totalBooks} />
+          <ResultCount count={totalBooks} />
         </div>
       </section>
 
-      {result.books.length > 0 ? (
+      {displayBooks.length ? (
         <CatalogBookGrid
           books={displayBooks}
           returnHref={returnHref}
@@ -182,21 +186,14 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
           locale={locale}
         />
       ) : (
-        <section className="emptyState">
-          <h2>{uiText(locale, "这个标签下暂无小说")}</h2>
-        </section>
+        <section className="emptyState"><h2>{uiText(locale, "这个标签下暂无小说")}</h2></section>
       )}
-
       <Pagination
-        page={result.page}
-        totalPages={result.totalPages}
+        page={Math.min(currentPage, totalPages)}
+        totalPages={totalPages}
         query=""
         basePath={`/tags/${tag.slug}`}
-        extraParams={{
-          sort: sortBy === "updated" ? undefined : sortBy,
-          order: sortOrder === defaultNovelCatalogSortOrder(sortBy) ? undefined : sortOrder,
-          random: randomSeed || undefined,
-        }}
+        extraParams={Object.fromEntries(baseParams)}
       />
     </main>
   );

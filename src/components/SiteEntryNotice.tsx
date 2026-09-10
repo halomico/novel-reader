@@ -4,6 +4,7 @@ import { Megaphone, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnnouncementMarkdown } from "./AnnouncementMarkdown";
+import { useFocusTrap } from "@/lib/focus-trap";
 
 const DISMISSED_NOTICE_KEY = "novel-site-entry-notice-dismissed";
 const SHOWN_NOTICE_KEY = "novel-site-entry-notice-shown";
@@ -68,18 +69,14 @@ export function SiteEntryNotice({ enabled, title, markdown, version }: SiteEntry
     setOpen(true);
   }, [enabled, markdown, noticeVersion, pathname]);
 
-  useEffect(() => {
-    if (open) closeButtonRef.current?.focus({ preventScroll: true });
-  }, [open]);
+  const drawerRef = useRef<HTMLElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeNotice();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [closeNotice, open]);
+  useFocusTrap({
+    active: open,
+    containerRef: drawerRef,
+    initialFocusRef: closeButtonRef,
+    onEscape: closeNotice,
+  });
 
   if (!open) return null;
 
@@ -93,6 +90,7 @@ export function SiteEntryNotice({ enabled, title, markdown, version }: SiteEntry
         onClick={closeNotice}
       />
       <section
+        ref={drawerRef}
         className="siteEntryNoticeDrawer"
         role="dialog"
         aria-modal="true"

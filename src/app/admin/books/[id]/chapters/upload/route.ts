@@ -2,7 +2,9 @@ import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
-import { appendUploadedNovelChapters } from "@/lib/novel-files";
+import { appendPostgresNovelChapters } from "@/domains/catalog/postgres-novel-storage";
+import { validateSameOriginMutation } from "@/core/security/origin";
+import { readFormBody } from "@/core/security/request-body";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -12,6 +14,8 @@ function jsonError(message: string, status: number) {
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = validateSameOriginMutation(request, { requireJson: false, requireMutationHeader: false });
+  if (guard) return guard;
   const access = getAdminAccessState(request.headers);
   if (!access.allowed) return new NextResponse(null, { status: 404 });
   if (!(await getAdminSession())) return jsonError("请先登录后台", 401);
@@ -20,17 +24,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const novelId = Number(id);
   if (!Number.isInteger(novelId) || novelId < 1) return jsonError("小说不存在", 404);
 
-  let formData: FormData;
-  try {
-    formData = await request.formData();
-  } catch {
-    return jsonError("上传请求格式有误", 400);
+  const parsed = await readFormBody(request, 256 * 1024 * 1024);
+  if (!parsed.ok) {
+    return jsonError(parsed.reason === "too_large" ? "章节上传请求不能超过 256 MB" : "上传请求格式有误", parsed.reason === "too_large" ? 413 : 400);
   }
+  const formData = parsed.value;
   const files = formData.getAll("files").filter((item): item is File => item instanceof File && item.size > 0);
   if (!files.length) return jsonError("请选择至少一个 TXT 章节", 400);
+  if (files.length > 1000 || files.some((file) => file.size > 64 * 1024 * 1024) || files.reduce((total, file) => total + file.size, 0) > 256 * 1024 * 1024) {
+    return jsonError("单次最多上传 1000 个文件，单文件不超过 64 MB，合计不超过 256 MB", 413);
+  }
 
   try {
-    const added = await appendUploadedNovelChapters(novelId, files);
+    const added = await appendPostgresNovelChapters(novelId, files);
     revalidatePath("/novels");
     revalidatePath(`/books/${novelId}`);
     revalidatePath(`/books/${novelId}/chapters`);

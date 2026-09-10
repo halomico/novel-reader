@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, Minus, Plus, RotateCcw, Search, Tags } from "lucide-react";
+import { BookOpen, Check, ChevronDown, FileText, Minus, Plus, RotateCcw, Search, Tags } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState, useTransition } from "react";
 import { beginNavigationProgress } from "./NavigationProgress";
@@ -26,6 +26,8 @@ export type AdvancedNovelSource = {
   novelCount: number;
 };
 
+export type AdvancedSearchScope = "novels" | "originals";
+
 const MAX_SELECTED_TAGS = 20;
 
 export function TagIntersectionSearchForm({
@@ -36,6 +38,8 @@ export function TagIntersectionSearchForm({
   initialContentQuery,
   sources,
   initialSourceLibrary,
+  initialScope,
+  originalSearchEnabled,
   locale,
 }: {
   groups: AdvancedTagGroup[];
@@ -45,21 +49,45 @@ export function TagIntersectionSearchForm({
   initialContentQuery: string;
   sources: AdvancedNovelSource[];
   initialSourceLibrary: string;
+  initialScope: AdvancedSearchScope;
+  originalSearchEnabled: boolean;
   locale: AppLocale;
 }) {
   const tr = (text: string) => uiText(locale, text);
   const router = useRouter();
+  const propsKey = useMemo(() => JSON.stringify({
+    selected: initialSelected,
+    excluded: initialExcluded,
+    title: initialTitleQuery,
+    content: initialContentQuery,
+    source: initialSourceLibrary,
+    scope: initialScope,
+  }), [initialSelected, initialExcluded, initialTitleQuery, initialContentQuery, initialSourceLibrary, initialScope]);
+
+  const [prevPropsKey, setPrevPropsKey] = useState(propsKey);
   const [included, setIncluded] = useState(() => new Set(initialSelected));
   const [excluded, setExcluded] = useState(() => new Set(initialExcluded));
   const [selectionMode, setSelectionMode] = useState<"include" | "exclude">("include");
   const [titleQuery, setTitleQuery] = useState(initialTitleQuery);
   const [contentQuery, setContentQuery] = useState(initialContentQuery);
   const [sourceLibrary, setSourceLibrary] = useState(initialSourceLibrary);
+  const [scope, setScope] = useState<AdvancedSearchScope>(initialScope);
   const [filter, setFilter] = useState("");
   const [message, setMessage] = useState("");
   const [pickerOpen, setPickerOpen] = useState(
     initialSelected.length === 0 && !initialTitleQuery.trim() && !initialContentQuery.trim(),
   );
+
+  if (prevPropsKey !== propsKey) {
+    setPrevPropsKey(propsKey);
+    setIncluded(new Set(initialSelected));
+    setExcluded(new Set(initialExcluded));
+    setTitleQuery(initialTitleQuery);
+    setContentQuery(initialContentQuery);
+    setSourceLibrary(initialSourceLibrary);
+    setScope(initialScope);
+  }
+
   const [isPending, startTransition] = useTransition();
   const orderedSlugs = useMemo(() => groups.flatMap((group) => group.tags.map((tag) => tag.slug)), [groups]);
   const tagsBySlug = useMemo(() => new Map(groups.flatMap((group) => group.tags.map((tag) => [tag.slug, tag] as const))), [groups]);
@@ -122,25 +150,50 @@ export function TagIntersectionSearchForm({
     const excludedTags = orderedSlugs.filter((slug) => excluded.has(slug));
     const normalizedTitle = titleQuery.normalize("NFKC").replace(/\s+/gu, " ").trim();
     const normalizedContent = contentQuery.normalize("NFKC").replace(/\s+/gu, " ").trim();
-    if (!includedTags.length && !normalizedTitle && !normalizedContent && !sourceLibrary) {
+    if (!includedTags.length && !normalizedTitle && !normalizedContent && (scope === "originals" || !sourceLibrary)) {
       setMessage(tr("请选择来源、标签或输入标题、正文关键词"));
       return;
     }
     const params = new URLSearchParams();
+    if (scope === "originals") params.set("scope", "originals");
     if (includedTags.length) params.set("tags", includedTags.join(","));
     if (excludedTags.length) params.set("exclude", excludedTags.join(","));
     if (normalizedTitle) params.set("q", normalizedTitle);
     if (normalizedContent) params.set("content", normalizedContent);
-    if (sourceLibrary && sourceLibrary !== DEFAULT_NOVEL_LIBRARY_SLUG) params.set("library", sourceLibrary);
+    if (scope === "novels" && sourceLibrary && sourceLibrary !== DEFAULT_NOVEL_LIBRARY_SLUG) params.set("library", sourceLibrary);
     setPickerOpen(false);
     beginNavigationProgress();
     startTransition(() => router.push(withLocalePath(`/tags/search?${params.toString()}#advanced-search-results`, locale)));
   }
 
+  function switchScope(nextScope: AdvancedSearchScope) {
+    if (nextScope === scope || nextScope === "originals" && !originalSearchEnabled) return;
+    setScope(nextScope);
+    setIncluded(new Set());
+    setExcluded(new Set());
+    setMessage("");
+    const params = new URLSearchParams();
+    if (nextScope === "originals") params.set("scope", "originals");
+    const normalizedTitle = titleQuery.normalize("NFKC").replace(/\s+/gu, " ").trim();
+    const normalizedContent = contentQuery.normalize("NFKC").replace(/\s+/gu, " ").trim();
+    if (normalizedTitle) params.set("q", normalizedTitle);
+    if (normalizedContent) params.set("content", normalizedContent);
+    beginNavigationProgress();
+    startTransition(() => router.push(withLocalePath(`/tags/search${params.size ? `?${params.toString()}` : ""}`, locale)));
+  }
+
   return (
     <form className="advancedTagSearchForm" onSubmit={submit}>
-      <div className="advancedTagSearchToolbar">
-        <label className="advancedLibraryField">
+      <div className="advancedSearchScope" role="group" aria-label={tr("搜索范围")}>
+        <button className={scope === "novels" ? "isActive" : ""} type="button" aria-pressed={scope === "novels"} onClick={() => switchScope("novels")} disabled={isPending}>
+          <BookOpen size={15} aria-hidden="true" />{tr("小说")}
+        </button>
+        <button className={scope === "originals" ? "isActive" : ""} type="button" aria-pressed={scope === "originals"} onClick={() => switchScope("originals")} disabled={!originalSearchEnabled || isPending} title={originalSearchEnabled ? undefined : tr("原创文章暂不可用")}>
+          <FileText size={15} aria-hidden="true" />{tr("原创文章")}
+        </button>
+      </div>
+      <div className={`advancedTagSearchToolbar${scope === "originals" ? " isOriginalScope" : ""}`}>
+        {scope === "novels" ? <label className="advancedLibraryField">
           <span>{tr("来源")}</span>
           <SelectControl wrapperClassName="advancedLibrarySelect" value={sourceLibrary} onChange={(event) => { setSourceLibrary(event.target.value); setMessage(""); }} aria-label={tr("选择来源")}>
               {sources.map((source) => (
@@ -150,7 +203,7 @@ export function TagIntersectionSearchForm({
               ))}
               <option value={ALL_NOVEL_LIBRARIES_SLUG}>{tr("全部")}</option>
           </SelectControl>
-        </label>
+        </label> : null}
         <label>
           <span>{tr("标题关键词")}</span>
           <input value={titleQuery} onChange={(event) => { setTitleQuery(event.target.value); setMessage(""); }} maxLength={80} placeholder={tr("可选")} />

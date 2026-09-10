@@ -1,22 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getVideoPlaybackAccess } from "@/lib/media-access";
-import { getMediaAsset, hasPublishedMediaHls, isMediaKindConsumable } from "@/lib/media";
+import { database } from "@/core/db/postgres";
+import { getPostgresVideoPlaybackAccess } from "@/domains/media/postgres-media-access";
+import { getPostgresMediaAsset } from "@/domains/media/postgres-media-catalog";
+import { hasPublishedMediaHls, isMediaKindConsumable } from "@/domains/media/media-model";
+import {
+  createPostgresVideoPlaybackLease,
+  estimatePostgresVideoBitrateKbps,
+  getPostgresVideoConcurrencyLimit,
+  refreshPostgresVideoPlaybackLease,
+  releasePostgresVideoPlaybackLease,
+} from "@/domains/media/postgres-video-playback";
 import { mediaDeliveryUrl } from "@/lib/media-delivery";
 import { getMediaNodePlaybackCapacity } from "@/lib/media-storage-config";
 import { getVideoPlaybackMode } from "@/lib/video-playback-mode";
 import { attachPlaybackViewerCookie, playbackViewerFromRequest } from "@/lib/playback-viewer";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 import {
-  createVideoPlaybackLease,
-  estimateVideoBitrateKbps,
-  getVideoConcurrencyLimit,
-  refreshVideoPlaybackLease,
-  releaseVideoPlaybackLease,
-} from "@/lib/video-playback";
-import {
   buildAuthorizedPlaybackHlsManifest,
   hlsSegmentsPubliclyCacheable,
 } from "@/lib/video-hls-delivery";
+import { validateSameOriginMutation } from "@/core/security/origin";
+import { readJsonBody } from "@/core/security/request-body";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,8 +32,9 @@ async function body(request: NextRequest): Promise<{
   token: string;
   inlineHls: boolean;
 }> {
-  try {
-    const value = await request.json() as Record<string, unknown>;
+  const parsed = await readJsonBody<Record<string, unknown>>(request, 16 * 1024);
+  if (parsed.ok) {
+    const value = parsed.value;
     return {
       mediaId: Number(value.mediaId),
       clientId: String(value.clientId || ""),
@@ -37,9 +42,8 @@ async function body(request: NextRequest): Promise<{
       token: String(value.token || ""),
       inlineHls: value.inlineHls === true,
     };
-  } catch {
-    return { mediaId: 0, clientId: "", sessionId: "", token: "", inlineHls: false };
   }
+  return { mediaId: 0, clientId: "", sessionId: "", token: "", inlineHls: false };
 }
 
 /**
@@ -49,29 +53,32 @@ async function body(request: NextRequest): Promise<{
  * playlist URL instead, so the manifest is only built once in either path.
  */
 export async function POST(request: NextRequest) {
-  const user = getCurrentUserFromRequest(request);
+  const guard = validateSameOriginMutation(request);
+  if (guard) return guard;
+  const user = await getCurrentUserFromRequest(request);
   const input = await body(request);
-  const asset = getMediaAsset(input.mediaId);
+  const asset = await getPostgresMediaAsset(database("web"), input.mediaId);
   if (!asset || asset.kind !== "video" || !isMediaKindConsumable("video", Boolean(user))) {
     return NextResponse.json({ ok: false, message: "视频不存在" }, { status: 404 });
   }
-  const access = getVideoPlaybackAccess(asset, user);
-  if (!access.allowed) {
+  const access = await getPostgresVideoPlaybackAccess(database("web"), asset.id, user);
+  if (!access || !access.allowed) {
+    const loginRequired = access?.reason === "login_required";
     return NextResponse.json(
-      { ok: false, message: access.reason === "login_required" ? "请先登录" : "请先解锁视频" },
-      { status: access.reason === "login_required" ? 401 : 402 },
+      { ok: false, message: loginRequired ? "请先登录" : "请先解锁视频" },
+      { status: loginRequired ? 401 : 402 },
     );
   }
   const viewer = playbackViewerFromRequest(request, user?.id || null, true)!;
   const capacity = getMediaNodePlaybackCapacity(asset.storageNodeId, asset.kind);
-  const result = createVideoPlaybackLease({
+  const result = await createPostgresVideoPlaybackLease({
     viewerKey: viewer.viewerKey,
     userId: user?.id || null,
     clientId: input.clientId,
     mediaId: asset.id,
-    limit: getVideoConcurrencyLimit(user),
+    limit: await getPostgresVideoConcurrencyLimit(database("web"), user),
     storageNodeId: capacity.storageNodeId,
-    reservedKbps: estimateVideoBitrateKbps(asset),
+    reservedKbps: estimatePostgresVideoBitrateKbps(asset),
     nodeMaxStreams: capacity.maxVideoStreams,
     nodeBandwidthKbps: capacity.bandwidthKbps,
   });
@@ -117,7 +124,7 @@ export async function POST(request: NextRequest) {
       mediaUrl = `/media/${asset.id}/hls/manifest?${query.toString()}`;
       format = "hls";
     } else if (playbackMode === "hls-only") {
-      releaseVideoPlaybackLease({
+      await releasePostgresVideoPlaybackLease(database("web"), {
         id: result.lease.id,
         token: result.lease.token,
         viewerKey: viewer.viewerKey,
@@ -132,13 +139,13 @@ export async function POST(request: NextRequest) {
     } else {
       mediaUrl = mediaDeliveryUrl(asset, false, {
         publiclyAccessible: false,
-        estimatedKbps: estimateVideoBitrateKbps(asset),
+        estimatedKbps: estimatePostgresVideoBitrateKbps(asset),
         playbackSessionId: result.lease.id,
         playbackToken: result.lease.token,
       });
     }
   } catch {
-    releaseVideoPlaybackLease({
+    await releasePostgresVideoPlaybackLease(database("web"), {
       id: result.lease.id,
       token: result.lease.token,
       viewerKey: viewer.viewerKey,
@@ -164,31 +171,35 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const user = getCurrentUserFromRequest(request);
+  const guard = validateSameOriginMutation(request);
+  if (guard) return guard;
+  const user = await getCurrentUserFromRequest(request);
   const viewer = playbackViewerFromRequest(request, user?.id || null);
   if (!viewer) return NextResponse.json({ ok: false }, { status: 401 });
   const input = await body(request);
-  const expiresAt = refreshVideoPlaybackLease({
+  const expiresAt = await refreshPostgresVideoPlaybackLease(database("web"), {
     id: input.sessionId,
     token: input.token,
     viewerKey: viewer.viewerKey,
     mediaId: input.mediaId,
   });
   return expiresAt
-    ? NextResponse.json({ ok: true, expiresAt })
-    : NextResponse.json({ ok: false, message: "播放会话已失效" }, { status: 404 });
+    ? NextResponse.json({ ok: true, expiresAt }, { headers: { "Cache-Control": "private, no-store" } })
+    : NextResponse.json({ ok: false, message: "播放会话已失效" }, { status: 404, headers: { "Cache-Control": "private, no-store" } });
 }
 
 export async function DELETE(request: NextRequest) {
-  const user = getCurrentUserFromRequest(request);
+  const guard = validateSameOriginMutation(request, { requireJson: false });
+  if (guard) return guard;
+  const user = await getCurrentUserFromRequest(request);
   const viewer = playbackViewerFromRequest(request, user?.id || null);
-  if (!viewer) return NextResponse.json({ ok: true });
+  if (!viewer) return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "private, no-store" } });
   const input = await body(request);
-  releaseVideoPlaybackLease({
+  await releasePostgresVideoPlaybackLease(database("web"), {
     id: input.sessionId,
     token: input.token,
     viewerKey: viewer.viewerKey,
     mediaId: input.mediaId,
   });
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "private, no-store" } });
 }

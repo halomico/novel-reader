@@ -1,8 +1,11 @@
 import { NextRequest } from "next/server";
+import { readPostgresSiteSettings } from "@/core/config/site-settings";
+import { database } from "@/core/db/postgres";
 import { validateSameOriginMutation } from "@/core/security/origin";
-import { recordAnalyticsEvent } from "@/lib/analytics";
-import { canAccessTagLibrary, isTagLibraryEnabled } from "@/lib/config";
-import { getTagBySlug } from "@/lib/tags";
+import { readJsonBody } from "@/core/security/request-body";
+import { recordPostgresAnalyticsEvent } from "@/domains/analytics/postgres-events";
+import { getPostgresCatalogTagBySlug } from "@/domains/catalog/postgres-tags";
+import { canBrowseHomePortal } from "@/lib/home-portal";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
@@ -16,31 +19,34 @@ export async function POST(request: NextRequest) {
     return new Response(null, { status: 403 });
   }
 
-  let slug = "";
-  try {
-    const body = await request.json() as { slug?: unknown };
-    slug = typeof body.slug === "string" ? body.slug.trim() : "";
-  } catch {
-    return new Response(null, { status: 400 });
+  const parsed = await readJsonBody<{ slug?: unknown }>(request, 8 * 1024);
+  if (!parsed.ok) {
+    return new Response(null, { status: parsed.reason === "too_large" ? 413 : 400 });
   }
+  const slug = typeof parsed.value.slug === "string" ? parsed.value.slug.trim() : "";
 
-  const user = getCurrentUserFromRequest(request);
-  if (!isTagLibraryEnabled() || !canAccessTagLibrary(Boolean(user))) {
+  const user = await getCurrentUserFromRequest(request);
+  const settings = await readPostgresSiteSettings();
+  if (!canBrowseHomePortal(settings.homePortalAccessModes.tags, Boolean(user))) {
     return new Response(null, { status: 404 });
   }
 
-  const tag = getTagBySlug(slug, { audience: user?.role === "admin" ? "admin" : user ? "member" : "public" });
+  const tag = await getPostgresCatalogTagBySlug(database("web"), slug, {
+    audience: user?.role === "admin" ? "admin" : user ? "member" : "public",
+  });
   if (!tag) {
     return new Response(null, { status: 404 });
   }
 
-  recordAnalyticsEvent({
-    headers: request.headers,
-    userId: user?.id ?? null,
-    eventType: "tag_click",
-    path: `/tags/${tag.slug}`,
-    referrer: request.headers.get("referer"),
-    tagId: tag.id,
-  });
+  if (settings.analyticsEnabled) {
+    await recordPostgresAnalyticsEvent(database("web"), {
+      headers: request.headers,
+      userId: user?.id ?? null,
+      eventType: "tag_click",
+      path: `/tags/${tag.slug}`,
+      referrer: request.headers.get("referer"),
+      tagId: tag.id,
+    });
+  }
   return new Response(null, { status: 204 });
 }

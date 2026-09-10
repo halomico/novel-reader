@@ -7,7 +7,7 @@ import { FormEvent, useEffect, useRef, useState, useTransition } from "react";
 import { localeFromPathname, withLocalePath } from "@/lib/locale";
 import { beginNavigationProgress } from "./NavigationProgress";
 
-type PageItem = number | "ellipsis";
+export type PageItem = number | "ellipsis";
 
 function pageHref(page: number, query: string, basePath: string, pageParam: string) {
   const params = new URLSearchParams();
@@ -27,7 +27,7 @@ function pageHrefWithParams(
 ) {
   const params = new URLSearchParams(pageHref(page, query, basePath, pageParam).split("?")[1]);
   for (const [key, value] of Object.entries(extraParams)) {
-    if (value) {
+    if (key !== pageParam && value) {
       params.set(key, value);
     }
   }
@@ -46,14 +46,16 @@ function pageHrefWithTarget(href: string, scrollTargetId?: string): string {
   return scrollTargetId ? `${href}#${encodeURIComponent(scrollTargetId)}` : href;
 }
 
-function getPageItems(page: number, totalPages: number): PageItem[] {
-  if (totalPages <= 7) {
-    return Array.from({ length: totalPages }, (_, index) => index + 1);
+export function getPaginationItems(page: number, totalPages: number): PageItem[] {
+  const pageCount = Math.max(1, Math.floor(totalPages));
+  const currentPage = Math.min(Math.max(Math.floor(page), 1), pageCount);
+  if (pageCount <= 7) {
+    return Array.from({ length: pageCount }, (_, index) => index + 1);
   }
 
   const items: PageItem[] = [1];
-  const start = page <= 3 ? 2 : page >= totalPages - 2 ? Math.max(2, totalPages - 4) : Math.max(2, page - 1);
-  const end = page <= 3 ? Math.min(5, totalPages - 1) : page >= totalPages - 2 ? totalPages - 1 : Math.min(totalPages - 1, page + 2);
+  const start = currentPage <= 3 ? 2 : currentPage >= pageCount - 2 ? Math.max(2, pageCount - 4) : Math.max(2, currentPage - 1);
+  const end = currentPage <= 3 ? Math.min(5, pageCount - 1) : currentPage >= pageCount - 2 ? pageCount - 1 : Math.min(pageCount - 1, currentPage + 2);
 
   if (start > 2) {
     items.push("ellipsis");
@@ -63,11 +65,11 @@ function getPageItems(page: number, totalPages: number): PageItem[] {
     items.push(item);
   }
 
-  if (end < totalPages - 1) {
+  if (end < pageCount - 1) {
     items.push("ellipsis");
   }
 
-  items.push(totalPages);
+  items.push(pageCount);
   return items;
 }
 
@@ -203,9 +205,10 @@ export function Pagination({
   onPageChange?: (page: number) => void;
   scrollTargetId?: string;
 }) {
-  const canGoPrev = page > 1;
-  const canGoNext = page < totalPages;
-  const pageItems = getPageItems(page, totalPages);
+  const currentPage = Math.min(Math.max(Math.floor(page), 1), Math.max(1, Math.floor(totalPages)));
+  const canGoPrev = currentPage > 1;
+  const canGoNext = currentPage < totalPages;
+  const pageItems = getPaginationItems(currentPage, totalPages);
 
   if (totalPages <= 1) {
     return null;
@@ -215,11 +218,11 @@ export function Pagination({
     <nav className="pagination" aria-label="分页导航">
       {canGoPrev ? (
         onPageChange ? (
-          <button className="pageButton" type="button" onClick={() => { onPageChange(page - 1); scrollAfterPageChange(scrollTargetId); }} aria-label="上一页">
+          <button className="pageButton" type="button" onClick={() => { onPageChange(currentPage - 1); scrollAfterPageChange(scrollTargetId); }} aria-label="上一页">
             <ChevronLeft size={18} aria-hidden="true" />
           </button>
         ) : (
-          <Link className="pageButton" href={pageHrefWithTarget(pageHrefWithParams(page - 1, query, basePath, extraParams, pageParam), scrollTargetId)} scroll aria-label="上一页">
+          <Link className="pageButton" href={pageHrefWithTarget(pageHrefWithParams(currentPage - 1, query, basePath, extraParams, pageParam), scrollTargetId)} scroll aria-label="上一页">
             <ChevronLeft size={18} aria-hidden="true" />
           </Link>
         )
@@ -229,7 +232,7 @@ export function Pagination({
         </span>
       )}
 
-      <div className="pageList" aria-label={`第 ${page} 页，共 ${totalPages} 页`}>
+      <div className="pageList" aria-label={`第 ${currentPage} 页，共 ${totalPages} 页`}>
         {pageItems.map((item, index) =>
           item === "ellipsis" ? (
             <PageJump
@@ -243,7 +246,7 @@ export function Pagination({
               scrollTargetId={scrollTargetId}
               key={`ellipsis-${index}`}
             />
-          ) : item === page ? (
+          ) : item === currentPage ? (
             <span className="pageNumber isActive" aria-current="page" key={item}>
               {item}
             </span>
@@ -261,11 +264,11 @@ export function Pagination({
 
       {canGoNext ? (
         onPageChange ? (
-          <button className="pageButton" type="button" onClick={() => { onPageChange(page + 1); scrollAfterPageChange(scrollTargetId); }} aria-label="下一页">
+          <button className="pageButton" type="button" onClick={() => { onPageChange(currentPage + 1); scrollAfterPageChange(scrollTargetId); }} aria-label="下一页">
             <ChevronRight size={18} aria-hidden="true" />
           </button>
         ) : (
-          <Link className="pageButton" href={pageHrefWithTarget(pageHrefWithParams(page + 1, query, basePath, extraParams, pageParam), scrollTargetId)} scroll aria-label="下一页">
+          <Link className="pageButton" href={pageHrefWithTarget(pageHrefWithParams(currentPage + 1, query, basePath, extraParams, pageParam), scrollTargetId)} scroll aria-label="下一页">
             <ChevronRight size={18} aria-hidden="true" />
           </Link>
         )

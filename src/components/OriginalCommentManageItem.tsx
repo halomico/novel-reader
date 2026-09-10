@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { Pencil, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import Link from "@/components/LocalizedLink";
-import type { OriginalCommentActivity } from "@/lib/original";
+import type { OriginalCommentActivity } from "@/domains/originals/original-model";
 import { OriginalMarkdown } from "./OriginalMarkdown";
 import { UserAvatar } from "./UserAvatar";
 
@@ -32,6 +32,11 @@ export function OriginalCommentManageItem({
     editor.setSelectionRange(editor.value.length, editor.value.length);
   }, [editing]);
 
+  async function handleEdit(formData: FormData) {
+    await editAction(formData);
+    setEditing(false);
+  }
+
   return (
     <article className="originalMineCommentItem">
       <header>
@@ -51,9 +56,21 @@ export function OriginalCommentManageItem({
         </div>
       </header>
       {editing ? (
-        <form className="originalMineCommentEdit" action={editAction}>
+        <form className="originalMineCommentEdit" action={handleEdit}>
           <input type="hidden" name="commentId" value={comment.id} />
-          <textarea ref={editorRef} name="bodyMarkdown" maxLength={200} defaultValue={comment.bodyMarkdown} required />
+          <textarea
+            ref={editorRef}
+            name="bodyMarkdown"
+            maxLength={200}
+            defaultValue={comment.bodyMarkdown}
+            required
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setEditing(false);
+              }
+            }}
+          />
           <div>
             <button type="submit"><Pencil size={13} aria-hidden="true" />{labels.save}</button>
             <button type="button" onClick={() => setEditing(false)}>{labels.cancel}</button>

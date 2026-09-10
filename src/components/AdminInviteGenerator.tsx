@@ -31,9 +31,16 @@ export function AdminInviteGenerator() {
   }
 
   async function copy() {
-    await navigator.clipboard.writeText(codes.join("\n"));
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1_800);
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard API not available");
+      }
+      await navigator.clipboard.writeText(codes.join("\n"));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1_800);
+    } catch {
+      setMessage("复制失败，请手动选择文本进行复制");
+    }
   }
 
   return (

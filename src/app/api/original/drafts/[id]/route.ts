@@ -1,9 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { validateSameOriginMutation } from "@/core/security/origin";
+import { readJsonBody } from "@/core/security/request-body";
 import {
   getOriginalDraftForAuthor,
   OriginalDraftError,
   saveOriginalDraft,
+  deleteOriginalDraftForAuthor,
 } from "@/features/original-editor/server";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 
@@ -19,9 +21,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const user = getCurrentUserFromRequest(request);
+  const user = await getCurrentUserFromRequest(request);
   if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
-  const draft = getOriginalDraftForAuthor(draftIdFrom((await params).id), user.id);
+  const draft = await getOriginalDraftForAuthor(draftIdFrom((await params).id), user.id);
   return draft
     ? NextResponse.json({ draft }, { headers: { "Cache-Control": "no-store" } })
     : NextResponse.json({ error: "草稿不存在" }, { status: 404 });
@@ -33,22 +35,24 @@ export async function PATCH(
 ) {
   const guard = validateSameOriginMutation(request);
   if (guard) return guard;
-  const user = getCurrentUserFromRequest(request);
+  const user = await getCurrentUserFromRequest(request);
   if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
-  let body: {
+  const parsed = await readJsonBody<{
     revision?: unknown;
     title?: unknown;
     editorStateJson?: unknown;
     tagIds?: unknown;
     unlockSodaPrice?: unknown;
-  };
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "请求格式无效" }, { status: 400 });
+  }>(request, 4 * 1024 * 1024);
+  if (!parsed.ok) {
+    return NextResponse.json(
+      { error: parsed.reason === "too_large" ? "请求内容过大" : "请求格式无效" },
+      { status: parsed.reason === "too_large" ? 413 : 400 },
+    );
   }
+  const body = parsed.value;
   try {
-    const result = saveOriginalDraft({
+    const result = await saveOriginalDraft({
       draftId: draftIdFrom((await params).id),
       authorId: user.id,
       revision: Number(body.revision),
@@ -72,4 +76,15 @@ export async function PATCH(
     console.error("Failed to save original draft", error);
     return NextResponse.json({ error: "草稿保存失败，请稍后重试" }, { status: 500 });
   }
+}
+
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const guard = validateSameOriginMutation(request, { requireJson: false });
+  if (guard) return guard;
+  const user = await getCurrentUserFromRequest(request);
+  if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
+  const removed = await deleteOriginalDraftForAuthor(draftIdFrom((await params).id), user.id);
+  return NextResponse.json(removed ? { ok: true } : { error: "草稿不存在或已发布，请刷新列表" }, {
+    status: removed ? 200 : 404, headers: { "Cache-Control": "no-store" },
+  });
 }

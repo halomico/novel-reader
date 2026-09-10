@@ -2,7 +2,7 @@ import { Eye, Play } from "lucide-react";
 import { ContextNavigationLink } from "./ContextNavigationLink";
 import { mediaCoverVersion } from "@/lib/media-cover-version";
 import { formatMediaDuration } from "@/lib/media-format";
-import type { MediaAsset } from "@/lib/media";
+import type { MediaAsset } from "@/domains/media/media-model";
 import { formatCompactUpdateDate, formatLocalDateTime, parseAppDateTime, toDateTimeAttribute } from "@/lib/date-time";
 import { type AppLocale, uiText } from "@/lib/locale";
 import { MediaVideoPreview } from "./MediaVideoPreview";

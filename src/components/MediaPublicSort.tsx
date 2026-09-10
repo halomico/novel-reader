@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Tags } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import Link from "@/components/LocalizedLink";
-import type { MediaKind, MediaSortBy, MediaSortOrder } from "@/lib/media";
+import type { MediaKind, MediaSortBy, MediaSortOrder } from "@/domains/media/media-model";
 import { beginNavigationProgress } from "./NavigationProgress";
 import { uiText, withLocalePath, type AppLocale } from "@/lib/locale";
 

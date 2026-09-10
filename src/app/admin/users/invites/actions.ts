@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
-import { createRegistrationInvites } from "@/lib/registration-invites";
+import { createPostgresRegistrationInvites } from "@/domains/identity/postgres-registration-invites";
 
 export async function createRegistrationInvitesAction(input: {
   label: string;
@@ -19,7 +19,7 @@ export async function createRegistrationInvitesAction(input: {
   try {
     return {
       ok: true,
-      codes: createRegistrationInvites({
+      codes: await createPostgresRegistrationInvites({
         ...input,
         expiresAt: input.expiresAt || null,
       }),

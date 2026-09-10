@@ -5,12 +5,12 @@ import {
   CupSoda,
   TicketCheck,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import {
   exchangeCurrencyAction,
   redeemMarketCodeAction,
 } from "@/app/market/actions";
-import type { CurrencyExchangeDirection } from "@/lib/user-wallet";
+import type { CurrencyExchangeDirection } from "@/domains/market/postgres-market";
 
 function ExchangeAsset({ currency }: { currency: "cookie" | "soda" }) {
   const soda = currency === "soda";
@@ -44,6 +44,13 @@ function ExchangeSwapIcon() {
   );
 }
 
+function stampMutationId(event: FormEvent<HTMLFormElement>) {
+  const field = event.currentTarget.elements.namedItem("mutationId");
+  if (field instanceof HTMLInputElement) {
+    field.value = globalThis.crypto.randomUUID();
+  }
+}
+
 export function MarketWalletTools({
   cookieBalance,
   sodaBalance,
@@ -57,6 +64,8 @@ export function MarketWalletTools({
 }) {
   const [direction, setDirection] = useState<CurrencyExchangeDirection>("cookie-to-soda");
   const [amount, setAmount] = useState("1");
+  const [exchangeMutationId] = useState(() => globalThis.crypto.randomUUID());
+  const [redeemMutationId] = useState(() => globalThis.crypto.randomUUID());
   const amountValue = useMemo(() => {
     const value = Number(amount);
     return Number.isSafeInteger(value) ? value : 0;
@@ -81,8 +90,9 @@ export function MarketWalletTools({
 
   return (
     <div className="marketWalletTools">
-      <form className="marketExchangeLine" action={exchangeCurrencyAction}>
+      <form className="marketExchangeLine" action={exchangeCurrencyAction} onSubmitCapture={stampMutationId}>
         <header className="marketExchangeName"><strong>闪兑</strong></header>
+        <input type="hidden" name="mutationId" defaultValue={exchangeMutationId} />
         <div className="marketExchangeStack">
           <label className="marketExchangePanel">
             <span className="marketExchangeSide">支付</span>
@@ -133,8 +143,9 @@ export function MarketWalletTools({
         </button>
       </form>
 
-      <form className="marketCodeLine" action={redeemMarketCodeAction}>
+      <form className="marketCodeLine" action={redeemMarketCodeAction} onSubmitCapture={stampMutationId}>
         <strong>兑换码</strong>
+        <input type="hidden" name="mutationId" defaultValue={redeemMutationId} />
         <div className="marketCodeInputRow">
           <label>
             <TicketCheck size={17} aria-hidden="true" />

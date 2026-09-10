@@ -24,7 +24,7 @@ type VerifyEmailPageProps = {
 export default async function VerifyEmailPage({ searchParams }: VerifyEmailPageProps) {
   const params = await searchParams;
   if (params.token) {
-    const verified = verifyEmailToken(params.token);
+    const verified = await verifyEmailToken(params.token);
     redirect(
       `/login?notice=${encodeURIComponent(verified ? "邮箱验证成功，现在可以登录" : "验证链接无效或已过期")}` +
       `&tone=${verified ? "success" : "warning"}`,

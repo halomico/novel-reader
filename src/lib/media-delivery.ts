@@ -2,18 +2,18 @@ import fs from "node:fs";
 import { Readable } from "node:stream";
 import type { NextRequest } from "next/server";
 import {
-  getMediaAsset,
   isMediaKindConsumable,
-  mediaFilePath,
   normalizeMediaFolder,
   parseMediaByteRange,
   type MediaAsset,
-} from "./media";
+} from "@/domains/media/media-model";
+import { getMediaDir } from "./config";
 import { createSignedMediaUrl } from "./media-signing";
 import {
   isRemoteMediaStorage,
   resolveRemoteMediaNodeForAsset,
 } from "./media-storage-config";
+import { resolveMediaStoragePath } from "./media-storage-path";
 
 export type ResolvedMediaDelivery = {
   asset: MediaAsset;
@@ -69,7 +69,10 @@ export function mediaDeliveryUrl(
   return `/media-file/${encodedStoredName(asset.storedName)}?${params.toString()}`;
 }
 
-export function resolveMediaDeliveryUri(uri: string): ResolvedMediaDelivery | null {
+export async function resolveMediaDeliveryUri(
+  uri: string,
+  resolveAsset: (id: number) => Promise<MediaAsset | null>,
+): Promise<ResolvedMediaDelivery | null> {
   let url: URL;
   try {
     url = new URL(uri, "http://media.local");
@@ -94,7 +97,7 @@ export function resolveMediaDeliveryUri(uri: string): ResolvedMediaDelivery | nu
   const normalizedStoredName = normalizeMediaFolder(storedName);
   const id = Number(url.searchParams.get("id"));
   const version = Number(url.searchParams.get("v"));
-  const asset = getMediaAsset(id);
+  const asset = Number.isSafeInteger(id) && id > 0 ? await resolveAsset(id) : null;
   if (
     !normalizedStoredName ||
     !asset ||
@@ -150,7 +153,12 @@ export async function serveMediaDelivery(
   if (isRemoteMediaStorage()) {
     return new Response(null, { status: 404 });
   }
-  const filePath = mediaFilePath(delivery.asset.storedName);
+  let filePath: string;
+  try {
+    filePath = resolveMediaStoragePath(getMediaDir(), delivery.asset.storedName);
+  } catch {
+    return new Response(null, { status: 404 });
+  }
   let stat: fs.Stats;
   try {
     stat = await fs.promises.stat(filePath);

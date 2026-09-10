@@ -52,7 +52,7 @@ export async function writeLocalOriginalDraft(draft: LocalOriginalDraft): Promis
       transaction.onabort = () => reject(transaction.error);
     });
   } catch {
-    // Server autosave remains available when IndexedDB is blocked.
+    // Server draft save remains available when IndexedDB is blocked.
   }
 }
 

@@ -1,6 +1,8 @@
+﻿"use client";
+
 import { ChevronRight, Folder, FolderOpen, HardDrive } from "lucide-react";
 import Link from "@/components/LocalizedLink";
-import type { MediaFolder, MediaKind, MediaSortBy, MediaSortOrder } from "@/lib/media";
+import type { MediaFolder, MediaKind, MediaSortBy, MediaSortOrder } from "@/domains/media/media-model";
 
 type FolderNode = MediaFolder & { children: FolderNode[] };
 
@@ -65,7 +67,12 @@ function FolderBranch({
   const containsActive = activeFolder.startsWith(`${node.path}/`);
   const Icon = active ? FolderOpen : Folder;
   const link = (
-    <Link className={active ? "isActive" : ""} href={folderHref(basePath, kind, node.path, query, sortBy, sortOrder, category)} title={node.path}>
+    <Link
+      className={active ? "isActive" : ""}
+      href={folderHref(basePath, kind, node.path, query, sortBy, sortOrder, category)}
+      title={node.path}
+      onClick={(event) => event.stopPropagation()}
+    >
       <Icon size={16} aria-hidden="true" />
       <span>{node.name}</span>
       <small>{node.directAssets}</small>

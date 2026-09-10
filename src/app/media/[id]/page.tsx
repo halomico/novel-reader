@@ -15,38 +15,41 @@ import { MediaPlayer } from "@/components/MediaPlayer";
 import { MediaTextDocument } from "@/components/MediaTextDocument";
 import { MediaVideoCard } from "@/components/MediaVideoCard";
 import { SiteHeader } from "@/components/SiteHeader";
+import { checkPostgresContentAccess, hasPostgresScopedContentAccessRules } from "@/domains/access/postgres-content-access";
 import { getAudioDefaultPlaybackMode, getRelatedVideoSettings, getVideoThumbnailSettings } from "@/lib/config";
-import { checkContentAccess, hasScopedContentAccessRules } from "@/lib/content-access";
-import { isMediaFavorite } from "@/lib/favorites";
-import { getMediaGroveState } from "@/lib/grove";
-import { getVideoDownloadAccess, getVideoPlaybackAccess } from "@/lib/media-access";
-import { mediaCoverVersion } from "@/lib/media-cover-version";
+import { isPostgresMediaFavorite } from "@/domains/activity/postgres-favorites";
+import { database } from "@/core/db/postgres";
+import { getPostgresMediaGroveState } from "@/domains/activity/postgres-grove";
+import { getPostgresVideoDownloadAccess, getPostgresVideoPlaybackAccess } from "@/domains/media/postgres-media-access";
 import {
-  getMediaAsset,
+  getPostgresMediaAsset,
+  listPostgresMediaFolderAssets,
+  listPostgresRelatedVideoAssets,
+  listPostgresVideoTagsForAsset,
+} from "@/domains/media/postgres-media-catalog";
+import {
   isFeedbackMediaKind,
   isMediaKindAccessible,
   isMediaKindConsumable,
   isMediaKindEntryVisible,
   isMediaKindPublic,
-  listMediaFolderAssets,
-  listRelatedVideoAssets,
-  listVideoTagsForAsset,
   type MediaKind,
-} from "@/lib/media";
+} from "@/domains/media/media-model";
+import { mediaCoverVersion } from "@/lib/media-cover-version";
 import { formatMediaDuration } from "@/lib/media-format";
 import { getMediaPublicUrlForAsset } from "@/lib/media-storage-config";
 import { directMediaThumbnailUrl } from "@/lib/media-thumbnail-url";
 import { isMediaTextPreviewSupported } from "@/lib/media-text-preview";
-import { getMediaRecommendationState } from "@/lib/recommendations";
+import { getPostgresMediaRecommendationState } from "@/domains/activity/postgres-recommendations";
+import { hasPostgresUserPermission } from "@/domains/identity/postgres-permissions";
 import { getCurrentUser } from "@/lib/user-auth";
-import { hasUserPermission } from "@/lib/user-levels";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { getRequestLocale, localizeText } from "@/lib/locale-server";
 import { languageAlternates, uiText, withLocalePath, type AppLocale } from "@/lib/locale";
 
 export const dynamic = "force-dynamic";
 
-const getAssetById = cache(getMediaAsset);
+const getAssetById = cache((id: number) => getPostgresMediaAsset(database("web"), id));
 
 const KIND_LABELS: Record<MediaKind, string> = { video: "视频", audio: "音频", file: "文件" };
 const KIND_ICONS = { video: Clapperboard, audio: Headphones, file: File };
@@ -95,7 +98,7 @@ function formatCompactCount(value: number, locale: AppLocale): string {
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const locale = await getRequestLocale();
-  const asset = getAssetById(Number((await params).id));
+  const asset = await getAssetById(Number((await params).id));
   if (!asset) {
     return { title: uiText(locale, "资源不存在"), robots: NO_INDEX_ROBOTS };
   }
@@ -128,7 +131,7 @@ export default async function MediaDetailPage({
   const locale = await getRequestLocale();
   const user = await getCurrentUser();
   const [routeParams, detailQuery] = await Promise.all([params, searchParams]);
-  const asset = getAssetById(Number(routeParams.id));
+  const asset = await getAssetById(Number(routeParams.id));
   if (!asset) notFound();
   if (!isMediaKindAccessible(asset.kind, Boolean(user))) {
     if (!user && isMediaKindEntryVisible(asset.kind, false)) {
@@ -140,7 +143,7 @@ export default async function MediaDetailPage({
   const mediaPublicOrigin = getMediaPublicUrlForAsset(asset.storageNodeId, asset.kind);
 
   const headerStore = await headers();
-  const access = checkContentAccess(headerStore, {
+  const access = await checkPostgresContentAccess(database("web"), headerStore, {
     scope: asset.kind,
     authenticated: Boolean(user),
     admin: user?.role === "admin",
@@ -154,7 +157,9 @@ export default async function MediaDetailPage({
   const displayFolder = await localizeText(asset.folder, locale);
   const displayArtist = asset.artist ? await localizeText(asset.artist, locale) : "";
   const listFolder = asset.kind === "video" ? "" : asset.folder;
-  const folderAudio = asset.kind === "audio" && contentAccessible ? listMediaFolderAssets("audio", asset.folder, 2_000) : [];
+  const folderAudio = asset.kind === "audio" && contentAccessible
+    ? await listPostgresMediaFolderAssets(database("web"), "audio", asset.folder, 2_000)
+    : [];
   if (asset.kind === "audio" && !folderAudio.some((item) => item.id === asset.id)) folderAudio.push(asset);
   const audioQueue: AudioQueueTrack[] = await Promise.all(folderAudio
     .sort((left, right) => left.title.localeCompare(right.title, "zh-CN", { numeric: true }))
@@ -168,33 +173,41 @@ export default async function MediaDetailPage({
   const relatedSettings = getRelatedVideoSettings();
   const thumbnailSettings = getVideoThumbnailSettings();
   const posterVersion = mediaCoverVersion(asset, thumbnailSettings.singlePercent);
-  const directThumbnails = asset.kind === "video" && !hasScopedContentAccessRules("video");
+  const directThumbnails = asset.kind === "video" && !await hasPostgresScopedContentAccessRules(database("web"), "video");
   const publiclyAccessibleThumbnails = directThumbnails && isMediaKindPublic("video");
   const posterUrl = directThumbnails
     ? directMediaThumbnailUrl(asset, thumbnailSettings.singlePercent, publiclyAccessibleThumbnails)
     : null;
-  const relatedVideos = asset.kind === "video" ? listRelatedVideoAssets(asset.id, relatedSettings.count, relatedSettings.mode) : [];
+  const relatedVideos = asset.kind === "video"
+    ? await listPostgresRelatedVideoAssets(database("web"), asset.id, relatedSettings.count, relatedSettings.mode)
+    : [];
   const displayRelatedVideos = await Promise.all(relatedVideos.map(async (item) => ({
     ...item,
     title: await localizeText(item.title, locale),
     artist: item.artist ? await localizeText(item.artist, locale) : item.artist,
     description: await localizeText(item.description, locale),
   })));
-  const videoTags = asset.kind === "video" ? listVideoTagsForAsset(asset.id).filter((tag) => tag.visible) : [];
+  const videoTags = asset.kind === "video"
+    ? (await listPostgresVideoTagsForAsset(database("web"), asset.id)).filter((tag) => tag.visible)
+    : [];
   const displayVideoTags = await Promise.all(videoTags.map(async (tag) => ({
     ...tag,
     name: await localizeText(tag.name, locale),
   })));
   const feedbackMedia = isFeedbackMediaKind(asset.kind);
-  const favorite = user && feedbackMedia ? isMediaFavorite(user.id, asset.id) : false;
-  const grove = user && feedbackMedia ? getMediaGroveState(user.id, asset.id) : null;
-  const recommendation = user && feedbackMedia ? getMediaRecommendationState(user.id, asset.id) : null;
-  const canRecommend = feedbackMedia && hasUserPermission(user, "novel_feedback");
-  const canReport = Boolean(feedbackMedia && user?.role === "user" && hasUserPermission(user, "content_report"));
-  const videoDownloadAccess = asset.kind === "video" ? getVideoDownloadAccess(asset, user) : null;
-  const showVideoDownload = asset.kind === "video" && Boolean(user && hasUserPermission(user, "video_download"));
+  const favorite = user && feedbackMedia ? await isPostgresMediaFavorite(database("web"), user.id, asset.id) : false;
+  const grove = user && feedbackMedia ? await getPostgresMediaGroveState(database("web"), user.id, asset.id) : null;
+  const recommendation = user && feedbackMedia ? await getPostgresMediaRecommendationState(database("web"), user.id, asset.id) : null;
+  const canRecommend = feedbackMedia && await hasPostgresUserPermission(database("web"), user, "novel_feedback");
+  const canReport = Boolean(feedbackMedia && user?.role === "user" && await hasPostgresUserPermission(database("web"), user, "content_report"));
+  const videoDownloadAccess = asset.kind === "video"
+    ? await getPostgresVideoDownloadAccess(database("web"), asset.id, user)
+    : null;
+  const showVideoDownload = asset.kind === "video" && Boolean(user && await hasPostgresUserPermission(database("web"), user, "video_download"));
   const textPreviewSupported = isMediaTextPreviewSupported(asset);
-  const videoPlaybackAccess = asset.kind === "video" ? getVideoPlaybackAccess(asset, user) : null;
+  const videoPlaybackAccess = asset.kind === "video"
+    ? await getPostgresVideoPlaybackAccess(database("web"), asset.id, user)
+    : null;
   const videoReturnHref = safeVideoReturnHref(detailQuery.from);
 
   return (
@@ -205,7 +218,6 @@ export default async function MediaDetailPage({
         currentUser={user}
         mobileBackHref={asset.kind === "video" ? videoReturnHref : undefined}
         mobileBackLabel={asset.kind === "video" ? uiText(locale, "返回视频列表") : undefined}
-        mediaSearchKind={asset.kind === "video" ? "video" : undefined}
       />
       <article className={`mediaDetail is-${asset.kind}`} id="media-detail-primary">
         <MediaViewTracker mediaId={asset.id} />
@@ -260,7 +272,7 @@ export default async function MediaDetailPage({
                   <nav className="mediaVideoTags" aria-label={uiText(locale, "视频标签")}>
                     {displayVideoTags.map((tag) => (
                       <Link className="contentTag contentTagLink" href={`/media?${new URLSearchParams({ kind: "video", tag: tag.slug }).toString()}`} key={tag.id}>
-                        #{tag.name}
+                        {tag.name}
                       </Link>
                     ))}
                   </nav>

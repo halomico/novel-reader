@@ -8,6 +8,7 @@ import {
 } from "@/lib/reader-layout";
 import {
   DEFAULT_READER_LINE_HEIGHT,
+  DEFAULT_READER_PAGE_TURN,
   getReaderThemeSystemTheme,
   isReaderTheme,
   normalizeReaderLineHeight,
@@ -62,8 +63,10 @@ export function useReaderDisplayPreferences({ pageTurnEnabled }: { pageTurnEnabl
   const [fontSize, setFontSize] = useState(18);
   const [lineHeight, setLineHeight] = useState<ReaderLineHeight>(DEFAULT_READER_LINE_HEIGHT);
   const [justified, setJustified] = useState(true);
-  const [pageTurn, setPageTurn] = useState<ReaderPageTurn>("scroll");
+  const [pageTurn, setPageTurn] = useState<ReaderPageTurn>(DEFAULT_READER_PAGE_TURN);
   const flowRestoreTimer = useRef<number>(0);
+  const flowRaf1 = useRef<number>(0);
+  const flowRaf2 = useRef<number>(0);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -109,20 +112,34 @@ export function useReaderDisplayPreferences({ pageTurnEnabled }: { pageTurnEnabl
       themeColorMeta.setAttribute("content", viewportColor);
     }
 
+    const computedRoot = getComputedStyle(root);
+    const configuredFontSize = Number.parseFloat(computedRoot.getPropertyValue("--reader-font-size"));
+    const fallbackFontSize = Number.isFinite(configuredFontSize) && configuredFontSize >= 8 && configuredFontSize <= 25
+      ? configuredFontSize
+      : 18;
+    const configuredLineHeight = normalizeReaderLineHeight(
+      computedRoot.getPropertyValue("--reader-line-height"),
+      DEFAULT_READER_LINE_HEIGHT,
+    );
+    const configuredPageTurn = normalizeReaderPageTurn(root.dataset.readerPageTurn, DEFAULT_READER_PAGE_TURN);
     const savedTheme = localStorage.getItem(READER_PAPER_STORAGE_KEY);
-    const savedFontSize = Number(localStorage.getItem(READER_FONT_SIZE_STORAGE_KEY));
+    const savedFontSizeValue = localStorage.getItem(READER_FONT_SIZE_STORAGE_KEY);
+    const savedFontSize = savedFontSizeValue === null ? Number.NaN : Number(savedFontSizeValue);
     const initialReaderTheme = isReaderTheme(savedTheme) ? savedTheme : null;
     const initialGlobalTheme = initialReaderTheme
       ? getReaderThemeSystemTheme(initialReaderTheme)
       : currentGlobalTheme();
     const initialWidth = normalizeReaderWidth(localStorage.getItem(READER_WIDTH_STORAGE_KEY));
-    const initialFontSize = Number.isFinite(savedFontSize) && savedFontSize >= 8 && savedFontSize <= 25 ? savedFontSize : 18;
+    const initialFontSize = Number.isFinite(savedFontSize) && savedFontSize >= 8 && savedFontSize <= 25 ? savedFontSize : fallbackFontSize;
     const initialLineHeight = normalizeReaderLineHeight(
-      Number(localStorage.getItem(READER_LINE_HEIGHT_STORAGE_KEY)),
-      DEFAULT_READER_LINE_HEIGHT,
+      localStorage.getItem(READER_LINE_HEIGHT_STORAGE_KEY),
+      configuredLineHeight,
     );
-    const initialPageTurn = normalizeReaderPageTurn(localStorage.getItem(READER_PAGE_TURN_STORAGE_KEY));
-    const initialJustified = normalizeReaderJustify(localStorage.getItem(READER_JUSTIFY_STORAGE_KEY));
+    const initialPageTurn = normalizeReaderPageTurn(localStorage.getItem(READER_PAGE_TURN_STORAGE_KEY), configuredPageTurn);
+    const initialJustified = normalizeReaderJustify(
+      localStorage.getItem(READER_JUSTIFY_STORAGE_KEY),
+      root.dataset.readerJustify !== "off",
+    );
 
     setReaderTheme(initialReaderTheme);
     setGlobalTheme(initialGlobalTheme);
@@ -143,7 +160,10 @@ export function useReaderDisplayPreferences({ pageTurnEnabled }: { pageTurnEnabl
     syncReaderViewportTheme(initialReaderTheme);
     root.dataset.readerWidth = String(initialWidth);
     shell.dataset.readerWidth = String(initialWidth);
-    if (pageTurnEnabled) shell.dataset.readerPageTurn = initialPageTurn;
+    if (pageTurnEnabled) {
+      root.dataset.readerPageTurn = initialPageTurn;
+      shell.dataset.readerPageTurn = initialPageTurn;
+    }
     root.dataset.readerJustify = initialJustified ? "on" : "off";
     shell.dataset.readerJustify = initialJustified ? "on" : "off";
     if (initialWidth === "auto") {
@@ -175,6 +195,8 @@ export function useReaderDisplayPreferences({ pageTurnEnabled }: { pageTurnEnabl
       root.removeAttribute("data-reader-viewport");
       root.style.removeProperty("--reader-viewport-bg");
       restoreThemeColor();
+      if (flowRaf1.current) window.cancelAnimationFrame(flowRaf1.current);
+      if (flowRaf2.current) window.cancelAnimationFrame(flowRaf2.current);
       if (flowRestoreTimer.current) window.clearTimeout(flowRestoreTimer.current);
     };
   }, [pageTurnEnabled]);
@@ -187,7 +209,11 @@ export function useReaderDisplayPreferences({ pageTurnEnabled }: { pageTurnEnabl
       const target = contentTop + content.scrollHeight * progressRatio - window.innerHeight * 0.42;
       window.scrollTo({ top: Math.max(0, target), behavior: "auto" });
     };
-    requestAnimationFrame(() => requestAnimationFrame(restore));
+    if (flowRaf1.current) window.cancelAnimationFrame(flowRaf1.current);
+    if (flowRaf2.current) window.cancelAnimationFrame(flowRaf2.current);
+    flowRaf1.current = window.requestAnimationFrame(() => {
+      flowRaf2.current = window.requestAnimationFrame(restore);
+    });
     if (flowRestoreTimer.current) window.clearTimeout(flowRestoreTimer.current);
     flowRestoreTimer.current = window.setTimeout(restore, 190);
   }

@@ -1,9 +1,12 @@
 "use client";
 
 import type { JSX } from "react";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
   $applyNodeReplacement,
+  $getNodeByKey,
   DecoratorNode,
+  SKIP_DOM_SELECTION_TAG,
   type EditorConfig,
   type LexicalNode,
   type NodeKey,
@@ -13,7 +16,7 @@ import {
 import styles from "../OriginalComposer.module.css";
 
 export type OriginalImagePayload = {
-  assetId: number;
+  assetId?: number | null;
   src: string;
   altText: string;
   caption: string;
@@ -27,7 +30,7 @@ export type SerializedOriginalImageNode = Spread<
 >;
 
 export class OriginalImageNode extends DecoratorNode<JSX.Element> {
-  __assetId: number;
+  __assetId: number | null;
   __src: string;
   __altText: string;
   __caption: string;
@@ -55,7 +58,7 @@ export class OriginalImageNode extends DecoratorNode<JSX.Element> {
 
   constructor(payload: OriginalImagePayload, key?: NodeKey) {
     super(key);
-    this.__assetId = payload.assetId;
+    this.__assetId = Number.isSafeInteger(payload.assetId) && Number(payload.assetId) > 0 ? Number(payload.assetId) : null;
     this.__src = payload.src;
     this.__altText = payload.altText;
     this.__caption = payload.caption;
@@ -68,7 +71,7 @@ export class OriginalImageNode extends DecoratorNode<JSX.Element> {
       ...super.exportJSON(),
       type: "original-image",
       version: 1,
-      assetId: this.__assetId,
+      assetId: this.__assetId ?? undefined,
       src: this.__src,
       altText: this.__altText,
       caption: this.__caption,
@@ -78,7 +81,7 @@ export class OriginalImageNode extends DecoratorNode<JSX.Element> {
   }
 
   createDOM(config: EditorConfig): HTMLElement {
-    const element = document.createElement("figure");
+    const element = document.createElement("div");
     element.className = config.theme.image || "";
     return element;
   }
@@ -87,21 +90,73 @@ export class OriginalImageNode extends DecoratorNode<JSX.Element> {
     return false;
   }
 
+  isInline(): false {
+    return false;
+  }
+
+  setSize(width: number, height: number): void {
+    const writable = this.getWritable();
+    writable.__width = width;
+    writable.__height = height;
+  }
+
   decorate(): JSX.Element {
     return (
-      <figure className={styles.editorImage} contentEditable={false}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={this.__src}
-          alt={this.__altText}
-          width={this.__width}
-          height={this.__height}
-          draggable={false}
-        />
-        {this.__caption ? <figcaption>{this.__caption}</figcaption> : null}
-      </figure>
+      <OriginalImage
+        nodeKey={this.getKey()}
+        src={this.__src}
+        altText={this.__altText}
+        caption={this.__caption}
+        width={this.__width}
+        height={this.__height}
+      />
     );
   }
+}
+
+/** A Markdown image carries no dimensions, so the node starts at the 1x1 sentinel.
+ *  Rendering that verbatim produced a one-pixel image; instead leave the box to CSS
+ *  until the bitmap loads, then write the natural size back so later round trips
+ *  through Markdown can reserve the right space. */
+function OriginalImage({
+  nodeKey,
+  src,
+  altText,
+  caption,
+  width,
+  height,
+}: {
+  nodeKey: NodeKey;
+  src: string;
+  altText: string;
+  caption: string;
+  width: number;
+  height: number;
+}) {
+  const [editor] = useLexicalComposerContext();
+  const known = width > 1 && height > 1;
+  return (
+    <figure className={styles.editorImage} contentEditable={false}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={altText}
+        width={known ? width : undefined}
+        height={known ? height : undefined}
+        style={known ? undefined : { aspectRatio: "auto" }}
+        draggable={false}
+        onLoad={(event) => {
+          const image = event.currentTarget;
+          if (known || !image.naturalWidth || !image.naturalHeight) return;
+          editor.update(() => {
+            const node = $getNodeByKey(nodeKey);
+            if ($isOriginalImageNode(node)) node.setSize(image.naturalWidth, image.naturalHeight);
+          }, { tag: [SKIP_DOM_SELECTION_TAG, "image-measure"] });
+        }}
+      />
+      {caption ? <figcaption>{caption}</figcaption> : null}
+    </figure>
+  );
 }
 
 export function $createOriginalImageNode(payload: OriginalImagePayload): OriginalImageNode {

@@ -1,6 +1,5 @@
 "use client";
 
-import { Dices } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   DEFAULT_LOCALE,
@@ -11,31 +10,36 @@ import {
   type AppLocale,
 } from "@/lib/locale";
 import {
-  COLOR_PALETTES,
   DEFAULT_READER_LINE_HEIGHT,
+  DEFAULT_READER_PAGE_TURN,
   getReaderThemeSystemTheme,
   getColorPalette,
+  getColorPaletteTextTokens,
   isColorPalette,
   isReaderTheme,
   normalizeReaderJustify,
   normalizeReaderLineHeight,
+  normalizeReaderPageTurn,
   normalizeReaderTagsMode,
   NOVEL_CATALOG_SEARCH_COOKIE,
   PALETTE_STORAGE_KEY,
   READER_HOTWORDS_STORAGE_KEY,
   READER_JUSTIFY_STORAGE_KEY,
   READER_LINE_HEIGHT_STORAGE_KEY,
+  READER_PAGE_TURN_OPTIONS,
+  READER_PAGE_TURN_STORAGE_KEY,
   READER_PAPER_STORAGE_KEY,
   READER_TAGS_STORAGE_KEY,
   type ColorPalette,
   type ReaderLineHeight,
+  type ReaderPageTurn,
   type ReaderTheme,
   type ReaderTagsMode,
 } from "@/lib/ui-preferences";
 import { clearReaderPaperPreference } from "@/lib/reader-theme-client";
+import { PalettePicker } from "./PalettePicker";
 import { ReaderJustifyToggle, ReaderThemePicker } from "./ReaderDisplayPreferences";
 import { ReaderFontSizeStepper, ReaderLineHeightStepper } from "./ReaderTypographyControls";
-import { SelectControl } from "./SelectControl";
 
 type ThemeChoice = "system" | "light" | "dark";
 
@@ -71,12 +75,15 @@ function removeLocalSetting(key: string) {
 
 function applyPalette(value: ColorPalette) {
   const palette = getColorPalette(value);
+  const textTokens = getColorPaletteTextTokens(palette);
   const root = document.documentElement;
   root.dataset.palette = value;
   root.style.setProperty("--palette-light-accent", palette.lightAccent);
   root.style.setProperty("--palette-light-strong", palette.lightStrong);
   root.style.setProperty("--palette-dark-accent", palette.darkAccent);
   root.style.setProperty("--palette-dark-strong", palette.darkStrong);
+  root.style.setProperty("--palette-light-text", textTokens.lightText);
+  root.style.setProperty("--palette-dark-text", textTokens.darkText);
 }
 
 function applySettings(
@@ -108,23 +115,23 @@ function applySettings(
 }
 
 export function SettingsPanel({
-  previewText,
   defaultFontSize,
   defaultLineHeight = DEFAULT_READER_LINE_HEIGHT,
   defaultPalette,
   defaultTheme,
   defaultReaderTagsMode,
+  defaultPageTurn = DEFAULT_READER_PAGE_TURN,
   canConfigureReaderTags,
   canConfigureReaderHotwords,
   currentLocale,
   novelCatalogSearchExpanded,
 }: {
-  previewText: string;
   defaultFontSize: number;
   defaultLineHeight?: ReaderLineHeight;
   defaultPalette: ColorPalette;
   defaultTheme: ThemeChoice;
   defaultReaderTagsMode: ReaderTagsMode;
+  defaultPageTurn?: ReaderPageTurn;
   canConfigureReaderTags: boolean;
   canConfigureReaderHotwords: boolean;
   currentLocale: AppLocale;
@@ -136,10 +143,11 @@ export function SettingsPanel({
   const [lineHeight, setLineHeight] = useState<ReaderLineHeight>(defaultLineHeight);
   const [readerTheme, setReaderTheme] = useState<ReaderTheme | null>(null);
   const [justified, setJustified] = useState(true);
+  const [pageTurn, setPageTurn] = useState<ReaderPageTurn>(defaultPageTurn);
   const [readerTagsMode, setReaderTagsMode] = useState<ReaderTagsMode>(defaultReaderTagsMode);
   const [showReaderHotwords, setShowReaderHotwords] = useState(true);
   const [catalogSearchExpanded, setCatalogSearchExpanded] = useState(novelCatalogSearchExpanded);
-  const [hasHotwordPreference, setHasHotwordPreference] = useState(false);
+
   const [locale, setLocale] = useState<AppLocale>(currentLocale);
   const [preferencePending, setPreferencePending] = useState(false);
   const [preferenceMessage, setPreferenceMessage] = useState("");
@@ -155,6 +163,8 @@ export function SettingsPanel({
     const savedReaderTheme = readLocalSetting(READER_PAPER_STORAGE_KEY);
     const nextReaderTheme = isReaderTheme(savedReaderTheme) ? savedReaderTheme : null;
     const savedJustified = normalizeReaderJustify(readLocalSetting(READER_JUSTIFY_STORAGE_KEY));
+    const savedPageTurn = readLocalSetting(READER_PAGE_TURN_STORAGE_KEY);
+    const nextPageTurn = normalizeReaderPageTurn(savedPageTurn, defaultPageTurn);
     const storedTheme = savedTheme === "light" || savedTheme === "dark" || savedTheme === "system" ? savedTheme : defaultTheme;
     const nextTheme = nextReaderTheme ? getReaderThemeSystemTheme(nextReaderTheme) : storedTheme;
     const nextPalette = isColorPalette(savedPalette) ? savedPalette : defaultPalette;
@@ -169,17 +179,19 @@ export function SettingsPanel({
     setLineHeight(nextLineHeight);
     setReaderTheme(nextReaderTheme);
     setJustified(savedJustified);
+    setPageTurn(nextPageTurn);
     setReaderTagsMode(nextReaderTagsMode);
     setShowReaderHotwords(nextShowHotwords);
     setCatalogSearchExpanded(novelCatalogSearchExpanded);
-    setHasHotwordPreference(nextHasHotwordPreference);
+
     document.documentElement.removeAttribute("data-ui-mode");
     document.documentElement.removeAttribute("data-top-menu");
     if (nextReaderTheme) document.documentElement.dataset.readerTheme = nextReaderTheme;
     else document.documentElement.removeAttribute("data-reader-theme");
     document.documentElement.dataset.readerJustify = savedJustified ? "on" : "off";
+    document.documentElement.dataset.readerPageTurn = nextPageTurn;
     applySettings(nextTheme, nextFontSize, nextLineHeight, nextPalette, nextReaderTagsMode, nextShowHotwords, false);
-  }, [defaultFontSize, defaultLineHeight, defaultPalette, defaultReaderTagsMode, defaultTheme, novelCatalogSearchExpanded]);
+  }, [defaultFontSize, defaultLineHeight, defaultPageTurn, defaultPalette, defaultReaderTagsMode, defaultTheme, novelCatalogSearchExpanded]);
 
   function changeTheme(value: ThemeChoice) {
     setTheme(value);
@@ -230,18 +242,16 @@ export function SettingsPanel({
     writeLocalSetting(READER_JUSTIFY_STORAGE_KEY, storedValue);
   }
 
+  function changePageTurn(value: ReaderPageTurn) {
+    setPageTurn(value);
+    document.documentElement.dataset.readerPageTurn = value;
+    writeLocalSetting(READER_PAGE_TURN_STORAGE_KEY, value);
+  }
+
   function changePalette(value: ColorPalette) {
     setPalette(value);
     applyPalette(value);
     writeLocalSetting(PALETTE_STORAGE_KEY, value);
-  }
-
-  function chooseRandomPalette() {
-    const choices = COLOR_PALETTES.filter((item) => item.value !== palette);
-    const next = choices[Math.floor(Math.random() * choices.length)];
-    if (next) {
-      changePalette(next.value);
-    }
   }
 
   function changeReaderTags(mode: ReaderTagsMode) {
@@ -252,7 +262,7 @@ export function SettingsPanel({
 
   function changeReaderHotwords(visible: boolean) {
     setShowReaderHotwords(visible);
-    setHasHotwordPreference(true);
+
     document.documentElement.dataset.readerHotwords = visible ? "show" : "hide";
     writeLocalSetting(READER_HOTWORDS_STORAGE_KEY, visible ? "show" : "hide");
   }
@@ -334,24 +344,7 @@ export function SettingsPanel({
               <div className="settingRowTitle">
                 <span>{tr("配色")}</span>
               </div>
-              <div className="settingPalettePicker">
-                <span className="paletteSwatches" aria-hidden="true">
-                  <span style={{ backgroundColor: getColorPalette(palette).lightAccent }} />
-                  <span style={{ backgroundColor: getColorPalette(palette).darkAccent }} />
-                </span>
-                <SelectControl wrapperClassName="settingPaletteSelect" aria-label="配色风格" value={palette} onChange={(event) => changePalette(event.target.value as ColorPalette)}>
-                  {COLOR_PALETTES.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}
-                </SelectControl>
-                <button
-                  className="settingPaletteRandomButton"
-                  type="button"
-                  onClick={chooseRandomPalette}
-                  aria-label="随机选择配色"
-                  title="随机选择配色"
-                >
-                  <Dices size={16} aria-hidden="true" />
-                </button>
-              </div>
+              <PalettePicker className="settingPalettePicker" value={palette} onChange={changePalette} />
             </div>
           </div>
         </section>
@@ -397,6 +390,26 @@ export function SettingsPanel({
                 label={tr("两端对齐")}
                 className="settingsReaderJustifyToggle"
               />
+            </div>
+
+            <div className="settingRow">
+              <div className="settingRowTitle">
+                <span>{tr("翻页方式")}</span>
+                <strong>{tr(READER_PAGE_TURN_OPTIONS.find((item) => item.value === pageTurn)?.label || "")}</strong>
+              </div>
+              <div className="segmentedControl settingCompactSegments" role="group" aria-label={tr("翻页方式")}>
+                {READER_PAGE_TURN_OPTIONS.map((item) => (
+                  <button
+                    className={pageTurn === item.value ? "isActive" : ""}
+                    key={item.value}
+                    type="button"
+                    onClick={() => changePageTurn(item.value)}
+                    aria-pressed={pageTurn === item.value}
+                  >
+                    {tr(item.label)}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </section>
@@ -463,11 +476,6 @@ export function SettingsPanel({
         <p className="settingsPreferenceNotice" role="status">{preferenceMessage}</p>
       ) : null}
 
-      {previewText ? (
-        <div className="previewReader" aria-label="阅读效果预览">
-          <p>{previewText}</p>
-        </div>
-      ) : null}
     </section>
   );
 }

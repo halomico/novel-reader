@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import test from "node:test";
-import { hashPassword, hashPasswordAsync, passwordNeedsRehash, verifyPassword, verifyPasswordAsync } from "./password";
+import { hashPasswordAsync, passwordNeedsRehash, verifyPasswordAsync } from "./password";
 
-test("synchronous administrator compatibility hashes remain salted and verifiable", () => {
-  const first = hashPassword("correct horse battery staple");
-  const second = hashPassword("correct horse battery staple");
+test("password hashes remain salted and verifiable without blocking the event loop", async () => {
+  const first = await hashPasswordAsync("correct horse battery staple");
+  const second = await hashPasswordAsync("correct horse battery staple");
   assert.notEqual(first, second);
-  assert.equal(verifyPassword("correct horse battery staple", first), true);
-  assert.equal(verifyPassword("wrong password", first), false);
+  assert.equal(await verifyPasswordAsync("correct horse battery staple", first), true);
+  assert.equal(await verifyPasswordAsync("wrong password", first), false);
 });
 
 test("normal user passwords use asynchronous scrypt and reject malformed hashes", async () => {

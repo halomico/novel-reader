@@ -31,18 +31,21 @@ export function MediaVideoPreview({
 }) {
   const containerRef = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(priority || eager);
+  const version = coverVersion || `single-${singlePercent}-${Math.floor(sourceVersion)}`;
+  const baseSrc = suppliedSrc || `${admin ? "/admin/media" : "/media"}/${id}/thumbnail?v=${encodeURIComponent(version)}`;
+  const [prevBaseSrc, setPrevBaseSrc] = useState(baseSrc);
   const [attempt, setAttempt] = useState(0);
   const [waiting, setWaiting] = useState(false);
   const [failed, setFailed] = useState(false);
-  const version = coverVersion || `single-${singlePercent}-${Math.floor(sourceVersion)}`;
-  const baseSrc = suppliedSrc || `${admin ? "/admin/media" : "/media"}/${id}/thumbnail?v=${encodeURIComponent(version)}`;
-  const src = retrySource(baseSrc, attempt);
 
-  useEffect(() => {
+  if (prevBaseSrc !== baseSrc) {
+    setPrevBaseSrc(baseSrc);
     setAttempt(0);
     setWaiting(false);
     setFailed(false);
-  }, [baseSrc]);
+  }
+
+  const src = retrySource(baseSrc, attempt);
 
   useEffect(() => {
     if (visible || !containerRef.current || typeof IntersectionObserver === "undefined") {

@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { database } from "@/core/db/postgres";
+import { hasPostgresUserPermission } from "@/domains/identity/postgres-permissions";
+import {
+  createPostgresContentReport,
+  isContentReportCategory,
+  isMediaReportCategory,
+  isOriginalReportCategory,
+} from "@/domains/activity/postgres-reports";
 import { validateSameOriginMutation } from "@/core/security/origin";
+import { readJsonBody } from "@/core/security/request-body";
 import { getUserDailyReportLimit } from "@/lib/config";
-import { createContentReport, isContentReportCategory, isMediaReportCategory, isOriginalReportCategory } from "@/lib/reports";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
-import { hasUserPermission } from "@/lib/user-levels";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -11,23 +18,25 @@ export const runtime = "nodejs";
 export async function POST(request: NextRequest) {
   const guard = validateSameOriginMutation(request);
   if (guard) return guard;
-  const user = getCurrentUserFromRequest(request);
+  const user = await getCurrentUserFromRequest(request);
   if (!user) {
     return NextResponse.json({ ok: false, message: "请先登录" }, { status: 401 });
   }
   if (user.role !== "user") {
     return NextResponse.json({ ok: false, message: "管理员无需提交内容反馈" }, { status: 403 });
   }
-  if (!hasUserPermission(user, "content_report")) {
+  if (!await hasPostgresUserPermission(database("web"), user, "content_report")) {
     return NextResponse.json({ ok: false, message: "当前等级暂不能提交内容反馈" }, { status: 403 });
   }
 
-  let body: Record<string, unknown>;
-  try {
-    body = await request.json() as Record<string, unknown>;
-  } catch {
-    return NextResponse.json({ ok: false, message: "请求格式有误" }, { status: 400 });
+  const parsed = await readJsonBody<Record<string, unknown>>(request, 16 * 1024);
+  if (!parsed.ok) {
+    return NextResponse.json(
+      { ok: false, message: parsed.reason === "too_large" ? "请求内容过大" : "请求格式有误" },
+      { status: parsed.reason === "too_large" ? 413 : 400 },
+    );
   }
+  const body = parsed.value;
   const category = body.category;
   const details = String(body.details || "").trim();
   const novelId = Number(body.novelId || 0);
@@ -46,7 +55,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = createContentReport({
+    const result = await createPostgresContentReport({
       userId: user.id,
       novelId,
       mediaId,

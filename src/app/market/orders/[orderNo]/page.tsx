@@ -1,5 +1,7 @@
 import { Download, KeyRound, LockKeyhole } from "lucide-react";
 import type { Metadata } from "next";
+import { database } from "@/core/db/postgres";
+import { hasPostgresUserPermission } from "@/domains/identity/postgres-permissions";
 import ReactMarkdown from "react-markdown";
 import { notFound, redirect } from "next/navigation";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
@@ -8,12 +10,11 @@ import { DismissibleNotice } from "@/components/DismissibleNotice";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getNoticeDisplaySeconds, isMarketEnabled } from "@/lib/config";
 import {
-  getUserMarketOrder,
-  listMarketOrderDeliveries,
+  getPostgresUserMarketOrder,
+  listPostgresMarketOrderDeliveries,
   revealOrderDeliveryContent,
-} from "@/lib/market";
+} from "@/domains/market/postgres-market";
 import { getCurrentUser } from "@/lib/user-auth";
-import { hasUserPermission } from "@/lib/user-levels";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "订单交付", robots: { index: false, follow: false } };
@@ -27,10 +28,10 @@ export default async function MarketOrderPage({ params, searchParams }: MarketOr
   const user = await getCurrentUser();
   const { orderNo } = await params;
   if (!user) redirect(`/login?returnTo=${encodeURIComponent(`/market/orders/${orderNo}`)}`);
-  if (!isMarketEnabled() || !hasUserPermission(user, "market_access")) notFound();
-  const order = getUserMarketOrder(user.id, orderNo);
+  if (!isMarketEnabled() || !await hasPostgresUserPermission(database("web"), user, "market_access")) notFound();
+  const order = await getPostgresUserMarketOrder(database(), user.id, orderNo);
   if (!order || order.status !== "fulfilled") notFound();
-  const deliveries = listMarketOrderDeliveries(order.id);
+  const deliveries = await listPostgresMarketOrderDeliveries(database(), order.id);
   const query = await searchParams;
 
   return (

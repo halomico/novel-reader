@@ -16,6 +16,7 @@ import { getTurnstileSiteKey } from "@/lib/human-verification";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { normalizeUserReturnPath } from "@/lib/return-path";
 import { registerUserAction } from "../account/actions";
+import { isEmailVerificationConfigured } from "@/lib/email-verification";
 import { getRequestLocale, localizeText } from "@/lib/locale-server";
 import { uiText, withLocalePath } from "@/lib/locale";
 
@@ -44,6 +45,7 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
   const registrationMode = getUserRegistrationMode();
   const registrationEnabled = registrationMode !== "closed";
   const emailVerificationRequired = isEmailVerificationRequired();
+  const emailConfigured = isEmailVerificationConfigured();
   const turnstileSiteKey = getTurnstileSiteKey();
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
 
@@ -68,20 +70,22 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
             <input name="username" autoComplete="username" minLength={3} maxLength={32} disabled={!registrationEnabled} required />
           </label>
           <label>
-            <span>{uiText(locale, "显示名称")}</span>
+            <span>{uiText(locale, "昵称")}</span>
             <input name="displayName" maxLength={40} placeholder={uiText(locale, "可留空，默认使用用户名")} disabled={!registrationEnabled} />
           </label>
-          <label>
-            <span>邮箱{emailVerificationRequired ? "" : "（可选）"}</span>
-            <input
-              name="email"
-              type="email"
-              autoComplete="email"
-              maxLength={254}
-              disabled={!registrationEnabled}
-              required={emailVerificationRequired}
-            />
-          </label>
+          {emailConfigured ? (
+            <label>
+              <span>邮箱{emailVerificationRequired ? "" : "（可选）"}</span>
+              <input
+                name="email"
+                type="email"
+                autoComplete="email"
+                maxLength={254}
+                disabled={!registrationEnabled}
+                required={emailVerificationRequired}
+              />
+            </label>
+          ) : null}
           {registrationMode === "invite" ? (
             <label>
               <span>邀请码</span>

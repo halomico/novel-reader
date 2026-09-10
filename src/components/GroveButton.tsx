@@ -1,7 +1,8 @@
 "use client";
 
-import { Sprout } from "lucide-react";
+import { Trees } from "lucide-react";
 import { useEffect, useOptimistic, useState, useTransition } from "react";
+import { jsonMutationRequest } from "@/core/security/browser-mutation";
 
 export function GroveButton({
   contentType,
@@ -35,7 +36,10 @@ export function GroveButton({
       setOptimisticPlanted(nextPlanted);
       try {
         const collection = contentType === "novel" ? "novels" : contentType;
-        const response = await fetch(`/api/${collection}/${contentId}/grove`, { method: "POST" });
+        const response = await fetch(
+          `/api/${collection}/${contentId}/grove`,
+          jsonMutationRequest({ method: "POST" }),
+        );
         const result = await response.json() as { ok?: boolean; planted?: boolean; message?: string };
         if (!response.ok || !result.ok) {
           setMessage(result.message || "操作失败，请稍后重试");
@@ -61,7 +65,7 @@ export function GroveButton({
         disabled={pending}
         onClick={toggleGrove}
       >
-        <Sprout size={18} fill={optimisticPlanted ? "currentColor" : "none"} aria-hidden="true" />
+        <Trees size={18} fill={optimisticPlanted ? "currentColor" : "none"} aria-hidden="true" />
         {showLabel ? <span>回响林</span> : null}
       </button>
       {message ? <span className="readerActionToast" role="status">{message}</span> : null}

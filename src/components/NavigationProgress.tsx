@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from "react";
 
 type ProgressState = "idle" | "loading" | "complete";
 
-const SHOW_DELAY_MS = 140;
+// Cached transitions finish without flashing a loading indicator.
+const SHOW_DELAY_MS = 120;
 const FAILSAFE_MS = 12_000;
 
 function isReaderDestination(pathname: string): boolean {

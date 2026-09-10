@@ -1,14 +1,12 @@
 import { NextRequest } from "next/server";
-import { getVideoPlaybackAccess } from "@/lib/media-access";
-import { checkContentAccess } from "@/lib/content-access";
-import {
-  getMediaAsset,
-  hasPublishedMediaHls,
-  isMediaKindConsumable,
-} from "@/lib/media";
+import { database } from "@/core/db/postgres";
+import { checkPostgresContentAccess } from "@/domains/access/postgres-content-access";
+import { getPostgresVideoPlaybackAccess } from "@/domains/media/postgres-media-access";
+import { validatePostgresVideoPlaybackLease } from "@/domains/media/postgres-video-playback";
+import { getPostgresMediaAsset } from "@/domains/media/postgres-media-catalog";
+import { hasPublishedMediaHls, isMediaKindConsumable } from "@/domains/media/media-model";
 import { playbackViewerFromRequest } from "@/lib/playback-viewer";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
-import { validateVideoPlaybackLease } from "@/lib/video-playback";
 import { buildAuthorizedPlaybackHlsManifest } from "@/lib/video-hls-delivery";
 
 export const dynamic = "force-dynamic";
@@ -19,12 +17,12 @@ export const runtime = "nodejs";
  * to avoid this extra RTT. Kept for Safari/bookmark compatibility and older clients.
  */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const user = getCurrentUserFromRequest(request);
-  const asset = getMediaAsset(Number((await params).id));
+  const user = await getCurrentUserFromRequest(request);
+  const asset = await getPostgresMediaAsset(database("web"), Number((await params).id));
   if (!asset || asset.kind !== "video" || !isMediaKindConsumable("video", Boolean(user))) {
     return new Response(null, { status: 404 });
   }
-  const access = checkContentAccess(request.headers, {
+  const access = await checkPostgresContentAccess(database("web"), request.headers, {
     scope: "video",
     authenticated: Boolean(user),
     admin: user?.role === "admin",
@@ -37,10 +35,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return new Response(null, { status: 404, headers: { "Cache-Control": "no-store" } });
   }
   const viewer = playbackViewerFromRequest(request, user?.id || null);
-  const playbackAccess = getVideoPlaybackAccess(asset, user);
+  const playbackAccess = await getPostgresVideoPlaybackAccess(database("web"), asset.id, user);
   const sessionId = request.nextUrl.searchParams.get("ps") || "";
   const token = request.nextUrl.searchParams.get("pt") || "";
-  if (!viewer || !playbackAccess.allowed || !validateVideoPlaybackLease({
+  if (!viewer || !playbackAccess?.allowed || !await validatePostgresVideoPlaybackLease(database("web"), {
     id: sessionId,
     token,
     viewerKey: viewer.viewerKey,

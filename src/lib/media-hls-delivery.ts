@@ -2,7 +2,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import type { NextRequest } from "next/server";
 import { getMediaDir } from "./config";
-import { parseMediaByteRange, type MediaAsset } from "./media";
+import { parseMediaByteRange, type MediaAsset } from "@/domains/media/media-model";
 import { createSignedMediaHlsFileUrl } from "./media-signing";
 import {
   isRemoteMediaStorage,

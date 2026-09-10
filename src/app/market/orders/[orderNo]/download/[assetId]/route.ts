@@ -1,13 +1,14 @@
 import fs from "node:fs";
 import { Readable } from "node:stream";
 import { NextRequest } from "next/server";
+import { database } from "@/core/db/postgres";
 import { getMediaDir } from "@/lib/config";
 import {
-  getMarketAssetById,
-  getUserMarketOrder,
-  userOwnsMarketAsset,
-} from "@/lib/market";
-import { parseMediaByteRange } from "@/lib/media";
+  getPostgresMarketAssetById,
+  getPostgresUserMarketOrder,
+  userOwnsPostgresMarketAsset,
+} from "@/domains/market/postgres-market";
+import { parseMediaByteRange } from "@/domains/media/media-model";
 import { createSignedMediaUrl } from "@/lib/media-signing";
 import { isRemoteMediaStorage } from "@/lib/media-storage-config";
 import { resolveMediaStoragePath } from "@/lib/media-storage-path";
@@ -25,13 +26,13 @@ export async function GET(
   request: NextRequest,
   context: { params: Promise<{ orderNo: string; assetId: string }> },
 ) {
-  const user = getCurrentUserFromRequest(request);
+  const user = await getCurrentUserFromRequest(request);
   if (!user) return new Response(null, { status: 401 });
   const params = await context.params;
-  const order = getUserMarketOrder(user.id, params.orderNo);
+  const order = await getPostgresUserMarketOrder(database(), user.id, params.orderNo);
   const assetId = Number(params.assetId);
-  const asset = getMarketAssetById(assetId);
-  if (!order || !asset || !userOwnsMarketAsset(user.id, order.id, assetId)) {
+  const asset = Number.isSafeInteger(assetId) && assetId > 0 ? await getPostgresMarketAssetById(database(), assetId) : null;
+  if (!order || !asset || !await userOwnsPostgresMarketAsset(database(), user.id, order.id, assetId)) {
     return new Response(null, { status: 404 });
   }
 

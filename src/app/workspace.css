@@ -23,7 +23,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 0;
   padding: 0;
 }
 
@@ -37,7 +37,7 @@
 
 .workspacePageTitle > svg {
   flex: 0 0 auto;
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
 }
 
 .workspacePageHeader h1 {
@@ -99,7 +99,7 @@
 .workspacePrimaryTabs > a:hover,
 .workspacePrimaryTabs > a:focus-visible,
 .workspacePrimaryTabs > a.isActive {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   outline: 0;
 }
 
@@ -145,14 +145,14 @@
 
 .workspaceSegmentedTabs > a:hover,
 .workspaceSegmentedTabs > a:focus-visible {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   outline: 0;
 }
 
 .workspaceSegmentedTabs > a.isActive {
   background: color-mix(in srgb, var(--accent) 13%, var(--surface));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   font-weight: 700;
 }
 
@@ -176,7 +176,7 @@
   width: 16px;
   height: 16px;
   flex: 0 0 auto;
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   stroke-width: 1.8;
 }
 
@@ -203,12 +203,12 @@
   border-top: 0;
 }
 
-/* A selected station conversation replaces the workspace chrome on mobile. */
-.userWorkspaceShell.isMobileImmersive .messagesPage.hasConversation > .messagesPageTabs {
-  display: none;
-}
-
 @media (max-width: 720px) {
+  /* A selected station conversation replaces the workspace chrome on mobile only. */
+  .userWorkspaceShell:has(.messagesPage.hasConversation) .messagesPage.hasConversation > .messagesPageTabs {
+    display: none;
+  }
+
   .workspacePageHeader,
   .workspacePageTitle {
     min-height: 46px;
@@ -247,16 +247,15 @@
 }
 
 /* Workspace section icons stay neutral like the settings icon. */
-.workspaceShell h1 > svg,
-.workspaceShell h2 > svg,
-.accountShell h1 > svg,
-.activityPage h1 > svg,
 .messagesPage h1 > svg,
-.marketPage h1 > svg,
 .originalMinePage h1 > svg,
-.workspacePageTitle > svg,
-.workspaceSectionTitle > svg {
+.workspacePageTitle > svg {
   color: var(--textMuted, var(--muted, #7b818a)) !important;
   fill: none !important;
 }
 
+
+.userWorkspaceShell .userContentHeader { border-bottom: 0; }
+.userWorkspaceShell .accountIdentityHeader,
+.userWorkspaceShell .accountGrowthHeader { border-bottom: 0; }
+.userWorkspaceShell .settingsHero.userContentHeader { border-bottom: 0; }

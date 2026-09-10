@@ -3,29 +3,30 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { database } from "@/core/db/postgres";
+import { postgresEntitlementTargetExists } from "@/domains/access/postgres-entitlements";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
 import { deleteStoredCover } from "@/lib/media-cover";
 import {
   encodeEntitlementDefinition,
-  entitlementTargetExists,
   parseEntitlementDefinition,
-} from "@/lib/entitlements";
+} from "@/lib/entitlement-protocol";
 import {
-  createMarketProduct,
-  createRedemptionCodeBatch,
-  deleteMarketDeliveryItem,
-  deleteMarketProduct,
-  getMarketProductById,
-  importMarketSecrets,
-  listMarketDeliveryItems,
+  createPostgresMarketProduct,
+  createPostgresRedemptionCodeBatch,
+  deletePostgresMarketDeliveryItem,
+  deletePostgresMarketProduct,
+  getPostgresMarketProductById,
+  importPostgresMarketSecrets,
+  listPostgresMarketDeliveryItems,
   MarketError,
-  removeAdminMarketOrder,
-  saveMarketDeliveryItem,
-  setMarketProductStatus,
-  updateMarketProduct,
+  removePostgresAdminMarketOrder,
+  savePostgresMarketDeliveryItem,
+  setPostgresMarketProductStatus,
+  updatePostgresMarketProduct,
   type MarketDeliveryKind,
-} from "@/lib/market";
+} from "@/domains/market/postgres-market";
 import { mutationResult, type MutationResult } from "@/lib/mutation-result";
 
 async function requireAdmin() {
@@ -69,7 +70,7 @@ export async function createMarketProductAction(formData: FormData) {
   let id: number;
   try {
     const price = selectedPrice(formData);
-    id = createMarketProduct({
+    id = await createPostgresMarketProduct({
       slug: String(formData.get("slug") || ""),
       title: String(formData.get("title") || ""),
       description: String(formData.get("description") || ""),
@@ -86,18 +87,18 @@ export async function createMarketProductAction(formData: FormData) {
 
 export async function updateMarketProductInlineAction(
   formData: FormData,
-): Promise<MutationResult<{ product: NonNullable<ReturnType<typeof getMarketProductById>> }>> {
+): Promise<MutationResult<{ product: NonNullable<Awaited<ReturnType<typeof getPostgresMarketProductById>>> }>> {
   await requireAdmin();
   const id = Number(formData.get("productId"));
   try {
-    const current = getMarketProductById(id);
+    const current = await getPostgresMarketProductById(database(), id);
     if (!current) return mutationResult(false, "商品不存在", "warning");
     const publish = formData.get("intent") === "publish";
     if (publish && !current.deliveryCount) {
       return mutationResult(false, "请先配置至少一项交付内容", "warning");
     }
     const price = selectedPrice(formData);
-    if (!updateMarketProduct({
+    if (!await updatePostgresMarketProduct({
       id,
       slug: String(formData.get("slug") || ""),
       title: String(formData.get("title") || ""),
@@ -113,7 +114,7 @@ export async function updateMarketProductInlineAction(
     revalidatePath("/market");
     revalidatePath(`/market/${current.slug}`);
     revalidatePath("/admin/market");
-    const product = getMarketProductById(id);
+    const product = await getPostgresMarketProductById(database(), id);
     if (product && product.slug !== current.slug) {
       revalidatePath(`/market/${product.slug}`);
     }
@@ -131,7 +132,7 @@ export async function setMarketProductStatusAction(
 ): Promise<MutationResult<{ status: "published" | "archived" }>> {
   await requireAdmin();
   const id = Math.floor(Number(idValue));
-  const product = getMarketProductById(id);
+  const product = Number.isSafeInteger(id) && id > 0 ? await getPostgresMarketProductById(database(), id) : null;
   if (!product) return mutationResult(false, "商品不存在", "warning");
   if (status === "published") {
     if (!product.deliveryCount) {
@@ -141,7 +142,7 @@ export async function setMarketProductStatusAction(
       return mutationResult(false, "商品只能选择一种支付方式", "warning");
     }
   }
-  if (!setMarketProductStatus(id, status)) {
+  if (!await setPostgresMarketProductStatus(database(), id, status)) {
     return mutationResult(false, "商品不存在", "warning");
   }
   revalidatePath("/market");
@@ -157,8 +158,8 @@ export async function setMarketProductStatusAction(
 export async function deleteMarketProductAction(idValue: number): Promise<MutationResult> {
   await requireAdmin();
   const id = Math.floor(Number(idValue));
-  const product = getMarketProductById(id);
-  if (!product || !deleteMarketProduct(id)) {
+  const product = Number.isSafeInteger(id) && id > 0 ? await getPostgresMarketProductById(database(), id) : null;
+  if (!product || !await deletePostgresMarketProduct(database(), id)) {
     return mutationResult(false, "商品不存在", "warning");
   }
   if (product.coverKey) {
@@ -174,7 +175,8 @@ export async function deleteMarketProductAction(idValue: number): Promise<Mutati
 
 export async function removeAdminMarketOrderAction(idValue: number): Promise<MutationResult> {
   await requireAdmin();
-  const removed = removeAdminMarketOrder(Math.floor(Number(idValue)));
+  const id = Math.floor(Number(idValue));
+  const removed = Number.isSafeInteger(id) && id > 0 && await removePostgresAdminMarketOrder(database(), id);
   return removed
     ? mutationResult(true, "订单已从后台列表移除", "success")
     : mutationResult(false, "订单不存在", "warning");
@@ -182,7 +184,7 @@ export async function removeAdminMarketOrderAction(idValue: number): Promise<Mut
 
 export async function saveMarketDeliveryItemInlineAction(
   formData: FormData,
-): Promise<MutationResult<{ deliveries: ReturnType<typeof listMarketDeliveryItems> }>> {
+): Promise<MutationResult<{ deliveries: Awaited<ReturnType<typeof listPostgresMarketDeliveryItems>> }>> {
   await requireAdmin();
   const productId = Number(formData.get("productId"));
   try {
@@ -198,12 +200,12 @@ export async function saveMarketDeliveryItemInlineAction(
         rights: formData.getAll("rights").map(String),
         durationSeconds: durationDays > 0 ? durationDays * 24 * 60 * 60 : null,
       });
-      if (!definition || !entitlementTargetExists(definition)) {
+      if (!definition || !await postgresEntitlementTargetExists(database("web"), definition)) {
         throw new MarketError("请选择有效的站内资源与权限", "invalid");
       }
       content = encodeEntitlementDefinition(definition);
     }
-    saveMarketDeliveryItem({
+    await savePostgresMarketDeliveryItem({
       id: Number(formData.get("deliveryId")) || undefined,
       productId,
       kind,
@@ -214,7 +216,7 @@ export async function saveMarketDeliveryItemInlineAction(
     });
     revalidatePath("/market");
     return mutationResult(true, "交付内容已保存", "success", {
-      deliveries: listMarketDeliveryItems(productId),
+      deliveries: await listPostgresMarketDeliveryItems(database(), productId),
     });
   } catch (error) {
     return mutationResult(false, marketMessage(error), "warning");
@@ -224,14 +226,16 @@ export async function saveMarketDeliveryItemInlineAction(
 export async function deleteMarketDeliveryItemInlineAction(
   productIdValue: number,
   deliveryIdValue: number,
-): Promise<MutationResult<{ deliveries: ReturnType<typeof listMarketDeliveryItems> }>> {
+): Promise<MutationResult<{ deliveries: Awaited<ReturnType<typeof listPostgresMarketDeliveryItems>> }>> {
   await requireAdmin();
   const productId = Math.floor(Number(productIdValue));
-  const deleted = deleteMarketDeliveryItem(productId, Math.floor(Number(deliveryIdValue)));
+  const deliveryId = Math.floor(Number(deliveryIdValue));
+  const deleted = Number.isSafeInteger(productId) && productId > 0 && Number.isSafeInteger(deliveryId) && deliveryId > 0 &&
+    await deletePostgresMarketDeliveryItem(database(), productId, deliveryId);
   if (!deleted) return mutationResult(false, "交付项不存在", "warning");
   revalidatePath("/market");
   return mutationResult(true, "交付项已删除", "success", {
-    deliveries: listMarketDeliveryItems(productId),
+    deliveries: await listPostgresMarketDeliveryItems(database(), productId),
   });
 }
 
@@ -242,7 +246,7 @@ export async function importMarketSecretsInlineAction(
   await requireAdmin();
   const productId = Math.floor(Number(productIdValue));
   try {
-    const count = importMarketSecrets(
+    const count = await importPostgresMarketSecrets(
       productId,
       String(secretsValue || "").split(/\r?\n/),
     );
@@ -267,7 +271,7 @@ export async function createRedemptionCodeBatchAction(input: {
 }): Promise<{ ok: true; codes: string[] } | { ok: false; message: string }> {
   await requireAdmin();
   try {
-    const result = createRedemptionCodeBatch({
+    const result = await createPostgresRedemptionCodeBatch({
       ...input,
       expiresAt: input.expiresAt || null,
     });

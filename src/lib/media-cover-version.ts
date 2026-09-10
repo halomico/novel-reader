@@ -1,4 +1,4 @@
-import type { MediaAsset } from "./media";
+import type { MediaAsset } from "@/domains/media/media-model";
 
 export function mediaCoverVersion(asset: Pick<MediaAsset, "customCoverKey" | "mtimeMs">, percent: number): string {
   return asset.customCoverKey

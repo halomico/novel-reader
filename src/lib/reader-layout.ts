@@ -6,6 +6,26 @@ export const READER_PAGE_STATE_REQUEST_EVENT = "novel-reader:page-state-request"
 export const READER_CHROME_SHOW_EVENT = "novel-reader:chrome-show";
 export const READER_KEEP_CHROME_SESSION_KEY = "novel-reader:keep-chrome";
 export const READER_ENTRY_EDGE_SESSION_KEY = "novel-reader:entry-edge";
+export const READER_ROUTE_PREFETCH_MAX_BYTES = 192 * 1024;
+
+type ReaderEntryEdge = "start" | "end";
+
+export function encodeReaderEntryEdge(href: string, edge: ReaderEntryEdge): string {
+  const url = new URL(href, "https://reader.local");
+  return JSON.stringify({ edge, target: `${url.pathname}${url.search}` });
+}
+
+export function resolveReaderEntryEdge(value: string | null, currentHref: string): ReaderEntryEdge | null {
+  if (!value) return null;
+  try {
+    const record = JSON.parse(value) as { edge?: unknown; target?: unknown };
+    if ((record.edge !== "start" && record.edge !== "end") || typeof record.target !== "string") return null;
+    const current = new URL(currentHref, "https://reader.local");
+    return record.target === `${current.pathname}${current.search}` ? record.edge : null;
+  } catch {
+    return null;
+  }
+}
 
 export type ReaderPageState = {
   paged: boolean;
@@ -14,6 +34,48 @@ export type ReaderPageState = {
   canPrevious: boolean;
   canNext: boolean;
 };
+
+export function shouldPrefetchReaderRoute({
+  contentBytes,
+  saveData = false,
+  effectiveType,
+  visible = true,
+}: {
+  contentBytes: number | null | undefined;
+  saveData?: boolean;
+  effectiveType?: string;
+  visible?: boolean;
+}): boolean {
+  return visible &&
+    !saveData &&
+    effectiveType !== "slow-2g" &&
+    effectiveType !== "2g" &&
+    Number.isFinite(contentBytes) &&
+    Number(contentBytes) > 0 &&
+    Number(contentBytes) <= READER_ROUTE_PREFETCH_MAX_BYTES;
+}
+
+export function resolveReaderEntryPage({
+  entryEdge,
+  progressRatio,
+  pageCount,
+}: {
+  entryEdge: "start" | "end" | null;
+  progressRatio?: number;
+  pageCount: number;
+}): number {
+  const lastPage = Math.max(Math.floor(pageCount) - 1, 0);
+  if (entryEdge === "end") return lastPage;
+  if (entryEdge === "start" || progressRatio === undefined) return 0;
+  return Math.min(Math.max(Math.round(progressRatio * lastPage), 0), lastPage);
+}
+
+export function normalizeReaderNavigationTitle(value: string): string {
+  const normalized = value.normalize("NFKC").replace(/\s+/gu, " ").trim();
+  const duplicatedPrefix = normalized.match(/^(\d{3,8}[-_.·、])(.+?)\1(.+)$/u);
+  if (!duplicatedPrefix) return normalized;
+  return `${duplicatedPrefix[1]}${duplicatedPrefix[2]} · ${duplicatedPrefix[3]}`;
+}
 
 export function resolveReaderPageMetrics({
   viewportWidth,

@@ -1,0 +1,720 @@
+/* Styles owned by the reader route family.
+ * Migrated from the former global cascade on 2026-09-04. Keep route-only rules in this file.
+ */
+.adminReaderActions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.adminReaderActions button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.adminReaderActions button:hover,
+.adminReaderActions button:focus-visible {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--accent-text, var(--accent));
+}
+
+.adminReaderActions form {
+  margin: 0;
+}
+
+.adminReaderActions .adminReaderPinButton.isActive {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent-text, var(--accent));
+}
+
+.adminReaderActions .adminReaderDeleteButton:hover,
+.adminReaderActions .adminReaderDeleteButton:focus-visible {
+  background: color-mix(in srgb, #b3261e 9%, transparent);
+  color: #b3261e;
+}
+
+.readerTagsBlock {
+  position: relative;
+  margin: -12px 0 44px;
+}
+
+.readerTagsBlock:not(.isMeasured) .readerTagLinks {
+  max-height: 65px;
+  overflow: hidden;
+}
+
+.readerTagMeasure {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.readerTagsInlineToggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  min-height: 30px;
+  border: 0;
+  border-radius: 6px;
+  padding: 4px;
+  background: color-mix(in srgb, var(--surface-strong) 34%, transparent);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.readerTagsInlineToggle:hover,
+.readerTagsInlineToggle:focus-visible {
+  border-color: color-mix(in srgb, var(--tag-color) 44%, var(--border));
+  color: var(--tag-color);
+}
+
+.readerTagsInlineToggle {
+  flex: 0 0 30px;
+}
+
+:root[data-reader-tags="collapsed"] .readerTagsBlock.hasOverflow:not(.isExpanded) .readerTagOverflowItem {
+  display: none;
+}
+
+:root[data-reader-tags="collapsed"] .readerTagsBlock.hasOverflow .readerTagsInlineToggle {
+  display: inline-flex;
+}
+
+.readerHotwordLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px 18px;
+  align-items: center;
+  margin-top: 38px;
+  padding-top: 20px;
+  border-top: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
+  color: var(--muted);
+  font-size: var(--reader-font-size);
+}
+
+:root[data-reader-tags="hidden"] .readerPage.hasReaderPreferences .readerTagsBlock,
+:root[data-reader-hotwords="hide"] .readerPage.hasReaderPreferences .readerHotwordLinks {
+  display: none;
+}
+
+.readerHotwordLinks a {
+  color: var(--accent-text, var(--accent));
+  text-decoration: underline;
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 6px;
+}
+
+.readerHotwordLinks a:hover,
+.readerHotwordLinks a:focus-visible {
+  color: var(--accent-text, var(--accent));
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 2px;
+}
+
+.bookSearchPage .searchResults {
+  gap: 0;
+  border-top: 1px solid var(--border);
+}
+
+.bookSearchPage .searchResultCard {
+  display: block;
+  padding: 14px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.bookSearchPage .searchResultCard:hover,
+.bookSearchPage .searchResultCard:focus-visible {
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+
+.bookSearchPage .searchResultBody {
+  gap: 6px;
+}
+
+.bookSearchPage .searchResultBody strong {
+  font-size: 16px;
+  font-weight: 620;
+}
+
+.bookSearchPage .searchResultBody > span {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.7;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+@media (max-width: 820px) {
+  .bookSearchPage .searchResultBody > span {
+    -webkit-line-clamp: 5;
+  }
+
+  .readerTagsBlock {
+    margin: -12px 0 24px;
+  }
+}
+
+.readerChapterNavigation {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) auto minmax(90px, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 30px;
+}
+
+.readerChapterNavigation > a,
+.readerChapterNavigation > span {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--surface-strong));
+  color: var(--muted);
+  padding-inline: 13px;
+  font-size: 13px;
+  font-weight: 620;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.readerChapterNavigation > :last-child {
+  justify-content: flex-end;
+}
+
+.readerChapterNavigation > a:hover,
+.readerChapterNavigation > a:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--accent-text, var(--accent));
+}
+
+.readerChapterNavigation .isDisabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.novelAccessGate {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 20px;
+  margin-block: 34px;
+  border-block: 1px solid var(--border);
+  padding: 22px 2px;
+}
+
+.novelAccessGate strong,
+.novelAccessGate small {
+  display: block;
+  margin: 0;
+}
+
+.novelAccessGate strong {
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.novelAccessGate small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.novelAccessGate button {
+  display: inline-flex;
+  min-height: var(--action-height);
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
+  border-radius: var(--action-radius);
+  padding: 0 var(--action-inline-padding);
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  color: var(--accent-text, var(--accent));
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--action-font-size);
+  font-weight: var(--action-font-weight);
+  line-height: 1;
+}
+
+.novelAccessGate button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.novelAccessGate > small {
+  grid-column: 1 / -1;
+  color: #b13d49;
+}
+
+@media (max-width: 820px) {
+
+  .readerChapterNavigation {
+    margin-block: 14px 24px;
+  }
+}
+
+@media (max-width: 520px) {
+  .readerChapterNavigation {
+    grid-template-columns: 1fr auto 1fr;
+  }
+
+  .readerChapterNavigation > a,
+.readerChapterNavigation > span {
+    font-size: 12px;
+  }
+
+  .novelAccessGate {
+    grid-template-columns: 1fr;
+  }
+
+  .novelAccessGate button {
+    justify-self: start;
+  }
+}
+
+.readerShell .readerChapterNavigation,
+.readerShell .readerHotwordLinks {
+  color: var(--reader-muted);
+}
+
+.readerShell .readerTagsBlock {
+  margin: -8px 0 36px;
+}
+
+.readerChapterNavigation {
+  grid-template-columns: minmax(84px, 1fr) auto minmax(84px, 1fr);
+  gap: 18px;
+  margin: 50px 0 24px;
+  border-top: 1px solid var(--reader-border);
+  padding-top: 20px;
+}
+
+.readerChapterNavigation > a,
+.readerChapterNavigation > span {
+  min-height: 36px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--reader-muted);
+  font-size: 14px;
+}
+
+.readerChapterNavigation > a:hover,
+.readerChapterNavigation > a:focus-visible {
+  border: 0;
+  background: transparent;
+  color: var(--accent-text, var(--accent));
+}
+
+.readerChapterNavigation > :last-child {
+  justify-content: flex-end;
+}
+
+.readerChapterProgress {
+  justify-content: center;
+  font-size: 12px !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.readerBookInfo {
+  margin: 0;
+  padding: 26px 24px;
+}
+
+.readerBookInfo h2,
+.readerBookInfo p {
+  margin: 0;
+}
+
+.readerBookInfo p {
+  margin-top: 8px;
+  color: var(--reader-muted);
+}
+
+.readerBookInfo .readerBookDescription {
+  margin-top: 18px;
+  color: var(--reader-text);
+  font-size: 14px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.readerBookInfo dl {
+  display: grid;
+  gap: 0;
+  margin: 26px 0;
+}
+
+.readerBookInfo dl > div {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--reader-border);
+  padding: 12px 0;
+}
+
+.readerBookInfo dt {
+  color: var(--reader-muted);
+}
+
+.readerBookInfo dd {
+  margin: 0;
+}
+
+.readerBookInfo > a {
+  color: var(--accent-text, var(--accent));
+  font-size: 13px;
+}
+
+@media (max-width: 820px) {
+
+  .readerChapterNavigation {
+    margin-top: 42px;
+  }
+}
+
+.readerShell .readerParagraph {
+  margin: 0;
+  letter-spacing: .015em;
+  overflow-wrap: break-word;
+  text-align: justify;
+  text-indent: 2em;
+  text-justify: inter-ideograph;
+  word-break: normal;
+}
+
+:root[data-reader-justify="off"] .novelReaderShell .readerParagraph,
+.novelReaderShell[data-reader-justify="off"] .readerParagraph {
+  text-align: start;
+  text-justify: auto;
+  line-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.readerShell .readerParagraph + .readerParagraph {
+  margin-top: .6em;
+}
+
+.readerShell .readerParagraph.isContinuation {
+  text-indent: 0;
+}
+
+.readerShell .readerParagraph.isSectionHeading {
+  margin-top: 1.2em;
+  font-weight: 650;
+  text-align: left;
+  text-indent: 0;
+}
+
+.readerShell .readerParagraph.isSectionHeading:first-child {
+  margin-top: 0;
+}
+
+.readerShell .readerParagraph.isSectionHeading + .readerParagraph {
+  margin-top: .75em;
+}
+
+@media (max-width: 820px) {
+:root[data-reader-page-turn="slide"]:has(.novelReaderShell),
+:root[data-reader-page-turn="instant"]:has(.novelReaderShell) {
+    overflow: hidden;
+    scrollbar-gutter: auto;
+  }
+
+  :root[data-reader-page-turn="slide"] body:has(.novelReaderShell),
+:root[data-reader-page-turn="instant"] body:has(.novelReaderShell) {
+    overflow: hidden;
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell .readerText,
+:root[data-reader-page-turn="instant"] .novelReaderShell .readerText {
+    box-sizing: border-box;
+    width: 100%;
+    height: max(320px, calc(100dvh - var(--reader-page-block-start) - var(--reader-page-block-end)));
+    column-fill: auto;
+    column-gap: 0;
+    column-width: var(--reader-page-column-width, 100vw);
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: none;
+    padding-inline: 0;
+    scroll-behavior: auto;
+    scrollbar-width: none;
+    touch-action: pan-y pinch-zoom;
+    will-change: scroll-position;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell .readerPagedStage,
+:root[data-reader-page-turn="instant"] .novelReaderShell .readerPagedStage {
+    width: 100%;
+    margin-inline: 0;
+    contain: layout;
+    overflow: hidden;
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell .readerPagedStage {
+    transform: translate3d(0, 0, 0);
+    backface-visibility: hidden;
+    transition: transform 96ms cubic-bezier(.22, .7, .2, 1);
+    will-change: transform;
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell.isReaderRouteLeavingPrevious .readerPagedStage {
+    transform: translate3d(9%, 0, 0);
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell.isReaderRouteLeavingNext .readerPagedStage {
+    transform: translate3d(-9%, 0, 0);
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell.isReaderRouteEnteringPrevious .readerPagedStage {
+    transform: translate3d(-9%, 0, 0);
+    transition: none;
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell.isReaderRouteEnteringNext .readerPagedStage {
+    transform: translate3d(9%, 0, 0);
+    transition: none;
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell .readerTitle,
+:root[data-reader-page-turn="slide"] .novelReaderShell .readerTagsBlock,
+:root[data-reader-page-turn="instant"] .novelReaderShell .readerTitle,
+:root[data-reader-page-turn="instant"] .novelReaderShell .readerTagsBlock {
+    display: none;
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell .readerText::-webkit-scrollbar,
+:root[data-reader-page-turn="instant"] .novelReaderShell .readerText::-webkit-scrollbar {
+    display: none;
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell .readerSegment,
+:root[data-reader-page-turn="instant"] .novelReaderShell .readerSegment {
+    content-visibility: visible;
+    contain-intrinsic-size: none;
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell .readerParagraph,
+:root[data-reader-page-turn="instant"] .novelReaderShell .readerParagraph {
+    margin-inline: var(--reader-page-inline-gutter);
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell .readerPagedIntro,
+  :root[data-reader-page-turn="instant"] .novelReaderShell .readerPagedIntro {
+    display: grid;
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell:not(.isReaderPageEnd) .readerChapterNavigation,
+:root[data-reader-page-turn="slide"] .novelReaderShell:not(.isReaderPageEnd) .readerHotwordLinks,
+:root[data-reader-page-turn="slide"] .novelReaderShell:not(.isReaderPageEnd) .readerNovelNavigation,
+:root[data-reader-page-turn="slide"] .novelReaderShell:not(.isReaderPageEnd) .readerPagedStage ~ .novelAccessGate,
+:root[data-reader-page-turn="instant"] .novelReaderShell:not(.isReaderPageEnd) .readerChapterNavigation,
+:root[data-reader-page-turn="instant"] .novelReaderShell:not(.isReaderPageEnd) .readerHotwordLinks,
+:root[data-reader-page-turn="instant"] .novelReaderShell:not(.isReaderPageEnd) .readerNovelNavigation,
+:root[data-reader-page-turn="instant"] .novelReaderShell:not(.isReaderPageEnd) .readerPagedStage ~ .novelAccessGate {
+    display: none;
+  }
+
+  /* Paged readers use the rail and edge gestures for navigation. Keep the
+   * document-end links out of the paged layout to prevent a visible reflow. */
+  :root[data-reader-page-turn="slide"] .novelReaderShell .readerChapterNavigation,
+  :root[data-reader-page-turn="slide"] .novelReaderShell .readerNovelNavigation,
+  :root[data-reader-page-turn="instant"] .novelReaderShell .readerChapterNavigation,
+  :root[data-reader-page-turn="instant"] .novelReaderShell .readerNovelNavigation {
+    display: none;
+  }
+}
+
+.readerPagedStage {
+  position: relative;
+}
+
+.readerPagedIntro {
+  display: none;
+}
+
+@media (max-width: 820px) {
+  .readerPagedIntro {
+    break-inside: avoid-column;
+    gap: 10px;
+    margin: 0 var(--reader-page-inline-gutter) 30px;
+    padding-top: 2px;
+  }
+
+  .readerPagedIntro h1,
+  .readerPagedIntro p {
+    margin: 0;
+  }
+
+  .readerPagedIntro h1 {
+    color: var(--reader-text);
+    font-family: inherit;
+    font-size: 1.28em;
+    font-weight: 650;
+    line-height: 1.42;
+    overflow-wrap: anywhere;
+  }
+
+  .readerPagedIntro > p {
+    color: var(--reader-muted);
+    font-size: .74em;
+    line-height: 1.5;
+  }
+
+  .readerPagedIntroTags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 2px;
+  }
+
+  .readerPagedIntroTags .tagChip {
+    font-family: var(--font-ui);
+    font-size: 11px;
+  }
+}
+
+.readerShell .readerTagsBlock {
+  margin: -4px 0 34px;
+}
+
+.readerShell .readerTagMeasure {
+  gap: 5px 8px;
+}
+
+.readerShell .readerTagsInlineToggle {
+  border: 0;
+  border-radius: 0;
+  padding: 4px;
+  background: transparent;
+  color: var(--reader-muted);
+  box-shadow: none;
+}
+
+.readerShell .readerTagsInlineToggle:hover,
+.readerShell .readerTagsInlineToggle:focus-visible {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--reader-accent) 8%, transparent);
+  color: var(--reader-accent);
+}
+
+.readerBookInfo {
+  display: grid;
+  gap: 0;
+  overflow-y: auto;
+  padding: 0 var(--reader-panel-inline) 28px;
+}
+
+.readerBookInfo h2 {
+  color: var(--reader-text);
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.readerBookInfo .readerBookChapterTitle {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.readerBookInfo .readerBookDescription {
+  margin-top: 15px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.readerBookInfo dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 18px 0 6px;
+}
+
+.readerBookInfo dl > div {
+  display: grid;
+  justify-content: initial;
+  gap: 4px;
+  border: 1px solid var(--reader-border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  background: color-mix(in srgb, var(--reader-border) 24%, transparent);
+}
+
+.readerBookInfo dt {
+  font-size: 11px;
+}
+
+.readerBookInfo dd {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.readerBookInfo > a {
+  width: fit-content;
+  margin-top: 12px;
+}
+
+@media (max-width: 820px) {
+  .readerBookInfo h2 {
+    font-family: inherit;
+  }
+
+  .readerBookInfo {
+    padding: 0 var(--reader-panel-inline) calc(24px + env(safe-area-inset-bottom));
+  }
+
+  .readerBookInfo h2 {
+    font-size: 18px;
+  }
+
+  .readerBookInfo .readerBookDescription {
+    font-size: 13.5px;
+    line-height: 1.68;
+  }
+}
+
+@media (max-width: 820px) {
+
+  .readerShell .readerPage {
+    padding-top: max(54px, calc(env(safe-area-inset-top) + 48px));
+  }
+
+  :root[data-reader-page-turn="slide"] .novelReaderShell > .readerPage,
+  :root[data-reader-page-turn="instant"] .novelReaderShell > .readerPage {
+    --reader-page-inline-gutter: clamp(20px, 5.65vw, 24px);
+    --reader-page-block-start: max(54px, calc(env(safe-area-inset-top) + 48px));
+    --reader-page-block-end: max(64px, calc(env(safe-area-inset-bottom) + 56px));
+    width: 100%;
+    height: 100dvh;
+    min-height: 100dvh;
+    padding: var(--reader-page-block-start) 0 var(--reader-page-block-end);
+  }
+}

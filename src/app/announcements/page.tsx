@@ -7,8 +7,9 @@ import { PageContextBar } from "@/components/PageContextBar";
 import { SiteHeader } from "@/components/SiteHeader";
 import { WorkspacePage, WorkspacePageHeader } from "@/components/WorkspacePageChrome";
 import { canAccessHomeAnnouncementCard, canSeeHomePortalContentEntry } from "@/lib/config";
+import { database } from "@/core/db/postgres";
+import { listPostgresVisibleAnnouncements } from "@/domains/station/postgres-station";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
-import { listVisibleAnnouncements } from "@/lib/station";
 import { getCurrentUser } from "@/lib/user-auth";
 import { getRequestLocale, localizeText, localizeTexts } from "@/lib/locale-server";
 import { languageAlternates, uiText, withLocalePath } from "@/lib/locale";
@@ -36,7 +37,7 @@ export default async function AnnouncementsPage() {
     }
     notFound();
   }
-  const announcements = listVisibleAnnouncements(Boolean(user));
+  const announcements = await listPostgresVisibleAnnouncements(database("web"), Boolean(user));
   const displayAnnouncements = await Promise.all(announcements.map(async (announcement) => ({
     ...announcement,
     title: await localizeText(announcement.title, locale),

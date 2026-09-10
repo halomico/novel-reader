@@ -36,12 +36,22 @@ type TargetResponse = {
 };
 
 export function AdminEntitlementPicker({ initial }: { initial: EntitlementDefinition | null }) {
+  const initialKey = initial ? `${initial.targetType}:${initial.targetId}:${(initial.rights || []).join(",")}` : "null";
+  const [prevInitialKey, setPrevInitialKey] = useState(initialKey);
   const [targetType, setTargetType] = useState<EntitlementTargetType>(initial?.targetType || "novel");
   const [targetId, setTargetId] = useState(initial?.targetId || "");
   const [query, setQuery] = useState("");
   const [targets, setTargets] = useState<EntitlementTargetOption[]>([]);
   const [allowedRights, setAllowedRights] = useState<EntitlementRight[]>([]);
   const [rights, setRights] = useState<EntitlementRight[]>(initial?.rights || []);
+
+  if (prevInitialKey !== initialKey) {
+    setPrevInitialKey(initialKey);
+    setTargetType(initial?.targetType || "novel");
+    setTargetId(initial?.targetId || "");
+    setRights(initial?.rights || []);
+    setQuery("");
+  }
   const [loading, setLoading] = useState(true);
   const durationDays = initial?.durationSeconds ? Math.max(Math.round(initial.durationSeconds / 86_400), 1) : 0;
   const selected = useMemo(() => targets.find((target) => target.id === targetId) || null, [targetId, targets]);

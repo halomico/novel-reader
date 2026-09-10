@@ -2,6 +2,7 @@ import {
   COLOR_PALETTES,
   ADMIN_SIDEBAR_STORAGE_KEY,
   DEFAULT_READER_WIDTH,
+  DEFAULT_READER_PAGE_TURN,
   PALETTE_STORAGE_KEY,
   READER_FONT_SIZE_STORAGE_KEY,
   READER_HOTWORDS_STORAGE_KEY,
@@ -19,12 +20,20 @@ import {
   UI_PREFERENCES_MIGRATION_KEY,
   UI_PREFERENCES_MIGRATION_VERSION,
   DEFAULT_READER_LINE_HEIGHT,
+  getColorPaletteTextTokens,
   getReaderThemeSystemTheme,
   type ColorPalette,
   type ReaderLineHeight,
+  type ReaderPageTurn,
   type ReaderTagsMode,
 } from "@/lib/ui-preferences";
 import { READER_KEEP_CHROME_SESSION_KEY } from "@/lib/reader-layout";
+import {
+  DEFAULT_LOCALE,
+  LOCALE_COOKIE,
+  TRADITIONAL_LOCALE,
+  TRADITIONAL_PATH_PREFIX,
+} from "@/lib/locale";
 
 export function ThemeScript({
   defaultTheme = "system",
@@ -32,14 +41,19 @@ export function ThemeScript({
   defaultLineHeight = DEFAULT_READER_LINE_HEIGHT,
   defaultPalette = "default",
   defaultReaderTagsMode = "collapsed",
+  defaultPageTurn = DEFAULT_READER_PAGE_TURN,
 }: {
   defaultTheme?: "system" | "light" | "dark";
   defaultFontSize?: number;
   defaultLineHeight?: ReaderLineHeight;
   defaultPalette?: ColorPalette;
   defaultReaderTagsMode?: ReaderTagsMode;
+  defaultPageTurn?: ReaderPageTurn;
 }) {
-  const paletteTokens = Object.fromEntries(COLOR_PALETTES.map((palette) => [palette.value, palette]));
+  const paletteTokens = Object.fromEntries(COLOR_PALETTES.map((palette) => [palette.value, {
+    ...palette,
+    ...getColorPaletteTextTokens(palette),
+  }]));
   const readerThemeSystemThemes = Object.fromEntries(
     READER_THEME_OPTIONS.map((theme) => [theme.value, getReaderThemeSystemTheme(theme.value)]),
   );
@@ -47,6 +61,16 @@ export function ThemeScript({
     (function () {
       try {
         var root = document.documentElement;
+        var localeCookie = document.cookie.split(";").map(function(part) { return part.trim(); }).find(function(part) {
+          return part.indexOf(${JSON.stringify(`${LOCALE_COOKIE}=`)}) === 0;
+        });
+        var documentLocale = window.location.pathname === ${JSON.stringify(TRADITIONAL_PATH_PREFIX)} ||
+          window.location.pathname.indexOf(${JSON.stringify(`${TRADITIONAL_PATH_PREFIX}/`)}) === 0 ||
+          (localeCookie && decodeURIComponent(localeCookie.slice(${LOCALE_COOKIE.length + 1})).toLowerCase() === ${JSON.stringify(TRADITIONAL_LOCALE.toLowerCase())})
+          ? ${JSON.stringify(TRADITIONAL_LOCALE)}
+          : ${JSON.stringify(DEFAULT_LOCALE)};
+        root.lang = documentLocale;
+        root.dataset.locale = documentLocale;
         var readerRoute = /(?:^|\\/)books\\/\\d+(?:\\/|$)/.test(window.location.pathname) ||
           /(?:^|\\/)original\\/(?!new(?:\\/|$)|mine(?:\\/|$)|tags(?:\\/|$)|author(?:\\/|$))[^/]+\\/?$/.test(window.location.pathname);
         var keepReaderChrome = sessionStorage.getItem(${JSON.stringify(READER_KEEP_CHROME_SESSION_KEY)}) === "1";
@@ -82,7 +106,7 @@ export function ThemeScript({
             : ${defaultLineHeight};
         }
         if (readerPageTurnOptions.indexOf(readerPageTurn) === -1) {
-          readerPageTurn = "scroll";
+          readerPageTurn = ${JSON.stringify(defaultPageTurn)};
         }
         if (readerWidth !== "auto" && readerWidthOptions.indexOf(readerWidth) === -1) {
           readerWidth = ${DEFAULT_READER_WIDTH};
@@ -124,6 +148,8 @@ export function ThemeScript({
         root.style.setProperty("--palette-light-strong", palette.lightStrong);
         root.style.setProperty("--palette-dark-accent", palette.darkAccent);
         root.style.setProperty("--palette-dark-strong", palette.darkStrong);
+        root.style.setProperty("--palette-light-text", palette.lightText);
+        root.style.setProperty("--palette-dark-text", palette.darkText);
         if (localStorage.getItem(${JSON.stringify(UI_PREFERENCES_MIGRATION_KEY)}) !== ${JSON.stringify(UI_PREFERENCES_MIGRATION_VERSION)}) {
           ${JSON.stringify(LEGACY_UI_STORAGE_KEYS)}.forEach(function(key) { localStorage.removeItem(key); });
           document.cookie = "novel-page-size=; Path=/; Max-Age=0; SameSite=Lax";

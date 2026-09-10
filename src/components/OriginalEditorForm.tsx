@@ -33,7 +33,7 @@ import {
   ORIGINAL_PAID_MARKER,
 } from "@/lib/original-constants";
 import { extractOriginalOutline } from "@/lib/original-outline";
-import type { OriginalArticle, OriginalTag } from "@/lib/original";
+import type { OriginalArticle, OriginalTag } from "@/domains/originals/original-model";
 import { OriginalMarkdown } from "./OriginalMarkdown";
 
 type OriginalEditorAction = (formData: FormData) => void | Promise<void>;
@@ -45,9 +45,6 @@ type OriginalEditorSettings = {
   editFeeSoda: number;
   articleMinWords: number;
   maxTags: number;
-  publishNoticeText: string;
-  publishNoticeLinkLabel: string;
-  publishNoticeUrl: string;
 };
 
 type MarkAction = {
@@ -97,6 +94,59 @@ function previewSections(body: string, paid: boolean): { publicBody: string; pai
 
 function removePreviewMarkers(body: string): string {
   return body.split(ORIGINAL_PAID_MARKER).join("");
+}
+
+function OriginalEditorPreview({
+  publicBody,
+  paidBody,
+  priceValue,
+  emptyText,
+  paidDividerText,
+  outlineAriaLabel,
+  outlineTitle,
+}: {
+  publicBody: string;
+  paidBody: string;
+  priceValue: number;
+  emptyText: string;
+  paidDividerText: string;
+  outlineAriaLabel: string;
+  outlineTitle: string;
+}) {
+  const outline = extractOriginalOutline(joinOriginalBodies(publicBody, paidBody), 30);
+  return (
+    <div className="originalComposerPreview">
+      <div className="originalComposerPreviewBody">
+        <OriginalMarkdown>{publicBody || emptyText}</OriginalMarkdown>
+        {priceValue > 0 ? (
+          <>
+            <div className="originalPaidPreviewDivider">
+              <span>
+                <BadgeDollarSign size={15} aria-hidden="true" />
+                {paidDividerText}
+              </span>
+            </div>
+            {paidBody ? <OriginalMarkdown>{paidBody}</OriginalMarkdown> : null}
+          </>
+        ) : null}
+      </div>
+      {outline.length ? (
+        <nav className="originalComposerOutline" aria-label={outlineAriaLabel}>
+          <strong>{outlineTitle}</strong>
+          <ol>
+            {outline.map((item, index) => (
+              <li
+                style={{ paddingInlineStart: `${Math.max(item.level - 1, 0) * 10}px` }}
+                key={`${item.level}-${item.text}-${index}`}
+              >
+                {item.text}
+              </li>
+            ))}
+          </ol>
+        </nav>
+      ) : null}
+    </div>
+  );
 }
 
 export function OriginalEditorForm({
@@ -255,29 +305,6 @@ export function OriginalEditorForm({
     applyMark(mark);
   }
 
-  function Preview() {
-    const outline = extractOriginalOutline(joinOriginalBodies(sections.publicBody, sections.paidBody), 30);
-    return (
-      <div className="originalComposerPreview">
-        <div className="originalComposerPreviewBody">
-          <OriginalMarkdown>{sections.publicBody || tr("暂无内容")}</OriginalMarkdown>
-          {priceValue > 0 ? (
-            <>
-              <div className="originalPaidPreviewDivider"><span><BadgeDollarSign size={15} aria-hidden="true" />{tr("以下内容需解锁")}</span></div>
-              {sections.paidBody ? <OriginalMarkdown>{sections.paidBody}</OriginalMarkdown> : null}
-            </>
-          ) : null}
-        </div>
-        {outline.length ? (
-          <nav className="originalComposerOutline" aria-label={tr("目录")}>
-            <strong>{tr("目录")}</strong>
-            <ol>{outline.map((item, index) => <li style={{ paddingInlineStart: `${Math.max(item.level - 1, 0) * 10}px` }} key={`${item.level}-${item.text}-${index}`}>{item.text}</li>)}</ol>
-          </nav>
-        ) : null}
-      </div>
-    );
-  }
-
   return (
     <form className={`originalComposer${fullscreen ? " isFullscreen" : ""}`} action={action}>
       {heading && closeHref ? (
@@ -290,14 +317,6 @@ export function OriginalEditorForm({
       ) : null}
       {hiddenFields.articleId ? <input type="hidden" name="articleId" value={hiddenFields.articleId} /> : null}
       {hiddenFields.slug ? <input type="hidden" name="slug" value={hiddenFields.slug} /> : null}
-      {settings.publishNoticeText ? (
-        <aside className="originalPublishNotice">
-          <span>
-            {tr(settings.publishNoticeText)}
-            {settings.publishNoticeLinkLabel && settings.publishNoticeUrl ? <>{" "}<a href={settings.publishNoticeUrl}>{tr(settings.publishNoticeLinkLabel)}</a></> : null}
-          </span>
-        </aside>
-      ) : null}
       <label className="originalComposerTitle">
         <span className="srOnly">{tr("标题")}</span>
         <input name="title" maxLength={120} value={title} onChange={(event) => setTitle(event.target.value)} required placeholder={tr("请输入标题")} />
@@ -422,7 +441,17 @@ export function OriginalEditorForm({
             aria-label={tr("正文")}
           />
         ) : <textarea className="srOnly" name="bodyMarkdown" value={body} readOnly aria-hidden="true" />}
-        {view !== "write" ? <Preview /> : null}
+        {view !== "write" ? (
+          <OriginalEditorPreview
+            publicBody={sections.publicBody}
+            paidBody={sections.paidBody}
+            priceValue={priceValue}
+            emptyText={tr("暂无内容")}
+            paidDividerText={tr("以下内容需解锁")}
+            outlineAriaLabel={tr("目录")}
+            outlineTitle={tr("目录")}
+          />
+        ) : null}
       </div>
 
       <footer className="originalComposerFooter">

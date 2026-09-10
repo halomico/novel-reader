@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronLeft, Plus, RotateCcw, Send, Trash2, X } from "lucide-react";
+import { Check, ChevronLeft, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
@@ -12,10 +12,11 @@ import {
   setContentReportStatusInlineAction,
   setStationThreadStatusInlineAction,
 } from "@/app/admin/station/actions";
-import type { ContentReport, ContentReportCategory } from "@/lib/reports";
-import type { StationMessage, StationThread } from "@/lib/station";
+import type { ContentReport, ContentReportCategory } from "@/domains/activity/postgres-reports";
+import type { StationMessage, StationThread } from "@/domains/station/postgres-station";
 import { LocalDateTime } from "./LocalDateTime";
 import { InlineMutationNotice, useInlineMutation } from "./useInlineMutation";
+import { useStationConversationSync } from "./useStationConversationSync";
 
 const REPORT_CATEGORY_LABELS: Record<ContentReportCategory, string> = {
   title_error: "标题有误",
@@ -38,7 +39,7 @@ function resizeReplyTextarea(textarea: HTMLTextAreaElement | null) {
   if (!textarea) return;
   textarea.style.height = "0px";
   const nextHeight = Math.min(textarea.scrollHeight, 120);
-  textarea.style.height = `${Math.max(nextHeight, 36)}px`;
+  textarea.style.height = `${Math.max(nextHeight, 34)}px`;
   textarea.style.overflowY = textarea.scrollHeight > 120 ? "auto" : "hidden";
 }
 
@@ -90,7 +91,7 @@ export function AdminStationComposer({ initialUsername = "" }: { initialUsername
             <footer>
               <InlineMutationNotice notice={mutation.notice} />
               <button className="adminPrimaryButton" type="submit" disabled={mutation.pending || !username.trim() || !subject.trim() || !body.trim()}>
-                <Send size={15} aria-hidden="true" />发送
+                发送
               </button>
             </footer>
           </form>
@@ -113,11 +114,27 @@ export function AdminStationConversation({
 }) {
   const router = useRouter();
   const mutation = useInlineMutation();
-  const [messages, setMessages] = useState(initialMessages);
-  const [status, setStatus] = useState(thread.status);
+  const [prevThreadId, setPrevThreadId] = useState(thread.id);
   const [reply, setReply] = useState("");
+
+  if (prevThreadId !== thread.id) {
+    setPrevThreadId(thread.id);
+    setReply("");
+  }
   const messageListRef = useRef<HTMLDivElement>(null);
   const replyRef = useRef<HTMLTextAreaElement>(null);
+  const {
+    messages,
+    setMessages,
+    status,
+    setStatus,
+    latestMessageIdRef,
+  } = useStationConversationSync({
+    threadId: thread.id,
+    apiPath: `/admin/api/station/threads/${thread.id}`,
+    initialMessages,
+    initialStatus: thread.status,
+  });
 
   useEffect(() => {
     const list = messageListRef.current;
@@ -125,48 +142,8 @@ export function AdminStationConversation({
   }, [messages]);
 
   useEffect(() => {
-    setMessages(initialMessages);
-    setStatus(thread.status);
-  }, [initialMessages, thread.id, thread.status]);
-
-  useEffect(() => {
     resizeReplyTextarea(replyRef.current);
   }, [reply, thread.id]);
-
-  useEffect(() => {
-    let active = true;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    async function syncConversation() {
-      try {
-        const response = await fetch(`/admin/api/station/threads/${thread.id}`, { cache: "no-store" });
-        if (response.ok && active) {
-          const payload = await response.json() as {
-            messages?: StationMessage[];
-            status?: "open" | "closed";
-          };
-          if (Array.isArray(payload.messages)) {
-            setMessages((current) => (
-              current.length === payload.messages!.length && current.at(-1)?.id === payload.messages!.at(-1)?.id
-                ? current
-                : payload.messages!
-            ));
-          }
-          if (payload.status) setStatus(payload.status);
-        }
-      } catch {
-        // Keep the current conversation visible and retry on the next interval.
-      } finally {
-        if (active) timer = setTimeout(syncConversation, 2_000);
-      }
-    }
-
-    timer = setTimeout(syncConversation, 2_000);
-    return () => {
-      active = false;
-      if (timer) clearTimeout(timer);
-    };
-  }, [thread.id]);
 
   function submitReply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -176,6 +153,7 @@ export function AdminStationConversation({
         if (!result.ok || !result.data) return;
         setMessages(result.data.messages);
         setReply("");
+        latestMessageIdRef.current = result.data.messages.at(-1)?.id ?? latestMessageIdRef.current;
         replyRef.current?.focus();
       },
     );
@@ -266,7 +244,7 @@ export function AdminStationConversation({
             />
           </label>
           <button type="submit" disabled={mutation.pending || !reply.trim()} aria-label="发送" title="发送">
-            <Send className="stationSendIcon" size={19} strokeWidth={1.8} aria-hidden="true" /><span className="stationSendLabel">发送</span>
+            <span className="stationSendLabel">发送</span>
           </button>
         </form>
       ) : <p className="adminConversationClosed">这条留言已结束。</p>}

@@ -2,24 +2,26 @@
 
 import { ArrowDown, ArrowUp, Pin, PinOff, RotateCcw, Save } from "lucide-react";
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { savePinnedNovelsAction } from "@/app/admin/actions";
 import { InlineMutationNotice, useInlineMutation } from "@/components/useInlineMutation";
-import type { PinnedNovel } from "@/lib/pinned-novels";
+import type { PinnedNovel } from "@/domains/catalog/postgres-admin-novels";
 
 export function AdminPinnedBooks({ books, returnPath }: { books: PinnedNovel[]; returnPath: string }) {
   const mutation = useInlineMutation();
   const sourceKey = useMemo(() => JSON.stringify(books.map((book) => [book.id, book.title])), [books]);
+  const [prevSourceKey, setPrevSourceKey] = useState(sourceKey);
   const [savedBooks, setSavedBooks] = useState(books);
   const [orderedBooks, setOrderedBooks] = useState(books);
   const sourceIds = savedBooks.map((book) => book.id).join(",");
   const orderedIds = orderedBooks.map((book) => book.id).join(",");
   const dirty = sourceIds !== orderedIds;
 
-  useEffect(() => {
+  if (prevSourceKey !== sourceKey) {
+    setPrevSourceKey(sourceKey);
     setSavedBooks(books);
     setOrderedBooks(books);
-  }, [sourceKey]);
+  }
 
   function moveBook(index: number, direction: -1 | 1) {
     const targetIndex = index + direction;

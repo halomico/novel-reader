@@ -3,7 +3,7 @@
 import { Upload } from "lucide-react";
 import { ChangeEvent, FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { NovelSource } from "@/lib/novel-library";
+import type { NovelSource } from "@/domains/catalog/postgres-admin-novels";
 import { AdminSelect } from "./AdminSelect";
 
 type UploadSummary = {

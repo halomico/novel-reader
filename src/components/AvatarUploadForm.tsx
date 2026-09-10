@@ -1,7 +1,7 @@
 "use client";
 
 import { Dices, Upload, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { selectDefaultAvatarAction, uploadAvatarAction } from "@/app/account/actions";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/lib/default-avatar-data";
 import { DEFAULT_LOCALE, uiText, type AppLocale } from "@/lib/locale";
 import { UserAvatar } from "./UserAvatar";
+import { useFocusTrap } from "@/lib/focus-trap";
 
 type AvatarChoice = "current" | "generated" | "upload";
 
@@ -149,6 +150,12 @@ export function AvatarUploadForm({
   userId: number;
 }) {
   const [open, setOpen] = useState(false);
+  const drawerRef = useRef<HTMLElement>(null);
+  useFocusTrap({
+    active: open,
+    containerRef: drawerRef,
+    onEscape: () => setOpen(false),
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -185,7 +192,7 @@ export function AvatarUploadForm({
       </div>
       {open ? (
         <div className="avatarEditorBackdrop" onMouseDown={(event) => event.target === event.currentTarget && setOpen(false)}>
-          <section className="avatarEditorDrawer" role="dialog" aria-modal="true" aria-label={uiText(locale, "设置头像")}>
+          <section ref={drawerRef} className="avatarEditorDrawer" role="dialog" aria-modal="true" aria-label={uiText(locale, "设置头像")}>
             <header>
               <strong>{uiText(locale, "设置头像")}</strong>
               <button type="button" autoFocus onClick={() => setOpen(false)} aria-label={uiText(locale, "关闭")}><X size={18} aria-hidden="true" /></button>

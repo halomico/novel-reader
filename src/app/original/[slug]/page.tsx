@@ -2,7 +2,6 @@ import { ChevronLeft, ChevronRight, LockKeyhole, MessageCircle } from "lucide-re
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "@/components/LocalizedLink";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
 import { OriginalAuthorBlockButton } from "@/components/OriginalAuthorBlockButton";
@@ -17,21 +16,23 @@ import { canAccessOriginalChannel, canConsumeOriginalChannel, getNoticeDisplaySe
 import { getRequestLocale, localizeText } from "@/lib/locale-server";
 import { formatRelativeUpdateTime, parseAppDateTime } from "@/lib/date-time";
 import { formatNovelWordCount } from "@/components/CatalogBookGrid";
-import { isOriginalFavorite } from "@/lib/favorites";
-import { getOriginalGroveState } from "@/lib/grove";
+import { isPostgresOriginalFavorite } from "@/domains/activity/postgres-favorites";
+import { database } from "@/core/db/postgres";
+import { getPostgresOriginalGroveState } from "@/domains/activity/postgres-grove";
+import { hasPostgresUserPermission } from "@/domains/identity/postgres-permissions";
+import { getPostgresOriginalReadingProgress } from "@/domains/originals/postgres-reading";
 import {
   getOriginalAccess,
   getAdjacentOriginalArticles,
   getOriginalArticleBySlug,
   getOriginalCommentQuota,
-  getOriginalReadingProgress,
+  hasTippedOriginalArticle,
   listOriginalCommentsPage,
   isOriginalAuthorBlocked,
-} from "@/lib/original";
+} from "@/domains/originals/postgres-originals";
 import { joinOriginalBodies } from "@/lib/original-constants";
 import { extractOriginalOutline } from "@/lib/original-outline";
 import { getCurrentUser } from "@/lib/user-auth";
-import { hasUserPermission } from "@/lib/user-levels";
 import { uiText } from "@/lib/locale";
 import { addOriginalCommentAction, purchaseOriginalArticleAction } from "../actions";
 
@@ -44,7 +45,7 @@ type OriginalDetailProps = {
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const locale = await getRequestLocale();
-  const article = getOriginalArticleBySlug((await params).slug);
+  const article = await getOriginalArticleBySlug((await params).slug);
   if (!article) return { title: uiText(locale, "文章不存在") };
   return { title: await localizeText(article.title, locale), description: await localizeText(article.excerpt, locale) };
 }
@@ -61,15 +62,25 @@ export default async function OriginalDetailPage({ params, searchParams }: Origi
     }
     notFound();
   }
-  const article = getOriginalArticleBySlug(slug);
+  const article = await getOriginalArticleBySlug(slug);
   if (!article) notFound();
-  const access = getOriginalAccess(article, user);
   const channelConsumable = canConsumeOriginalChannel(Boolean(user));
+  const canTip = Boolean(user && user.id !== article.authorId);
+  const [access, commentPage, tipped, canReport, commentQuota, readingProgress, favorite, grove, blocked, adjacent] = await Promise.all([
+    getOriginalAccess(article, user),
+    channelConsumable
+      ? listOriginalCommentsPage(article.id, { page: Math.max(Math.floor(Number(query.comments || 1)) || 1, 1), pageSize: 30, viewerId: user?.id })
+      : Promise.resolve({ items: [], page: 1, pageSize: 30, totalItems: 0, totalPages: 1 }),
+    canTip && user ? hasTippedOriginalArticle(article.id, user.id) : Promise.resolve(false),
+    user?.role === "user" ? hasPostgresUserPermission(database("web"), user, "content_report") : Promise.resolve(false),
+    user && channelConsumable ? getOriginalCommentQuota(user) : Promise.resolve(null),
+    user ? getPostgresOriginalReadingProgress(database("web"), user.id, article.id) : Promise.resolve(null),
+    user ? isPostgresOriginalFavorite(database("web"), user.id, article.id) : Promise.resolve(false),
+    user ? getPostgresOriginalGroveState(database("web"), user.id, article.id) : Promise.resolve(null),
+    user ? isOriginalAuthorBlocked(user.id, article.authorId) : Promise.resolve(false),
+    getAdjacentOriginalArticles(article.id, user?.id),
+  ]);
   const contentAllowed = channelConsumable && access.allowed;
-  const requestedCommentPage = Math.max(Math.floor(Number(query.comments || 1)) || 1, 1);
-  const commentPage = channelConsumable
-    ? listOriginalCommentsPage(article.id, { page: requestedCommentPage, pageSize: 30, viewerId: user?.id })
-    : { items: [], page: 1, pageSize: 30, totalItems: 0, totalPages: 1 };
   const [title, authorName, publicBody, paidBody] = await Promise.all([
     localizeText(article.title, locale),
     localizeText(article.authorName, locale),
@@ -88,15 +99,7 @@ export default async function OriginalDetailPage({ params, searchParams }: Origi
   const visibleBody = contentAllowed ? joinOriginalBodies(publicBody, paidBody) : publicBody;
   const outline = extractOriginalOutline(visibleBody);
   const canEdit = Boolean(user && (user.role === "admin" || user.id === article.authorId));
-  const canTip = Boolean(user && user.id !== article.authorId);
-  const canReport = Boolean(user?.role === "user" && hasUserPermission(user, "content_report"));
-  const commentQuota = user && channelConsumable ? getOriginalCommentQuota(user) : null;
   const originalSettings = getOriginalPublishingSettings();
-  const readingProgress = user ? getOriginalReadingProgress(user.id, article.id) : null;
-  const favorite = user ? isOriginalFavorite(user.id, article.id) : false;
-  const grove = user ? getOriginalGroveState(user.id, article.id) : null;
-  const blocked = user ? isOriginalAuthorBlocked(user.id, article.authorId) : false;
-  const adjacent = getAdjacentOriginalArticles(article.id, user?.id);
   const [displayPrevious, displayNext] = await Promise.all([
     adjacent.previous ? localizeText(adjacent.previous.title, locale).then((adjacentTitle) => ({ ...adjacent.previous!, title: adjacentTitle })) : null,
     adjacent.next ? localizeText(adjacent.next.title, locale).then((adjacentTitle) => ({ ...adjacent.next!, title: adjacentTitle })) : null,
@@ -109,9 +112,8 @@ export default async function OriginalDetailPage({ params, searchParams }: Origi
   };
   return (
     <main className="readerShell originalReaderShell" data-reader-theme="app">
-      <SiteHeader currentUser={user} readerMode readerAutoHideOnScroll={false} showSearch={false} showPrimaryNavigation={false} mobileBackHref="/original" mobileBackLabel={tr("返回原创")} />
+      <SiteHeader currentUser={user} readerMode readerAutoHideOnScroll={false} mobileBackHref="/original" mobileBackLabel={tr("返回原创")} />
       <article className="readerPage originalDetail">
-        <Breadcrumbs className="readerBreadcrumbs" items={[{ label: tr("首页"), href: "/" }, { label: tr("原创"), href: "/original" }, { label: title }]} />
         {query.notice ? <DismissibleNotice message={query.notice} tone={query.tone} variant="search" displaySeconds={getNoticeDisplaySeconds()} /> : null}
         <OriginalArticleTracker
           articleId={article.id}
@@ -158,9 +160,12 @@ export default async function OriginalDetailPage({ params, searchParams }: Origi
               next={displayNext}
               authenticated={Boolean(user)}
               canTip={canTip}
+              initialTipped={tipped}
               canReport={canReport}
               initialFavorite={favorite}
               initialInGrove={Boolean(grove?.planted)}
+              commentComposerAvailable={Boolean(user && channelConsumable && commentQuota)}
+              wordCount={article.wordCount}
               editHref={canEdit ? `/original/${article.slug}/edit` : undefined}
             />
           </div>
@@ -185,15 +190,15 @@ export default async function OriginalDetailPage({ params, searchParams }: Origi
         ) : null}
 
         {(displayPrevious || displayNext) ? (
-          <nav className="readerNovelNavigation originalArticleNavigation" aria-label={tr("文章导航")}>
+          <nav className={`readerNovelNavigation originalArticleNavigation${Boolean(displayPrevious) !== Boolean(displayNext) ? " isSingle" : ""}`} aria-label={tr("文章导航")}>
             {displayPrevious ? (
-              <Link className="readerNovelLink readerNovelPrevious" href={`/original/${encodeURIComponent(displayPrevious.slug)}`} aria-label={`${tr("上一篇")}：${displayPrevious.title}`} title={`${tr("上一篇")}：${displayPrevious.title}`}>
+              <Link className="readerNovelLink readerNovelPrevious" href={`/original/${encodeURIComponent(displayPrevious.slug)}`} aria-label={`${tr("上一篇")}：${displayPrevious.title}`} title={`${tr("上一篇")}：${displayPrevious.title}`} prefetch>
                 <span className="readerNovelArrow"><ChevronLeft size={20} strokeWidth={1.8} aria-hidden="true" /></span>
                 <span className="readerNovelTitle"><strong>{displayPrevious.title}</strong></span>
               </Link>
             ) : null}
             {displayNext ? (
-              <Link className="readerNovelLink readerNovelNext" href={`/original/${encodeURIComponent(displayNext.slug)}`} aria-label={`${tr("下一篇")}：${displayNext.title}`} title={`${tr("下一篇")}：${displayNext.title}`}>
+              <Link className="readerNovelLink readerNovelNext" href={`/original/${encodeURIComponent(displayNext.slug)}`} aria-label={`${tr("下一篇")}：${displayNext.title}`} title={`${tr("下一篇")}：${displayNext.title}`} prefetch>
                 <span className="readerNovelTitle"><strong>{displayNext.title}</strong></span>
                 <span className="readerNovelArrow"><ChevronRight size={20} strokeWidth={1.8} aria-hidden="true" /></span>
               </Link>
@@ -202,30 +207,12 @@ export default async function OriginalDetailPage({ params, searchParams }: Origi
         ) : null}
 
         <section className="originalComments" id="original-comments">
-            <header><MessageCircle size={17} aria-hidden="true" /><h2>{tr("评论")}</h2></header>
-            <div className="originalCommentList">
-              {displayComments.map((comment) => (
-                <article key={comment.id}>
-                  <header>
-                    <UserAvatar className="originalCommentAvatar" userId={comment.authorId} displayName={comment.authorName} avatarPath={comment.authorAvatarPath} />
-                    <div>
-                      <Link className="originalCommentAuthor" href={`/original/author/${comment.authorId}`}>{comment.authorName}</Link>
-                      <time dateTime={comment.createdAt}>{formatRelativeUpdateTime(parseAppDateTime(comment.createdAt)?.getTime() || Date.now(), relativeTimeLabels)}</time>
-                    </div>
-                  </header>
-                  <div><OriginalMarkdown>{comment.bodyMarkdown}</OriginalMarkdown></div>
-                </article>
-              ))}
-              {!displayComments.length ? <p className="originalEmpty">{tr("暂无评论")}</p> : null}
+          <header>
+            <div className="originalCommentsHeading">
+              <MessageCircle size={17} aria-hidden="true" />
+              <h2>{tr("评论")}</h2>
+              {commentPage.totalItems ? <span className="originalCommentTotal">{commentPage.totalItems}</span> : null}
             </div>
-            <Pagination
-              page={commentPage.page}
-              totalPages={commentPage.totalPages}
-              query=""
-              basePath={`/original/${encodeURIComponent(article.slug)}`}
-              pageParam="comments"
-              scrollTargetId="original-comments"
-            />
             {user && channelConsumable && commentQuota ? (
               <OriginalCommentComposer
                 action={addOriginalCommentAction}
@@ -235,8 +222,33 @@ export default async function OriginalDetailPage({ params, searchParams }: Origi
                 locale={locale}
                 minChars={originalSettings.commentMinChars}
                 noticeDisplaySeconds={getNoticeDisplaySeconds()}
+                showTrigger={false}
               />
-            ) : <p className="originalLoginHint"><Link href={`/login?returnTo=${encodeURIComponent(`/original/${article.slug}`)}`}>{tr("登录")}</Link>{tr("后参与评论")}</p>}
+            ) : null}
+          </header>
+          <div className="originalCommentList">
+            {displayComments.map((comment) => (
+              <article key={comment.id}>
+                <header>
+                  <UserAvatar className="originalCommentAvatar" userId={comment.authorId} displayName={comment.authorName} avatarPath={comment.authorAvatarPath} />
+                  <div>
+                    <Link className="originalCommentAuthor" href={`/original/author/${comment.authorId}`}>{comment.authorName}</Link>
+                    <time dateTime={comment.createdAt}>{formatRelativeUpdateTime(parseAppDateTime(comment.createdAt)?.getTime() || Date.now(), relativeTimeLabels)}</time>
+                  </div>
+                </header>
+                <div><OriginalMarkdown>{comment.bodyMarkdown}</OriginalMarkdown></div>
+              </article>
+            ))}
+            {!displayComments.length ? <p className="originalEmpty">{tr("暂无评论")}</p> : null}
+          </div>
+          <Pagination
+            page={commentPage.page}
+            totalPages={commentPage.totalPages}
+            query=""
+            basePath={`/original/${encodeURIComponent(article.slug)}`}
+            pageParam="comments"
+            scrollTargetId="original-comments"
+          />
         </section>
       </article>
     </main>

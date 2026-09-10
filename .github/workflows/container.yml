@@ -2,8 +2,7 @@ name: Build container
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -13,10 +12,18 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  CANDIDATE_IMAGE: novel-reader-candidate:${{ github.sha }}
 
 jobs:
+  postgres:
+    uses: ./.github/workflows/postgres-integration.yml
+    permissions:
+      contents: read
+
   build:
+    needs: postgres
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
@@ -25,15 +32,17 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
+      - name: Enforce repository submission scope
+        run: node scripts/check-repository-files.mjs
+
+      - name: Test artifact and repository privacy guards
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+
+      - name: Seed synthetic private build-context files
+        run: python3 scripts/seed-image-canaries.py
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate image metadata
         id: meta
@@ -44,71 +53,130 @@ jobs:
             type=raw,value=latest
             type=sha,format=long,prefix=sha-
 
-      - name: Build and push image
+      - name: Generate build metadata
+        id: build-meta
+        shell: bash
+        run: echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Build candidate without publishing
         uses: docker/build-push-action@v7
         with:
           context: .
           target: runner
-          push: true
+          load: true
+          push: false
           platforms: linux/amd64
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: ${{ env.CANDIDATE_IMAGE }}
           labels: ${{ steps.meta.outputs.labels }}
-          provenance: ${{ !contains(github.event.head_commit.message, '[prune-ghcr-once]') }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.build-meta.outputs.build_time }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Remove older container versions
-        if: contains(github.event.head_commit.message, '[prune-ghcr-once]')
+      - name: Audit every candidate layer and enforce PostgreSQL-only runtime
         shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PACKAGE_OWNER: ${{ github.repository_owner }}
-          PACKAGE_NAME: ${{ github.event.repository.name }}
-          CURRENT_SHA_TAG: sha-${{ github.sha }}
         run: |
           set -euo pipefail
+          docker image save --output "${RUNNER_TEMP}/candidate.tar" "${CANDIDATE_IMAGE}"
+          python3 scripts/audit-container-image.py \
+            --image-tar "${RUNNER_TEMP}/candidate.tar" \
+            --canary-env IMAGE_AUDIT_CANARY --require-postgres
 
-          package_url="https://api.github.com/users/${PACKAGE_OWNER}/packages/container/${PACKAGE_NAME}/versions"
-
-          request() {
-            curl --fail-with-body --silent --show-error \
-              -H "Accept: application/vnd.github+json" \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "$@"
+      - name: Smoke-test exact candidate with clean PostgreSQL storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --file docker/postgres/Dockerfile --tag novel-reader-pg-smoke .
+          network="novel-reader-smoke-${GITHUB_RUN_ID}"
+          app="${network}-app"
+          pg="${network}-pg"
+          cleanup() {
+            docker rm --force --volumes "${app}" "${pg}" >/dev/null 2>&1 || true
+            docker network rm "${network}" >/dev/null 2>&1 || true
           }
-
-          current_id=""
-          for attempt in 1 2 3 4 5 6; do
-            versions="$(request "${package_url}?per_page=100")"
-            current_id="$(jq -r --arg tag "${CURRENT_SHA_TAG}" \
-              '.[] | select((.metadata.container.tags // []) | index($tag)) | .id' \
-              <<<"${versions}" | head -n 1)"
-            if [[ -n "${current_id}" ]]; then
+          trap cleanup EXIT
+          docker network create "${network}"
+          docker run --detach --name "${pg}" --network "${network}" --network-alias postgres \
+            --tmpfs /var/lib/postgresql:rw \
+            --env POSTGRES_PASSWORD=smoke-only --env POSTGRES_DB=novel_reader \
+            --env POSTGRES_INITDB_ARGS='--encoding=UTF8 --locale=C' novel-reader-pg-smoke
+          pg_ready=0
+          for attempt in $(seq 1 30); do
+            if docker exec "${pg}" pg_isready --username postgres --dbname novel_reader; then
+              pg_ready=1
               break
             fi
-            sleep 5
+            sleep 1
           done
-
-          if [[ -z "${current_id}" ]]; then
-            echo "Current container version ${CURRENT_SHA_TAG} was not found; refusing to delete anything." >&2
+          [[ "${pg_ready}" == 1 ]]
+          database_url="postgresql://postgres:smoke-only@postgres:5432/novel_reader"
+          docker run --rm --network "${network}" --env DATABASE_URL="${database_url}" \
+            "${CANDIDATE_IMAGE}" npm run db:pg:init
+          docker run --detach --name "${app}" --network "${network}" \
+            --env DATABASE_URL="${database_url}" --env SITE_URL=http://127.0.0.1:3000 \
+            "${CANDIDATE_IMAGE}"
+          ready=0
+          for attempt in $(seq 1 30); do
+            if docker exec "${app}" node -e \
+              "fetch('http://127.0.0.1:3000/api/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"; then
+              ready=1
+              break
+            fi
+            if [[ "$(docker inspect --format '{{.State.Running}}' "${app}")" != "true" ]]; then
+              break
+            fi
+            sleep 2
+          done
+          if [[ "${ready}" != 1 ]]; then
+            docker logs "${app}"
             exit 1
           fi
+          docker exec "${app}" node -e '
+            if (process.getuid() === 0) throw new Error("runtime is root");
+            const endpoints = ["/", "/api/live", "/api/health", "/api/ready", "/api/version"];
+            Promise.all(endpoints.map(async (endpoint) => {
+              const response = await fetch("http://127.0.0.1:3000" + endpoint);
+              if (!response.ok) throw new Error(endpoint + " returned " + response.status);
+              if (endpoint === "/api/version") {
+                const version = await response.json();
+                if (version.commit !== process.env.APP_GIT_SHA) throw new Error("commit metadata mismatch");
+                if (version.schemaVersion !== version.expectedSchemaVersion) throw new Error("schema mismatch");
+              }
+            })).catch((error) => { console.error(error); process.exit(1); });
+          '
+          # A smoke request must not silently bootstrap any legacy SQLite files.
+          docker exec "${app}" node -e '
+            const fs = require("node:fs");
+            const legacy = fs.readdirSync("/app/data", { recursive: true })
+              .some(name => /\.(db|sqlite[0-9]*)(-|$)/i.test(name));
+            if (legacy) throw new Error("request created legacy SQLite storage");
+          '
 
-          deleted=0
-          while true; do
-            versions="$(request "${package_url}?per_page=100")"
-            old_ids="$(jq -r --arg current "${current_id}" \
-              '.[] | select((.id | tostring) != $current) | .id' \
-              <<<"${versions}")"
-            if [[ -z "${old_ids}" ]]; then
-              break
+      # Authenticate to the registry only after verification. Tag and push the
+      # exact locally tested image, never rebuild it after verification.
+      - name: Log in to GHCR after all gates pass
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish verified candidate
+        shell: bash
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r tag; do
+            docker tag "${CANDIDATE_IMAGE}" "${tag}"
+            if [[ "${tag}" != *:latest ]]; then
+              docker push "${tag}"
             fi
-
-            while IFS= read -r version_id; do
-              request -X DELETE "${package_url}/${version_id}" >/dev/null
-              deleted=$((deleted + 1))
-            done <<<"${old_ids}"
-          done
-
-          echo "Removed ${deleted} older container version(s); kept ${CURRENT_SHA_TAG}."
+          done <<< "${IMAGE_TAGS}"
+          # Promote latest only after the immutable revision tag is available.
+          while IFS= read -r tag; do
+            if [[ "${tag}" == *:latest ]]; then
+              docker push "${tag}"
+            fi
+          done <<< "${IMAGE_TAGS}"

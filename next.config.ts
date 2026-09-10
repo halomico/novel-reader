@@ -1,7 +1,16 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   output: "standalone",
+  outputFileTracingExcludes: {
+    "/*": [
+      "./.env*", "./**/.env*", "./data/**/*", "./library/**/*",
+      "./backups/**/*", "./deploy/**/*", "./docs/**/*",
+      "./public/avatars/**/*", "./**/*.db", "./**/*.db-*",
+      "./**/*.sqlite*", "./**/*.pem", "./**/*.key",
+    ],
+  },
   poweredByHeader: false,
   devIndicators: false,
   async headers() {
@@ -13,16 +22,21 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), browsing-topics=()" },
-          {
-            key: "Content-Security-Policy-Report-Only",
-            value: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-src https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'",
-          },${process.env.ENABLE_HSTS === "1" ? `
-          { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },` : ""}
+          ...(process.env.ENABLE_HSTS === "1"
+            ? [
+                {
+                  key: "Strict-Transport-Security",
+                  value: "max-age=31536000; includeSubDomains",
+                },
+              ]
+            : []),
         ],
       },
     ];
   },
   experimental: {
+    // Browser-local RSC reuse; personal pages are never put in a shared cache.
+    staleTimes: { dynamic: 30, static: 60 },
     serverActions: {
       bodySizeLimit: "16mb",
     },

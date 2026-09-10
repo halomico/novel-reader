@@ -7,17 +7,28 @@ services:
     container_name: novel-reader
     restart: unless-stopped
     init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+      - /app/.next/cache:size=64m,uid=1001,gid=1001,mode=0700
+    stop_grace_period: 35s
     env_file:
       - .env
     environment:
       NODE_ENV: production
       PORT: 3000
       NOVEL_LIBRARY_DIR: /app/library/books
-      DATABASE_PATH: /app/data/novels.db
+    depends_on:
+      worker:
+        condition: service_started
     ports:
       - "127.0.0.1:${PORT:-3000}:3000"
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -31,3 +42,40 @@ services:
       - ./library/books:/app/library/books
       - ./data:/app/data
       - ./public/avatars:/app/public/avatars
+
+  worker:
+    image: ${NOVEL_READER_IMAGE:?Set NOVEL_READER_IMAGE in .env}:${NOVEL_READER_IMAGE_TAG:-latest}
+    build:
+      context: .
+      target: runner
+    container_name: novel-reader-worker
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    stop_grace_period: 35s
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+      PG_JOB_POOL_SIZE: ${PG_JOB_POOL_SIZE:-2}
+      PG_CONNECTION_TIMEOUT_MS: ${PG_CONNECTION_TIMEOUT_MS:-1000}
+      PG_IDLE_TIMEOUT_MS: ${PG_IDLE_TIMEOUT_MS:-30000}
+      PG_JOB_STATEMENT_TIMEOUT_MS: ${PG_JOB_STATEMENT_TIMEOUT_MS:-30000}
+      NOVEL_LIBRARY_DIR: /app/library/books
+      CONTENT_JOB_POLL_INTERVAL_MS: ${CONTENT_JOB_POLL_INTERVAL_MS:-2000}
+      CONTENT_JOB_LEASE_MS: ${CONTENT_JOB_LEASE_MS:-120000}
+      CONTENT_INDEX_BATCH_SIZE: ${CONTENT_INDEX_BATCH_SIZE:-10}
+      CONTENT_INDEX_CONCURRENCY: ${CONTENT_INDEX_CONCURRENCY:-2}
+    command: ["node", "maintenance/postgres-content-worker.js"]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - ./library/books:/app/library/books:ro

@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { database } from "@/core/db/postgres";
+import { hasPostgresUserPermission } from "@/domains/identity/postgres-permissions";
 import { redirect } from "next/navigation";
 import {
   getCookieToSodaRate,
@@ -8,17 +10,15 @@ import {
   isMarketEnabled,
 } from "@/lib/config";
 import {
+  MutationIdError,
   MarketError,
-  purchaseMarketProduct,
-  redeemMarketCode,
-} from "@/lib/market";
-import { getCurrentUser } from "@/lib/user-auth";
-import { hasUserPermission } from "@/lib/user-levels";
-import {
-  exchangeUserCurrency,
+  purchasePostgresMarketProduct,
+  redeemPostgresMarketCode,
+  exchangePostgresUserCurrency,
   type CurrencyExchangeDirection,
   type UserCurrency,
-} from "@/lib/user-wallet";
+} from "@/domains/market/postgres-market";
+import { getCurrentUser } from "@/lib/user-auth";
 
 function marketNotice(pathname: string, message: string, tone: "success" | "warning" | "error" = "success"): never {
   const params = new URLSearchParams({ notice: message, tone });
@@ -26,6 +26,7 @@ function marketNotice(pathname: string, message: string, tone: "success" | "warn
 }
 
 function errorMessage(error: unknown): string {
+  if (error instanceof MutationIdError) return error.message;
   if (error instanceof MarketError) return error.message;
   if (
     error instanceof Error &&
@@ -50,7 +51,7 @@ function errorMessage(error: unknown): string {
 async function requireMarketUser() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?returnTo=%2Fmarket");
-  if (!isMarketEnabled() || !hasUserPermission(user, "market_access")) {
+  if (!isMarketEnabled() || !await hasPostgresUserPermission(database("web"), user, "market_access")) {
     marketNotice("/", "集市暂不可用", "warning");
   }
   return user;
@@ -63,9 +64,10 @@ export async function purchaseMarketProductAction(formData: FormData) {
   const returnPath = slug ? `/market/${encodeURIComponent(slug)}` : "/market";
   const currencyValue = String(formData.get("currency"));
   const currency: UserCurrency = currencyValue === "soda" ? "soda" : "cookie";
+  const mutationId = String(formData.get("mutationId") || "");
   let orderNo: string;
   try {
-    const order = purchaseMarketProduct({ userId: user.id, productId, currency });
+    const order = await purchasePostgresMarketProduct({ userId: user.id, productId, currency, mutationId });
     orderNo = order.orderNo;
   } catch (error) {
     marketNotice(returnPath, errorMessage(error), "warning");
@@ -77,9 +79,10 @@ export async function purchaseMarketProductAction(formData: FormData) {
 
 export async function redeemMarketCodeAction(formData: FormData) {
   const user = await requireMarketUser();
-  let result: ReturnType<typeof redeemMarketCode>;
+  const mutationId = String(formData.get("mutationId") || "");
+  let result: Awaited<ReturnType<typeof redeemPostgresMarketCode>>;
   try {
-    result = redeemMarketCode(user.id, String(formData.get("code") || ""));
+    result = await redeemPostgresMarketCode(user.id, String(formData.get("code") || ""), mutationId);
   } catch (error) {
     marketNotice("/market", errorMessage(error), "warning");
   }
@@ -97,16 +100,18 @@ export async function exchangeCurrencyAction(formData: FormData) {
   const direction: CurrencyExchangeDirection = formData.get("direction") === "soda-to-cookie"
     ? "soda-to-cookie"
     : "cookie-to-soda";
+  const mutationId = String(formData.get("mutationId") || "");
   if (direction === "soda-to-cookie" && !isBidirectionalCurrencyExchangeEnabled()) {
     marketNotice("/market", "暂未开放苏打换曲奇", "warning");
   }
-  let result: ReturnType<typeof exchangeUserCurrency>;
+  let result: Awaited<ReturnType<typeof exchangePostgresUserCurrency>>;
   try {
-    result = exchangeUserCurrency({
+    result = await exchangePostgresUserCurrency({
       userId: user.id,
       direction,
       sourceAmount: Number(formData.get("sourceAmount")),
       sodaPerCookie: getCookieToSodaRate(),
+      mutationId,
     });
   } catch (error) {
     marketNotice("/market", errorMessage(error), "warning");

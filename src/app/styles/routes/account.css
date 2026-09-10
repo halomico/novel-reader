@@ -1,0 +1,2146 @@
+/* Styles owned by the account route family.
+ * Migrated from the former global cascade on 2026-09-04. Keep route-only rules in this file.
+ */
+.settingsHero {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 0 18px;
+}
+
+.settingsHero h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 750;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.settingsHero p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.settingsPanel {
+  display: grid;
+}
+
+.settingsGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.settingBlockHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settingBlock h2 {
+  margin: 0;
+  line-height: 1.3;
+}
+
+.settingRowTitle strong {
+  color: var(--accent-text, var(--accent));
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.settingRows {
+  display: grid;
+}
+
+.settingRow {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 13px 16px;
+  border-bottom: 0;
+}
+
+.settingRowTitle {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.settingPaletteRow {
+  align-items: center;
+}
+
+.settingPalettePicker {
+  width: min(100%, 252px);
+  justify-self: end;
+}
+
+.settingCompactSegments {
+  padding: 2px;
+}
+
+.settingCompactSegments button {
+  min-height: 26px;
+  padding: 3px 9px;
+  font-size: 12px;
+}
+
+.accountProfile h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+.accountProfile p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.accountPanel {
+  display: none;
+}
+
+.accountProfileForm,
+.accountPasswordForm {
+  display: flex;
+  width: auto;
+  max-width: 100%;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 9px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.accountProfileForm label {
+  width: min(260px, 100%);
+}
+
+.accountPasswordForm label {
+  width: min(178px, 100%);
+}
+
+.accountActionButton {
+  display: inline-flex;
+  min-height: var(--action-height);
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--accent) 74%, var(--border));
+  border-radius: var(--action-radius);
+  padding: 0 var(--action-inline-padding);
+  background: var(--accent);
+  color: #fffaf2;
+  cursor: pointer;
+  font-size: var(--action-font-size);
+  font-weight: var(--action-font-weight);
+}
+
+.userPanel .accountActionButton {
+  min-height: var(--action-height);
+  border-radius: var(--action-radius);
+  padding: 0 var(--action-inline-padding);
+  font-size: var(--action-font-size);
+  font-weight: var(--action-font-weight);
+}
+
+.accountActionButton.isPending {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.accountIdentityHeader {
+  padding: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+@media (max-width: 820px) {
+
+  .settingsHero {
+    padding-top: 2px;
+  }
+  .settingRow {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .settingRowTitle {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  .settingRowTitle strong {
+    display: none; /* hide duplicate current-value on narrow screens */
+  }
+
+  .settingRow > :last-child {
+    flex: 0 0 auto;
+    margin-left: auto;
+    justify-self: end;
+    max-width: min(70vw, 280px);
+  }
+
+  .settingPalettePicker {
+    width: min(100%, 236px);
+    justify-self: end;
+    margin-left: auto;
+  }
+
+  .settingsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .accountProfileForm,
+.accountPasswordForm {
+    grid-template-columns: 1fr;
+  }
+}
+
+.accountGrowthTools > a {
+  min-height: 52px;
+}
+
+.accountGrowth {
+  display: grid;
+}
+
+.accountGrowthHeader {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 18px;
+}
+
+.accountGrowthLevel {
+  display: inline-flex;
+  align-items: center;
+}
+
+.accountPermissionList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.accountPermissionList > span {
+  display: inline-flex;
+  min-height: 27px;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 9px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.accountPermissionList > span.isEnabled {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  color: var(--accent-text, var(--accent));
+}
+
+.accountCheckin {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-block: 1px solid var(--border);
+  padding: 12px 2px;
+}
+
+.accountCheckinCopy {
+  display: grid;
+  gap: 3px;
+}
+
+.accountCheckin small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.accountCheckinActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.userPanel .accountCheckinButton {
+  display: inline-flex;
+  width: auto;
+  min-width: 58px;
+  height: var(--action-height);
+  min-height: var(--action-height);
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--accent);
+  border-radius: var(--action-radius);
+  padding: 0 var(--action-inline-padding);
+  background: var(--accent);
+  color: #fffaf2;
+  box-shadow: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--action-font-size);
+  font-weight: var(--action-font-weight);
+  line-height: 1;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.userPanel .accountCheckinButton:hover:not(:disabled),
+.userPanel .accountCheckinButton:focus-visible:not(:disabled) {
+  background: var(--accent-strong, var(--accent));
+}
+
+.userPanel .accountCheckinButton:disabled {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  cursor: default;
+}
+
+.userPanel .accountLeaderboardButton {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.userPanel .accountLeaderboardButton:hover,
+.userPanel .accountLeaderboardButton:focus-visible {
+  border: 0;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent-text, var(--accent));
+}
+
+.accountLeaderboardButton svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.checkinLeaderboardBackdrop {
+  position: fixed;
+  z-index: 130;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgb(0 0 0 / 44%);
+}
+
+.checkinLeaderboardDialog {
+  display: grid;
+  width: min(390px, 100%);
+  max-height: min(620px, calc(100dvh - 36px));
+  gap: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 17px;
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+  color: var(--text);
+}
+
+.checkinLeaderboardDialog > header,
+.checkinLeaderboardDialog > header > div {
+  display: flex;
+  align-items: center;
+}
+
+.checkinLeaderboardDialog > header {
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.checkinLeaderboardDialog > header > div {
+  min-width: 0;
+  gap: 10px;
+}
+
+.checkinLeaderboardDialog h2,
+.checkinLeaderboardDialog p {
+  margin: 0;
+}
+
+.checkinLeaderboardDialog h2 {
+  font-size: 16px;
+}
+
+.checkinLeaderboardIcon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+  color: var(--accent-text, var(--accent));
+}
+
+.checkinLeaderboardDialog > header > button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.checkinLeaderboardDialog > header > button:hover,
+.checkinLeaderboardDialog > header > button:focus-visible {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent-text, var(--accent));
+}
+
+.checkinReward {
+  display: flex;
+  min-height: 48px;
+  align-items: baseline;
+  gap: 5px;
+  border-block: 1px solid var(--border);
+  padding: 12px 2px;
+}
+
+.checkinReward > span,
+.checkinReward > small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.checkinReward > strong {
+  margin-left: auto;
+  color: var(--accent-text, var(--accent));
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+
+.checkinReward.isPending {
+  align-items: center;
+  color: var(--muted);
+}
+
+.checkinLeaderboardStatus {
+  display: flex;
+  min-height: 96px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.checkinLeaderboardStatus.isError {
+  color: #b42318;
+}
+
+.checkinLeaderboardList {
+  display: grid;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.checkinLeaderboardList li {
+  display: grid;
+  min-height: 46px;
+  grid-template-columns: 26px 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  padding: 6px 4px;
+}
+
+.checkinLeaderboardList li:last-child {
+  border-bottom: 0;
+}
+
+.checkinLeaderboardList li.isCurrent {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.checkinLeaderboardRank {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--muted) 8%, transparent);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.checkinLeaderboardList li:nth-child(1) .checkinLeaderboardRank {
+  background: #d6a62e;
+  color: #fff;
+}
+
+.checkinLeaderboardList li:nth-child(2) .checkinLeaderboardRank {
+  background: #8995a2;
+  color: #fff;
+}
+
+.checkinLeaderboardList li:nth-child(3) .checkinLeaderboardRank {
+  background: #a96f48;
+  color: #fff;
+}
+
+.checkinLeaderboardAvatar {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-soft);
+  color: var(--muted);
+}
+
+.checkinLeaderboardAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.checkinLeaderboardName {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.checkinLeaderboardName strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.checkinLeaderboardName small {
+  flex: 0 0 auto;
+  border-radius: 4px;
+  padding: 1px 4px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent-text, var(--accent));
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.checkinLeaderboardList b {
+  color: var(--accent-text, var(--accent));
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.accountGrowthTools {
+  align-items: center;
+}
+
+.accountGrowthTools > a {
+  place-items: center;
+}
+
+.accountGrowthTools > a small {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  border: 2px solid var(--surface);
+  border-radius: 999px;
+  padding: 0 3px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  line-height: 12px;
+  text-align: center;
+}
+
+.accountSodaHistory > div {
+  display: grid;
+}
+
+.accountSodaHistory article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--border);
+  padding: 8px 2px;
+}
+
+.accountSodaHistory > .pagination {
+  margin-top: 14px;
+}
+
+.accountSodaHistory article > span {
+  display: grid;
+  gap: 2px;
+}
+
+.accountSodaHistory article small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.accountSodaHistory article b {
+  color: var(--muted);
+}
+
+.accountSodaHistory article b.isPositive {
+  color: #1f7a4d;
+}
+
+@media (max-width: 560px) {
+
+  .accountGrowthHeader,
+.accountCheckin {
+    align-items: flex-start;
+  }
+}
+.userWorkspaceContent > .accountPanel {
+  display: grid;
+}
+
+.accountProfile {
+  width: 100%;
+  justify-items: stretch;
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.accountFormSections {
+  display: grid;
+}
+
+.accountFormSection {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  align-items: start;
+  gap: 24px;
+  padding: 18px;
+}
+
+.accountFormSection + .accountFormSection {
+  border-top: 1px solid var(--border);
+}
+
+.accountFormSection > header {
+  display: grid;
+  gap: 3px;
+  padding-top: 2px;
+}
+
+.accountFormSection h2 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.accountFormSection header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.accountFormSection .accountProfileForm,
+.accountFormSection .accountPasswordForm {
+  display: grid;
+  width: 100%;
+  align-items: end;
+  border: 0;
+  padding: 0;
+}
+
+.accountFormSection .accountProfileForm label,
+.accountFormSection .accountPasswordForm label {
+  width: auto;
+}
+
+.accountFormSection .accountActionButton {
+  width: fit-content;
+  min-height: var(--action-height);
+  justify-self: start;
+  padding: 0 var(--action-inline-padding);
+  font-size: var(--action-font-size);
+}
+
+.accountEmailBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 560;
+}
+
+.accountEmailBadge.isVerified {
+  background: color-mix(in srgb, #1b8a5a 12%, transparent);
+  color: #1b8a5a;
+}
+
+.accountEmailBadge.isUnverified {
+  background: color-mix(in srgb, #d97706 12%, transparent);
+  color: #d97706;
+}
+
+.accountEmailUnavailable {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.accountActionButton:hover:not(:disabled),
+.accountActionButton:focus-visible:not(:disabled) {
+  border-color: var(--accent-strong, var(--accent));
+  background: var(--accent-strong, var(--accent));
+  color: #fff;
+}
+
+.accountLevelProgress {
+  display: grid;
+  gap: 8px;
+}
+
+.accountLevelProgress > header,
+.accountLevelProgress > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.accountLevelProgress > header strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.accountLevelProgressTrack {
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--border));
+}
+
+.accountLevelProgressTrack > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 220ms ease;
+}
+
+@media (max-width: 620px) {
+  .accountIdentityHeader {
+    padding: 15px;
+  }
+
+  .accountFormSection {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding: 15px;
+  }
+
+  .accountFormSection .accountProfileForm,
+.accountFormSection .accountPasswordForm {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .accountGrowthHeader {
+    flex-direction: column;
+  }
+
+}
+
+.readingProgressSetting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 58px;
+  align-items: center;
+  column-gap: 16px;
+  row-gap: 0;
+  border: 1px solid var(--border);
+  padding: 10px 14px;
+}
+
+.readingProgressHeading {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.readingProgressHeading > strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.readingProgressControls {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.readingProgressOption {
+  display: inline-grid;
+  width: 30px;
+  flex: 0 0 auto;
+  grid-template-columns: 30px;
+  min-height: 22px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.readingProgressOption .settingToggleTrack {
+  grid-column: 1;
+}
+
+.readingHistoryNotice {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.readingHistoryList {
+  display: grid;
+  border-top: 0;
+}
+
+.readingHistoryItem {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  transition: background-color 140ms ease;
+}
+
+.readingHistoryItem.isSelected {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.readingHistoryMain {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+  padding: 13px 3px;
+  color: var(--text);
+}
+
+.readingHistoryCopy {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.readingHistoryCopy strong {
+  overflow: hidden;
+  font-family: var(--font-title);
+  font-size: 15px;
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 140ms ease;
+}
+
+.readingHistoryCopy small {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.readingHistoryResumeLabel {
+  color: var(--accent-text, var(--accent));
+  font-weight: 700;
+}
+
+.readingHistoryMain:hover strong,
+.readingHistoryMain:focus-visible strong {
+  color: var(--accent-text, var(--accent));
+}
+
+.readingHistoryProgress {
+  display: block;
+  width: clamp(64px, 9vw, 96px);
+  height: 3px;
+  justify-self: end;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 64%, transparent);
+}
+
+.readingHistoryProgress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.activityBatchButton {
+  display: inline-flex;
+  min-width: 30px;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 6px;
+  padding: 5px 7px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease, opacity 120ms ease;
+}
+
+.activityBatchButton:hover,
+.activityBatchButton:focus-visible {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent-text, var(--accent));
+}
+
+.activityBatchButton.isDanger:hover,
+.activityBatchButton.isDanger:focus-visible {
+  background: color-mix(in srgb, #c94a57 9%, transparent);
+  color: #c94a57;
+}
+
+.activityBatchButton.isDanger {
+  color: #c94a57;
+}
+
+.favoriteManageToolbar .readingHistoryNotice {
+  min-height: 1em;
+}
+
+.favoriteSelectableItem > .mediaVideoCard,
+.favoriteSelectableItem > .mediaResourceRow {
+  width: 100%;
+  height: 100%;
+}
+
+.favoriteSelectableItem.isSelected > .mediaVideoCard,
+.favoriteSelectableItem.isSelected > .mediaResourceRow {
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent);
+}
+
+.favoriteAudioList .favoriteSelectControl {
+  top: 50%;
+  right: auto;
+  left: 12px;
+  transform: translateY(-50%);
+}
+
+.favoriteEmpty {
+  min-height: 140px;
+  display: grid;
+  place-content: center;
+  text-align: center;
+}
+
+.activityEmpty {
+  display: grid;
+  min-height: 180px;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.activityEmpty p {
+  margin: 0;
+}
+
+.activityEmpty a {
+  color: var(--accent-text, var(--accent));
+  font-size: 13px;
+}
+
+.settingsPreferenceNotice {
+  margin: -4px 2px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 620px) {
+  .readingHistoryMain {
+    gap: 6px;
+    padding-block: 10px;
+  }
+
+  .readingHistoryCopy {
+    display: grid;
+    gap: 2px;
+  }
+
+  .readingHistoryCopy small {
+    justify-self: start;
+  }
+}
+
+.accountEntitlements {
+  display: grid;
+  gap: 0;
+}
+
+.accountEntitlementList {
+  display: grid;
+}
+
+.accountEntitlementList article {
+  display: grid;
+  align-items: center;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+}
+
+.accountEntitlementList article.isExpired {
+  opacity: 0.58;
+}
+
+.accountEntitlementCopy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.accountEntitlementCopy strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountEntitlementCopy small,
+.accountEntitlementExpiry {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.accountEntitlementExpiry {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+
+  .accountEntitlementList article {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .accountEntitlementExpiry {
+    grid-column: 2;
+  }
+}
+
+.accountGrowthTools {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-block: 1px solid var(--border);
+}
+
+.accountGrowthTools > a {
+  display: flex;
+  width: auto;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.accountGrowthTools > a + a {
+  border-left: 1px solid var(--border);
+}
+
+.accountGrowthTools > a:hover,
+.accountGrowthTools > a:focus-visible,
+.accountGrowthTools > a.isActive {
+  border-color: var(--border);
+}
+
+.accountGrowthTools > a small {
+  display: none;
+}
+
+.accountGrowthDetail {
+  scroll-margin-top: 76px;
+}
+
+.accountRightsDetail .accountPermissionList {
+  margin-block: 12px 18px;
+}
+
+.accountSodaHistory article strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.accountSodaHistory article strong em {
+  border-radius: 4px;
+  padding: 2px 5px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent-text, var(--accent));
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 650;
+}
+
+.groveOverview {
+  display: grid;
+  gap: 13px;
+  padding-top: 2px;
+}
+
+.groveIntro {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 10px;
+  padding-block: 2px;
+}
+
+.groveIntroIcon {
+  width: 36px;
+  height: 36px;
+  color: #4f8d62;
+}
+
+.groveIntroCopy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.groveIntro h2,
+.groveIntro p {
+  margin: 0;
+}
+
+.groveIntro h2 {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 680;
+  line-height: 1.4;
+}
+
+.groveIntro p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.groveStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.groveStatCard {
+  display: grid;
+  min-width: 0;
+  min-height: 82px;
+  align-content: space-between;
+  gap: 9px;
+  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  border-radius: 12px;
+  padding: 12px 13px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.groveStatCard dt {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.groveStatCard dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 25px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 680;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.groveStatIcon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--border) 42%, transparent);
+  color: var(--muted);
+}
+
+.groveStatCard.is-all .groveStatIcon {
+  background: color-mix(in srgb, #64748b 10%, var(--surface));
+  color: #64748b;
+}
+
+.groveStatCard.is-seed .groveStatIcon {
+  background: color-mix(in srgb, #9a7650 12%, var(--surface));
+  color: #876540;
+}
+
+.groveStatCard.is-sprout .groveStatIcon {
+  background: color-mix(in srgb, #5e9b68 12%, var(--surface));
+  color: #4f865b;
+}
+
+.groveStatCard.is-tree .groveStatIcon {
+  background: color-mix(in srgb, #33715a 13%, var(--surface));
+  color: #33715a;
+}
+
+.groveStageTabs {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 22px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: none;
+}
+
+.groveStageTabs::-webkit-scrollbar {
+  display: none;
+}
+
+.groveStageTabs a {
+  display: inline-flex;
+  min-height: 42px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  transition: border-color 150ms ease, color 150ms ease;
+}
+
+.groveStageTabs a:hover,
+.groveStageTabs a:focus-visible,
+.groveStageTabs a.isActive {
+  border-bottom-color: #4f8d62;
+  color: #4f8d62;
+  outline: 0;
+}
+
+.groveStageTabs small {
+  color: color-mix(in srgb, currentColor 78%, var(--muted));
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 580;
+}
+
+.groveGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.groveCard {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 106px;
+  align-items: flex-start;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--surface);
+  box-shadow: 0 6px 20px rgb(24 42 30 / 3%);
+  color: var(--text);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.groveCard::after {
+  position: absolute;
+  top: -42px;
+  right: -42px;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: color-mix(in srgb, #4f8d62 7%, transparent);
+  content: "";
+  pointer-events: none;
+}
+
+.groveCard:hover,
+.groveCard:focus-visible {
+  border-color: color-mix(in srgb, #4f8d62 46%, var(--border));
+  box-shadow: 0 12px 30px rgb(24 42 30 / 8%);
+  color: var(--text);
+  outline: 0;
+  transform: translateY(-2px);
+}
+
+.groveCardBody {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 78px;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.groveStageBadge {
+  display: inline-flex;
+  min-height: 23px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 3px 8px 3px 7px;
+  background: color-mix(in srgb, var(--border) 46%, transparent);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 680;
+  line-height: 1;
+}
+
+.groveStageBadge.is-seed {
+  background: color-mix(in srgb, #9a7650 11%, var(--surface));
+  color: #876540;
+}
+
+.groveStageBadge.is-sprout {
+  background: color-mix(in srgb, #5e9b68 11%, var(--surface));
+  color: #4f865b;
+}
+
+.groveStageBadge.is-tree {
+  background: color-mix(in srgb, #33715a 13%, var(--surface));
+  color: #33715a;
+}
+
+.groveCardTitleLine {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.groveCardTitleLine > strong {
+  display: -webkit-box;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  font-family: var(--font-title);
+  font-size: 14px;
+  font-weight: 610;
+  line-height: 1.42;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.groveCardBottomLine {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.groveCardFacts {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  overflow: hidden;
+}
+
+.groveCardMeta,
+.groveVisitCount {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groveVisitCount {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--muted) 88%, var(--text));
+}
+
+.groveCardMeta + .groveVisitCount::before {
+  margin: 0 6px;
+  color: color-mix(in srgb, var(--muted) 48%, transparent);
+  content: "·";
+}
+
+.grovePlantedTime {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  color: color-mix(in srgb, var(--muted) 78%, var(--text));
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.groveTimeTypeIcon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+}
+
+.groveTimeTypeIcon.is-novel {
+  color: #4f8d62;
+}
+
+.groveTimeTypeIcon.is-video {
+  color: #557da8;
+}
+
+.groveTimeTypeIcon.is-audio {
+  color: #8a668f;
+}
+
+.groveEmpty {
+  display: grid;
+  min-height: 144px;
+  place-content: center;
+  justify-items: center;
+  gap: 7px;
+  border: 1px dashed color-mix(in srgb, #4f8d62 35%, var(--border));
+  border-radius: 14px;
+  background: color-mix(in srgb, #4f8d62 3%, var(--surface));
+  color: #4f8d62;
+  text-align: center;
+}
+
+.groveEmpty strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.groveEmpty span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 980px) {
+  .groveGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .groveIntroIcon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .groveStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .groveStatCard {
+    min-height: 70px;
+    border-radius: 10px;
+    padding: 10px 11px;
+  }
+
+  .groveStatCard dd {
+    font-size: 22px;
+  }
+
+  .groveStageTabs {
+    gap: 18px;
+  }
+
+  .groveGrid {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+
+  .groveCard {
+    min-height: 102px;
+    border-radius: 12px;
+    padding: 12px;
+  }
+
+  .groveCardBody {
+    min-height: 76px;
+  }
+
+  .groveEmpty {
+    min-height: 132px;
+    border-radius: 10px;
+    padding-inline: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .groveStageTabs a,
+.groveCard {
+    transition: none;
+  }
+}
+
+.accountGrowthTools {
+  gap: 18px;
+  margin-top: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.accountGrowth {
+  gap: 0;
+}
+
+.accountGrowthHeader {
+  min-height: 52px;
+  align-items: center;
+  gap: 16px;
+  padding: 0 2px;
+}
+
+.accountGrowthIdentity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.accountGrowthIdentity > svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  stroke-width: 1.8;
+}
+
+.accountGrowthHeader h1 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font-title);
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountGrowthLevel {
+  flex: 0 0 auto;
+  gap: 0;
+  border-left: 1px solid var(--border);
+  padding-left: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.accountLevelProgress {
+  padding: 14px 2px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.accountLevelProgressTrack {
+  height: 5px;
+}
+
+.accountGrowth .accountCheckin {
+  margin-top: 0;
+  border-top: 0;
+  padding: 13px 2px;
+}
+
+.accountGrowthTools > a {
+  position: relative;
+  height: 42px;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+  padding-inline: 2px;
+}
+
+nav.accountGrowthTools > a + a {
+  border-left: 0;
+}
+
+.accountGrowthTools > a:hover,
+.accountGrowthTools > a:focus-visible,
+.accountGrowthTools > a.isActive {
+  outline: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-text, var(--accent));
+  box-shadow: none;
+}
+
+.accountGrowthTools > a.isActive::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--accent);
+  content: "";
+}
+
+.accountGrowthDetail {
+  min-height: 0;
+  margin-top: 0;
+  border-top: 0;
+  padding-top: 14px;
+}
+
+.accountRightsDetail .accountPermissionList {
+  gap: 5px 14px;
+  margin: 0 0 12px;
+}
+
+.accountRightsDetail .accountPermissionList > span {
+  min-height: 24px;
+  border: 0;
+  border-radius: 0;
+  padding: 2px 0;
+  background: transparent;
+  font-size: 11.5px;
+}
+
+.accountEntitlementList article {
+  min-height: 50px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 7px 0;
+}
+
+.accountEntitlementCopy strong {
+  font-weight: 600;
+}
+
+.accountSodaHistory article {
+  min-height: 50px;
+  padding-inline: 0;
+}
+
+@media (max-width: 820px) {
+  .readingHistoryCopy strong {
+    font-family: inherit;
+  }
+
+  .accountGrowthHeader {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .accountGrowthBalance {
+    flex: 0 0 auto;
+    margin-left: auto;
+  }
+
+  .accountGrowthDetail {
+    min-height: 0;
+  }
+}
+
+.settingsHero.userContentHeader {
+  min-height: 48px;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  padding: 0;
+}
+
+.settingsHero.userContentHeader > span {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 8px;
+}
+
+.settingsHero.userContentHeader h1 {
+  margin: 0;
+  font-family: var(--font-title);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.settingsPanel {
+  max-width: none;
+  gap: 0;
+}
+
+.settingsGrid {
+  gap: 0;
+}
+
+.settingBlock {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.settingsGrid > .settingBlock + .settingBlock {
+  border-top: 1px solid var(--border);
+}
+
+.settingBlockHeader {
+  min-height: 42px;
+  padding: 14px 2px 8px;
+  border-bottom: 0;
+}
+
+.settingBlock h2 {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 680;
+}
+
+.settingRow {
+  padding-inline: 2px;
+  border: 0;
+}
+
+.settingsReaderThemePicker {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-self: end;
+  gap: 9px;
+}
+
+.settingsReaderThemePicker button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--text) 15%, transparent);
+  border-radius: 50%;
+  padding: 0;
+  background: var(--reader-theme-swatch);
+  color: var(--accent-text, var(--accent));
+  cursor: pointer;
+}
+
+.settingsReaderThemePicker button:hover,
+.settingsReaderThemePicker button:focus-visible,
+.settingsReaderThemePicker button.isActive {
+  border-color: var(--accent);
+  outline: 0;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 11%, transparent);
+}
+
+:root[data-reader-theme="gray"] .settingsReaderThemePicker [data-reader-theme-value="gray"],
+:root[data-reader-theme="warm"] .settingsReaderThemePicker [data-reader-theme-value="warm"],
+:root[data-reader-theme="sepia"] .settingsReaderThemePicker [data-reader-theme-value="sepia"],
+:root[data-reader-theme="green"] .settingsReaderThemePicker [data-reader-theme-value="green"],
+:root[data-reader-theme="blue"] .settingsReaderThemePicker [data-reader-theme-value="blue"],
+:root[data-reader-theme="night"] .settingsReaderThemePicker [data-reader-theme-value="night"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 11%, transparent);
+}
+
+.settingsReaderJustifyToggle {
+  justify-self: end;
+}
+
+@media (max-width: 820px) {
+
+  .settingRow {
+    padding: 13px 2px;
+  }
+}
+.settingToggleOnly {
+  justify-self: end;
+}
+
+.userWorkspaceContent > .accountPanel {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.accountGrowthIdentity > svg {
+  color: var(--muted);
+}
+
+.accountFormSection .accountProfileForm {
+  grid-template-columns: minmax(0, 420px) auto;
+}
+
+.accountFormSection .accountPasswordForm {
+  width: min(420px, 100%);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.accountFormSection .accountProfileForm label,
+.accountFormSection .accountPasswordForm label {
+  min-width: 0;
+}
+
+.accountFormSection .accountProfileForm input,
+.accountFormSection .accountPasswordForm input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 38px;
+}
+
+.accountFormSection .accountPasswordForm .accountActionButton {
+  grid-column: 1;
+}
+
+@media (max-width: 620px) {
+  .accountFormSection .accountProfileForm {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .accountFormSection .accountPasswordForm {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.readingProgressSetting {
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.readingProgressSetting {
+  border-width: 0 0 1px;
+}
+
+.readingProgressSetting {
+  padding-inline: 2px;
+}
+
+.favoriteCollection.isManaging .favoriteSelectableItem > .mediaVideoCard,
+.favoriteCollection.isManaging .favoriteSelectableItem > .mediaResourceRow {
+  min-width: 0;
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.favoriteCollection.isManaging .favoriteAudioList .favoriteSelectableItem > .mediaResourceRow {
+  padding-left: 0;
+}
+
+.accountAvatarEditorEntry {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.userAvatar.accountAvatarImage {
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  border-radius: 8px;
+}
+
+.accountAvatarIdentity {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.accountAvatarIdentity strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountAvatarIdentity small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountProfile .accountAvatarEditButton {
+  white-space: nowrap;
+}
+
+.accountProfile .accountAvatarEditButton:hover,
+.accountProfile .accountAvatarEditButton:focus-visible {
+  background: var(--accent-strong);
+  color: #fffaf2;
+  outline: 0;
+}
+
+.avatarEditorBackdrop {
+  position: fixed;
+  z-index: 360;
+  inset: 0;
+  width: 100vw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgb(0 0 0 / 34%);
+  backdrop-filter: blur(2px);
+}
+
+.avatarEditorDrawer {
+  display: grid;
+  width: min(420px, 100%);
+  max-height: calc(100dvh - 40px);
+  grid-template-rows: auto minmax(0, auto);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 24%);
+  animation: avatarDialogEnter 140ms ease-out;
+}
+
+.avatarEditorDrawer > header {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 14px 0 20px;
+}
+
+.avatarEditorDrawer > header strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.accountProfile .avatarEditorDrawer > header > button {
+  display: grid;
+  width: 32px;
+  min-height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.accountProfile .avatarEditorDrawer > header > button:hover,
+.accountProfile .avatarEditorDrawer > header > button:focus-visible {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--accent-text, var(--accent));
+  outline: 0;
+}
+
+.avatarEditorBody {
+  display: grid;
+  align-content: start;
+  overflow-y: auto;
+  padding: 24px 20px;
+}
+
+.avatarEditorForm {
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+  gap: 18px;
+}
+
+.avatarEditorPreview {
+  width: 96px;
+  height: 96px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+}
+
+.avatarEditorPreview > .userAvatar,
+.avatarEditorPreview > .userAvatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.avatarEditorActions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.accountProfile .avatarRandomizeButton,
+.accountProfile .avatarUploadButton {
+  display: inline-flex;
+  min-height: var(--action-height);
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--action-radius);
+  padding: 0 11px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: var(--action-font-size);
+  font-weight: 650;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+}
+
+.avatarUploadButton input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.userPanel .avatarRandomizeButton:hover:not(:disabled),
+.userPanel .avatarRandomizeButton:focus-visible:not(:disabled),
+.userPanel .avatarUploadButton:hover,
+.userPanel .avatarUploadButton:focus-within,
+.accountProfile .avatarRandomizeButton:hover,
+.accountProfile .avatarRandomizeButton:focus-visible,
+.accountProfile .avatarUploadButton:hover,
+.accountProfile .avatarUploadButton:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent-text, var(--accent));
+  outline: 0;
+}
+
+.userPanel .avatarRandomizeButton:active:not(:disabled),
+.userPanel .avatarUploadButton:active,
+.accountProfile .avatarRandomizeButton:active:not(:disabled),
+.accountProfile .avatarUploadButton:active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.avatarRandomizeButton:disabled,
+.avatarUploadButton.isPending {
+  cursor: wait;
+  opacity: .55;
+}
+
+.accountProfile .avatarEditorSave {
+  white-space: nowrap;
+}
+
+@media (max-width: 620px) {
+  .avatarEditorBackdrop {
+    padding: 10px;
+  }
+
+  .avatarEditorDrawer {
+    width: 100%;
+    max-height: calc(100dvh - 20px);
+  }
+
+  .avatarEditorDrawer > header {
+    min-height: 54px;
+  }
+
+  .avatarEditorBody {
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avatarEditorDrawer { animation: none; }
+}
+.userAvatar.checkinLeaderboardAvatar { border-radius: 7px; }
+.activityContentTypeTabs + .readingHistory { margin-top: 4px; }
+.readingHistoryItem > .readingHistoryMain:first-child { grid-column: 1 / -1; }
+.readingHistoryMain.hasAuthor { grid-template-columns: 28px minmax(0, 1fr); column-gap: 10px; }
+.userAvatar.readingHistoryAuthorAvatar { width: 28px; height: 28px; grid-column: 1; grid-row: 1 / 3; align-self: center; border-radius: 6px; font-size: 11px; }
+.readingHistoryMain.hasAuthor .readingHistoryCopy,
+.readingHistoryMain.hasAuthor .readingHistoryProgress { grid-column: 2; }
+.readingHistoryMain.hasAuthor .readingHistoryCopy small > span:first-child { max-width: 15ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.groveTimeTypeIcon.is-original { color: var(--accent-text, var(--accent)); }
+
+@media (max-width: 700px) {
+  .readingHistoryMain.hasAuthor { grid-template-columns: 26px minmax(0, 1fr); column-gap: 8px; }
+  .userAvatar.readingHistoryAuthorAvatar { width: 26px; height: 26px; }
+}

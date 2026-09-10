@@ -1,6 +1,4 @@
-import { Suspense } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { NovelAccessGate } from "@/components/NovelAccessGate";
 import { ReadingProgressTracker } from "@/components/ReadingProgressTracker";
 import { ReaderTagLinks } from "@/components/ReaderTagLinks";
@@ -10,62 +8,50 @@ import { NovelViewTracker } from "@/components/NovelViewTracker";
 import { SiteHeader } from "@/components/SiteHeader";
 import { AdminReaderActions } from "@/components/AdminReaderActions";
 import Link from "@/components/LocalizedLink";
-import { getAdjacentNovels, readNovelSegments, type Novel } from "@/lib/books";
+import { database } from "@/core/db/postgres";
+import {
+  getPostgresNovelSourceById,
+  listPostgresNovelChapters,
+  listPostgresTagsForNovels,
+  type PostgresChapterContext,
+  type PostgresPublicNovel,
+  type PostgresPublicTag,
+} from "@/domains/catalog/postgres-catalog";
+import { ContentNotPublishedError, readPublishedNovelContent } from "@/domains/reading/postgres-content";
+import { getPostgresReadingProgress, type PostgresReadingProgress } from "@/domains/reading/postgres-reading-progress";
+import { getPostgresNovelInteractionState } from "@/domains/reading/postgres-reader-interactions";
+import {
+  getPostgresAdjacentReaderNovels,
+  isPostgresNovelPinned,
+  listPostgresEffectivelyHiddenTagIds,
+  listPostgresNovelHotwords,
+} from "@/domains/reading/postgres-reader-catalog";
+import type { PostgresNovelReadAccess } from "@/domains/reading/postgres-novel-access";
+import { hasPostgresUserPermission } from "@/domains/identity/postgres-permissions";
 import {
   areGuestHotwordLinksEnabled,
   areHotwordLinksEnabled,
+  getReaderAdjacentNovelSort,
   isTagLibraryPublic,
   isTagLibraryEnabled,
 } from "@/lib/config";
-import { isNovelFavorite } from "@/lib/favorites";
-import { getNovelGroveState } from "@/lib/grove";
 import type { AppLocale } from "@/lib/locale";
-import { localizeNovelSegments, localizeText, localizeTexts } from "@/lib/locale-server";
-import { getNovelReadAccess, getSodaNovelPreviewSegments, type NovelReadAccess } from "@/lib/novel-access";
-import {
-  novelChapterContentVersion,
-  getNovelSourceById,
-  listNovelChapters,
-  readNovelChapterSegments,
-  type NovelChapter,
-} from "@/lib/novel-library";
-import { getReadingProgress, novelContentVersion, type ReadingProgress } from "@/lib/reading-progress";
+import { localizeNovelSegments, localizeText } from "@/lib/locale-server";
 import type { NovelSegment } from "@/lib/segments";
-import { isNovelPinned } from "@/lib/pinned-novels";
-import { filterTagsForUser } from "@/lib/tag-preferences";
-import { listHotwordsForNovel, listTagsForNovel } from "@/lib/tags";
-import { hasUserPermission } from "@/lib/user-levels";
-import type { UserProfile } from "@/lib/users";
-import { splitReaderParagraphs } from "@/lib/reader-layout";
+import type { PostgresUserProfile as UserProfile } from "@/domains/identity/postgres-users";
+import { normalizeReaderNavigationTitle, splitReaderParagraphs } from "@/lib/reader-layout";
 
 export type NovelReaderQuery = {
   from?: string;
   hit?: string;
+  at?: string;
   resume?: string;
 };
 
-type ChapterContext = {
-  chapter: NovelChapter;
-  index: number;
-  total: number;
-  previous: NovelChapter | null;
-  next: NovelChapter | null;
-};
-
-function readerNavigationTitle(value: string): string {
-  return value.normalize("NFKC").replace(/\s+/gu, " ").trim();
-}
+type ChapterContext = PostgresChapterContext;
 
 function safeReturnHref(value: string | undefined, fallback = "/novels"): string {
   return value?.startsWith("/") && !value.startsWith("//") && !value.includes("\\") ? value : fallback;
-}
-
-function ReaderContentLoading() {
-  return (
-    <div className="readerContentLoading" role="status" aria-label="正文加载中">
-      {Array.from({ length: 7 }, (_, index) => <span key={index} />)}
-    </div>
-  );
 }
 
 function ReaderSegments({
@@ -82,15 +68,17 @@ function ReaderSegments({
     const continued = !previousEndedParagraph;
     const paragraphs = splitReaderParagraphs(segment.content, continued);
     previousEndedParagraph = /\r?\n\s*$/.test(segment.content);
+    const isSearchTarget = segment.segmentIndex === hitSegment;
     return (
       <section
         className="readerSegment"
         data-reader-continuation={continued ? "true" : undefined}
         data-segment-index={segment.segmentIndex}
-        data-search-target={segment.segmentIndex === hitSegment ? "true" : undefined}
+        data-search-target={isSearchTarget ? "true" : undefined}
         id={`seg-${segment.segmentIndex}`}
         key={segment.segmentIndex}
       >
+        {isSearchTarget ? <span id="search-hit" aria-hidden="true" /> : null}
         {paragraphs.map((paragraph, index) => (
           <p
             aria-level={paragraph.sectionHeading ? 2 : undefined}
@@ -104,6 +92,41 @@ function ReaderSegments({
       </section>
     );
   });
+}
+
+type ReaderDisplayTag = { id: number; name: string; slug: string };
+
+function ReaderPagedIntro({
+  title,
+  subtitle,
+  tags,
+  library,
+}: {
+  title: string;
+  subtitle?: string;
+  tags: ReaderDisplayTag[];
+  library: string;
+}) {
+  return (
+    <header className="readerPagedIntro">
+      <h1>{title}</h1>
+      {subtitle ? <p>{subtitle}</p> : null}
+      {tags.length ? (
+        <nav className="readerPagedIntroTags" aria-label="文章标签">
+          {tags.map((tag) => (
+            <Link
+              className="tagChip contentTagLink"
+              href={`/tags/${tag.slug}${library === "default" ? "" : `?library=${encodeURIComponent(library)}`}`}
+              key={tag.id}
+              prefetch={false}
+            >
+              {tag.name}
+            </Link>
+          ))}
+        </nav>
+      ) : null}
+    </header>
+  );
 }
 
 function ReaderHotwordLinks({ hotwords, novelId, library }: { hotwords: string[]; novelId: number; library: string }) {
@@ -124,6 +147,18 @@ function chapterHref(bookId: number, chapterId: number, from?: string): string {
   return `/books/${bookId}/chapters/${chapterId}${query}`;
 }
 
+async function listAllReaderChapters(bookId: number) {
+  const executor = database("web");
+  const chapters = [] as Awaited<ReturnType<typeof listPostgresNovelChapters>>["items"];
+  let cursor: Awaited<ReturnType<typeof listPostgresNovelChapters>>["nextCursor"] = null;
+  do {
+    const page = await listPostgresNovelChapters(executor, bookId, { limit: 200, ...(cursor ? { cursor } : {}) });
+    chapters.push(...page.items);
+    cursor = page.nextCursor;
+  } while (cursor);
+  return chapters;
+}
+
 function ChapterNavigation({ bookId, context, from }: {
   bookId: number;
   context: ChapterContext;
@@ -132,13 +167,13 @@ function ChapterNavigation({ bookId, context, from }: {
   return (
     <nav className="readerChapterNavigation" aria-label="章节导航">
       {context.previous ? (
-        <Link href={chapterHref(bookId, context.previous.id, from)} title={context.previous.title}>
+        <Link href={chapterHref(bookId, context.previous.id, from)} title={context.previous.title} prefetch={false} scroll>
           <span>上一章</span>
         </Link>
       ) : <span className="isDisabled"><span>上一章</span></span>}
       <span className="readerChapterProgress">{context.index + 1} / {context.total}</span>
       {context.next ? (
-        <Link href={chapterHref(bookId, context.next.id, from)} title={context.next.title}>
+        <Link href={chapterHref(bookId, context.next.id, from)} title={context.next.title} prefetch={false} scroll>
           <span>下一章</span>
         </Link>
       ) : <span className="isDisabled"><span>下一章</span></span>}
@@ -161,13 +196,13 @@ function ReaderNovelNavigation({
   return (
     <nav className={`readerNovelNavigation${isSingle ? " isSingle" : ""}`} aria-label="小说导航">
       {previous ? (
-        <Link className="readerNovelLink readerNovelPrevious" href={href(previous.id)} aria-label={`上一篇：${previous.title}`} title={`上一篇：${previous.title}`}>
+        <Link className="readerNovelLink readerNovelPrevious" href={href(previous.id)} aria-label={`上一篇：${previous.title}`} title={`上一篇：${previous.title}`} prefetch={false} scroll>
           <span className="readerNovelArrow"><ChevronLeft size={20} strokeWidth={1.8} aria-hidden="true" /></span>
           <span className="readerNovelTitle"><strong>{previous.title}</strong></span>
         </Link>
       ) : null}
       {next ? (
-        <Link className="readerNovelLink readerNovelNext" href={href(next.id)} aria-label={`下一篇：${next.title}`} title={`下一篇：${next.title}`}>
+        <Link className="readerNovelLink readerNovelNext" href={href(next.id)} aria-label={`下一篇：${next.title}`} title={`下一篇：${next.title}`} prefetch={false} scroll>
           <span className="readerNovelTitle"><strong>{next.title}</strong></span>
           <span className="readerNovelArrow"><ChevronRight size={20} strokeWidth={1.8} aria-hidden="true" /></span>
         </Link>
@@ -180,7 +215,8 @@ async function ReaderContent({
   book,
   chapterContext,
   hitSegment,
-  requestHeaders,
+  hitCharOffset,
+
   user,
   locale,
   initialProgress,
@@ -188,37 +224,82 @@ async function ReaderContent({
   preview,
   previousHref,
   nextHref,
+  previousContentBytes,
+  nextContentBytes,
+  pagedTitle,
+  pagedSubtitle,
+  pagedTags,
+  library,
 }: {
-  book: Novel;
+  book: PostgresPublicNovel;
   chapterContext: ChapterContext | null;
   hitSegment: number;
-  requestHeaders: Headers;
+  hitCharOffset: number;
+
   user: UserProfile | null;
   locale: AppLocale;
-  initialProgress: ReadingProgress | null;
+  initialProgress: PostgresReadingProgress | null;
   resume: boolean;
   preview: boolean;
   previousHref?: string | null;
   nextHref?: string | null;
+  previousContentBytes?: number | null;
+  nextContentBytes?: number | null;
+  pagedTitle: string;
+  pagedSubtitle?: string;
+  pagedTags: ReaderDisplayTag[];
+  library: string;
 }) {
   const chapter = chapterContext?.chapter || null;
-  const sourceSegments = chapter ? await readNovelChapterSegments(chapter) : await readNovelSegments(book);
-  const contentVersion = chapter ? novelChapterContentVersion(chapter) : novelContentVersion(book);
-  const readableSegments = preview && !chapter ? getSodaNovelPreviewSegments(sourceSegments) : sourceSegments;
+  let published: Awaited<ReturnType<typeof readPublishedNovelContent>>;
+  try {
+    published = await readPublishedNovelContent(database("web"), {
+      novelId: book.id,
+      chapterId: chapter?.id,
+      previewRatio: preview && !chapter ? 0.3 : 1,
+    });
+  } catch (error) {
+    if (!(error instanceof ContentNotPublishedError)) throw error;
+    return (
+      <section className="emptyState readerUnavailable" role="status">
+        <h2>正文正在准备中</h2>
+        <p>这篇内容尚未完成发布，请稍后再试。</p>
+      </section>
+    );
+  }
+  const sourceSegments: NovelSegment[] = published.blocks.map((block) => ({
+    segmentIndex: block.blockNo,
+    charStart: block.charStart,
+    charEnd: block.charEnd,
+    content: block.originalText,
+  }));
+  const resolvedHitSegment = Number.isSafeInteger(hitSegment) && hitSegment >= 0
+    ? hitSegment
+    : Number.isSafeInteger(hitCharOffset) && hitCharOffset >= 0
+      ? sourceSegments.find((segment) => segment.charStart <= hitCharOffset && hitCharOffset < segment.charEnd)?.segmentIndex ??
+        sourceSegments.find((segment) => segment.charStart >= hitCharOffset)?.segmentIndex ??
+        sourceSegments.at(-1)?.segmentIndex ?? Number.NaN
+      : Number.NaN;
   const segments = await localizeNovelSegments(
-    readableSegments,
+    sourceSegments,
     locale,
-    preview && !chapter ? `${contentVersion}:soda-preview-30` : contentVersion,
+    preview && !chapter ? `${published.contentVersion}:soda-preview-30` : published.contentVersion,
   );
-  const path = chapter ? `/books/${book.id}/chapters/${chapter.id}` : `/books/${book.id}`;
+
 
   return (
     <>
       <div className="readerPagedStage">
         <div className="readerText">
-          <ReaderSegments segments={segments} hitSegment={hitSegment} />
+          <ReaderPagedIntro title={pagedTitle} subtitle={pagedSubtitle} tags={pagedTags} library={library} />
+          <ReaderSegments segments={segments} hitSegment={resolvedHitSegment} />
         </div>
-        <ReaderPageTurnController previousHref={previousHref} nextHref={nextHref} />
+        <ReaderPageTurnController
+          previousHref={previousHref}
+          nextHref={nextHref}
+          previousContentBytes={previousContentBytes}
+          nextContentBytes={nextContentBytes}
+        />
       </div>
       {user?.readingHistoryEnabled && !preview ? (
         <ReadingProgressTracker
@@ -227,8 +308,8 @@ async function ReaderContent({
           chapterIndex={chapterContext?.index || 0}
           totalChapters={chapterContext?.total || 1}
           userId={user.id}
-          contentVersion={contentVersion}
-          totalSegments={segments.length}
+          contentVersion={published.contentVersion}
+          totalSegments={published.blockCount}
           initialProgress={initialProgress}
           resume={resume}
         />
@@ -241,63 +322,79 @@ export async function NovelReaderView({
   book,
   chapterContext = null,
   query,
-  requestHeaders,
+
   user,
   locale,
   readAccess,
 }: {
-  book: Novel;
+  book: PostgresPublicNovel;
   chapterContext?: ChapterContext | null;
   query: NovelReaderQuery;
-  requestHeaders: Headers;
+
   user: UserProfile | null;
   locale: AppLocale;
-  readAccess: NovelReadAccess;
+  readAccess: PostgresNovelReadAccess;
 }) {
   const authenticated = Boolean(user);
   const chapter = chapterContext?.chapter || null;
   const preview = readAccess.reason === "preview";
   const hitSegment = Number(query.hit);
+  const hitCharOffset = Number(query.at);
   const showTags = isTagLibraryEnabled() && (authenticated || isTagLibraryPublic());
   const showHotwords = readAccess.allowed && !preview && areHotwordLinksEnabled() && (authenticated || areGuestHotwordLinksEnabled());
   const tagAudience = user?.role === "admin" ? "admin" : user ? "member" : "public";
-  const sourceTags = showTags ? listTagsForNovel(book.id, { audience: tagAudience }) : [];
-  const tags = filterTagsForUser(sourceTags, user?.id);
-  const hotwords = showHotwords ? listHotwordsForNovel(book.id) : [];
-  const displayTitle = await localizeText(book.title, locale);
-  const displayDescription = book.description ? await localizeText(book.description, locale) : "";
-  const displayChapterTitle = chapter ? await localizeText(chapter.title, locale) : "";
-  const localizedTagNames = await Promise.all(tags.map((tag) => localizeText(tag.name, locale)));
-  const localizedHotwords = await Promise.all(hotwords.map((term) => localizeText(term, locale)));
-  const [homeLabel, novelsLabel] = await localizeTexts(["首页", "小说"] as const, locale);
-  const initialProgress = user ? getReadingProgress(user.id, book.id) : null;
-  const grove = user ? getNovelGroveState(user.id, book.id) : null;
-  const favorite = user ? isNovelFavorite(user.id, book.id) : false;
-  const canReport = user?.role === "user" && hasUserPermission(user, "content_report");
-  const library = book.source_id ? getNovelSourceById(book.source_id)?.slug || "default" : "default";
+  const executor = database("web");
+  const [tagsByNovel, hiddenTagIds, hotwords, source, sourceChapters, adjacentNovels, initialProgress, interaction, canReport, pinned] = await Promise.all([
+    showTags
+      ? listPostgresTagsForNovels(executor, [book.id], { audience: tagAudience })
+      : Promise.resolve(new Map<number, PostgresPublicTag[]>()),
+    showTags ? listPostgresEffectivelyHiddenTagIds(executor, user?.id) : Promise.resolve(new Set<number>()),
+    showHotwords ? listPostgresNovelHotwords(executor, book.id) : Promise.resolve([]),
+    book.sourceId ? getPostgresNovelSourceById(executor, book.sourceId) : Promise.resolve(null),
+    book.storageMode === "chapters" ? listAllReaderChapters(book.id) : Promise.resolve([]),
+    chapter ? Promise.resolve(null) : getPostgresAdjacentReaderNovels(executor, book, getReaderAdjacentNovelSort()),
+    user ? getPostgresReadingProgress(executor, user.id, book.id) : Promise.resolve(null),
+    user ? getPostgresNovelInteractionState(executor, user.id, book.id) : Promise.resolve(null),
+    user?.role === "user" ? hasPostgresUserPermission(executor, user, "content_report") : Promise.resolve(false),
+    user?.role === "admin" ? isPostgresNovelPinned(executor, book.id) : Promise.resolve(false),
+  ]);
+  const tags = (tagsByNovel.get(book.id) || []).filter((tag) => !hiddenTagIds.has(tag.id));
+  const [displayTitle, displayDescription, displayChapterTitle, localizedTagNames, localizedHotwords] = await Promise.all([
+    localizeText(book.title, locale),
+    book.description ? localizeText(book.description, locale) : Promise.resolve(""),
+    chapter ? localizeText(chapter.title, locale) : Promise.resolve(""),
+    Promise.all(tags.map((tag) => localizeText(tag.name, locale))),
+    Promise.all(hotwords.map((term) => localizeText(term, locale))),
+  ]);
+  const library = source?.slug || "default";
   const catalogHref = safeReturnHref(
     query.from,
     library === "default" ? "/novels" : `/novels?library=${encodeURIComponent(library)}`,
   );
-  const chapterCatalogHref = `/books/${book.id}/chapters${query.from ? `?from=${encodeURIComponent(query.from)}` : ""}`;
-  const mobileBackHref = chapter ? chapterCatalogHref : catalogHref;
-  const sourceChapters = book.storage_mode === "chapters" ? listNovelChapters(book.id) : [];
+  const mobileBackHref = catalogHref;
   const chapters = await Promise.all(sourceChapters.map(async (item) => ({
     id: item.id,
     title: await localizeText(item.title, locale),
     wordCount: item.wordCount,
   })));
-  const currentSearchBookId = book.storage_mode === "chapters" && getNovelReadAccess(book, user).allowed
+  const currentSearchBookId = book.storageMode === "chapters" && readAccess.allowed
     ? book.id
     : undefined;
-  const adjacentNovels = chapter ? null : getAdjacentNovels(book);
   const [displayPreviousNovel, displayNextNovel] = adjacentNovels
     ? await Promise.all([
         adjacentNovels.previous
-          ? localizeText(adjacentNovels.previous.title, locale).then((title) => ({ id: adjacentNovels.previous!.id, title }))
+          ? localizeText(adjacentNovels.previous.title, locale).then((title) => ({
+              id: adjacentNovels.previous!.id,
+              title: normalizeReaderNavigationTitle(title),
+              sizeBytes: adjacentNovels.previous!.sizeBytes,
+            }))
           : null,
         adjacentNovels.next
-          ? localizeText(adjacentNovels.next.title, locale).then((title) => ({ id: adjacentNovels.next!.id, title }))
+          ? localizeText(adjacentNovels.next.title, locale).then((title) => ({
+              id: adjacentNovels.next!.id,
+              title: normalizeReaderNavigationTitle(title),
+              sizeBytes: adjacentNovels.next!.sizeBytes,
+            }))
           : null,
       ])
     : [null, null];
@@ -307,6 +404,37 @@ export async function NovelReaderView({
   const nextReaderHref = chapter
     ? chapterContext?.next ? chapterHref(book.id, chapterContext.next.id, query.from) : null
     : displayNextNovel ? `/books/${displayNextNovel.id}?from=${encodeURIComponent(catalogHref)}` : null;
+  const displayTags = tags.map(({ id: tagId, slug }, index) => ({
+    id: tagId,
+    name: localizedTagNames[index],
+    slug,
+  }));
+  const readerContent = readAccess.allowed
+    ? await ReaderContent({
+        book,
+        chapterContext,
+        hitSegment,
+        hitCharOffset,
+
+        user,
+        locale,
+        initialProgress,
+        resume: query.resume === "1",
+        preview,
+        previousHref: previousReaderHref,
+        nextHref: nextReaderHref,
+        previousContentBytes: chapter
+          ? chapterContext?.previous?.sizeBytes
+          : displayPreviousNovel?.sizeBytes,
+        nextContentBytes: chapter
+          ? chapterContext?.next?.sizeBytes
+          : displayNextNovel?.sizeBytes,
+        pagedTitle: chapter ? displayChapterTitle : displayTitle,
+        pagedSubtitle: chapter ? displayTitle : undefined,
+        pagedTags: displayTags,
+        library,
+      })
+    : null;
 
   return (
     <main className="readerShell novelReaderShell">
@@ -318,15 +446,15 @@ export async function NovelReaderView({
         library={library}
         currentSearchBookId={currentSearchBookId}
         mobileBackHref={mobileBackHref}
-        mobileBackLabel={chapter ? "返回章节目录" : "返回小说列表"}
+        mobileBackLabel="返回小说列表"
       />
       <ReaderExperienceControls
         bookId={book.id}
         title={displayTitle}
         description={displayDescription || undefined}
         chapterTitle={displayChapterTitle || undefined}
-        wordCount={book.word_count}
-        chapterCount={book.chapter_count}
+        wordCount={book.wordCount}
+        chapterCount={book.chapterCount}
         chapters={chapters}
         currentChapterId={chapter?.id}
         navigationKind={chapter ? "chapter" : "novel"}
@@ -339,21 +467,12 @@ export async function NovelReaderView({
         from={query.from}
         returnHref={catalogHref}
         authenticated={authenticated}
-        initialInGrove={Boolean(grove?.planted)}
-        initialFavorite={favorite}
+        initialInGrove={Boolean(interaction?.planted)}
+        initialFavorite={Boolean(interaction?.favorite)}
         canReport={canReport}
       />
       <article className="readerPage hasReaderPreferences" id="reader-content">
         {readAccess.allowed ? <NovelViewTracker novelId={book.id} /> : null}
-        <Breadcrumbs
-          className="readerBreadcrumbs"
-          items={[
-            { label: homeLabel, href: "/" },
-            { label: novelsLabel, href: catalogHref },
-            chapter ? { label: displayTitle, href: `/books/${book.id}/chapters` } : { label: displayTitle },
-            ...(chapter ? [{ label: displayChapterTitle }] : []),
-          ]}
-        />
         <header className="readerTitle">
           <div>
             <h1>{chapter ? displayChapterTitle : displayTitle}</h1>
@@ -363,30 +482,18 @@ export async function NovelReaderView({
             <AdminReaderActions
               bookId={book.id}
               title={displayTitle}
-              isPinned={isNovelPinned(book.id)}
+              isPinned={pinned}
               returnHref={catalogHref}
             />
           ) : null}
         </header>
         <ReaderTagLinks
-          tags={tags.map(({ id: tagId, slug }, index) => ({ id: tagId, name: localizedTagNames[index], slug }))}
+          tags={displayTags}
           library={library}
         />
         {readAccess.allowed ? (
-          <Suspense fallback={<ReaderContentLoading />}>
-            <ReaderContent
-              book={book}
-              chapterContext={chapterContext}
-              hitSegment={hitSegment}
-              requestHeaders={requestHeaders}
-              user={user}
-              locale={locale}
-              initialProgress={initialProgress}
-              resume={query.resume === "1"}
-              preview={preview}
-              previousHref={previousReaderHref}
-              nextHref={nextReaderHref}
-            />
+          <>
+            {readerContent}
             {preview ? (
               <NovelAccessGate
                 novelId={book.id}
@@ -405,7 +512,7 @@ export async function NovelReaderView({
                 returnHref={catalogHref}
               />
             ) : null}
-          </Suspense>
+          </>
         ) : (
           <NovelAccessGate
             novelId={book.id}

@@ -1,0 +1,598 @@
+﻿import { Settings } from "lucide-react";
+import type { Metadata } from "next";
+import { BookOpen, ChevronRight, Clapperboard, File, FilePenLine, Globe2, Headphones, ListFilter, Megaphone, PenLine, Search, Tags, Trash2, Upload } from "lucide-react";
+import { AdminPaletteField } from "@/components/AdminPaletteField";
+import { AdminSelect } from "@/components/AdminSelect";
+import { AdminSwitchRow } from "@/components/AdminSwitchRow";
+import { HomeCardOrderField } from "@/components/HomeCardOrderField";
+import { SiteIconFilePicker } from "@/components/SiteIconFilePicker";
+import { readPostgresSiteSettings } from "@/core/config/site-settings";
+import { database } from "@/core/db/postgres";
+import { countPostgresRecommendationPoolNovels } from "@/domains/activity/postgres-recommendations";
+import { listPostgresNovelSources } from "@/domains/catalog/postgres-catalog";
+import { getSiteIconHref } from "@/lib/site-icon";
+import {
+  ALL_NOVEL_LIBRARIES_SLUG,
+  novelLibraryDisplayName,
+} from "@/lib/novel-library-scope";
+import { isEmailVerificationConfigured } from "@/lib/email-verification";
+import { normalizeReaderLineHeight, READER_LINE_HEIGHTS, READER_PAGE_TURN_OPTIONS } from "@/lib/ui-preferences";
+import {
+  deleteSiteIconAction,
+  saveAdminSettingsAction,
+  uploadSiteIconAction,
+} from "@/app/admin/actions";
+import { AdminFrame } from "../AdminFrame";
+
+export const dynamic = "force-dynamic";
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
+
+type AdminSettingsPageProps = {
+  searchParams: Promise<{
+    notice?: string;
+    tone?: "success" | "warning" | "error";
+  }>;
+};
+
+function mediaAccessMode(enabled: boolean, guestEnabled: boolean): "off" | "user" | "public" {
+  if (!enabled) return "off";
+  return guestEnabled ? "public" : "user";
+}
+
+export default async function AdminSettingsPage({ searchParams }: AdminSettingsPageProps) {
+  const [params, settings, novelSources, recommendationPoolCount] = await Promise.all([
+    searchParams,
+    readPostgresSiteSettings(),
+    listPostgresNovelSources(database("web"), { includeEmpty: true }),
+    countPostgresRecommendationPoolNovels(database("web")),
+  ]);
+  const siteName = settings.siteName;
+  const siteTitle = settings.siteTitle;
+  const adminUsername = settings.adminUsername;
+  const loginRateLimit = settings.adminLoginRateLimitPerMinute;
+  const catalogPageSize = settings.catalogPageSize;
+  const searchResultsPageSize = settings.searchResultsPageSize;
+  const adminBookPageSize = settings.adminBookPageSize;
+  const noticeDisplaySeconds = settings.noticeDisplaySeconds;
+  const readerDefaultFontSize = settings.readerDefaultFontSize;
+  const readerDefaultLineHeight = normalizeReaderLineHeight(settings.readerDefaultLineHeight);
+  const globalSearchMaxResults = settings.globalSearchMaxResults;
+  const userDailyRegistrationLimit = settings.userDailyRegistrationLimitPerIp;
+  const userDailyReportLimit = settings.userDailyReportLimit;
+  const userAvatarMaxMb = (settings.userAvatarMaxBytes / 1024 ** 2).toFixed(1);
+  const analyticsRealtimeLimit = settings.analyticsRealtimeLimit;
+  const frontendSearchConcurrencyLimit = settings.frontendSearchConcurrencyLimit;
+  const siteIconHref = getSiteIconHref(settings);
+  const defaultNovelLibrarySlug = settings.defaultNovelLibrarySlug === ALL_NOVEL_LIBRARIES_SLUG ||
+    novelSources.some((source) => source.slug === settings.defaultNovelLibrarySlug)
+    ? settings.defaultNovelLibrarySlug
+    : "default";
+  const mailConfigured = isEmailVerificationConfigured();
+
+  return (
+    <AdminFrame active="settings" notice={params.notice} tone={params.tone}>
+      <article className="adminPanel adminSettingsPanel">
+        <div className="adminPanelHeader">
+          <div>
+            <h2>系统设置</h2>
+            <p>管理站点展示、账户入口、内容开放范围与搜索行为。</p>
+          </div>
+          <Settings size={20} aria-hidden="true" />
+        </div>
+
+        <form className="adminSettingsSection siteIconManager" action={uploadSiteIconAction}>
+          <div className="siteIconPreview" aria-label="当前浏览器标签图标">
+            {siteIconHref ? (
+              <img
+                src={siteIconHref}
+                alt="当前站点图标"
+                width="48"
+                height="48"
+              />
+            ) : (
+              <Globe2 size={24} aria-hidden="true" />
+            )}
+          </div>
+          <SiteIconFilePicker />
+          <div className="siteIconActions">
+            <button className="adminMediaUploadButton" type="submit">
+              <Upload size={15} aria-hidden="true" />
+              上传
+            </button>
+            <button
+              className="searchRateRuleIconButton isDanger"
+              type="submit"
+              formAction={deleteSiteIconAction}
+              formNoValidate
+              disabled={!settings.siteIconFileName}
+              aria-label="删除站点图标"
+              title="删除站点图标"
+            >
+              <Trash2 size={15} aria-hidden="true" />
+            </button>
+          </div>
+        </form>
+
+        <form className="adminSettingsForm" action={saveAdminSettingsAction}>
+          <details className="adminSettingsSection adminSettingsDisclosure" open>
+            <summary>基础信息</summary>
+            <div className="adminFieldGrid">
+              <label>
+                <span>站点名称</span>
+                <input name="siteName" defaultValue={settings.siteName || siteName} />
+              </label>
+              <label>
+                <span>页面标题</span>
+                <input name="siteTitle" defaultValue={settings.siteTitle || siteTitle} />
+              </label>
+            </div>
+            <label className="adminCompactField">
+              <span>站点标识跳转</span>
+              <AdminSelect name="brandLinkTarget" defaultValue={settings.brandLinkTarget}>
+                <option value="novels">小说</option>
+                <option value="home">首页</option>
+              </AdminSelect>
+            </label>
+            <label className="adminCompactField">
+              <span>默认进入书库</span>
+              <AdminSelect name="defaultNovelLibrarySlug" defaultValue={defaultNovelLibrarySlug}>
+                {novelSources.map((source) => (
+                  <option value={source.slug} key={source.id}>
+                    {novelLibraryDisplayName(source)}（{source.novelCount} 本）
+                  </option>
+                ))}
+                <option value={ALL_NOVEL_LIBRARIES_SLUG}>全部书库</option>
+              </AdminSelect>
+              <small>仅影响尚未保存个人书库选择的用户；用户手动选择后以个人选择为准。</small>
+            </label>
+            <div className="adminFieldGrid adminReaderDefaults">
+              <label>
+                <span>默认正文字号 / px</span>
+                <input name="readerDefaultFontSize" type="number" min="8" max="25" defaultValue={readerDefaultFontSize} />
+              </label>
+              <label>
+                <span>默认正文行距</span>
+                <AdminSelect name="readerDefaultLineHeight" defaultValue={String(readerDefaultLineHeight)}>
+                  {READER_LINE_HEIGHTS.map((value) => (
+                    <option key={value} value={String(value)}>{value.toFixed(1)} 倍</option>
+                  ))}
+                </AdminSelect>
+              </label>
+            </div>
+            <label className="adminCompactField">
+              <span>文章标签默认显示</span>
+              <AdminSelect name="readerDefaultTagsMode" defaultValue={settings.readerDefaultTagsMode}>
+                <option value="collapsed">收起</option>
+                <option value="expanded">展开</option>
+                <option value="hidden">关闭</option>
+              </AdminSelect>
+            </label>
+            <label className="adminCompactField">
+              <span>默认翻页方式</span>
+              <AdminSelect name="readerDefaultPageTurn" defaultValue={settings.readerDefaultPageTurn || "scroll"}>
+                {READER_PAGE_TURN_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </AdminSelect>
+            </label>
+            <fieldset className="adminCompactSegmentedField">
+              <legend>文末上一篇 / 下一篇排序</legend>
+              <div>
+                <label>
+                  <input
+                    name="readerAdjacentNovelSort"
+                    type="radio"
+                    value="updated"
+                    defaultChecked={settings.readerAdjacentNovelSort === "updated"}
+                  />
+                  <span>时间</span>
+                </label>
+                <label>
+                  <input
+                    name="readerAdjacentNovelSort"
+                    type="radio"
+                    value="name"
+                    defaultChecked={settings.readerAdjacentNovelSort === "name"}
+                  />
+                  <span>名称</span>
+                </label>
+              </div>
+            </fieldset>
+            <AdminSwitchRow
+              name="novelCatalogSearchExpanded"
+              title="小说搜索框默认展开"
+              description="只影响尚未在浏览器里选择个人布局的访客。"
+              defaultChecked={settings.novelCatalogSearchExpanded}
+            />
+            <label className="adminCompactField">
+              <span>默认明暗模式</span>
+              <AdminSelect name="adminTheme" defaultValue={settings.adminTheme}>
+                <option value="system">跟随系统</option>
+                <option value="light">浅色</option>
+                <option value="dark">深色</option>
+              </AdminSelect>
+            </label>
+            <AdminPaletteField defaultValue={settings.defaultPalette} />
+            <AdminSwitchRow
+              name="defaultPaletteRandomEnabled"
+              title="定时随机切换默认配色"
+              description="只影响没有保存个人配色的浏览器，周期内所有页面保持一致。"
+              defaultChecked={settings.defaultPaletteRandomEnabled}
+            />
+            <label className="adminCompactField isNarrow">
+              <span>配色切换周期 / 分钟</span>
+              <input
+                name="defaultPaletteRotationMinutes"
+                type="number"
+                min="1"
+                max="10080"
+                defaultValue={settings.defaultPaletteRotationMinutes}
+              />
+            </label>
+          </details>
+
+          <details className="adminSettingsSection adminSettingsDisclosure">
+            <summary>后台安全</summary>
+            <label>
+              <span>后台用户名</span>
+              <input name="adminUsername" defaultValue={adminUsername} autoComplete="username" />
+            </label>
+            <div className="adminFieldGrid">
+              <label>
+                <span>后台新密码</span>
+                {/* No minLength: empty means unchanged; length validated server-side when set */}
+                <input name="newAdminPassword" type="password" maxLength={72} autoComplete="new-password" placeholder="留空则不修改" />
+              </label>
+              <label>
+                <span>确认后台新密码</span>
+                <input name="confirmAdminPassword" type="password" maxLength={72} autoComplete="new-password" placeholder="再次输入新密码" />
+              </label>
+            </div>
+            <label className="adminCompactField isNarrow">
+              <span>登录限速 / 分钟</span>
+              <input name="adminLoginRateLimitPerMinute" type="number" min="1" max="120" defaultValue={loginRateLimit} />
+            </label>
+            <AdminSwitchRow name="adminLoginRateLimitEnabled" title="启用登录限速" description="建议保持开启，保护后台密码入口。" defaultChecked={settings.adminLoginRateLimitEnabled} />
+            <label>
+              <span>后台访问白名单</span>
+              <textarea
+                name="adminAllowedNetworks"
+                rows={3}
+                defaultValue={settings.adminAllowedNetworks.join("\n")}
+                placeholder="每行一个 IP 或 CIDR"
+              />
+            </label>
+            <AdminSwitchRow name="adminIpAllowlistEnabled" title="启用后台访问白名单" description="仅限制后台入口；保存时会确认当前 IP 已包含在规则中。" defaultChecked={settings.adminIpAllowlistEnabled} />
+          </details>
+
+          <details className="adminSettingsSection adminSettingsDisclosure">
+            <summary>分页显示</summary>
+            <div className="adminFieldGrid">
+              <label>
+                <span>首页书名每页 / 本</span>
+                <input name="catalogPageSize" type="number" min="1" max="100" defaultValue={catalogPageSize} />
+              </label>
+              <label>
+                <span>全文搜索每页 / 条</span>
+                <input name="searchResultsPageSize" type="number" min="1" max="100" defaultValue={searchResultsPageSize} />
+              </label>
+            </div>
+            <div className="adminFieldGrid">
+              <label>
+                <span>后台小说每页 / 本</span>
+                <input name="adminBookPageSize" type="number" min="1" max="200" defaultValue={adminBookPageSize} />
+              </label>
+              <label>
+                <span>提示显示秒数（0 为持续显示）</span>
+                <input name="noticeDisplaySeconds" type="number" min="0" max="60" defaultValue={noticeDisplaySeconds} />
+              </label>
+              <label>
+                <span>音频默认播放</span>
+                <AdminSelect name="audioDefaultPlaybackMode" defaultValue={settings.audioDefaultPlaybackMode}>
+                  <option value="next">自动连播</option>
+                  <option value="stop">播完暂停</option>
+                  <option value="repeat-one">单曲循环</option>
+                </AdminSelect>
+              </label>
+            </div>
+            <AdminSwitchRow name="randomCatalogEnabled" title="显示随便看看" defaultChecked={settings.randomCatalogEnabled} />
+            <AdminSwitchRow name="manualPinnedNovelsEnabled" title="启用手动置顶" description="关闭后保留置顶列表，但前台暂不提升这些小说的排序。" defaultChecked={settings.manualPinnedNovelsEnabled} />
+            <AdminSwitchRow name="randomRecommendationsEnabled" title="启用随机推荐" description={`每个周期从精选推荐池等权抽取，当前 ${recommendationPoolCount} 本。`} defaultChecked={settings.randomRecommendationsEnabled} />
+            <label className="adminCompactField">
+              <span>置顶显示顺序</span>
+              <AdminSelect name="catalogPromotionOrder" defaultValue={settings.catalogPromotionOrder}>
+                <option value="manual-first">手动置顶在前</option>
+                <option value="random-first">随机推荐在前</option>
+              </AdminSelect>
+            </label>
+            <div className="adminFieldGrid">
+              <label>
+                <span>每轮随机展示 / 本</span>
+                <input name="randomRecommendationCount" type="number" min="1" max="1000" defaultValue={settings.randomRecommendationCount} />
+              </label>
+              <label>
+                <span>推荐切换周期 / 分钟</span>
+                <input
+                  name="randomRecommendationIntervalMinutes"
+                  type="number"
+                  min="1"
+                  max="10080"
+                  defaultValue={settings.randomRecommendationIntervalMinutes}
+                />
+              </label>
+            </div>
+          </details>
+
+          <details className="adminSettingsSection adminSettingsDisclosure">
+            <summary>账户与内容访问</summary>
+            <div className="adminSettingsGroup">
+              <h4>账户与站务</h4>
+              <div className="adminFieldGrid">
+                <label>
+                  <span>用户头像上限 / MB</span>
+                  <input name="userAvatarMaxMb" type="number" min="0.1" max="10" step="0.1" defaultValue={userAvatarMaxMb} />
+                </label>
+                <label>
+                  <span>站务显示名称</span>
+                  <input name="stationDisplayName" maxLength={20} defaultValue={settings.stationDisplayName} />
+                </label>
+              </div>
+              <div className="adminFieldGrid">
+                <label>
+                  <span>单 IP 每日注册上限</span>
+                  <input name="userDailyRegistrationLimitPerIp" type="number" min="0" max="100" defaultValue={userDailyRegistrationLimit} />
+                </label>
+                <label>
+                  <span>单用户每日反馈上限</span>
+                  <input name="userDailyReportLimit" type="number" min="1" max="500" defaultValue={userDailyReportLimit} />
+                </label>
+              </div>
+              <AdminSwitchRow name="userLoginEnabled" title="开放前台登录" description="关闭后不再接受新登录。" defaultChecked={settings.userLoginEnabled} />
+              <label className="adminCompactField">
+                <span>注册方式</span>
+                <AdminSelect name="userRegistrationMode" defaultValue={settings.userRegistrationMode}>
+                  <option value="closed">关闭</option>
+                  <option value="invite">邀请码</option>
+                  <option value="open">开放注册</option>
+                </AdminSelect>
+              </label>
+              <AdminSwitchRow
+                name="emailVerificationRequired"
+                title="注册后验证邮箱"
+                description={mailConfigured ? "验证后允许登录。" : "请先配置 SMTP 与 SITE_URL。"}
+                status={mailConfigured ? "已就绪" : "未配置"}
+                defaultChecked={settings.emailVerificationRequired}
+                disabled={!mailConfigured}
+              />
+            </div>
+            <div className="adminSettingsGroup">
+              <h4>集市与兑换</h4>
+              <AdminSwitchRow name="marketEnabled" title="启用集市" description="入口仍受等级权限控制。" defaultChecked={settings.marketEnabled} />
+              <AdminSwitchRow
+                name="bidirectionalCurrencyExchangeEnabled"
+                title="允许双向兑换"
+                description="开启后可按相同比例用苏打换回曲奇。"
+                defaultChecked={settings.bidirectionalCurrencyExchangeEnabled}
+              />
+              <label className="adminCompactField isNarrow">
+                <span>每曲奇兑换苏打</span>
+                <input
+                  name="cookieToSodaRate"
+                  type="number"
+                  min="1"
+                  max="10000"
+                  defaultValue={settings.cookieToSodaRate}
+                />
+              </label>
+            </div>
+            <div className="adminSettingsGroup">
+              <h4><PenLine size={15} aria-hidden="true" />原创频道</h4>
+              <p className="adminSettingsHint">用户可发布 Markdown 文章、添加独立标签并进行评论互动；价格为 0 表示免费，频道开关统一在下方“前台资源访问”中调整。</p>
+              <div className="adminFieldGrid">
+                <label>
+                  <span>发布门槛 / 苏打</span>
+                  <input name="originalPublishMinSoda" type="number" min="0" max="2000000000" defaultValue={settings.originalPublishMinSoda} />
+                  <small>与等级门槛满足其一即可；曲奇按当前兑换比例折算。</small>
+                </label>
+                <label>
+                  <span>发布门槛 / 等级</span>
+                  <input name="originalPublishMinLevel" type="number" min="1" max="6" defaultValue={settings.originalPublishMinLevel} />
+                </label>
+              </div>
+              <div className="adminFieldGrid">
+                <label>
+                  <span>发布扣除 / 苏打</span>
+                  <input name="originalPublishFeeSoda" type="number" min="0" max="10000" defaultValue={settings.originalPublishFeeSoda} />
+                </label>
+                <label>
+                  <span>编辑扣除 / 苏打</span>
+                  <input name="originalEditFeeSoda" type="number" min="0" max="10000" defaultValue={settings.originalEditFeeSoda} />
+                </label>
+                <label>
+                  <span>文章最高售价 / 苏打</span>
+                  <input name="originalMaxArticlePrice" type="number" min="1" max="2000000000" defaultValue={settings.originalMaxArticlePrice} />
+                </label>
+                <label>
+                  <span>每日免费回复 / 等级</span>
+                  <input name="originalFreeCommentsPerLevel" type="number" min="0" max="100" defaultValue={settings.originalFreeCommentsPerLevel} />
+                  <small>每个等级每天的免费回复次数，例如 3 表示 3 × 等级。</small>
+                </label>
+                <label>
+                  <span>超额回复扣除 / 苏打</span>
+                  <input name="originalCommentCostSoda" type="number" min="0" max="10000" defaultValue={settings.originalCommentCostSoda} />
+                </label>
+              </div>
+              <h5>内容规范与展示</h5>
+              <div className="adminFieldGrid">
+                <label>
+                  <span>文章最少字数</span>
+                  <input name="originalArticleMinWords" type="number" min="1" max="200000" defaultValue={settings.originalArticleMinWords} />
+                  <small>默认 2000 字，仅校验新发布和用户编辑，不改写已有文章。</small>
+                </label>
+                <label>
+                  <span>回复最少字数</span>
+                  <input name="originalCommentMinChars" type="number" min="1" max="200" defaultValue={settings.originalCommentMinChars} />
+                </label>
+                <label>
+                  <span>每篇最多标签</span>
+                  <input name="originalMaxTags" type="number" min="1" max="20" defaultValue={settings.originalMaxTags} />
+                  <small>中文标签 2–6 字；英文标签为 2–15 个字母的单个单词。</small>
+                </label>
+                <label>
+                  <span>原创列表每页篇数</span>
+                  <input name="originalPageSize" type="number" min="5" max="100" defaultValue={settings.originalPageSize} />
+                </label>
+              </div>
+            </div>
+            <div className="adminSettingsGroup">
+              <h4>前台资源访问</h4>
+              <div className="adminAccessModeGrid">
+                <label className="adminAccessModeRow">
+                  <span><BookOpen size={16} aria-hidden="true" /><strong>小说</strong></span>
+                  <AdminSelect name="novelAccessMode" defaultValue={settings.homePortalAccessModes.novels}>
+                    <option value="public">公开可用</option>
+                    <option value="browse">公开展示</option>
+                    <option value="member">登录可用</option>
+                    <option value="off">关闭</option>
+                  </AdminSelect>
+                </label>
+                <label className="adminAccessModeRow">
+                  <span><Clapperboard size={16} aria-hidden="true" /><strong>视频</strong></span>
+                  <AdminSelect name="videoAccessMode" defaultValue={settings.homePortalAccessModes.video}>
+                    <option value="public">公开可用</option>
+                    <option value="browse">公开展示</option>
+                    <option value="member">登录可用</option>
+                    <option value="off">关闭</option>
+                  </AdminSelect>
+                </label>
+                <label className="adminAccessModeRow">
+                  <span><Headphones size={16} aria-hidden="true" /><strong>音频</strong></span>
+                  <AdminSelect name="audioAccessMode" defaultValue={settings.homePortalAccessModes.audio}>
+                    <option value="public">公开可用</option>
+                    <option value="browse">公开展示</option>
+                    <option value="member">登录可用</option>
+                    <option value="off">关闭</option>
+                  </AdminSelect>
+                </label>
+                <label className="adminAccessModeRow">
+                  <span><File size={16} aria-hidden="true" /><strong>文件</strong></span>
+                  <AdminSelect name="fileAccessMode" defaultValue={settings.homePortalAccessModes.file}>
+                    <option value="public">公开可用</option>
+                    <option value="browse">公开展示</option>
+                    <option value="member">登录可用</option>
+                    <option value="off">关闭</option>
+                  </AdminSelect>
+                </label>
+                <label className="adminAccessModeRow">
+                  <span><Tags size={16} aria-hidden="true" /><strong>标签</strong></span>
+                  <AdminSelect name="tagAccessMode" defaultValue={settings.homePortalAccessModes.tags}>
+                    <option value="public">公开可用</option>
+                    <option value="browse">公开展示</option>
+                    <option value="member">登录可用</option>
+                    <option value="off">关闭</option>
+                  </AdminSelect>
+                </label>
+                <label className="adminAccessModeRow">
+                  <span><FilePenLine size={16} aria-hidden="true" /><strong>原创</strong></span>
+                  <AdminSelect name="originalAccessMode" defaultValue={settings.homePortalAccessModes.original}>
+                    <option value="public">公开可用</option>
+                    <option value="browse">公开展示</option>
+                    <option value="member">登录可用</option>
+                    <option value="off">关闭</option>
+                  </AdminSelect>
+                </label>
+                <label className="adminAccessModeRow">
+                  <span><Megaphone size={16} aria-hidden="true" /><strong>公告</strong></span>
+                  <AdminSelect
+                    name="announcementCardAccessMode"
+                    defaultValue={settings.homePortalAccessModes.announcement}
+                  >
+                    <option value="public">公开可用</option>
+                    <option value="browse">公开展示</option>
+                    <option value="member">登录可用</option>
+                    <option value="off">关闭</option>
+                  </AdminSelect>
+                </label>
+                <label className="adminAccessModeRow">
+                  <span><ChevronRight size={16} aria-hidden="true" /><strong>公告跳转</strong></span>
+                  <AdminSelect name="announcementCardTarget" defaultValue={settings.announcementCardTarget}>
+                    <option value="list">公告列表</option>
+                    <option value="latest">最新公告</option>
+                  </AdminSelect>
+                </label>
+                <label className="adminAccessModeRow">
+                  <span><ListFilter size={16} aria-hidden="true" /><strong>高级搜索</strong></span>
+                  <AdminSelect name="advancedTagAccessMode" defaultValue={mediaAccessMode(settings.advancedTagSearchEnabled, settings.guestAdvancedTagSearchEnabled)}>
+                    <option value="off">关闭</option>
+                    <option value="public">公开访问</option>
+                    <option value="user">登录可用</option>
+                  </AdminSelect>
+                </label>
+                <label className="adminAccessModeRow">
+                  <span><Search size={16} aria-hidden="true" /><strong>文末热词</strong></span>
+                  <AdminSelect name="hotwordAccessMode" defaultValue={mediaAccessMode(settings.hotwordLinksEnabled, settings.guestHotwordLinksEnabled)}>
+                    <option value="off">关闭</option>
+                    <option value="public">公开访问</option>
+                    <option value="user">登录可用</option>
+                  </AdminSelect>
+                </label>
+              </div>
+              <p className="adminFieldHint">公开展示允许访客浏览列表、标题、封面和基础信息，播放、阅读、预览或下载时提示登录；公开可用允许访客直接使用内容。</p>
+              <HomeCardOrderField initialOrder={settings.homePortalOrder} />
+            </div>
+            <div className="adminSettingsGroup">
+              <h4>访问统计</h4>
+              <AdminSwitchRow name="analyticsEnabled" title="启用站内统计" description="记录内容访问、来源和客户端。" defaultChecked={settings.analyticsEnabled} />
+              <label className="adminCompactField isNarrow">
+                <span>实时访问保留 / 条</span>
+                <input name="analyticsRealtimeLimit" type="number" min="30" max="100000" defaultValue={analyticsRealtimeLimit} />
+              </label>
+            </div>
+          </details>
+
+          <details className="adminSettingsSection adminSettingsDisclosure">
+            <summary>索引策略</summary>
+            <AdminSwitchRow name="showProgressBars" title="显示索引进度条" description="仅控制后台索引构建的详细进度；前台搜索固定使用轻量状态提示。" defaultChecked={settings.showProgressBars} />
+            <div className="adminFieldGrid">
+              <label>
+                <span>前台全文最多显示 / 条</span>
+                <input name="globalSearchMaxResults" type="number" min="1" max="10000" defaultValue={globalSearchMaxResults} />
+              </label>
+              <label>
+                <span>全文搜索并发上限 / 个</span>
+                <input name="frontendSearchConcurrencyLimit" type="number" min="1" max="100" defaultValue={frontendSearchConcurrencyLimit} />
+              </label>
+            </div>
+            <p className="adminFieldHint">前台检索使用 PostgreSQL 语句超时与并发配额自动保护；索引构建和取消统一在“搜索索引”页面管理。</p>
+          </details>
+
+          <div className="adminSettingsSaveBar">
+            <button className="adminSettingsSaveButton" type="submit">
+              保存设置
+            </button>
+          </div>
+        </form>
+
+        <div className="adminPaths">
+          <p>
+            <strong>正文存储</strong>
+            <span>PostgreSQL 已发布内容块</span>
+          </p>
+          <p>
+            <strong>数据库</strong>
+            <span>PostgreSQL 18</span>
+          </p>
+          <p>
+            <strong>后台设置</strong>
+            <span>PostgreSQL site_settings</span>
+          </p>
+        </div>
+      </article>
+    </AdminFrame>
+  );
+}

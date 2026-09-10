@@ -7,7 +7,7 @@ import {
   deleteMarketProductAction,
   setMarketProductStatusAction,
 } from "@/app/admin/market/actions";
-import type { MarketProduct } from "@/lib/market";
+import type { MarketProduct } from "@/domains/market/postgres-market";
 import { InlineMutationNotice, useInlineMutation } from "./useInlineMutation";
 
 type ProductFilter = "all" | "published" | "offline";

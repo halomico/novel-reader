@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import {
   getColorPalette,
+  getColorPaletteTextTokens,
   isColorPalette,
   PALETTE_STORAGE_KEY,
   resolveDefaultPalette,
@@ -11,12 +12,15 @@ import {
 
 function applyPalette(value: ColorPalette) {
   const palette = getColorPalette(value);
+  const textTokens = getColorPaletteTextTokens(palette);
   const root = document.documentElement;
   root.dataset.palette = value;
   root.style.setProperty("--palette-light-accent", palette.lightAccent);
   root.style.setProperty("--palette-light-strong", palette.lightStrong);
   root.style.setProperty("--palette-dark-accent", palette.darkAccent);
   root.style.setProperty("--palette-dark-strong", palette.darkStrong);
+  root.style.setProperty("--palette-light-text", textTokens.lightText);
+  root.style.setProperty("--palette-dark-text", textTokens.darkText);
 }
 
 export function DefaultPaletteRotation({

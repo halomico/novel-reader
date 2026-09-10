@@ -62,6 +62,7 @@ function safeHref(href: string | undefined): string | null {
 /** Shared safe Markdown renderer for user-authored articles and replies. */
 export function OriginalMarkdown({ children }: { children: string }) {
   let headingIndex = 0;
+  let imageIndex = 0;
   const source = preserveOriginalMarkdownSpacing(children);
   const sourceLines = source.split("\n");
   const paragraphGap = (line: number | undefined) => {
@@ -71,8 +72,10 @@ export function OriginalMarkdown({ children }: { children: string }) {
   };
   const renderHeading = (Tag: "h1" | "h2" | "h3" | "h4" | "h5" | "h6") => ({
     children: headingChildren,
+    node,
     ...props
-  }: React.HTMLAttributes<HTMLHeadingElement> & { children?: React.ReactNode }) => {
+  }: React.HTMLAttributes<HTMLHeadingElement> & { children?: React.ReactNode; node?: unknown }) => {
+    void node;
     const id = originalHeadingId(headingIndex);
     headingIndex += 1;
     return <Tag {...props} id={id}>{headingChildren}</Tag>;
@@ -87,9 +90,15 @@ export function OriginalMarkdown({ children }: { children: string }) {
           const target = safeHref(href);
           return target ? <a href={target} rel="noreferrer noopener">{linkChildren}</a> : <span>{linkChildren}</span>;
         },
-        // Original is intentionally text-only: preserve an author's alt text
-        // without fetching remote images during list/detail rendering.
-        img: ({ alt }) => alt ? <span>{alt}</span> : null,
+        img: ({ alt, src, title, node }) => {
+          // Uploaded assets retain the existing endpoint's access checks.
+          if (typeof src !== "string" || !/^\/original\/assets\/[1-9]\d*$/.test(src)) return alt ? <span>{alt}</span> : null;
+          const size = /^<!-- original-image-size:(\d+)x(\d+) -->$/.exec(sourceLines[node?.position?.end.line || 0]?.trim() || "");
+          return <span className="originalInlineImage">
+            <img src={src} alt={alt || ""} width={size ? Number(size[1]) : undefined} height={size ? Number(size[2]) : undefined} loading={imageIndex++ === 0 ? "eager" : "lazy"} decoding="async" />
+            {title ? <span className="originalImageCaption">{title}</span> : null}
+          </span>;
+        },
         p: ({ children: paragraphChildren, node }) => {
           const gap = paragraphGap(node?.position?.start.line);
           const style = gap
@@ -97,6 +106,8 @@ export function OriginalMarkdown({ children }: { children: string }) {
             : undefined;
           return <p className="originalMarkdownParagraph" style={style}>{paragraphChildren}</p>;
         },
+        pre: ({ children: codeChildren }) => <pre className="originalMarkdownCodeBlock">{codeChildren}</pre>,
+        table: ({ children: tableChildren }) => <div className="originalMarkdownTable"><table>{tableChildren}</table></div>,
         h1: renderHeading("h1"),
         h2: renderHeading("h2"),
         h3: renderHeading("h3"),

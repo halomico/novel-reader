@@ -1,24 +1,33 @@
 import { NextRequest } from "next/server";
+import { database } from "@/core/db/postgres";
+import { checkPostgresContentAccess } from "@/domains/access/postgres-content-access";
+import { hasValidPostgresVideoDownloadSession } from "@/domains/media/postgres-media-access";
+import { getPostgresMediaAsset } from "@/domains/media/postgres-media-catalog";
 import { authorizeMediaDelivery, mediaDeliveryHeaders, resolveMediaDeliveryUri } from "@/lib/media-delivery";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
-import { checkContentAccess } from "@/lib/content-access";
-import { hasValidVideoDownloadSession } from "@/lib/media-access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export function GET(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const originalMethod = request.headers.get("x-forwarded-method") || "GET";
   const originalUri = request.headers.get("x-forwarded-uri") || "";
   if (originalMethod !== "GET" && originalMethod !== "HEAD") {
     return new Response(null, { status: 404 });
   }
-  const delivery = resolveMediaDeliveryUri(originalUri);
+  const delivery = await resolveMediaDeliveryUri(originalUri, (id) => getPostgresMediaAsset(database("web"), id));
   if (!delivery) {
     return new Response(null, { status: 404 });
   }
-  const user = getCurrentUserFromRequest(request);
-  const access = checkContentAccess(request.headers, {
+  const user = await getCurrentUserFromRequest(request);
+  const downloadSessionValid = delivery.download && delivery.asset.kind === "video" && user?.role !== "admin"
+    ? await hasValidPostgresVideoDownloadSession(database("web"), {
+        userId: user?.id ?? 0,
+        mediaId: delivery.asset.id,
+        token: delivery.downloadToken,
+      }).catch(() => false)
+    : true;
+  const access = await checkPostgresContentAccess(database("web"), request.headers, {
     scope: delivery.asset.kind,
     authenticated: Boolean(user),
     admin: user?.role === "admin",
@@ -28,11 +37,7 @@ export function GET(request: NextRequest) {
     !access.allowed ||
     !authorizeMediaDelivery(delivery, Boolean(user)) ||
     (delivery.download && delivery.asset.kind === "video" && (
-      !user || (user.role !== "admin" && !hasValidVideoDownloadSession({
-        userId: user.id,
-        mediaId: delivery.asset.id,
-        token: delivery.downloadToken,
-      }))
+      !user || !downloadSessionValid
     ))
   ) {
     return new Response(null, { status: 404 });

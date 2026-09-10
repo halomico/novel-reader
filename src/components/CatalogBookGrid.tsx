@@ -1,9 +1,20 @@
-import type { Novel } from "@/lib/books";
-import type { Tag } from "@/lib/tags";
 import { CupSoda } from "lucide-react";
 import { formatCompactUpdateDate, parseAppDateTime } from "@/lib/date-time";
 import { SearchTrackedLink } from "@/components/SearchTrackedLink";
 import { DEFAULT_LOCALE, uiText, type AppLocale } from "@/lib/locale";
+
+export type CatalogBookSummary = {
+  id: number;
+  title: string;
+  storage_mode: "single" | "chapters";
+  chapter_count: number;
+  soda_price: number;
+  word_count: number;
+  mtime_ms: number;
+  updated_at: string;
+};
+
+export type CatalogTagSummary = { id: number; name: string; slug: string };
 
 export function formatNovelWordCount(wordCount: number, locale: AppLocale = DEFAULT_LOCALE): string {
   const value = Math.max(0, Math.floor(Number(wordCount) || 0));
@@ -15,7 +26,7 @@ export function formatNovelWordCount(wordCount: number, locale: AppLocale = DEFA
   return `${new Intl.NumberFormat(numberLocale, { maximumFractionDigits: 1 }).format(value / 100_000_000)}${uiText(locale, "亿字")}`;
 }
 
-export function formatNovelUpdateTime(book: Pick<Novel, "mtime_ms" | "updated_at">, now = Date.now()): string {
+export function formatNovelUpdateTime(book: Pick<CatalogBookSummary, "mtime_ms" | "updated_at">, now = Date.now()): string {
   const parsedUpdatedAt = parseAppDateTime(book.updated_at)?.getTime();
   const timestamp = Number.isFinite(book.mtime_ms) && book.mtime_ms > 0
     ? book.mtime_ms
@@ -30,18 +41,15 @@ export function CatalogBookCard({
   resume = false,
   locale = DEFAULT_LOCALE,
 }: {
-  book: Novel;
+  book: CatalogBookSummary;
   returnHref: string;
-  tags?: Tag[];
   searchEventKey?: string | null;
   resume?: boolean;
   locale?: AppLocale;
 }) {
   const showSodaPrice = book.soda_price > 0;
   const showMetadata = book.storage_mode === "chapters" || showSodaPrice;
-  const bookPath = book.storage_mode === "chapters"
-    ? `/books/${book.id}/chapters`
-    : `/books/${book.id}`;
+  const bookPath = `/books/${book.id}`;
   const query = new URLSearchParams({ from: returnHref });
   if (resume) query.set("resume", "1");
   return (
@@ -86,10 +94,10 @@ export function CatalogBookGrid({
   resume = false,
   locale = DEFAULT_LOCALE,
 }: {
-  books: Novel[];
+  books: CatalogBookSummary[];
   returnHref: string;
   ariaLabel: string;
-  tagsByNovel?: ReadonlyMap<number, Tag[]>;
+  tagsByNovel?: ReadonlyMap<number, readonly CatalogTagSummary[]>;
   searchEventKey?: string | null;
   resume?: boolean;
   locale?: AppLocale;
@@ -97,12 +105,11 @@ export function CatalogBookGrid({
   return (
     <section className="bookGrid" aria-label={ariaLabel}>
       {books.map((book) => {
-        const tags = tagsByNovel.get(book.id) || [];
+        void tagsByNovel;
         return (
           <CatalogBookCard
             book={book}
             returnHref={returnHref}
-            tags={tags}
             searchEventKey={searchEventKey}
             resume={resume}
             locale={locale}

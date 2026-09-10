@@ -1,0 +1,878 @@
+/* Styles owned by the market route family.
+ * Migrated from the former global cascade on 2026-09-04. Keep route-only rules in this file.
+ */
+.marketProductPage,
+.marketOrderPage {
+  display: grid;
+  gap: 24px;
+}
+
+.marketProductPage > header,
+.marketOrderPage > header {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.marketProductPage h1,
+.marketOrderPage h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: 25px;
+  font-weight: 720;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.marketProductPage > header p,
+.marketOrderPage > header p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.marketProductPrice span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.marketProductPrice svg,
+.marketProductMeta svg {
+  color: var(--accent-text, var(--accent));
+}
+
+.marketWalletTools {
+  display: grid;
+  grid-template-columns: minmax(360px, 1.2fr) minmax(260px, 0.8fr);
+  column-gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.marketExchangeLine {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 12px;
+  padding: 14px 24px 16px 2px;
+}
+
+.marketExchangeName {
+  min-width: 0;
+}
+
+.marketExchangeName strong,
+.marketCodeLine > strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 680;
+}
+
+.marketExchangeStack {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.marketExchangePanel {
+  display: grid;
+  min-width: 0;
+  min-height: 78px;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 14px 12px;
+  background: color-mix(in srgb, var(--surface-strong) 55%, var(--surface));
+}
+
+.marketExchangeSide {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.marketExchangeRow {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.marketExchangeRow input,
+.marketExchangeRow output {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 26px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.marketExchangeRow input[type="number"] {
+  appearance: textfield;
+}
+
+.marketExchangeRow input::-webkit-outer-spin-button,
+.marketExchangeRow input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.marketExchangeAsset {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  color: var(--text);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.marketExchangeAsset strong {
+  font-size: 14px;
+  font-weight: 680;
+}
+
+.marketExchangeAsset svg {
+  flex: 0 0 auto;
+  color: var(--accent-text, var(--accent));
+}
+
+.marketExchangeSwap {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  justify-self: center;
+  place-items: center;
+  margin-block: -18px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.marketExchangeSwap svg {
+  display: block;
+  transition: transform 180ms ease;
+}
+
+.marketExchangeSwap.isReversed svg {
+  transform: rotate(180deg);
+}
+
+.marketExchangeSwap:hover,
+.marketExchangeSwap:focus-visible {
+  color: var(--accent-text, var(--accent));
+}
+
+.marketExchangeSwap.isStatic {
+  cursor: default;
+}
+
+.marketExchangeSwap.isStatic:hover,
+.marketExchangeSwap.isStatic:focus-visible {
+  color: var(--muted);
+}
+
+.marketExchangeHint {
+  margin: -2px 2px 0;
+  color: var(--accent-text, var(--accent));
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+
+.marketExchangeLine > button,
+.marketExchangeSubmit {
+  width: 100%;
+  min-height: 42px;
+}
+
+.marketCodeLine {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 10px;
+  border-left: 1px solid var(--border);
+  padding: 14px 2px 16px 24px;
+}
+
+.marketCodeInputRow {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.marketCodeInputRow label {
+  display: grid;
+  min-width: 0;
+  min-height: 40px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: var(--accent-text, var(--accent));
+  background: color-mix(in srgb, var(--surface-strong) 26%, transparent);
+}
+
+.marketCodeLine input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+@media (max-width: 900px) {
+  .marketWalletTools {
+    grid-template-columns: minmax(0, 1fr);
+    column-gap: 0;
+  }
+
+  .marketExchangeLine {
+    padding: 14px 2px 16px;
+  }
+
+  .marketCodeLine {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+    padding: 14px 2px 16px;
+  }
+}
+
+.marketExchangeLine > button,
+.marketCodeLine button,
+.marketPurchaseActions button,
+.marketOrderFile a,
+.marketOrderSecret button {
+  display: inline-flex;
+  min-height: var(--action-height);
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 74%, var(--border));
+  border-radius: var(--action-radius);
+  padding: 0 var(--action-inline-padding);
+  background: var(--accent);
+  color: #fffaf2;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+  font-size: var(--action-font-size);
+  font-weight: var(--action-font-weight);
+}
+
+.marketExchangeLine > button,
+.marketExchangeSubmit {
+  min-height: var(--action-height);
+  border-radius: var(--action-radius);
+  font-size: var(--action-font-size);
+}
+
+.marketExchangeLine > button:disabled,
+.marketExchangeSubmit:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.marketProductGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 16px;
+}
+
+.marketProductCard {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: 0 3px 14px color-mix(in srgb, #000 5%, transparent);
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.marketProductCard:hover,
+.marketProductCard:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  box-shadow: 0 8px 22px color-mix(in srgb, #000 9%, transparent);
+  transform: translateY(-1px);
+}
+
+.marketProductVisual {
+  display: grid;
+  width: 100%;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  place-items: center;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 11%, var(--surface)), var(--surface-strong));
+  color: color-mix(in srgb, var(--accent) 78%, var(--muted));
+}
+
+.marketProductVisual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.marketProductCopy {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  padding: 11px 12px 4px;
+  text-align: left;
+}
+
+.marketExchangeLine > button:hover,
+.marketExchangeLine > button:focus-visible,
+.marketCodeLine button:hover,
+.marketCodeLine button:focus-visible,
+.marketPurchaseActions button:hover,
+.marketPurchaseActions button:focus-visible,
+.marketOrderFile a:hover,
+.marketOrderFile a:focus-visible {
+  border-color: var(--accent-strong, var(--accent));
+  background: var(--accent-strong, var(--accent));
+  color: #fffaf2;
+  outline: 0;
+}
+
+.marketProductCopy strong {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--action-font-size);
+  font-weight: var(--action-font-weight);
+  line-height: 1.42;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.marketProductMeta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 12px 12px;
+  color: var(--muted);
+}
+
+.marketProductPrices,
+.marketProductAvailability {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.marketProductMeta b {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--accent-text, var(--accent));
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.marketProductAvailability {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.marketProductStock,
+.marketProductLevel {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: color-mix(in srgb, #2e7d52 9%, var(--surface));
+  color: color-mix(in srgb, #2e7d52 78%, var(--text));
+  font-size: 10px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.marketProductStock.isEmpty {
+  background: color-mix(in srgb, #b33c32 9%, var(--surface));
+  color: #b33c32;
+}
+
+.marketProductLevel {
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  color: var(--accent-text, var(--accent));
+}
+
+.marketStockLine.isEmpty {
+  color: #b33c32;
+}
+
+.marketEmpty,
+.marketStatusText {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.marketRecentOrders {
+  display: grid;
+  gap: 8px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border);
+}
+
+.marketRecentOrders > header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+}
+
+.marketRecentOrders h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.marketRecentOrders > div,
+.marketOrderDeliveries {
+  display: grid;
+}
+
+.marketRecentOrders a,
+.marketOrderFile,
+.marketOrderEntitlement {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  padding: 10px 1px;
+}
+
+.marketRecentOrders a > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.marketRecentOrders strong,
+.marketOrderFile strong,
+.marketOrderEntitlement strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.marketRecentOrders small,
+.marketRecentOrders time,
+.marketOrderPage time {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.marketProductPage,
+.marketOrderPage {
+  width: min(860px, 100%);
+  margin: 8px auto 48px;
+}
+
+.marketProductPage > header.hasCover {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.marketProductHeroCover {
+  width: 200px;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+.marketProductPrice {
+  display: grid;
+  flex: 0 0 auto;
+  justify-items: end;
+  gap: 5px;
+}
+
+.marketProductPrice span {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.marketStockLine {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  margin: -10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.marketStockLine svg {
+  color: var(--accent-text, var(--accent));
+}
+
+.marketMarkdown {
+  color: color-mix(in srgb, var(--text) 88%, var(--muted));
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.marketMarkdown > :first-child {
+  margin-top: 0;
+}
+
+.marketMarkdown > :last-child {
+  margin-bottom: 0;
+}
+
+.marketMarkdown a {
+  color: var(--accent-text, var(--accent));
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.marketMarkdown pre,
+.marketMarkdown code {
+  overflow-wrap: anywhere;
+  border-radius: 5px;
+  background: var(--surface-strong);
+}
+
+.marketMarkdown pre {
+  overflow-x: auto;
+  padding: 12px;
+}
+
+.marketDeliveryPreview,
+.marketPurchaseActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.marketDeliveryPreview span {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 9px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.marketDeliveryPreview svg {
+  color: var(--accent-text, var(--accent));
+}
+
+.marketPurchaseActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.marketOrderDeliveries {
+  gap: 14px;
+}
+
+.marketOrderSecret,
+.marketOrderDeliveries > .marketMarkdown {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 14px;
+  background: var(--surface);
+}
+
+.marketOrderSecret > header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.marketOrderSecret h2,
+.marketOrderDeliveries .marketMarkdown h2 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.marketOrderSecret code {
+  overflow-x: auto;
+  border-radius: 5px;
+  padding: 10px;
+  background: var(--surface-strong);
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.marketOrderSecret button {
+  width: fit-content;
+  background: var(--surface-strong);
+  color: var(--text);
+}
+
+.marketOrderFile > span,
+.marketOrderEntitlement {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.marketOrderFile svg,
+.marketOrderEntitlement svg {
+  color: var(--accent-text, var(--accent));
+}
+
+@media (max-width: 720px) {
+  .marketProductPage > header,
+.marketOrderPage > header {
+    display: grid;
+    gap: 12px;
+  }
+
+  .marketWalletTools {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .marketCodeLine {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .marketProductGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 10px;
+  }
+
+  .marketProductCopy {
+    padding: 9px 10px 3px;
+  }
+
+  .marketProductCopy strong {
+    font-size: 13px;
+  }
+
+  .marketProductMeta {
+    gap: 7px;
+    padding: 4px 10px 10px;
+  }
+
+  .marketProductPrice {
+    justify-items: start;
+  }
+
+  .marketProductPage > header.hasCover {
+    grid-template-columns: 150px minmax(0, 1fr);
+  }
+
+  .marketProductPage > header.hasCover .marketProductPrice {
+    grid-column: 2;
+  }
+
+  .marketProductHeroCover {
+    width: 150px;
+  }
+
+  .marketRecentOrders a,
+.marketOrderFile {
+    align-items: flex-start;
+  }
+
+  .marketRecentOrders time {
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 520px) {
+  .marketProductPage h1,
+.marketOrderPage h1 {
+    font-size: 21px;
+  }
+
+  .marketExchangeRow input,
+.marketExchangeRow output {
+    font-size: 22px;
+  }
+
+  .marketExchangePanel {
+    min-height: 72px;
+    padding: 9px 12px 11px;
+  }
+
+  .marketProductPage > header.hasCover {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .marketProductPage > header.hasCover .marketProductPrice {
+    grid-column: 1;
+  }
+
+  .marketProductHeroCover {
+    width: min(100%, 320px);
+  }
+
+  .marketRecentOrders a {
+    display: grid;
+  }
+
+  .marketRecentOrders time {
+    justify-self: start;
+  }
+}
+
+.marketWalletTools {
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.marketWalletTools {
+  border-width: 0 0 1px;
+}
+.marketWalletTools {
+  display: grid;
+  width: min(100%, 430px);
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+  background: transparent;
+}
+
+.marketExchangeLine {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 8px;
+  padding: 12px 0 14px;
+}
+
+.marketExchangeName strong,
+.marketCodeLine > strong {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.marketExchangeStack {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.marketExchangePanel {
+  min-height: 56px;
+  border-radius: 6px;
+  padding: 7px 10px 8px;
+}
+
+.marketExchangeRow input,
+.marketExchangeRow output {
+  font-size: 19px;
+}
+
+.marketExchangeSwap {
+  margin: -12px auto -12px;
+}
+
+.marketExchangeLine > .marketExchangeSubmit {
+  width: 100%;
+  min-width: 0;
+  justify-self: stretch;
+}
+
+.marketCodeLine {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  border-left: 0;
+  padding: 14px 0 0;
+}
+
+.marketCodeInputRow {
+  grid-template-columns: minmax(0, 1fr) 76px;
+}
+
+.marketCodeInputRow label {
+  min-height: var(--action-height);
+  border-radius: var(--action-radius);
+  padding: 5px 9px;
+}
+
+.marketExchangeLine > .marketExchangeSubmit,
+.marketCodeLine button {
+  min-height: var(--action-height);
+  border: 1px solid color-mix(in srgb, var(--accent) 74%, var(--border));
+  border-radius: var(--action-radius);
+  padding: 0 var(--action-inline-padding);
+  background: var(--accent);
+  color: #fffaf2;
+  font-size: var(--action-font-size);
+  font-weight: var(--action-font-weight);
+}
+
+.marketOrdersSection {
+  gap: 0;
+  border-top: 0;
+  padding-top: 0;
+}
+
+.marketOrdersSection > header {
+  min-height: 38px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 0 8px;
+}
+
+.marketOrdersSection > div {
+  border-top: 0;
+}
+
+@media (max-width: 420px) {
+  .marketWalletTools {
+    width: 100%;
+  }
+}

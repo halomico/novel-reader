@@ -2,24 +2,22 @@
 
 import {
   ArrowUp,
+  Bookmark,
   ChevronLeft,
   ChevronRight,
+  Flag,
   Info,
   List,
   Moon,
   Settings2,
   Sun,
+  Trees,
 } from "lucide-react";
 import Link from "@/components/LocalizedLink";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { localeFromPathname } from "@/lib/locale";
-import {
-  READER_PAGE_REQUEST_EVENT,
-  READER_PAGE_STATE_EVENT,
-  READER_PAGE_STATE_REQUEST_EVENT,
-  type ReaderPageState,
-} from "@/lib/reader-layout";
+import { READER_PAGE_REQUEST_EVENT } from "@/lib/reader-layout";
 import { normalizeReaderPageTurn } from "@/lib/ui-preferences";
 import { formatNovelWordCount } from "./CatalogBookGrid";
 import { GroveButton } from "./GroveButton";
@@ -36,6 +34,10 @@ const MOBILE_READER_QUERY = "(max-width: 820px)";
 
 function chapterHref(bookId: number, chapterId: number, from?: string) {
   return `/books/${bookId}/chapters/${chapterId}${from ? `?from=${encodeURIComponent(from)}` : ""}`;
+}
+
+function scrollReaderToTop() {
+  window.scrollTo({ top: 0, behavior: "auto" });
 }
 
 export function ReaderExperienceControls({
@@ -75,26 +77,25 @@ export function ReaderExperienceControls({
   initialFavorite: boolean;
   canReport: boolean;
 }) {
+  const pathname = usePathname();
+  const locale = localeFromPathname(pathname);
   const [panel, setPanel] = useState<ReaderPanel>(null);
   const preferences = useReaderDisplayPreferences({ pageTurnEnabled: true });
-  const [pageState, setPageState] = useState<ReaderPageState>({
-    paged: false,
-    index: 0,
-    count: 1,
-    canPrevious: Boolean(previous),
-    canNext: Boolean(next),
-  });
-  const locale = localeFromPathname(usePathname());
-
   function keepReaderChrome() {
     keepReaderChromeVisible();
   }
 
-  function requestPage(direction: -1 | 1) {
+  function preparePagedNavigation(event: React.MouseEvent<HTMLAnchorElement>, direction: -1 | 1) {
     keepReaderChrome();
-    window.dispatchEvent(new CustomEvent(READER_PAGE_REQUEST_EVENT, {
-      detail: { direction, keepChrome: true },
-    }));
+    if (
+      window.matchMedia(MOBILE_READER_QUERY).matches &&
+      normalizeReaderPageTurn(document.documentElement.dataset.readerPageTurn) !== "scroll"
+    ) {
+      event.preventDefault();
+      window.dispatchEvent(new CustomEvent(READER_PAGE_REQUEST_EVENT, { detail: { direction, keepChrome: true } }));
+      return;
+    }
+    scrollReaderToTop();
   }
 
   function closeReaderPanel() {
@@ -107,45 +108,38 @@ export function ReaderExperienceControls({
     }
   }
 
-  useEffect(() => {
-    function handlePageState(event: Event) {
-      setPageState((event as CustomEvent<ReaderPageState>).detail);
-    }
-    window.addEventListener(READER_PAGE_STATE_EVENT, handlePageState);
-    window.dispatchEvent(new Event(READER_PAGE_STATE_REQUEST_EVENT));
-    return () => window.removeEventListener(READER_PAGE_STATE_EVENT, handlePageState);
-  }, []);
-
   const panelTitle = panel === "directory" ? "章节目录" : panel === "info" ? "详情" : "设置";
-  const previousLabel = navigationKind === "chapter" ? "上一章" : "上一篇";
-  const nextLabel = navigationKind === "chapter" ? "下一章" : "下一篇";
+  // The reader rail is a document-level navigator. Keep its wording stable
+  // across chapter and single-file novels; horizontal page turns stay a
+  // gesture/edge interaction rather than a second set of page buttons.
+  const previousLabel = "上一篇";
+  const nextLabel = "下一篇";
   const navigationHref = (item: NavigationItem) => navigationKind === "chapter"
     ? chapterHref(bookId, item.id, from)
     : `/books/${item.id}?from=${encodeURIComponent(returnHref || "/novels")}`;
-
   return (
     <>
       <ReaderToolRail>
         <button className="readerToolItem isDirectory" type="button" onClick={() => setPanel("directory")}>
           <List size={20} aria-hidden="true" /><span>目录</span>
         </button>
-        {pageState.paged ? (
-          <button className="readerToolItem isMobileChapter isPrevious" type="button" disabled={!pageState.canPrevious} onClick={() => requestPage(-1)}>
-            <ChevronLeft size={20} aria-hidden="true" /><span>上一页</span>
-          </button>
-        ) : (
-          <Link className="readerToolItem isMobileChapter isPrevious" href={previous ? navigationHref(previous) : "#"} aria-disabled={!previous} onClick={previous ? keepReaderChrome : undefined}>
+        {previous ? (
+          <Link className="readerToolItem isMobileChapter isPrevious" href={navigationHref(previous)} prefetch={false} onClick={(event) => preparePagedNavigation(event, -1)} title={`${previousLabel}：${previous.title}`}>
             <ChevronLeft size={20} aria-hidden="true" /><span>{previousLabel}</span>
           </Link>
-        )}
-        {pageState.paged ? (
-          <button className="readerToolItem isMobileChapter isNext" type="button" disabled={!pageState.canNext} onClick={() => requestPage(1)}>
-            <ChevronRight size={20} aria-hidden="true" /><span>下一页</span>
-          </button>
         ) : (
-          <Link className="readerToolItem isMobileChapter isNext" href={next ? navigationHref(next) : "#"} aria-disabled={!next} onClick={next ? keepReaderChrome : undefined}>
+          <span className="readerToolItem isMobileChapter isPrevious isDisabled" aria-disabled="true" title={`没有${previousLabel}`}>
+            <ChevronLeft size={20} aria-hidden="true" /><span>{previousLabel}</span>
+          </span>
+        )}
+        {next ? (
+          <Link className="readerToolItem isMobileChapter isNext" href={navigationHref(next)} prefetch={false} onClick={(event) => preparePagedNavigation(event, 1)} title={`${nextLabel}：${next.title}`}>
             <ChevronRight size={20} aria-hidden="true" /><span>{nextLabel}</span>
           </Link>
+        ) : (
+          <span className="readerToolItem isMobileChapter isNext isDisabled" aria-disabled="true" title={`没有${nextLabel}`}>
+            <ChevronRight size={20} aria-hidden="true" /><span>{nextLabel}</span>
+          </span>
         )}
         <button className="readerToolItem isInfo" type="button" onClick={() => setPanel("info")}>
           <Info size={20} aria-hidden="true" /><span>详情</span>
@@ -156,11 +150,25 @@ export function ReaderExperienceControls({
         </button>
         {authenticated ? (
           <span className="readerToolItem readerToolAction isGrove"><GroveButton contentType="novel" contentId={bookId} initialPlanted={initialInGrove} showLabel /></span>
-        ) : null}
+        ) : (
+          <Link className="readerToolItem readerToolAction isGrove" href={`/login?returnTo=${encodeURIComponent(returnHref || pathname)}`} title="登录后加入回响林">
+            <Trees size={20} aria-hidden="true" /><span>回响林</span>
+          </Link>
+        )}
         {authenticated ? (
           <span className="readerToolItem readerToolAction isFavorite"><NovelFavoriteButton novelId={bookId} initialFavorite={initialFavorite} showLabel /></span>
-        ) : null}
-        {canReport ? <span className="readerToolItem readerToolAction isReport"><ReportNovelButton novelId={bookId} title={title} variant="responsive" /></span> : null}
+        ) : (
+          <Link className="readerToolItem readerToolAction isFavorite" href={`/login?returnTo=${encodeURIComponent(returnHref || pathname)}`} title="登录后收藏">
+            <Bookmark size={20} aria-hidden="true" /><span>收藏</span>
+          </Link>
+        )}
+        {canReport ? (
+          <span className="readerToolItem readerToolAction isReport"><ReportNovelButton novelId={bookId} title={title} variant="responsive" /></span>
+        ) : (
+          <Link className="readerToolItem readerToolAction isReport" href={`/login?returnTo=${encodeURIComponent(returnHref || pathname)}`} title="登录后反馈问题">
+            <Flag size={20} aria-hidden="true" /><span>反馈</span>
+          </Link>
+        )}
         <button className="readerToolItem isSettings" type="button" onClick={() => setPanel("settings")}>
           <Settings2 size={20} aria-hidden="true" /><span>设置</span>
         </button>
@@ -172,9 +180,9 @@ export function ReaderExperienceControls({
         <ReaderSidePanel kind={panel} title={panelTitle} meta={panel === "directory" ? <small>{chapterCount} 章</small> : null} onClose={closeReaderPanel}>
             {panel === "directory" ? (
               chapters.length ? <nav className="readerDirectoryList">
-                {chapters.map((chapter, index) => (
-                  <Link className={chapter.id === currentChapterId ? "isActive" : ""} href={chapterHref(bookId, chapter.id, from)} key={chapter.id} onClick={() => { keepReaderChrome(); setPanel(null); }}>
-                    <span><i>{index + 1}</i>{chapter.title}</span><small>{formatNovelWordCount(chapter.wordCount, locale)}</small>
+                {chapters.map((chapter) => (
+                  <Link className={chapter.id === currentChapterId ? "isActive" : ""} href={chapterHref(bookId, chapter.id, from)} key={chapter.id} prefetch={false} onClick={() => { keepReaderChrome(); setPanel(null); }}>
+                    <span>{chapter.title}</span><small>{formatNovelWordCount(chapter.wordCount, locale)}</small>
                   </Link>
                 ))}
               </nav> : <p className="readerPanelEmpty">当前为单文件小说，无章节目录。</p>
@@ -185,7 +193,7 @@ export function ReaderExperienceControls({
                 {chapterTitle ? <p className="readerBookChapterTitle">{chapterTitle}</p> : null}
                 {description ? <p className="readerBookDescription">{description}</p> : null}
                 <dl><div><dt>字数</dt><dd>{formatNovelWordCount(wordCount, locale)}</dd></div><div><dt>章节</dt><dd>{chapterCount ? `${chapterCount}章` : "单篇"}</dd></div></dl>
-                {chapterCount ? <Link href={`/books/${bookId}/chapters`} onClick={closeReaderPanel}>查看完整目录</Link> : null}
+                {chapterCount ? <button type="button" onClick={() => setPanel("directory")}>查看完整目录</button> : null}
               </div>
             ) : null}
             {panel === "settings" ? (

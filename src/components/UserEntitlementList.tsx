@@ -1,6 +1,7 @@
 import { Clock3 } from "lucide-react";
+import type { PostgresUserEntitlementPage } from "@/domains/access/postgres-entitlements";
+import type { EntitlementRight, EntitlementTargetType } from "@/lib/entitlement-protocol";
 import type { AppLocale } from "@/lib/locale";
-import type { EntitlementRight, EntitlementTargetType, UserEntitlementPage } from "@/lib/entitlements";
 import { Pagination } from "./Pagination";
 
 const TYPE_LABELS: Record<EntitlementTargetType, string> = {
@@ -22,7 +23,7 @@ const RIGHT_LABELS: Record<EntitlementRight, string> = {
   download: "下载",
 };
 
-export function UserEntitlementList({ data, locale }: { data: UserEntitlementPage; locale: AppLocale }) {
+export function UserEntitlementList({ data, locale }: { data: PostgresUserEntitlementPage; locale: AppLocale }) {
   const dateLocale = locale === "zh-Hant" ? "zh-TW" : "zh-CN";
   return (
     <section className="accountEntitlements">

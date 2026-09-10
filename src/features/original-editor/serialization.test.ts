@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { serializeOriginalEditorState } from "./serialization";
+import { countOriginalMarkdownCharacters, serializeOriginalEditorState } from "./serialization";
 
 function state(children: unknown[]): string {
   return JSON.stringify({ root: { type: "root", version: 1, children } });
@@ -11,11 +11,11 @@ const paragraph = (value: string) => ({ type: "paragraph", version: 1, children:
 
 test("serializes one paid gate into isolated public and paid snapshots", () => {
   const result = serializeOriginalEditorState(state([
-    { type: "original-heading", tag: "h2", anchorId: "heading_abcdefgh1234", children: [text("公开标题")] },
+    { type: "original-heading", tag: "h1", anchorId: "heading_abcdefgh1234", children: [text("公开标题")] },
     paragraph("公开正文"),
     { type: "original-image", assetId: 7, altText: "公开图", caption: "说明", width: 800, height: 600 },
     { type: "paid-gate", version: 1 },
-    { type: "original-heading", tag: "h3", anchorId: "heading_paid987654", children: [text("付费标题")] },
+    { type: "original-heading", tag: "h2", anchorId: "heading_paid987654", children: [text("付费标题")] },
     paragraph("付费正文"),
     { type: "original-image", assetId: 8, altText: "付费图", caption: "", width: 900, height: 500 },
   ]));
@@ -26,8 +26,8 @@ test("serializes one paid gate into isolated public and paid snapshots", () => {
   assert.deepEqual(result.publicAssetIds, [7]);
   assert.deepEqual(result.paidAssetIds, [8]);
   assert.deepEqual(result.outline, [
-    { id: "heading_abcdefgh1234", level: 2, text: "公开标题", paid: false },
-    { id: "heading_paid987654", level: 3, text: "付费标题", paid: true },
+    { id: "heading_abcdefgh1234", level: 1, text: "公开标题", paid: false },
+    { id: "heading_paid987654", level: 2, text: "付费标题", paid: true },
   ]);
   assert.equal(result.paidGateCount, 1);
 });
@@ -40,4 +40,31 @@ test("preserves code and link text without whole-document normalization", () => 
   assert.match(result.publicMarkdown, /https:\/\/例子\.test\/Ａ/u);
   assert.match(result.publicMarkdown, /https:\/\/example\.com\/%EF%BC%A1/u);
   assert.match(result.publicMarkdown, /链接Ａ/u);
+});
+
+test("serializes full heading levels and GFM tables", () => {
+  const result = serializeOriginalEditorState(state([
+    { type: "original-heading", tag: "h3", anchorId: "heading_levelthree", children: [text("三级标题")] },
+    {
+      type: "table",
+      children: [
+        { type: "tablerow", children: [
+          { type: "tablecell", children: [paragraph("名称")] },
+          { type: "tablecell", children: [paragraph("数量")] },
+        ] },
+        { type: "tablerow", children: [
+          { type: "tablecell", children: [paragraph("苹果")] },
+          { type: "tablecell", children: [paragraph("3")] },
+        ] },
+      ],
+    },
+  ]));
+  assert.match(result.publicMarkdown, /^### 三级标题/mu);
+  assert.match(result.publicMarkdown, /^\| 名称 \| 数量 \|/mu);
+  assert.match(result.publicMarkdown, /^\| 苹果 \| 3 \|/mu);
+  assert.deepEqual(result.outline, [{ id: "heading_levelthree", level: 3, text: "三级标题", paid: false }]);
+});
+
+test("counts Markdown source text without syntax or task markers", () => {
+  assert.equal(countOriginalMarkdownCharacters("### 标题\n\n- [x] 完成\n- [ ] 待办\n\n**加粗**"), 8);
 });

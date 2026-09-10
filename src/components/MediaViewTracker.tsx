@@ -1,26 +1,24 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
 export function MediaViewTracker({ mediaId, targetId = "media-detail-primary" }: { mediaId: number; targetId?: string }) {
-  const sent = useRef(false);
   useEffect(() => {
+    let sent = false;
     const target = document.getElementById(targetId);
     if (!target) return;
-    const key = `novel-reader:media-view:${mediaId}`;
-    let id = "";
-    try {
-      id = sessionStorage.getItem(key) || `event_${crypto.randomUUID().replace(/-/g, "")}`;
-      sessionStorage.setItem(key, id);
-    } catch { id = `event_${Date.now()}_${Math.random().toString(36).slice(2)}`; }
+    const nonce = typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID().replace(/-/g, "")
+      : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const id = `event_media_${mediaId}_${nonce}`;
     let visible = false; let timer = 0;
     const cancel = () => { if (timer) clearTimeout(timer); timer = 0; };
     const schedule = () => {
       cancel();
-      if (!visible || sent.current || document.visibilityState !== "visible") return;
+      if (!visible || sent || document.visibilityState !== "visible") return;
       timer = window.setTimeout(() => {
-        if (!visible || sent.current || document.visibilityState !== "visible") return;
-        sent.current = true;
+        if (!visible || sent || document.visibilityState !== "visible") return;
+        sent = true;
         void fetch("/api/analytics/media-view", { method: "POST", headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" }, body: JSON.stringify({ mediaId, eventId: id }), keepalive: true, credentials: "same-origin" }).catch(() => undefined);
       }, 1_500);
     };

@@ -5,18 +5,31 @@ export type MutationGuardOptions = {
   requireMutationHeader?: boolean;
 };
 
+function isLoopbackHost(host: string): boolean {
+  return /^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(host);
+}
+
 function canonicalOrigin(request: Request): string | null {
+  const requestUrl = new URL(request.url);
+  const requestHost = request.headers.get("host")?.trim();
+  const host = requestHost || requestUrl.host;
+  const isLoopback = isLoopbackHost(host);
+
   const configured = String(process.env.SITE_URL || "").trim();
   if (configured) {
     try {
-      return new URL(configured).origin;
+      const configuredUrl = new URL(configured);
+      if (isLoopback && isLoopbackHost(configuredUrl.host)) {
+        return new URL(`${requestUrl.protocol}//${host}`).origin;
+      }
+      return configuredUrl.origin;
     } catch {
       return null;
     }
   }
-  if (process.env.NODE_ENV === "production") return null;
   try {
-    return new URL(request.url).origin;
+    if (process.env.NODE_ENV === "production" && !isLoopback) return null;
+    return new URL(`${requestUrl.protocol}//${host}`).origin;
   } catch {
     return null;
   }
@@ -26,30 +39,57 @@ function errorResponse(error: string, status = 403): Response {
   return Response.json({ ok: false, error }, { status, headers: NO_STORE_HEADERS });
 }
 
-/**
- * Fast browser mutation guard. It performs only header parsing and string
- * comparisons, before authentication or database access.
- */
+function effectivePort(url: URL): string {
+  if (url.port) return url.port;
+  return url.protocol === "https:" ? "443" : "80";
+}
+
+function isLoopbackEquivalent(a: URL, b: URL): boolean {
+  return (
+    isLoopbackHost(a.host) &&
+    isLoopbackHost(b.host) &&
+    effectivePort(a) === effectivePort(b)
+  );
+}
+
 export function validateSameOriginMutation(
   request: Request,
   options: MutationGuardOptions = {},
 ): Response | null {
   const requireJson = options.requireJson !== false;
   const requireMutationHeader = options.requireMutationHeader !== false;
-  const fetchSite = request.headers.get("sec-fetch-site");
-  if (fetchSite && fetchSite !== "same-origin") return errorResponse("invalid_request_origin");
 
   const expectedOrigin = canonicalOrigin(request);
   if (!expectedOrigin) return errorResponse("site_origin_not_configured", 503);
+
+  const expectedUrl = new URL(expectedOrigin);
+  const fetchSite = request.headers.get("sec-fetch-site");
   const origin = request.headers.get("origin");
   if (origin) {
     try {
-      if (new URL(origin).origin !== expectedOrigin) return errorResponse("invalid_request_origin");
+      const originUrl = new URL(origin);
+      const isExactMatch = originUrl.origin === expectedOrigin;
+      const isLoopbackMatch = isLoopbackEquivalent(originUrl, expectedUrl);
+      if (!isExactMatch && !isLoopbackMatch) return errorResponse("invalid_request_origin");
     } catch {
       return errorResponse("invalid_request_origin");
     }
   } else if (!fetchSite) {
     return errorResponse("missing_request_origin");
+  }
+
+  if (fetchSite && fetchSite !== "same-origin") {
+    let isLoopbackAllowed = false;
+    if (origin) {
+      try {
+        isLoopbackAllowed = isLoopbackEquivalent(new URL(origin), expectedUrl);
+      } catch {
+        isLoopbackAllowed = false;
+      }
+    }
+    if (!isLoopbackAllowed) {
+      return errorResponse("invalid_request_origin");
+    }
   }
 
   if (requireMutationHeader && request.headers.get("x-novel-mutation") !== "1") {
@@ -62,10 +102,4 @@ export function validateSameOriginMutation(
     }
   }
   return null;
-}
-
-export function mutationHeaders(extra: HeadersInit = {}): Headers {
-  const headers = new Headers(extra);
-  headers.set("X-Novel-Mutation", "1");
-  return headers;
 }

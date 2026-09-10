@@ -39,8 +39,7 @@ export function SearchTrackedLink({
       contextReturnHref={returnHref}
       href={href}
       onClick={trackClick}
-      // Dense result grids only fetch after an explicit click.
-      prefetchPolicy="never"
+      prefetchPolicy="intent"
     >
       {children}
     </ContextNavigationLink>

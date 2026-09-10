@@ -1,34 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
+import { readPostgresSiteSettings } from "@/core/config/site-settings";
+import { database } from "@/core/db/postgres";
+import { hasPostgresUserPermission } from "@/domains/identity/postgres-permissions";
 import { validateSameOriginMutation } from "@/core/security/origin";
-import { getMediaAsset, isFeedbackMediaKind, isMediaKindConsumable } from "@/lib/media";
-import { recommendMediaWithSoda } from "@/lib/recommendations";
+import { getPostgresMediaSummary } from "@/domains/media/postgres-media-engagement";
+import { canConsumeHomePortal } from "@/lib/home-portal";
+import { recommendPostgresMediaWithSoda } from "@/domains/activity/postgres-recommendations";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
-import { hasUserPermission } from "@/lib/user-levels";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function POST(request: NextRequest, {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const guard = validateSameOriginMutation(request);
-  if (guard) return guard; params }: { params: Promise<{ id: string }> }) {
+  if (guard) return guard;
   const fetchSite = request.headers.get("sec-fetch-site");
   if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "same-site") {
     return NextResponse.json({ ok: false, message: "请求无效" }, { status: 403 });
   }
-  const user = getCurrentUserFromRequest(request);
+  const user = await getCurrentUserFromRequest(request);
   if (!user) {
     return NextResponse.json({ ok: false, message: "请先登录" }, { status: 401 });
   }
-  if (!hasUserPermission(user, "novel_feedback")) {
+  if (!await hasPostgresUserPermission(database("web"), user, "novel_feedback")) {
     return NextResponse.json({ ok: false, message: "当前等级暂时不能推荐" }, { status: 403 });
   }
 
   const mediaId = Number((await params).id);
-  const asset = getMediaAsset(mediaId);
-  if (!asset || !isFeedbackMediaKind(asset.kind) || !isMediaKindConsumable(asset.kind, true)) {
+  const [asset, settings] = await Promise.all([getPostgresMediaSummary(database("web"), mediaId), readPostgresSiteSettings()]);
+  if (!asset || asset.kind === "file" || !canConsumeHomePortal(settings.homePortalAccessModes[asset.kind], true)) {
     return NextResponse.json({ ok: false, message: "媒体不存在" }, { status: 404 });
   }
-  const result = recommendMediaWithSoda(user.id, mediaId);
+  const result = await recommendPostgresMediaWithSoda(user.id, mediaId);
   if (result.ok) {
     return NextResponse.json(result);
   }

@@ -1,6 +1,7 @@
 "use client";
 
 import type { JSX } from "react";
+import { LockKeyhole } from "lucide-react";
 import {
   $applyNodeReplacement,
   DecoratorNode,
@@ -56,7 +57,7 @@ export class PaidGateNode extends DecoratorNode<JSX.Element> {
   decorate(): JSX.Element {
     return (
       <div className={styles.paidGateCard} contentEditable={false}>
-        <span aria-hidden="true" />
+        <LockKeyhole size={16} aria-hidden="true" />
         <strong>公开内容到此结束</strong>
         <small>以下内容仅在读者解锁后显示</small>
       </div>

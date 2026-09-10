@@ -1,26 +1,32 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { getMediaDir } from "./config";
-import { MEDIA_UPLOAD_CHUNK_BYTES, MEDIA_UPLOAD_MAX_BYTES } from "./media-node-protocol";
+import { database } from "@/core/db/postgres";
 import {
-  availableMediaStoredName,
-  createMediaAsset,
-  deleteMediaAssets,
-  getMediaAsset,
   isMediaKind,
-  MediaCategoryError,
-  mediaFolderExists,
   mediaFolderFromStoredName,
-  mediaFilePath,
-  mediaStoredName,
-  normalizeMediaFolder,
-  normalizeMediaFile,
-  normalizeMediaTitle,
-  resolveVideoCategoryId,
   type MediaAsset,
   type MediaKind,
-} from "./media";
+} from "@/domains/media/media-model";
+import {
+  availableLocalMediaStoredName,
+  localMediaFolderExists,
+  mediaFilePath,
+  mediaStoredName,
+  normalizeMediaFile,
+  normalizeMediaTitle,
+} from "@/domains/media/media-storage-model";
+import {
+  createPostgresMediaAsset,
+  deletePostgresMediaAssets,
+  indexedPostgresMediaStoredNames,
+  MediaCategoryError,
+  resolvePostgresVideoCategoryId,
+} from "@/domains/media/postgres-media-admin";
+import { getPostgresMediaAsset } from "@/domains/media/postgres-media-catalog";
+import { getMediaDir } from "./config";
+import { MEDIA_UPLOAD_CHUNK_BYTES, MEDIA_UPLOAD_MAX_BYTES } from "./media-node-protocol";
+import { normalizeMediaFolder } from "@/domains/media/media-model";
 import { optimizeMediaFileFastStart } from "./media-processing";
 import {
   getActiveVideoTranscodeProfile,
@@ -41,6 +47,14 @@ export type PreparedMediaUpload = {
   sizeBytes: number;
 };
 
+export type MediaUploadRepository = {
+  resolveVideoCategoryId(value: unknown): Promise<number | null>;
+  getAsset(id: number): Promise<MediaAsset | null>;
+  indexedStoredNames(kind: MediaKind, folder: string, fileName: string): Promise<Set<string>>;
+  createAsset(params: Parameters<typeof createPostgresMediaAsset>[1]): Promise<MediaAsset>;
+  deleteAssets(ids: readonly number[]): Promise<void>;
+};
+
 type UploadSession = PreparedMediaUpload & {
   id: string;
   createdAt: number;
@@ -52,6 +66,21 @@ type CompletedUpload = {
 };
 
 const localUploadLocks = new Map<string, Promise<void>>();
+
+const postgresUploadRepository: MediaUploadRepository = {
+  resolveVideoCategoryId: (value) => resolvePostgresVideoCategoryId(database(), value),
+  getAsset: (id) => getPostgresMediaAsset(database(), id),
+  indexedStoredNames: (kind, folder, fileName) => indexedPostgresMediaStoredNames(
+    database(),
+    kind,
+    folder,
+    fileName,
+  ),
+  createAsset: (params) => createPostgresMediaAsset(database(), params),
+  deleteAssets: async (ids) => {
+    await deletePostgresMediaAssets(ids);
+  },
+};
 
 export class MediaUploadError extends Error {
   constructor(message: string, readonly status = 400) {
@@ -102,11 +131,13 @@ function writeJsonAtomic(filePath: string, value: unknown) {
   }
 }
 
-function readCompletedUpload(uploadId: string): MediaAsset | null {
+async function readCompletedUpload(uploadId: string, repository: MediaUploadRepository): Promise<MediaAsset | null> {
   if (!validUploadId(uploadId)) return null;
   try {
     const completed = JSON.parse(fs.readFileSync(completedPath(uploadId), "utf8")) as CompletedUpload;
-    return Number.isInteger(completed.assetId) ? getMediaAsset(completed.assetId) : null;
+    return Number.isInteger(completed.assetId)
+      ? await repository.getAsset(completed.assetId)
+      : null;
   } catch {
     return null;
   }
@@ -183,7 +214,7 @@ function pruneStaleUploads(now = Date.now()) {
   }
 }
 
-export function startMediaUpload(params: {
+export async function startMediaUpload(params: {
   kind: unknown;
   categoryId?: unknown;
   title: string;
@@ -193,8 +224,8 @@ export function startMediaUpload(params: {
   fileName: string;
   mimeType: string;
   sizeBytes: number;
-}): { uploadId: string; chunkBytes: number } {
-  const prepared = prepareMediaUpload(params, { requireLocalFolder: true });
+}, repository: MediaUploadRepository = postgresUploadRepository): Promise<{ uploadId: string; chunkBytes: number }> {
+  const prepared = await prepareMediaUpload(params, { requireLocalFolder: true }, repository);
   fs.mkdirSync(uploadTempDir(), { recursive: true });
   pruneStaleUploads();
   const uploadId = crypto.randomBytes(16).toString("hex");
@@ -208,7 +239,7 @@ export function startMediaUpload(params: {
   return { uploadId, chunkBytes: MEDIA_UPLOAD_CHUNK_BYTES };
 }
 
-export function prepareMediaUpload(
+export async function prepareMediaUpload(
   params: {
     kind: unknown;
     categoryId?: unknown;
@@ -221,7 +252,8 @@ export function prepareMediaUpload(
     sizeBytes: number;
   },
   options: { requireLocalFolder: boolean },
-): PreparedMediaUpload {
+  repository: MediaUploadRepository = postgresUploadRepository,
+): Promise<PreparedMediaUpload> {
   if (!isMediaKind(params.kind)) {
     throw new MediaUploadError("资源类型无效");
   }
@@ -238,13 +270,13 @@ export function prepareMediaUpload(
     throw new MediaUploadError(params.kind === "file" ? "文件名无效" : "请选择浏览器可播放的常见媒体格式");
   }
   const folder = normalizeMediaFolder(params.folder || "");
-  if (folder === null || (options.requireLocalFolder && !mediaFolderExists(params.kind, folder))) {
+  if (folder === null || (options.requireLocalFolder && !localMediaFolderExists(params.kind, folder))) {
     throw new MediaUploadError("上传目标文件夹不存在");
   }
   let categoryId: number | null = null;
   if (params.kind === "video") {
     try {
-      categoryId = resolveVideoCategoryId(params.categoryId);
+      categoryId = await repository.resolveVideoCategoryId(params.categoryId);
     } catch (error) {
       if (error instanceof MediaCategoryError) {
         throw new MediaUploadError(error.message);
@@ -310,12 +342,15 @@ export function getMediaUploadOffset(uploadId: string): Promise<number> {
   });
 }
 
-export function finishMediaUpload(uploadId: string): Promise<MediaAsset> {
-  return withLocalUploadLock(uploadId, async () => finishMediaUploadUnlocked(uploadId));
+export function finishMediaUpload(
+  uploadId: string,
+  repository: MediaUploadRepository = postgresUploadRepository,
+): Promise<MediaAsset> {
+  return withLocalUploadLock(uploadId, async () => finishMediaUploadUnlocked(uploadId, repository));
 }
 
-async function finishMediaUploadUnlocked(uploadId: string): Promise<MediaAsset> {
-  const completedAsset = readCompletedUpload(uploadId);
+async function finishMediaUploadUnlocked(uploadId: string, repository: MediaUploadRepository): Promise<MediaAsset> {
+  const completedAsset = await readCompletedUpload(uploadId, repository);
   if (completedAsset) return completedAsset;
   const session = readSession(uploadId);
   const sourcePath = partialPath(uploadId);
@@ -330,10 +365,17 @@ async function finishMediaUploadUnlocked(uploadId: string): Promise<MediaAsset> 
   const outputStoredName = transcodeProfile
     ? videoTranscodeOutputStoredName(requestedStoredName, transcodeProfile)
     : requestedStoredName;
-  const storedName = availableMediaStoredName(
+  const outputFolder = mediaFolderFromStoredName(outputStoredName, session.kind);
+  const indexedNames = await repository.indexedStoredNames(
     session.kind,
-    mediaFolderFromStoredName(outputStoredName, session.kind),
+    outputFolder,
     path.basename(outputStoredName),
+  );
+  const storedName = availableLocalMediaStoredName(
+    session.kind,
+    outputFolder,
+    path.basename(outputStoredName),
+    indexedNames,
   );
   const finalPath = mediaFilePath(storedName);
   fs.mkdirSync(path.dirname(finalPath), { recursive: true });
@@ -365,7 +407,7 @@ async function finishMediaUploadUnlocked(uploadId: string): Promise<MediaAsset> 
   const finalStat = fs.statSync(finalPath);
   let asset: MediaAsset;
   try {
-    asset = createMediaAsset({
+    asset = await repository.createAsset({
       kind: session.kind,
       categoryId: session.categoryId,
       title: path.basename(storedName, path.extname(storedName)) || session.title,
@@ -388,7 +430,7 @@ async function finishMediaUploadUnlocked(uploadId: string): Promise<MediaAsset> 
       completedAt: Date.now(),
     } satisfies CompletedUpload);
   } catch (error) {
-    await deleteMediaAssets([asset.id]);
+    await repository.deleteAssets([asset.id]);
     throw error;
   }
   try {
@@ -399,9 +441,12 @@ async function finishMediaUploadUnlocked(uploadId: string): Promise<MediaAsset> 
   return asset;
 }
 
-export function cancelMediaUpload(uploadId: string): Promise<boolean> {
+export function cancelMediaUpload(
+  uploadId: string,
+  repository: MediaUploadRepository = postgresUploadRepository,
+): Promise<boolean> {
   return withLocalUploadLock(uploadId, async () => {
-    if (!validUploadId(uploadId) || readCompletedUpload(uploadId)) {
+    if (!validUploadId(uploadId) || await readCompletedUpload(uploadId, repository)) {
       return false;
     }
     const found = fs.existsSync(sessionPath(uploadId)) || fs.existsSync(partialPath(uploadId));

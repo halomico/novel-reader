@@ -1,15 +1,14 @@
-import { canAccessHomeAnnouncementCard, canAccessOriginalChannel, isNovelLibraryPublic, isTagLibraryEnabled, isTagLibraryPublic } from "@/lib/config";
-import { getDb } from "@/lib/db";
-import { isMediaKindPublic, type MediaKind } from "@/lib/media";
+import { canAccessHomeAnnouncementCard, canAccessOriginalChannel, canBrowseHomePortalContent, isNovelLibraryPublic, isTagLibraryEnabled, isTagLibraryPublic } from "@/lib/config";
+import { database } from "@/core/db/postgres";
+import { getPostgresSitemapCounts, type SitemapMediaKind } from "@/domains/navigation/postgres-sitemaps";
 import { absoluteSiteUrl } from "@/lib/seo";
 import { getBookSitemapPageCount, renderSitemapIndex, sitemapResponse } from "@/lib/sitemap";
 
 export const dynamic = "force-dynamic";
 
-export function GET() {
-  const bookCount = isNovelLibraryPublic()
-    ? (getDb().prepare("SELECT COUNT(*) AS count FROM novels").get() as { count: number }).count
-    : 0;
+export async function GET() {
+  const counts = await getPostgresSitemapCounts(database("web"));
+  const bookCount = isNovelLibraryPublic() ? counts.novels : 0;
   const urls = Array.from(
     { length: getBookSitemapPageCount(bookCount) },
     (_, index) => absoluteSiteUrl(`/sitemap/books/${index + 1}.xml`),
@@ -19,22 +18,12 @@ export function GET() {
     urls.push(absoluteSiteUrl("/sitemap/tags.xml"));
   }
   if (canAccessOriginalChannel(false)) {
-    const originalCount = (getDb().prepare(
-      "SELECT COUNT(*) AS count FROM original_articles WHERE status = 'published'",
-    ).get() as { count: number }).count;
-    if (originalCount > 0) urls.push(absoluteSiteUrl("/sitemap/original.xml"));
+    if (counts.originals > 0) urls.push(absoluteSiteUrl("/sitemap/original.xml"));
   }
-  if ((["video", "audio", "file"] as MediaKind[]).some(isMediaKindPublic)) {
+  if ((["video", "audio", "file"] as SitemapMediaKind[]).some((kind) => canBrowseHomePortalContent(kind, false))) {
     urls.push(absoluteSiteUrl("/sitemap/media.xml"));
   }
-  const publicAnnouncementCount = (getDb().prepare(
-    `SELECT COUNT(*) AS count
-     FROM announcements
-     WHERE status = 'published' AND audience = 'public'
-       AND published_at IS NOT NULL AND published_at <= CURRENT_TIMESTAMP
-       AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)`,
-  ).get() as { count: number }).count;
-  if (canAccessHomeAnnouncementCard(false) && publicAnnouncementCount > 0) {
+  if (canAccessHomeAnnouncementCard(false) && counts.announcements > 0) {
     urls.push(absoluteSiteUrl("/sitemap/announcements.xml"));
   }
 

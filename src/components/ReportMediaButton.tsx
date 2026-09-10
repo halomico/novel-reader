@@ -1,6 +1,6 @@
 "use client";
 
-import type { FeedbackMediaKind } from "@/lib/media";
+import type { FeedbackMediaKind } from "@/domains/media/media-model";
 import { ContentReportButton, type ContentReportOption } from "./ContentReportButton";
 
 const REPORT_OPTIONS: Record<FeedbackMediaKind, ContentReportOption[]> = {

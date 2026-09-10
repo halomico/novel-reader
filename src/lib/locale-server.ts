@@ -88,7 +88,12 @@ export async function localizeNovelSegments(
   state.localizedSegmentCache ||= new Map();
   state.localizedSegmentCacheBytes ||= 0;
   const cache = state.localizedSegmentCache;
-  const key = `${locale}:${contentVersion}`;
+  const first = segments[0];
+  const last = segments.at(-1);
+  // A reader may request separate windows of the same content version. Include
+  // the stable source range so one cached window can never be returned for
+  // another position in the book.
+  const key = `${locale}:${contentVersion}:${first.segmentIndex}:${first.charStart}:${last?.segmentIndex}:${last?.charEnd}`;
   const cached = cache.get(key);
   if (cached) {
     cache.delete(key);
@@ -119,10 +124,4 @@ export async function localizeNovelSegments(
     state.localizedSegmentCacheBytes = (state.localizedSegmentCacheBytes || 0) + estimatedBytes;
   }
   return localized;
-}
-
-export function clearLocalizedContentCache() {
-  const state = globalThis as LocaleGlobal;
-  state.localizedSegmentCache?.clear();
-  state.localizedSegmentCacheBytes = 0;
 }

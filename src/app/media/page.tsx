@@ -12,29 +12,32 @@ import { MediaVideoCard } from "@/components/MediaVideoCard";
 import { PageContextBar } from "@/components/PageContextBar";
 import { Pagination } from "@/components/Pagination";
 import { SiteHeader } from "@/components/SiteHeader";
+import { database } from "@/core/db/postgres";
+import { checkPostgresContentAccess, hasPostgresScopedContentAccessRules } from "@/domains/access/postgres-content-access";
+import {
+  getPostgresVideoTagBySlug,
+  listPostgresMediaAssets,
+  listPostgresMediaFolders,
+  listPostgresVideoCategories,
+} from "@/domains/media/postgres-media-catalog";
 import { getVideoThumbnailSettings } from "@/lib/config";
 import {
   getAccessibleMediaKinds,
   getVisibleMediaEntryKinds,
-  getVideoTagBySlug,
   isMediaKind,
   isMediaKindPublic,
-  listMediaAssets,
-  listMediaFolders,
-  listVideoCategories,
   normalizeMediaFolder,
   sortMediaFolders,
   type MediaAsset,
   type MediaKind,
   type MediaSortBy,
   type MediaSortOrder,
-} from "@/lib/media";
+} from "@/domains/media/media-model";
 import { formatMediaDuration } from "@/lib/media-format";
 import { getMediaPublicUrlForKind } from "@/lib/media-storage-config";
 import { getCurrentUser } from "@/lib/user-auth";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import type { BreadcrumbItem } from "@/components/Breadcrumbs";
-import { checkContentAccess, hasScopedContentAccessRules } from "@/lib/content-access";
 import { directMediaThumbnailUrl } from "@/lib/media-thumbnail-url";
 import { getRequestLocale, localizeText, normalizeSearchText } from "@/lib/locale-server";
 import { languageAlternates, uiText, withLocalePath, type AppLocale } from "@/lib/locale";
@@ -62,7 +65,7 @@ export async function generateMetadata({ searchParams }: MediaPageProps): Promis
   const canonicalParams = new URLSearchParams({ kind });
   if (kind !== "video" && params.folder) canonicalParams.set("folder", params.folder);
   if (kind === "video" && /^\d+$/.test(params.category || "")) canonicalParams.set("category", params.category!);
-  const videoTag = kind === "video" ? getVideoTagBySlug(params.tag) : null;
+  const videoTag = kind === "video" ? await getPostgresVideoTagBySlug(database("web"), params.tag) : null;
   if (videoTag) canonicalParams.set("tag", videoTag.slug);
   const page = Number(params.page || 1);
   if (Number.isInteger(page) && page > 1) canonicalParams.set("page", String(page));
@@ -71,7 +74,7 @@ export async function generateMetadata({ searchParams }: MediaPageProps): Promis
   const canonicalPath = `/media?${canonicalParams.toString()}`;
   const canonical = withLocalePath(canonicalPath, locale);
   const label = uiText(locale, KIND_LABELS[kind]);
-  const title = videoTag ? `#${videoTag.name} · ${label}` : `${label}${uiText(locale, "资源")}`;
+  const title = videoTag ? `${videoTag.name} · ${label}` : `${label}${uiText(locale, "资源")}`;
   const description = videoTag
     ? locale === "zh-Hant" ? `瀏覽標記為 ${videoTag.name} 的站內視頻。` : `浏览标记为 ${videoTag.name} 的站内视频。`
     : locale === "zh-Hant" ? `瀏覽站內${label}資源。` : `浏览站内${label}资源。`;
@@ -157,12 +160,11 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
   const params = await searchParams;
   const requestedKind = isMediaKind(params.kind) ? params.kind : null;
   const headerStore = await headers();
-  const accessibleKinds = getAccessibleMediaKinds(Boolean(user)).filter((candidate) => checkContentAccess(headerStore, {
-    scope: candidate,
-    authenticated: Boolean(user),
-    admin: user?.role === "admin",
-    rateLimit: false,
-  }).allowed);
+  const candidateKinds = getAccessibleMediaKinds(Boolean(user));
+  const kindAccess = await Promise.all(candidateKinds.map((candidate) => checkPostgresContentAccess(database("web"), headerStore, {
+    scope: candidate, authenticated: Boolean(user), admin: user?.role === "admin", rateLimit: false,
+  })));
+  const accessibleKinds = candidateKinds.filter((_, index) => kindAccess[index].allowed);
   if (!accessibleKinds.length || (requestedKind && !accessibleKinds.includes(requestedKind))) {
     const visibleEntryKinds = !user ? getVisibleMediaEntryKinds(false) : [];
     const gatedKind = requestedKind && visibleEntryKinds.includes(requestedKind)
@@ -186,17 +188,17 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
   const sortOrder: MediaSortOrder = params.order === "asc" || params.order === "desc"
     ? params.order
     : sortBy === "name" ? "asc" : "desc";
-  const videoCategories = kind === "video" ? listVideoCategories() : [];
+  const videoCategories = kind === "video" ? await listPostgresVideoCategories(database("web")) : [];
   const requestedCategoryId = /^\d+$/.test(params.category || "") ? Number(params.category) : undefined;
   const videoCategoryId = requestedCategoryId && videoCategories.some((category) => category.id === requestedCategoryId)
     ? requestedCategoryId
     : undefined;
   const categoryParam = videoCategoryId ? String(videoCategoryId) : "";
   const activeVideoCategory = videoCategories.find((category) => category.id === videoCategoryId);
-  const activeVideoTag = kind === "video" ? getVideoTagBySlug(params.tag) : null;
+  const activeVideoTag = kind === "video" ? await getPostgresVideoTagBySlug(database("web"), params.tag) : null;
   const tagParam = activeVideoTag?.slug || "";
   const queryInput = (params.q || "").trim();
-  const sourceResult = listMediaAssets({
+  const sourceResult = await listPostgresMediaAssets(database("web"), {
     kind,
     videoCategoryId,
     videoTagId: activeVideoTag?.id,
@@ -232,9 +234,9 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
     ? { ...activeVideoTag, name: await localizeText(activeVideoTag.name, locale) }
     : undefined;
   const thumbnailSettings = getVideoThumbnailSettings();
-  const directThumbnails = kind === "video" && !hasScopedContentAccessRules("video");
+  const directThumbnails = kind === "video" && !await hasPostgresScopedContentAccessRules(database("web"), "video");
   const publiclyAccessibleThumbnails = directThumbnails && isMediaKindPublic("video");
-  const folders = kind === "video" ? [] : listMediaFolders(kind);
+  const folders = kind === "video" ? [] : await listPostgresMediaFolders(database("web"), kind);
   const EmptyIcon = KIND_ICONS[kind];
   const segments = result.folder ? result.folder.split("/") : [];
   const normalizedFolderTerms = sourceResult.query.normalize("NFKC").toLocaleLowerCase().split(" ").filter(Boolean);
@@ -267,11 +269,11 @@ export default async function MediaPage({ searchParams }: MediaPageProps) {
   ];
   if (displayVideoTag) {
     breadcrumbItems.push({ label: uiText(locale, "标签"), href: "/media/tags" });
-    breadcrumbItems.push({ label: `#${displayVideoTag.name}` });
+    breadcrumbItems.push({ label: displayVideoTag.name });
   } else if (displayCategory) {
     breadcrumbItems.push({ label: displayCategory.name });
   } else {
-    segments.forEach((segment, index) => {
+    segments.forEach((_, index) => {
       const folder = segments.slice(0, index + 1).join("/");
       breadcrumbItems.push({
         label: displaySegments[index],

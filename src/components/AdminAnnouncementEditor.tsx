@@ -7,7 +7,7 @@ import {
   deleteAnnouncementInlineAction,
   saveAnnouncementInlineAction,
 } from "@/app/admin/station/actions";
-import type { Announcement, AnnouncementDisplayMode } from "@/lib/station";
+import type { Announcement, AnnouncementDisplayMode } from "@/domains/station/postgres-station";
 import { AdminSelect } from "./AdminSelect";
 import { InlineMutationNotice, mutationNoticePath, useInlineMutation } from "./useInlineMutation";
 

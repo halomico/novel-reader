@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { engagementViewerKey } from "@/core/engagement/viewer";
 import { validateEngagementEventId } from "@/core/engagement/record";
 import { validateSameOriginMutation } from "@/core/security/origin";
+import { readJsonBody } from "@/core/security/request-body";
 import { recordOriginalEngagement } from "@/domains/originals";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
@@ -11,9 +12,7 @@ export const runtime = "nodejs";
 
 export async function POST(
   request: NextRequest,
-  {
-  const guard = validateSameOriginMutation(request);
-  if (guard) return guard; params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const guard = validateSameOriginMutation(request);
   if (guard) return guard;
@@ -21,15 +20,17 @@ export async function POST(
   if (!Number.isSafeInteger(articleId) || articleId <= 0) {
     return NextResponse.json({ error: "invalid_article" }, { status: 400 });
   }
-  let body: { eventId?: unknown; action?: unknown };
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "invalid_body" }, { status: 400 });
+  const parsed = await readJsonBody<{ eventId?: unknown; action?: unknown }>(request, 16 * 1024);
+  if (!parsed.ok) {
+    return NextResponse.json(
+      { error: parsed.reason === "too_large" ? "body_too_large" : "invalid_body" },
+      { status: parsed.reason === "too_large" ? 413 : 400 },
+    );
   }
+  const body = parsed.value;
   const eventId = validateEngagementEventId(body.eventId);
   if (!eventId) return NextResponse.json({ error: "invalid_event" }, { status: 400 });
-  const user = getCurrentUserFromRequest(request);
+  const user = await getCurrentUserFromRequest(request);
   const viewerKey = engagementViewerKey(request.headers, user?.id);
   const limit = checkRateLimit({
     key: `original-engagement:${viewerKey}`,
@@ -42,7 +43,7 @@ export async function POST(
       headers: { "Retry-After": String(limit.retryAfterSeconds), "Cache-Control": "no-store" },
     });
   }
-  const result = recordOriginalEngagement({
+  const result = await recordOriginalEngagement({
     eventId,
     viewerKey,
     articleId,

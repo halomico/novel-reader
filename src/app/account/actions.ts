@@ -7,46 +7,42 @@ import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { getClientIp } from "@/lib/admin-access";
 import {
-  getUserAvatarMaxBytes,
-  getUserDailyRegistrationLimitPerIp,
-  getUserRegistrationMode,
-  isEmailVerificationRequired,
-  isUserLoginEnabled,
-} from "@/lib/config";
-import { getDb } from "@/lib/db";
+  accountAvatarMaxBytes,
+  accountDailyRegistrationLimit,
+  accountEmailVerificationRequired,
+  accountLoginEnabled,
+  accountRegistrationMode,
+} from "@/core/config/account-settings";
+import { readPostgresSiteSettings } from "@/core/config/site-settings";
+import { database } from "@/core/db/postgres";
+import { getTrustedClientIp } from "@/core/security/client-ip";
+import { normalizeEmail, normalizeUsername, validateDisplayName, validateEmail, validatePassword, validateUsername } from "@/domains/identity/account-input";
+import { removeUserAvatarFile } from "@/domains/identity/avatar-storage";
+import {
+  countPostgresRegistrationsForIpToday,
+  findPostgresUserIdByEmail,
+  getPostgresUserPasswordHash,
+  registerPostgresUser,
+  replacePostgresUserPassword,
+  updatePostgresUserAvatar,
+  updatePostgresUserDisplayName,
+  updatePostgresUserEmail,
+} from "@/domains/identity/postgres-account";
 import { isGeneratedAvatarPath } from "@/lib/default-avatar-data";
 import { isEmailVerificationConfigured, sendUserVerificationEmail } from "@/lib/email-verification";
 import { verifyHumanRequest } from "@/lib/human-verification";
 import { LOCALE_REQUEST_HEADER, normalizeLocale } from "@/lib/locale";
 import { normalizeUserReturnPath } from "@/lib/return-path";
-import { claimDailySoda } from "@/lib/user-economy";
-import { consumeRegistrationInviteInCurrentTransaction } from "@/lib/registration-invites";
+import { claimPostgresDailySoda } from "@/domains/identity/postgres-user-economy";
 import {
   clearCurrentUserSession,
   createUserSession,
-  deleteUserSessions,
   getCurrentUser,
   hashUserPassword,
   loginUser,
   verifyUserPassword,
 } from "@/lib/user-auth";
-import {
-  countTodayRegistrationsForIp,
-  createUserRecord,
-  getUserPasswordHashById,
-  removeAvatarFile,
-  normalizeUsername,
-  normalizeEmail,
-  updateUserDisplayName,
-  updateUserPasswordHash,
-  updateUserAvatar,
-  validateDisplayName,
-  validateEmail,
-  validatePassword,
-  validateUsername,
-} from "@/lib/users";
 
 function authNotice(
   pathname: string,
@@ -60,14 +56,6 @@ function authNotice(
 
 function cleanText(formData: FormData, name: string): string {
   return String(formData.get(name) || "").trim();
-}
-
-function isUsernameConflict(error: unknown): boolean {
-  return error instanceof Error && error.message.includes("UNIQUE constraint failed: users.username");
-}
-
-function isEmailConflict(error: unknown): boolean {
-  return error instanceof Error && error.message.includes("UNIQUE constraint failed: users.email");
 }
 
 function requestOrigin(headerStore: Awaited<ReturnType<typeof headers>>): string {
@@ -120,15 +108,16 @@ function hasAvatarSignature(buffer: Buffer, extension: string): boolean {
 export async function registerUserAction(formData: FormData) {
   const returnTo = normalizeUserReturnPath(formData.get("returnTo"));
   const returnValues = { returnTo };
-  const registrationMode = getUserRegistrationMode();
+  const settings = await readPostgresSiteSettings();
+  const registrationMode = accountRegistrationMode(settings);
   if (registrationMode === "closed") {
     authNotice("/register", "注册暂未开放", "warning", returnValues);
   }
 
   const headerStore = await headers();
-  const clientIp = getClientIp(headerStore);
-  const dailyLimit = getUserDailyRegistrationLimitPerIp();
-  if (dailyLimit > 0 && countTodayRegistrationsForIp(clientIp) >= dailyLimit) {
+  const clientIp = getTrustedClientIp(headerStore);
+  const dailyLimit = accountDailyRegistrationLimit(settings);
+  if (dailyLimit > 0 && await countPostgresRegistrationsForIpToday(database("web"), clientIp) >= dailyLimit) {
     authNotice("/register", `当前 IP 今日最多注册 ${dailyLimit} 个账号`, "warning", returnValues);
   }
 
@@ -147,7 +136,7 @@ export async function registerUserAction(formData: FormData) {
   if (displayNameError) {
     authNotice("/register", displayNameError, "warning", returnValues);
   }
-  const verificationRequired = isEmailVerificationRequired();
+  const verificationRequired = accountEmailVerificationRequired(settings);
   if ((verificationRequired || email) && validateEmail(email)) {
     authNotice("/register", "请输入有效的邮箱地址", "warning", returnValues);
   }
@@ -172,13 +161,8 @@ export async function registerUserAction(formData: FormData) {
 
   const passwordHash = await hashUserPassword(password);
   let userId = 0;
-  const db = getDb();
   try {
-    if (registrationMode === "invite") db.exec("BEGIN IMMEDIATE");
-    if (registrationMode === "invite" && !consumeRegistrationInviteInCurrentTransaction(inviteCode)) {
-      throw new Error("INVALID_REGISTRATION_INVITE");
-    }
-    userId = createUserRecord({
+    const created = await registerPostgresUser({
       username,
       displayName,
       email: email || null,
@@ -186,25 +170,21 @@ export async function registerUserAction(formData: FormData) {
       status: verificationRequired ? "pending" : "active",
       localePreference: normalizeLocale(headerStore.get(LOCALE_REQUEST_HEADER)),
       registrationIp: clientIp,
+      registrationMode,
+      inviteCode,
+      dailyLimit,
     });
-    if (registrationMode === "invite") db.exec("COMMIT");
+    if (!created.ok) {
+      const messages = {
+        daily_limit: `当前 IP 今日最多注册 ${dailyLimit} 个账号`,
+        invalid_invite: "邀请码无效或已失效",
+        username_conflict: "用户名已存在",
+        email_conflict: "邮箱已被使用",
+      } as const;
+      authNotice("/register", messages[created.reason], "warning", returnValues);
+    }
+    userId = created.userId;
   } catch (error) {
-    if (registrationMode === "invite") {
-      try {
-        db.exec("ROLLBACK");
-      } catch {
-        // The transaction may already have been rolled back by the validation branch.
-      }
-    }
-    if (isUsernameConflict(error)) {
-      authNotice("/register", "用户名已存在", "warning", returnValues);
-    }
-    if (error instanceof Error && error.message === "INVALID_REGISTRATION_INVITE") {
-      authNotice("/register", "邀请码无效或已失效", "warning", returnValues);
-    }
-    if (isEmailConflict(error)) {
-      authNotice("/register", "邮箱已被使用", "warning", returnValues);
-    }
     console.error("Failed to create user", error);
     authNotice("/register", "账号创建失败，请稍后重试", "error", returnValues);
   }
@@ -224,7 +204,7 @@ export async function registerUserAction(formData: FormData) {
     }
   }
 
-  if (!isUserLoginEnabled()) {
+  if (!accountLoginEnabled(settings)) {
     authNotice("/login", "注册成功，登录暂未开放", "success", returnValues);
   }
 
@@ -237,7 +217,7 @@ export async function registerUserAction(formData: FormData) {
 
 export async function loginUserAction(formData: FormData) {
   const returnTo = normalizeUserReturnPath(formData.get("returnTo"));
-  if (!isUserLoginEnabled()) {
+  if (!accountLoginEnabled(await readPostgresSiteSettings())) {
     authNotice("/login", "登录暂未开放", "warning", { returnTo });
   }
 
@@ -246,7 +226,7 @@ export async function loginUserAction(formData: FormData) {
   const rememberLogin = formData.get("rememberLogin") === "on";
   const loginValues = { username, remember: rememberLogin ? "1" : "0", returnTo };
   const headerStore = await headers();
-  const clientIp = getClientIp(headerStore);
+  const clientIp = getTrustedClientIp(headerStore);
   const throttle = checkLoginAttempt(clientIp, username);
   if (!throttle.allowed) {
     authNotice("/login", `登录太频繁，请 ${throttle.retryAfterSeconds} 秒后再试`, "warning", loginValues);
@@ -281,7 +261,7 @@ export async function uploadAvatarAction(formData: FormData) {
     authNotice("/account", "请选择头像图片", "warning");
   }
 
-  const maxBytes = getUserAvatarMaxBytes();
+  const maxBytes = accountAvatarMaxBytes(await readPostgresSiteSettings());
   if (file.size > maxBytes) {
     authNotice("/account", `头像不能超过 ${(maxBytes / 1024 / 1024).toFixed(1)} MB`, "warning");
   }
@@ -312,7 +292,9 @@ export async function uploadAvatarAction(formData: FormData) {
     authNotice("/account", "头像文件保存失败，请稍后重试", "error");
   }
   try {
-    updateUserAvatar(user.id, `/avatars/${fileName}`);
+    if (!await updatePostgresUserAvatar(database("web"), user.id, `/avatars/${fileName}`)) {
+      throw new Error("User no longer exists");
+    }
   } catch (error) {
     try {
       fs.rmSync(filePath, { force: true });
@@ -322,7 +304,7 @@ export async function uploadAvatarAction(formData: FormData) {
     console.error("Failed to update user avatar", error);
     authNotice("/account", "头像信息保存失败，请稍后重试", "error");
   }
-  removeAvatarFile(user.avatarPath);
+  removeUserAvatarFile(user.avatarPath);
   revalidatePath("/account");
   authNotice("/account", "头像已更新");
 }
@@ -335,8 +317,10 @@ export async function selectDefaultAvatarAction(formData: FormData) {
   if (!isGeneratedAvatarPath(avatarPath)) {
     authNotice("/account", "默认头像无效，请重新选择", "warning");
   }
-  removeAvatarFile(user.avatarPath);
-  updateUserAvatar(user.id, avatarPath);
+  if (!await updatePostgresUserAvatar(database("web"), user.id, avatarPath)) {
+    authNotice("/account", "账号不存在或已注销", "error");
+  }
+  removeUserAvatarFile(user.avatarPath);
   revalidatePath("/account");
   authNotice("/account", "头像已更新");
 }
@@ -353,9 +337,59 @@ export async function updateAccountDisplayNameAction(formData: FormData) {
     authNotice("/account", displayNameError, "warning");
   }
 
-  updateUserDisplayName(user.id, displayName);
+  await updatePostgresUserDisplayName(database("web"), user.id, displayName);
   revalidatePath("/account");
-  authNotice("/account", "显示名称已更新");
+  authNotice("/account", "昵称已更新");
+}
+
+export async function updateAccountEmailAction(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+
+  if (!isEmailVerificationConfigured()) {
+    authNotice("/account", "邮件服务暂不可用", "warning");
+  }
+
+  const rawEmail = cleanText(formData, "email");
+  if (!rawEmail) {
+    await updatePostgresUserEmail(user.id, null);
+    revalidatePath("/account");
+    authNotice("/account", "邮箱已解绑", "success");
+  }
+
+  const emailError = validateEmail(rawEmail);
+  if (emailError) {
+    authNotice("/account", emailError, "warning");
+  }
+
+  const normalized = normalizeEmail(rawEmail);
+  const existingUserId = await findPostgresUserIdByEmail(database("web"), normalized);
+  if (existingUserId && existingUserId !== user.id) {
+    authNotice("/account", "该邮箱已被其他账号使用", "warning");
+  }
+
+  const emailUpdate = await updatePostgresUserEmail(user.id, normalized);
+  if (emailUpdate === "conflict") authNotice("/account", "该邮箱已被其他账号使用", "warning");
+  if (emailUpdate === "not_found") authNotice("/account", "账号不存在或已注销", "error");
+
+  try {
+    const headerStore = await headers();
+    const origin = headerStore.get("origin") || "";
+    await sendUserVerificationEmail({
+      userId: user.id,
+      email: normalized,
+      displayName: user.displayName,
+      requestOrigin: origin,
+    });
+    revalidatePath("/account");
+    authNotice("/account", "邮箱已更新，验证邮件已发送，请前往查收验证", "success");
+  } catch (err) {
+    console.error("Failed to send verification email:", err);
+    revalidatePath("/account");
+    authNotice("/account", "邮箱已保存，但验证邮件发送失败，请稍后重试", "warning");
+  }
 }
 
 export async function updateAccountPasswordAction(formData: FormData) {
@@ -375,15 +409,16 @@ export async function updateAccountPasswordAction(formData: FormData) {
     authNotice("/account", "两次输入的新密码不一致", "warning");
   }
 
-  const passwordHash = getUserPasswordHashById(user.id);
+  const passwordHash = await getPostgresUserPasswordHash(database("web"), user.id);
   if (!passwordHash || !(await verifyUserPassword(currentPassword, passwordHash))) {
     authNotice("/account", "当前密码不正确", "warning");
   }
 
-  updateUserPasswordHash(user.id, await hashUserPassword(newPassword));
-  deleteUserSessions(user.id);
+  if (!await replacePostgresUserPassword(user.id, await hashUserPassword(newPassword))) {
+    authNotice("/account", "账号不存在或已注销", "error");
+  }
   const headerStore = await headers();
-  await createUserSession(user.id, getClientIp(headerStore), headerStore.get("user-agent") || "");
+  await createUserSession(user.id, getTrustedClientIp(headerStore), headerStore.get("user-agent") || "");
   revalidatePath("/account");
   authNotice("/account", "密码已更新", "success");
 }
@@ -393,7 +428,7 @@ export async function claimDailySodaAction() {
   if (!user) {
     redirect("/login");
   }
-  const result = claimDailySoda(user.id);
+  const result = await claimPostgresDailySoda(user.id);
   if (!result.ok) {
     authNotice("/account", "签到失败，请稍后重试", "error", { view: "growth" });
   }

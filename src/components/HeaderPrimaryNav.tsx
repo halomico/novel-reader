@@ -2,7 +2,8 @@
 
 import { AppLink as Link } from "@/components/AppLink";
 import { usePathname, useSearchParams } from "next/navigation";
-import type { MediaKind } from "@/lib/media";
+import { useLinkStatus } from "next/link";
+import type { MediaKind } from "@/domains/media/media-model";
 import { localeFromPathname, stripLocalePath, uiText } from "@/lib/locale";
 
 const MEDIA_LINKS: Record<MediaKind, string> = {
@@ -10,6 +11,11 @@ const MEDIA_LINKS: Record<MediaKind, string> = {
   audio: "音频",
   file: "文件",
 };
+
+function NavigationLabel({ text }: { text: string }) {
+  const { pending } = useLinkStatus();
+  return <span data-pending={pending || undefined} aria-busy={pending}>{text}</span>;
+}
 
 export function HeaderPrimaryNav({
   mediaKinds,
@@ -38,25 +44,25 @@ export function HeaderPrimaryNav({
   return (
     <nav className={className} aria-label={ariaLabel}>
       {showLibrary ? (
-        <Link href="/novels" aria-current={pathname === "/novels" ? "page" : undefined} onClick={onNavigate}>
-          {uiText(locale, "小说")}
+        <Link href="/novels" prefetch aria-current={pathname.startsWith("/novels") || pathname.startsWith("/books") ? "page" : undefined} onClick={onNavigate}>
+          <NavigationLabel text={uiText(locale, "小说")} />
         </Link>
       ) : null}
       {showTags ? (
-        <Link href="/tags" aria-current={pathname.startsWith("/tags") ? "page" : undefined} onClick={onNavigate}>
-          {uiText(locale, "标签")}
+        <Link href="/tags" prefetch aria-current={pathname.startsWith("/tags") ? "page" : undefined} onClick={onNavigate}>
+          <NavigationLabel text={uiText(locale, "标签")} />
         </Link>
       ) : null}
       {showOriginal ? (
-        <Link href="/original" aria-current={pathname.startsWith("/original") ? "page" : undefined} onClick={onNavigate}>
-          {uiText(locale, "原创")}
+        <Link href="/original" prefetch aria-current={pathname.startsWith("/original") ? "page" : undefined} onClick={onNavigate}>
+          <NavigationLabel text={uiText(locale, "原创")} />
         </Link>
       ) : null}
       {mediaKinds.map((kind) => {
         const active = (pathname === "/media" && activeKind === kind) || (kind === "video" && pathname.startsWith("/media/tags"));
         return (
-          <Link href={`/media?kind=${kind}`} aria-current={active ? "page" : undefined} key={kind} onClick={onNavigate}>
-            {uiText(locale, MEDIA_LINKS[kind])}
+          <Link href={`/media?kind=${kind}`} prefetch aria-current={active ? "page" : undefined} key={kind} onClick={onNavigate}>
+            <NavigationLabel text={uiText(locale, MEDIA_LINKS[kind])} />
           </Link>
         );
       })}

@@ -11,8 +11,7 @@
  */
 
 import { getMediaDir } from "./config";
-import type { MediaAsset } from "./media";
-import { hasPublishedMediaHls } from "./media";
+import { hasPublishedMediaHls, type MediaAsset } from "@/domains/media/media-model";
 import { readRemoteMediaPlaybackManifest } from "./media-node-client";
 import { createSignedMediaHlsUrl } from "./media-signing";
 import { isRemoteMediaStorage, resolveRemoteMediaNodeForAsset } from "./media-storage-config";

@@ -1,15 +1,17 @@
 import type { Metadata } from "next";
+import { Tags } from "lucide-react";
 import { notFound } from "next/navigation";
 import Link from "@/components/LocalizedLink";
 import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import { PageContextBar } from "@/components/PageContextBar";
 import { SiteHeader } from "@/components/SiteHeader";
 import { TagLibrarySearch } from "@/components/TagLibrarySearch";
+import { ResultCount } from "@/components/ResultCount";
 import { canAccessOriginalChannel, isOriginalChannelEnabled, isOriginalChannelEntryVisible } from "@/lib/config";
 import { getRequestLocale, localizeText } from "@/lib/locale-server";
 import { uiText } from "@/lib/locale";
 import { getCurrentUser } from "@/lib/user-auth";
-import { listOriginalTagSummaries } from "@/lib/original";
+import { listOriginalTagSummaries } from "@/domains/originals/postgres-originals";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +33,7 @@ export default async function OriginalTagsPage({ searchParams }: { searchParams:
   }
   const params = await searchParams;
   const query = String(params.q || "").normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, 80);
-  const tags = listOriginalTagSummaries();
+  const tags = await listOriginalTagSummaries();
   const displayTags = await Promise.all(tags.map(async (tag) => ({
     ...tag,
     name: await localizeText(tag.name, locale),
@@ -44,19 +46,23 @@ export default async function OriginalTagsPage({ searchParams }: { searchParams:
         items={[{ label: tr("首页"), href: "/" }, { label: tr("原创"), href: "/original" }, { label: tr("标签") }]}
         search={<TagLibrarySearch locale={locale} initialQuery={query} targetId="original-tag-library" />}
       />
-      <section id="original-tag-library" className="originalTagDirectory">
+      <section id="original-tag-library" className="mediaTagDirectory originalTagDirectory">
+        <header className="mediaTagDirectoryHeader userContentHeader">
+          <span><Tags size={19} aria-hidden="true" /><h1>{tr("原创标签")}</h1></span>
+          <ResultCount count={displayTags.length} unit={tr("个")} />
+        </header>
         {displayTags.length ? (
           <>
-            <div className="tagChipCloud originalTagDirectoryCloud" data-tag-group-search={tr("标签")}>
+            <div className="mediaTagGrid originalTagDirectoryCloud" data-tag-group-search={tr("标签")}>
               {displayTags.map((tag) => (
                 <Link
-                  className="tagChip contentTagLink"
+                  className="mediaTagItem"
                   href={`/original/tags/${encodeURIComponent(tag.slug)}`}
                   data-tag-search={`${tag.name} ${tag.slug}`}
                   key={tag.id}
                 >
-                  <span>{tag.name}</span>
-                  <small>{tag.articleCount}</small>
+                  <strong>{tag.name}</strong>
+                  <span>{tag.articleCount.toLocaleString("zh-CN")}</span>
                 </Link>
               ))}
             </div>

@@ -1,23 +1,35 @@
 import { NextRequest } from "next/server";
+import { database } from "@/core/db/postgres";
+import { checkPostgresContentAccess, hasPostgresScopedContentAccessRules } from "@/domains/access/postgres-content-access";
+import { hasValidPostgresVideoDownloadSession } from "@/domains/media/postgres-media-access";
+import { getPostgresMediaAsset } from "@/domains/media/postgres-media-catalog";
+import { validatePostgresVideoPlaybackLease } from "@/domains/media/postgres-video-playback";
 import { authorizeMediaDelivery, resolveMediaDeliveryUri, serveMediaDelivery } from "@/lib/media-delivery";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
-import { checkContentAccess, hasScopedContentAccessRules } from "@/lib/content-access";
-import { isMediaKindPublic } from "@/lib/media";
-import { hasValidVideoDownloadSession } from "@/lib/media-access";
+import { isMediaKindPublic } from "@/domains/media/media-model";
 import { playbackViewerFromRequest } from "@/lib/playback-viewer";
-import { validateVideoPlaybackLease } from "@/lib/video-playback";
 import { videoPlaybackUsesHlsOnly } from "@/lib/video-playback-mode";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 async function deliver(request: NextRequest) {
-  const delivery = resolveMediaDeliveryUri(`${request.nextUrl.pathname}${request.nextUrl.search}`);
+  const delivery = await resolveMediaDeliveryUri(
+    `${request.nextUrl.pathname}${request.nextUrl.search}`,
+    (id) => getPostgresMediaAsset(database("web"), id),
+  );
   if (!delivery) {
     return new Response(null, { status: 404 });
   }
-  const user = getCurrentUserFromRequest(request);
-  const access = checkContentAccess(request.headers, {
+  const user = await getCurrentUserFromRequest(request);
+  const downloadSessionValid = delivery.download && delivery.asset.kind === "video" && user?.role !== "admin"
+    ? await hasValidPostgresVideoDownloadSession(database("web"), {
+        userId: user?.id ?? 0,
+        mediaId: delivery.asset.id,
+        token: delivery.downloadToken,
+      }).catch(() => false)
+    : true;
+  const access = await checkPostgresContentAccess(database("web"), request.headers, {
     scope: delivery.asset.kind,
     authenticated: Boolean(user),
     admin: user?.role === "admin",
@@ -27,11 +39,7 @@ async function deliver(request: NextRequest) {
     !access.allowed ||
     !authorizeMediaDelivery(delivery, Boolean(user)) ||
     (delivery.download && delivery.asset.kind === "video" && (
-      !user || (user.role !== "admin" && !hasValidVideoDownloadSession({
-        userId: user.id,
-        mediaId: delivery.asset.id,
-        token: delivery.downloadToken,
-      }))
+      !user || !downloadSessionValid
     ))
   ) {
     return new Response(null, { status: 404 });
@@ -45,7 +53,7 @@ async function deliver(request: NextRequest) {
       !viewer ||
       !delivery.playbackSessionId ||
       !delivery.playbackToken ||
-      !validateVideoPlaybackLease({
+      !await validatePostgresVideoPlaybackLease(database("web"), {
         id: delivery.playbackSessionId,
         token: delivery.playbackToken,
         viewerKey: viewer.viewerKey,
@@ -58,7 +66,7 @@ async function deliver(request: NextRequest) {
   return serveMediaDelivery(request, delivery, {
     publiclyAccessible: !delivery.download &&
       isMediaKindPublic(delivery.asset.kind) &&
-      !hasScopedContentAccessRules(delivery.asset.kind),
+      !await hasPostgresScopedContentAccessRules(database("web"), delivery.asset.kind),
   });
 }
 

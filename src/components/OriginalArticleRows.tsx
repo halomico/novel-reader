@@ -3,18 +3,34 @@ import { Fragment } from "react";
 import Link from "@/components/LocalizedLink";
 import { AppLink } from "@/components/AppLink";
 import { formatNovelWordCount } from "@/components/CatalogBookGrid";
+import { defaultOriginalSortOrder, type OriginalSort, type OriginalSortOrder } from "@/domains/originals/original-model";
 import type { AppLocale } from "@/lib/locale";
 import { uiText } from "@/lib/locale";
 import { formatCompactUpdateDate, parseAppDateTime } from "@/lib/date-time";
-import type { OriginalArticle, OriginalSort } from "@/lib/original";
 import { UserAvatar } from "./UserAvatar";
 import { FavoriteSelectableItem } from "./FavoriteSelectionManager";
 
-type DisplayArticle = OriginalArticle & { title: string; authorName: string };
+export type OriginalArticleRowItem = {
+  id: number;
+  slug: string;
+  authorId: number;
+  authorName: string;
+  authorAvatarPath: string | null;
+  title: string;
+  wordCount: number;
+  unlockSodaPrice: number;
+  status: "draft" | "published" | "hidden";
+  isPinned: boolean;
+  commentCount: number;
+  createdAt: string;
+  publishedAt: string | null;
+  tags: Array<{ id: number; name: string; slug: string }>;
+};
 
-function tagHref(tag: string, query?: { q: string; sort: OriginalSort }): string {
+function tagHref(tag: string, query?: { q: string; sort: OriginalSort; order?: OriginalSortOrder }): string {
   const params = new URLSearchParams();
   if (query?.sort && query.sort !== "latest") params.set("sort", query.sort);
+  if (query?.sort && query.order && query.order !== defaultOriginalSortOrder(query.sort)) params.set("order", query.order);
   return `/original/tags/${encodeURIComponent(tag)}${params.size ? `?${params.toString()}` : ""}`;
 }
 
@@ -30,11 +46,11 @@ export function OriginalArticleRows({
   selectable = false,
   resume = false,
 }: {
-  items: DisplayArticle[];
+  items: OriginalArticleRowItem[];
   locale: AppLocale;
   showAuthor?: boolean;
   showAvatar?: boolean;
-  query?: { q: string; sort: OriginalSort };
+  query?: { q: string; sort: OriginalSort; order?: OriginalSortOrder };
   showStatus?: boolean;
   showEdit?: boolean;
   showStats?: boolean;
@@ -60,7 +76,7 @@ export function OriginalArticleRows({
               {showStatus || showEdit ? (
                 <span className="originalRowControls">
                   {showStatus && article.status !== "published" ? <b className={`originalStatus is-${article.status}`}>{tr(article.status === "hidden" ? "已隐藏" : "草稿")}</b> : null}
-                  {showEdit ? <Link className="originalRowEdit" prefetch={false} href={`/original/${article.slug}/edit`}>{tr("编辑")}</Link> : null}
+                  {showEdit ? <Link className="originalRowEdit" prefetch href={`/original/${article.slug}/edit`}>{tr("编辑")}</Link> : null}
                 </span>
               ) : null}
             </div>
@@ -84,14 +100,16 @@ export function OriginalArticleRows({
               {article.unlockSodaPrice > 0 ? (
                 <span className="originalArticlePrice"><CupSoda size={13} aria-hidden="true" />{article.unlockSodaPrice}</span>
               ) : null}
-              <span className="originalArticleTags" aria-label={tr("文章标签")}>
-                {article.tags.slice(0, 3).map((item) => (
-                  <Link className="tagChip contentTagLink originalArticleTag" prefetch={false} href={tagHref(item.slug, query)} key={item.id}>{item.name}</Link>
-                ))}
-                {article.tags.length > 3 ? <span className="originalTagOverflow">+{article.tags.length - 3}</span> : null}
-              </span>
             </div>
           </div>
+          {article.tags.length ? (
+            <span className="originalArticleTags" aria-label={tr("文章标签")}>
+              {article.tags.slice(0, 3).map((item) => (
+                <Link className="tagChip contentTagLink originalArticleTag" prefetch={false} href={tagHref(item.slug, query)} key={item.id}>{item.name}</Link>
+              ))}
+              {article.tags.length > 3 ? <span className="originalTagOverflow">+{article.tags.length - 3}</span> : null}
+            </span>
+          ) : null}
         </article>
         );
         return selectable ? (

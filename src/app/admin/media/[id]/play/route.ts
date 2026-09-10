@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
+import { database } from "@/core/db/postgres";
+import { getPostgresMediaAsset, incrementPostgresMediaPlayCount } from "@/domains/media/postgres-media-catalog";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
-import { getMediaAsset, incrementMediaPlayCount } from "@/lib/media";
 
 export const dynamic = "force-dynamic";
 
@@ -10,10 +11,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!access.allowed || !(await getAdminSession())) {
     return new Response(null, { status: 404 });
   }
-  const asset = getMediaAsset(Number((await params).id));
+  const asset = await getPostgresMediaAsset(database("web"), Number((await params).id));
   if (!asset || (asset.kind !== "video" && asset.kind !== "audio")) {
     return new Response(null, { status: 404 });
   }
-  incrementMediaPlayCount(asset.id);
+  await incrementPostgresMediaPlayCount(database("web"), asset.id);
   return new Response(null, { status: 204 });
 }

@@ -4,7 +4,7 @@ import { CircleAlert, Disc3, ListMusic, LoaderCircle, Play, Repeat1, SkipBack, S
 import { useEffect, useRef, useState } from "react";
 import { MediaAudioFeedbackActions } from "@/components/MediaAudioFeedbackActions";
 import { formatMediaDuration } from "@/lib/media-format";
-import type { AudioPlaybackMode } from "@/lib/site-settings";
+import type { AudioPlaybackMode } from "@/core/config/site-settings-schema";
 import { DEFAULT_LOCALE, uiText, type AppLocale } from "@/lib/locale";
 
 export type AudioQueueTrack = {
@@ -60,6 +60,14 @@ export function MediaAudioPlayer({
 }) {
   const initialTrack = tracks.find((track) => track.id === initialId) || tracks[0];
   const [activeTrack, setActiveTrack] = useState(initialTrack);
+  const [prevInitialId, setPrevInitialId] = useState(initialId);
+  if (prevInitialId !== initialId) {
+    setPrevInitialId(initialId);
+    const nextTrack = tracks.find((track) => track.id === initialId) || tracks[0];
+    if (nextTrack && nextTrack.id !== activeTrack.id) {
+      setActiveTrack(nextTrack);
+    }
+  }
   const [mode, setMode] = useState<AudioPlaybackMode>(defaultPlaybackMode);
   const audioRef = useRef<HTMLAudioElement>(null);
   const queueRef = useRef<HTMLDivElement>(null);
@@ -162,8 +170,7 @@ export function MediaAudioPlayer({
     pendingAutoPlayTrackIdRef.current = shouldAutoPlay ? activeTrack.id : null;
     // Switching tracks: soft loading only if metadata not already available.
     if (audio.readyState < 1) {
-      setAudioStatus("loading");
-      setAudioStatusMessage(uiText(locale, "正在加载音频…"));
+      markBuffering(uiText(locale, "正在加载音频…"));
     } else {
       markReady();
     }
@@ -270,8 +277,7 @@ export function MediaAudioPlayer({
             const audio = audioRef.current;
             // Initial load only — avoid sticky “loading” after canplay has already fired.
             if (audio && audio.readyState >= 2) return;
-            setAudioStatus("loading");
-            setAudioStatusMessage(uiText(locale, "正在加载音频…"));
+            markBuffering(uiText(locale, "正在加载音频…"));
           }}
           onLoadedMetadata={() => {
             if (audioRef.current) restorePendingSeek(audioRef.current);
@@ -355,8 +361,7 @@ export function MediaAudioPlayer({
           </div>
         </div>
         <div className="mediaAudioQueue">
-          <header>
-            <strong>{uiText(locale, "同目录音频")}</strong>
+          <header className="mediaAudioQueueHeader">
             <span>{tracks.length} {uiText(locale, "首")}</span>
           </header>
           <div className="mediaAudioQueueViewport" ref={queueRef} onScroll={(event) => setQueueScrollTop(event.currentTarget.scrollTop)}>

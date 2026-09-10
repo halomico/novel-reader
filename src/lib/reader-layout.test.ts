@@ -1,6 +1,29 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveReaderDragTarget, resolveReaderPageMetrics, splitReaderParagraphs } from "./reader-layout";
+import {
+  encodeReaderEntryEdge,
+  normalizeReaderNavigationTitle,
+  resolveReaderEntryEdge,
+  resolveReaderDragTarget,
+  resolveReaderEntryPage,
+  resolveReaderPageMetrics,
+  shouldPrefetchReaderRoute,
+  splitReaderParagraphs,
+} from "./reader-layout";
+
+test("reader entry edges can only be consumed by their destination route", () => {
+  const stored = encodeReaderEntryEdge("/books/8/chapters/20?from=reader", "end");
+  assert.equal(resolveReaderEntryEdge(stored, "/books/8/chapters/19?from=reader"), null);
+  assert.equal(resolveReaderEntryEdge(stored, "/books/8/chapters/20?from=reader"), "end");
+  assert.equal(resolveReaderEntryEdge("end", "/books/8/chapters/20?from=reader"), null);
+});
+
+test("reader entry edges land on the intended adjacent-document page", () => {
+  assert.equal(resolveReaderEntryPage({ entryEdge: "start", pageCount: 30 }), 0);
+  assert.equal(resolveReaderEntryPage({ entryEdge: "end", pageCount: 30 }), 29);
+  assert.equal(resolveReaderEntryPage({ entryEdge: null, progressRatio: 0.5, pageCount: 30 }), 15);
+  assert.equal(resolveReaderEntryPage({ entryEdge: null, pageCount: 30 }), 0);
+});
 
 test("reader paragraphs keep Chinese paragraph structure and section headings", () => {
   assert.deepEqual(splitReaderParagraphs("第一章 开始\n\n　　第一段。\n第二段。"), [
@@ -31,4 +54,31 @@ test("reader page metrics include the moving gap between adjacent pages", () => 
   assert.equal(metrics.stride, 390);
   assert.equal(metrics.count, 35);
   assert.equal(metrics.index, 1);
+});
+
+test("reader page metrics preserve fractional CSS column widths", () => {
+  const metrics = resolveReaderPageMetrics({
+    viewportWidth: 375.2,
+    scrollWidth: 22_887,
+    scrollLeft: 7_504,
+    pageGap: 0,
+  });
+  assert.equal(metrics.stride, 375.2);
+  assert.equal(metrics.index, 20);
+});
+
+test("reader navigation removes a repeated numeric source prefix", () => {
+  assert.equal(
+    normalizeReaderNavigationTitle("0981-千城测试纪事0981-银沙堡归途石"),
+    "0981-千城测试纪事 · 银沙堡归途石",
+  );
+  assert.equal(normalizeReaderNavigationTitle("普通标题"), "普通标题");
+});
+
+test("reader route prefetch respects document and network budgets", () => {
+  assert.equal(shouldPrefetchReaderRoute({ contentBytes: 32_000 }), true);
+  assert.equal(shouldPrefetchReaderRoute({ contentBytes: 300_000 }), false);
+  assert.equal(shouldPrefetchReaderRoute({ contentBytes: 32_000, saveData: true }), false);
+  assert.equal(shouldPrefetchReaderRoute({ contentBytes: 32_000, effectiveType: "2g" }), false);
+  assert.equal(shouldPrefetchReaderRoute({ contentBytes: 32_000, visible: false }), false);
 });

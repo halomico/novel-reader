@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
+import { database } from "@/core/db/postgres";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
 import {
@@ -11,13 +12,14 @@ import {
   writeStoredCover,
 } from "@/lib/media-cover";
 import {
-  getMarketProductById,
-  replaceMarketProductCover,
-} from "@/lib/market";
+  getPostgresMarketProductById,
+  replacePostgresMarketProductCover,
+} from "@/domains/market/postgres-market";
 import {
   getRemoteMediaNodeForKind,
   isRemoteMediaStorage,
 } from "@/lib/media-storage-config";
+import { validateSameOriginMutation } from "@/core/security/origin";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -41,8 +43,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const guard = validateSameOriginMutation(request, { requireJson: false, requireMutationHeader: false });
+  if (guard) return guard;
   if (!(await authorize(request))) return new Response(null, { status: 404 });
-  const product = getMarketProductById(Number((await params).id));
+  const productId = Number((await params).id);
+  const product = Number.isSafeInteger(productId) && productId > 0 ? await getPostgresMarketProductById(database(), productId) : null;
   if (!product) return jsonError("商品不存在", 404);
   const contentLength = Number(request.headers.get("content-length") || "0");
   if (Number.isFinite(contentLength) && contentLength > MAX_CUSTOM_MEDIA_COVER_BYTES + 1024 * 1024) {
@@ -62,7 +67,7 @@ export async function POST(
     const normalized = await normalizeMediaCover(Buffer.from(await file.arrayBuffer()));
     key = createMediaCoverKey();
     await writeStoredCover(storageNodeId, key, normalized);
-    const previous = replaceMarketProductCover(product.id, { key, storageNodeId });
+    const previous = await replacePostgresMarketProductCover(database(), product.id, { key, storageNodeId });
     if (previous) {
       await deleteStoredCover(previous.storageNodeId, previous.key).catch((error) => {
         console.warn(`[market] failed to remove replaced cover for product ${product.id}`, error);
@@ -84,10 +89,13 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const guard = validateSameOriginMutation(request, { requireJson: false, requireMutationHeader: false });
+  if (guard) return guard;
   if (!(await authorize(request))) return new Response(null, { status: 404 });
-  const product = getMarketProductById(Number((await params).id));
+  const productId = Number((await params).id);
+  const product = Number.isSafeInteger(productId) && productId > 0 ? await getPostgresMarketProductById(database(), productId) : null;
   if (!product) return jsonError("商品不存在", 404);
-  const previous = replaceMarketProductCover(product.id, null);
+  const previous = await replacePostgresMarketProductCover(database(), product.id, null);
   if (previous) {
     await deleteStoredCover(previous.storageNodeId, previous.key).catch((error) => {
       console.warn(`[market] failed to remove cover for product ${product.id}`, error);

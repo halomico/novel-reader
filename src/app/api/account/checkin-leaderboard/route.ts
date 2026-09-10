@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+import { database } from "@/core/db/postgres";
+import { listPostgresDailyCheckinLeaderboard } from "@/domains/identity/postgres-user-economy";
 import { getCurrentUser } from "@/lib/user-auth";
-import { listDailyCheckinLeaderboard } from "@/lib/user-economy";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ export async function GET() {
     return NextResponse.json({ message: "请先登录" }, { status: 401 });
   }
 
-  const response = NextResponse.json({ entries: listDailyCheckinLeaderboard() });
+  const response = NextResponse.json({ entries: await listPostgresDailyCheckinLeaderboard(database("web")) });
   response.headers.set("Cache-Control", "private, no-store");
   return response;
 }

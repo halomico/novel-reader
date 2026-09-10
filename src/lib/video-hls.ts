@@ -71,9 +71,7 @@ export function playbackHlsDirectoryPath(root: string, mediaId: number, version:
   return path.join(hlsRootPath(root, mediaId), version);
 }
 
-export function playbackHlsManifestPath(root: string, mediaId: number, version: string): string {
-  return path.join(playbackHlsDirectoryPath(root, mediaId, version), PLAYBACK_HLS_MANIFEST_FILE);
-}
+
 
 function isPlaybackResourceFileName(fileName: string): boolean {
   return fileName === PLAYBACK_HLS_MANIFEST_FILE ||
@@ -368,7 +366,7 @@ export async function packageVideoHls(input: {
   }
   const version = sourceVersion(input.mtimeMs, input.sizeBytes);
   const directoryPath = playbackHlsDirectoryPath(input.root, input.mediaId, version);
-  const manifestPath = path.join(directoryPath, PLAYBACK_HLS_MANIFEST_FILE);
+
   const sourcePath = resolveMediaStoragePath(input.root, normalized);
   validSource(sourcePath, input.sizeBytes, input.mtimeMs);
   try {

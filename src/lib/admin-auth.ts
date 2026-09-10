@@ -9,7 +9,7 @@ import {
   getAdminSessionTtlHours,
   getAdminUsername,
 } from "./config";
-import { verifyPassword } from "./password";
+import { verifyPasswordAsync } from "./password";
 
 export type AdminSession = {
   username: string;
@@ -76,14 +76,14 @@ export function isAdminSecurityConfigured(): boolean {
   return Boolean(getAdminSessionSecret() && (getAdminPassword() || getAdminPasswordHash() || getAdminPasswordSha256()));
 }
 
-export function verifyAdminCredentials(username: string, password: string): boolean {
+export async function verifyAdminCredentials(username: string, password: string): Promise<boolean> {
   if (!isAdminSecurityConfigured() || !safeEqual(username, getAdminUsername())) {
     return false;
   }
 
   const strongPasswordHash = getAdminPasswordHash();
   if (strongPasswordHash) {
-    return verifyPassword(password, strongPasswordHash);
+    return verifyPasswordAsync(password, strongPasswordHash);
   }
 
   const passwordHash = getAdminPasswordSha256();

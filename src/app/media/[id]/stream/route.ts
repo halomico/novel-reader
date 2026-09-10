@@ -1,11 +1,13 @@
 import { NextRequest } from "next/server";
-import { getVideoPlaybackAccess } from "@/lib/media-access";
-import { getMediaAsset, isMediaKindConsumable, isMediaKindContentPublic } from "@/lib/media";
+import { database } from "@/core/db/postgres";
+import { checkPostgresContentAccess, hasPostgresScopedContentAccessRules } from "@/domains/access/postgres-content-access";
+import { getPostgresVideoPlaybackAccess } from "@/domains/media/postgres-media-access";
+import { estimatePostgresVideoBitrateKbps, validatePostgresVideoPlaybackLease } from "@/domains/media/postgres-video-playback";
+import { isMediaKindConsumable, isMediaKindContentPublic } from "@/domains/media/media-model";
+import { getPostgresMediaAsset } from "@/domains/media/postgres-media-catalog";
 import { mediaDeliveryUrl } from "@/lib/media-delivery";
-import { checkContentAccess, hasScopedContentAccessRules } from "@/lib/content-access";
 import { playbackViewerFromRequest } from "@/lib/playback-viewer";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
-import { estimateVideoBitrateKbps, validateVideoPlaybackLease } from "@/lib/video-playback";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -29,12 +31,12 @@ export function OPTIONS(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const user = getCurrentUserFromRequest(request);
-  const asset = getMediaAsset(Number((await params).id));
+  const user = await getCurrentUserFromRequest(request);
+  const asset = await getPostgresMediaAsset(database("web"), Number((await params).id));
   if (!asset || (asset.kind !== "video" && asset.kind !== "audio") || !isMediaKindConsumable(asset.kind, Boolean(user))) {
     return new Response(null, { status: 404 });
   }
-  const access = checkContentAccess(request.headers, {
+  const access = await checkPostgresContentAccess(database("web"), request.headers, {
     scope: asset.kind,
     authenticated: Boolean(user),
     admin: user?.role === "admin",
@@ -51,8 +53,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
   if (asset.kind === "video") {
     const viewer = playbackViewerFromRequest(request, user?.id || null);
-    const playbackAccess = getVideoPlaybackAccess(asset, user);
-    if (!viewer || !playbackAccess.allowed || !validateVideoPlaybackLease({
+    const playbackAccess = await getPostgresVideoPlaybackAccess(database("web"), asset.id, user);
+    if (!viewer || !playbackAccess?.allowed || !await validatePostgresVideoPlaybackLease(database("web"), {
       id: request.nextUrl.searchParams.get("ps") || "",
       token: request.nextUrl.searchParams.get("pt") || "",
       viewerKey: viewer?.viewerKey || "",
@@ -62,11 +64,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
   }
   let location: string;
-  const publiclyAccessible = asset.kind !== "video" && isMediaKindContentPublic(asset.kind) && !hasScopedContentAccessRules(asset.kind);
+  const publiclyAccessible = asset.kind !== "video" && isMediaKindContentPublic(asset.kind) &&
+    !await hasPostgresScopedContentAccessRules(database("web"), asset.kind);
   try {
     location = mediaDeliveryUrl(asset, false, {
       publiclyAccessible,
-      estimatedKbps: asset.kind === "video" ? estimateVideoBitrateKbps(asset) : 0,
+      estimatedKbps: asset.kind === "video" ? estimatePostgresVideoBitrateKbps(asset) : 0,
     });
   } catch {
     return new Response(null, { status: 503 });

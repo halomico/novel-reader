@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import { Readable } from "node:stream";
 import type { NextRequest } from "next/server";
+import { mediaThumbnailVersion, type MediaAsset } from "@/domains/media/media-model";
 import { getVideoThumbnailSettings } from "./config";
 import { findLocalMediaCustomCover } from "./media-cover";
-import { mediaThumbnailVersion, type MediaAsset } from "./media";
 import { findMediaThumbnail, mediaThumbnailEtag } from "./media-thumbnail";
 import { createSignedMediaCoverUrl, createSignedMediaThumbnailUrl } from "./media-signing";
 import {

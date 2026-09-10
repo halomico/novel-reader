@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
-import { getDb } from "./db";
+import { database } from "@/core/db/postgres";
+import { processPostgresTelegramOutbox } from "@/domains/notifications/postgres-telegram-outbox";
 import { getTelegramConfig } from "./telegram-config";
-import { processTelegramOutbox } from "./telegram-outbox";
 
 type TelegramRuntimeGlobal = typeof globalThis & {
   novelReaderTelegramStarted?: boolean;
@@ -14,9 +14,11 @@ async function ensureTelegramWebhook() {
     .update(`${config.botToken}\n${config.webhookUrl}\n${config.webhookSecret}`)
     .digest("hex");
   const key = "telegram_webhook_fingerprint";
-  const current = getDb().prepare("SELECT value FROM app_metadata WHERE key = ?")
-    .get(key) as { value: string } | undefined;
-  if (current?.value === fingerprint) return;
+  const current = await database("jobs").query<{ value: string }>({
+    text: "SELECT value FROM app_metadata WHERE key = $1",
+    values: [key],
+  });
+  if (current.rows[0]?.value === fingerprint) return;
   const response = await fetch(`https://api.telegram.org/bot${config.botToken}/setWebhook`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },
@@ -30,10 +32,11 @@ async function ensureTelegramWebhook() {
   });
   const body = await response.json() as { ok?: boolean; description?: string };
   if (!response.ok || !body.ok) throw new Error(body.description || `HTTP ${response.status}`);
-  getDb().prepare(
-    `INSERT INTO app_metadata (key, value) VALUES (?, ?)
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
-  ).run(key, fingerprint);
+  await database("jobs").query({
+    text: `INSERT INTO app_metadata (key, value) VALUES ($1, $2)
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = clock_timestamp()`,
+    values: [key, fingerprint],
+  });
 }
 
 export async function initializeTelegramIntegration() {
@@ -45,11 +48,11 @@ export async function initializeTelegramIntegration() {
   void ensureTelegramWebhook().catch((error) => {
     console.warn("[telegram] webhook setup failed", error);
   });
-  void processTelegramOutbox().catch((error) => {
+  void processPostgresTelegramOutbox().catch((error) => {
     console.warn("[telegram] outbox delivery failed", error);
   });
   const timer = setInterval(() => {
-    void processTelegramOutbox().catch((error) => {
+    void processPostgresTelegramOutbox().catch((error) => {
       console.warn("[telegram] outbox delivery failed", error);
     });
   }, 10_000);

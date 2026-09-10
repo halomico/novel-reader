@@ -11,7 +11,8 @@ import {
 } from "react";
 import { localeFromPathname, withLocalePath } from "@/lib/locale";
 
-const INTENT_PREFETCH_DELAY_MS = 100;
+const INTENT_PREFETCH_DELAY_MS = 30;
+const INTENT_PREFETCH_TTL_MS = 60_000;
 
 export type PrefetchPolicy = "default" | "intent" | "never";
 
@@ -27,16 +28,14 @@ type NetworkInformation = {
 };
 
 function canPrefetch(): boolean {
-  if (document.visibilityState !== "visible") return false;
+  if (typeof window === "undefined" || document.visibilityState !== "visible") return false;
   const connection = (navigator as Navigator & { connection?: NetworkInformation }).connection;
   if (connection?.saveData) return false;
   return connection?.effectiveType !== "slow-2g" && connection?.effectiveType !== "2g";
 }
 
 /**
- * Localized application link with one explicit prefetch policy. Intent mode is
- * conservative by default: it waits for sustained mouse/keyboard intent and
- * never starts a large route fetch from touchstart.
+ * Localized application link with bounded intent prefetch.
  */
 export function AppLink({
   href,
@@ -44,6 +43,7 @@ export function AppLink({
   prefetchPolicy = prefetch === false ? "never" : prefetch === true ? "default" : "intent",
   onPointerEnter,
   onPointerLeave,
+  onPointerDown,
   onFocus,
   onBlur,
   ...props
@@ -51,6 +51,7 @@ export function AppLink({
   const pathname = usePathname();
   const router = useRouter();
   const prefetchedHrefRef = useRef<string | null>(null);
+  const prefetchedAtRef = useRef(0);
   const prefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const localizedHref = withLocalePath(href, localeFromPathname(pathname));
 
@@ -60,14 +61,27 @@ export function AppLink({
     prefetchTimerRef.current = null;
   }
 
+  function doPrefetch() {
+    if (prefetchPolicy === "never" || isPrefetched() || !canPrefetch()) return;
+    prefetchedHrefRef.current = localizedHref;
+    prefetchedAtRef.current = Date.now();
+    try {
+      router.prefetch(localizedHref);
+    } catch {
+      prefetchedHrefRef.current = null;
+    }
+  }
+
+  function isPrefetched() {
+    return prefetchedHrefRef.current === localizedHref && Date.now() - prefetchedAtRef.current < INTENT_PREFETCH_TTL_MS;
+  }
+
   function schedulePrefetch() {
     clearPrefetchTimer();
-    if (prefetchPolicy !== "intent" || prefetchedHrefRef.current === localizedHref || !canPrefetch()) return;
+    if (prefetchPolicy === "never" || isPrefetched() || !canPrefetch()) return;
     prefetchTimerRef.current = setTimeout(() => {
       prefetchTimerRef.current = null;
-      if (!canPrefetch()) return;
-      prefetchedHrefRef.current = localizedHref;
-      router.prefetch(localizedHref);
+      doPrefetch();
     }, INTENT_PREFETCH_DELAY_MS);
   }
 
@@ -75,7 +89,12 @@ export function AppLink({
 
   function handlePointerEnter(event: PointerEvent<HTMLAnchorElement>) {
     onPointerEnter?.(event);
-    if (!event.defaultPrevented && event.pointerType !== "touch") schedulePrefetch();
+    if (!event.defaultPrevented) schedulePrefetch();
+  }
+
+  function handlePointerDown(event: PointerEvent<HTMLAnchorElement>) {
+    onPointerDown?.(event);
+    if (!event.defaultPrevented && event.button === 0) doPrefetch();
   }
 
   function handlePointerLeave(event: PointerEvent<HTMLAnchorElement>) {
@@ -97,8 +116,11 @@ export function AppLink({
     <Link
       href={localizedHref}
       {...props}
-      prefetch={prefetchPolicy === "default"}
+      // Intent links are prefetched only after user intent. Enabling Next's
+      // viewport prefetch here would eagerly fetch every card on large lists.
+      prefetch={prefetch ?? (prefetchPolicy === "default")}
       onPointerEnter={handlePointerEnter}
+      onPointerDown={handlePointerDown}
       onPointerLeave={handlePointerLeave}
       onFocus={handleFocus}
       onBlur={handleBlur}

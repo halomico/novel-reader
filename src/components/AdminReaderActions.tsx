@@ -30,7 +30,7 @@ export function AdminReaderActions({
       <form
         action={deleteReaderNovelAction}
         onSubmit={(event) => {
-          if (!window.confirm(`确认删除《${title}》及其小说文件？`)) {
+          if (!window.confirm(`确认删除《${title}》及其全部目录、正文与互动数据？此操作不可撤销。`)) {
             event.preventDefault();
           }
         }}

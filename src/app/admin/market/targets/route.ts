@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
+import { database } from "@/core/db/postgres";
+import {
+  getPostgresEntitlementTargetOption,
+  listPostgresEntitlementTargets,
+} from "@/domains/access/postgres-entitlements";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
 import {
   ENTITLEMENT_TARGET_RIGHTS,
-  getEntitlementTargetOption,
   isEntitlementTargetType,
-  listEntitlementTargets,
-} from "@/lib/entitlements";
+} from "@/lib/entitlement-protocol";
 
 export const dynamic = "force-dynamic";
 
@@ -21,10 +24,10 @@ export async function GET(request: Request) {
   if (!isEntitlementTargetType(targetType)) {
     return NextResponse.json({ ok: false, message: "资源类型无效" }, { status: 400 });
   }
-  const targets = listEntitlementTargets(targetType, url.searchParams.get("q") || "", 30);
+  const targets = await listPostgresEntitlementTargets(database("web"), targetType, url.searchParams.get("q") || "", 30);
   const selectedId = url.searchParams.get("selected") || "";
   const selected = selectedId && !targets.some((target) => target.id === selectedId)
-    ? getEntitlementTargetOption(targetType, selectedId)
+    ? await getPostgresEntitlementTargetOption(database("web"), targetType, selectedId)
     : null;
   return NextResponse.json({
     ok: true,

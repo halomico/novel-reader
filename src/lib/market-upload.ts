@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { database } from "@/core/db/postgres";
 import { getMediaDir } from "./config";
-import { getDb } from "./db";
 import {
   cancelRemoteMediaUpload,
   createRemoteMediaFolder,
@@ -16,7 +16,7 @@ import {
   isRemoteMediaStorage,
 } from "./media-storage-config";
 import { resolveMediaStoragePath } from "./media-storage-path";
-import { MarketError, type MarketAsset } from "./market";
+import { MarketError, upsertPostgresMarketAsset, type MarketAsset } from "@/domains/market/postgres-market";
 
 type LocalMarketUpload = {
   id: string;
@@ -98,8 +98,12 @@ function withUploadLock<T>(uploadId: string, task: () => Promise<T>): Promise<T>
   });
 }
 
-function productExists(productId: number): boolean {
-  return Boolean(getDb().prepare("SELECT 1 AS found FROM market_products WHERE id = ?").get(productId));
+async function productExists(productId: number): Promise<boolean> {
+  const result = await database("web").query({
+    text: "SELECT 1 FROM market_products WHERE id = $1 AND deleted_at IS NULL",
+    values: [productId],
+  });
+  return Boolean(result.rows[0]);
 }
 
 async function ensureRemoteMarketFolder(nodeId: string, productId: number) {
@@ -120,65 +124,8 @@ function insertMarketAsset(input: {
   mimeType: string;
   sizeBytes: number;
   mtimeMs: number;
-}): MarketAsset {
-  const db = getDb();
-  const existing = db
-    .prepare(
-      `SELECT id, product_id, storage_node_id, file_name, stored_name, mime_type, size_bytes, mtime_ms, created_at
-       FROM market_assets
-       WHERE storage_node_id IS ? AND stored_name = ?`,
-    )
-    .get(input.storageNodeId, input.storedName) as {
-    id: number;
-    product_id: number;
-    storage_node_id: string | null;
-    file_name: string;
-    stored_name: string;
-    mime_type: string;
-    size_bytes: number;
-    mtime_ms: number;
-    created_at: string;
-  } | undefined;
-  if (existing) {
-    return {
-      id: existing.id,
-      productId: existing.product_id,
-      storageNodeId: existing.storage_node_id,
-      fileName: existing.file_name,
-      storedName: existing.stored_name,
-      mimeType: existing.mime_type,
-      sizeBytes: existing.size_bytes,
-      mtimeMs: existing.mtime_ms,
-      createdAt: existing.created_at,
-    };
-  }
-  const info = db
-    .prepare(
-      `INSERT INTO market_assets (
-         product_id, storage_node_id, file_name, stored_name, mime_type, size_bytes, mtime_ms
-       )
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      input.productId,
-      input.storageNodeId,
-      input.fileName,
-      input.storedName,
-      input.mimeType,
-      input.sizeBytes,
-      input.mtimeMs,
-    );
-  return {
-    id: Number(info.lastInsertRowid),
-    productId: input.productId,
-    storageNodeId: input.storageNodeId,
-    fileName: input.fileName,
-    storedName: input.storedName,
-    mimeType: input.mimeType,
-    sizeBytes: input.sizeBytes,
-    mtimeMs: input.mtimeMs,
-    createdAt: new Date().toISOString(),
-  };
+}): Promise<MarketAsset> {
+  return upsertPostgresMarketAsset(input);
 }
 
 export async function startMarketAssetUpload(input: {
@@ -190,7 +137,7 @@ export async function startMarketAssetUpload(input: {
 }): Promise<MarketUploadStart> {
   const productId = Math.floor(input.productId);
   const sizeBytes = Math.floor(input.sizeBytes);
-  if (!Number.isInteger(productId) || productId < 1 || !productExists(productId)) {
+  if (!Number.isInteger(productId) || productId < 1 || !await productExists(productId)) {
     throw new MarketError("商品不存在", "not_found");
   }
   if (!Number.isInteger(sizeBytes) || sizeBytes <= 0 || sizeBytes > MEDIA_UPLOAD_MAX_BYTES) {
@@ -283,7 +230,7 @@ export async function finishMarketAssetUpload(uploadId: string): Promise<MarketA
   if (remote) {
     const productId = Number(remote[1]);
     const receipt = await finishRemoteMediaUpload(remote[2], remote[3]);
-    return insertMarketAsset({
+    return await insertMarketAsset({
       productId,
       storageNodeId: remote[2],
       fileName: receipt.fileName,
@@ -304,7 +251,7 @@ export async function finishMarketAssetUpload(uploadId: string): Promise<MarketA
     await fs.promises.rename(partialPath, finalPath);
     const finalStat = await fs.promises.stat(finalPath);
     fs.rmSync(localSessionPath(uploadId), { force: true });
-    return insertMarketAsset({
+    return await insertMarketAsset({
       productId: session.productId,
       storageNodeId: null,
       fileName: session.fileName,

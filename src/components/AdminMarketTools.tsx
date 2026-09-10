@@ -4,7 +4,7 @@ import { Check, Copy, FileText, ImagePlus, TicketPlus, Trash2, Upload } from "lu
 import Image from "next/image";
 import { ChangeEvent, FormEvent, useRef, useState, useTransition } from "react";
 import { createRedemptionCodeBatchAction } from "@/app/admin/market/actions";
-import type { MarketAsset } from "@/lib/market";
+import type { MarketAsset } from "@/domains/market/postgres-market";
 import { AdminSelect } from "./AdminSelect";
 
 type ProductOption = { id: number; title: string };

@@ -10,6 +10,8 @@ import {
 } from "@/lib/market-upload";
 import { MEDIA_UPLOAD_CHUNK_BYTES } from "@/lib/media-node-protocol";
 import { isRemoteMediaStorage } from "@/lib/media-storage-config";
+import { validateSameOriginMutation } from "@/core/security/origin";
+import { readJsonBody } from "@/core/security/request-body";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -58,12 +60,19 @@ function uploadError(error: unknown): NextResponse {
 }
 
 export async function POST(request: NextRequest) {
+  const action = request.nextUrl.searchParams.get("action");
+  const guard = validateSameOriginMutation(request, {
+    requireJson: action === "start",
+    requireMutationHeader: false,
+  });
+  if (guard) return guard;
   const denied = await authorize(request);
   if (denied) return denied;
-  const action = request.nextUrl.searchParams.get("action");
   try {
     if (action === "start") {
-      const body = (await request.json()) as Record<string, unknown>;
+      const parsed = await readJsonBody<Record<string, unknown>>(request, 32 * 1024);
+      if (!parsed.ok) return jsonError(parsed.reason === "too_large" ? "上传参数过大" : "上传参数格式有误", parsed.reason === "too_large" ? 413 : 400);
+      const body = parsed.value;
       const started = await startMarketAssetUpload({
         productId: Number(body.productId),
         fileName: String(body.fileName || ""),
@@ -104,6 +113,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const guard = validateSameOriginMutation(request, { requireJson: false, requireMutationHeader: false });
+  if (guard) return guard;
   const denied = await authorize(request);
   if (denied) return denied;
   try {

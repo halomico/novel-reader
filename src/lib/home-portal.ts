@@ -14,7 +14,6 @@ export type HomePortalAccessMode = "off" | "member" | "browse" | "public";
 export type HomePortalAccessModes = Record<HomePortalContentCardKey, HomePortalAccessMode>;
 
 export const DEFAULT_HOME_PORTAL_ORDER: HomePortalCardKey[] = [...HOME_PORTAL_CARD_KEYS];
-export const HOME_PORTAL_CONTENT_CARD_KEYS = HOME_PORTAL_CARD_KEYS;
 
 export const DEFAULT_HOME_PORTAL_ACCESS_MODES: HomePortalAccessModes = {
   announcement: "public",
@@ -52,7 +51,7 @@ export function normalizeHomePortalAccessModes(
   fallback: HomePortalAccessModes = DEFAULT_HOME_PORTAL_ACCESS_MODES,
 ): HomePortalAccessModes {
   const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
-  return Object.fromEntries(HOME_PORTAL_CONTENT_CARD_KEYS.map((key) => [
+  return Object.fromEntries(HOME_PORTAL_CARD_KEYS.map((key) => [
     key,
     normalizeHomePortalAccessMode(source[key], fallback[key]),
   ])) as HomePortalAccessModes;
@@ -66,10 +65,6 @@ export function resolveHomePortalAccessMode(
   if (!enabled) return "off";
   if (guestAccessible) return "public";
   return publicDisplay ? "browse" : "member";
-}
-
-export function isHomePortalCardVisible(mode: HomePortalAccessMode, authenticated: boolean): boolean {
-  return isHomePortalEntryVisible(mode, authenticated);
 }
 
 export function isHomePortalEntryVisible(mode: HomePortalAccessMode, authenticated: boolean): boolean {

@@ -1,23 +1,21 @@
-﻿import path from "node:path";
-import { cache } from "react";
+import path from "node:path";
+import { readRuntimeSiteSettings } from "@/core/config/runtime-site-settings";
 import {
   canBrowseHomePortal,
   canConsumeHomePortal,
   isHomePortalEntryVisible,
   type HomePortalAccessMode,
-  type HomePortalCardKey,
   type HomePortalContentCardKey,
 } from "./home-portal";
 import {
-  readSiteSettings as readSiteSettingsFromDisk,
   type AudioPlaybackMode,
   type IpRateLimitRule,
   type ReaderAdjacentNovelSort,
   type RelatedVideoMode,
   type UserRegistrationMode,
-} from "./site-settings";
+} from "@/core/config/site-settings-schema";
 
-const readSiteSettings = cache(readSiteSettingsFromDisk);
+const readSiteSettings = readRuntimeSiteSettings;
 
 function resolveFromProject(value: string): string {
   return path.isAbsolute(value) ? value : path.resolve(process.cwd(), value);
@@ -25,15 +23,6 @@ function resolveFromProject(value: string): string {
 
 export function getLibraryDir(): string {
   return resolveFromProject(process.env.NOVEL_LIBRARY_DIR || "./library/books");
-}
-
-export function getDatabasePath(): string {
-  return resolveFromProject(process.env.DATABASE_PATH || "./data/novels.db");
-}
-
-export function getContentSearchIndexDirectory(): string {
-  const configured = process.env.CONTENT_SEARCH_INDEX_DIR?.trim();
-  return resolveFromProject(configured || "./data/content-search");
 }
 
 export function getMediaDir(): string {
@@ -49,32 +38,8 @@ export function getSiteName(): string {
   return readSiteSettings().siteName || process.env.SITE_NAME || "Example Reader";
 }
 
-export function getSiteTitle(): string {
-  return readSiteSettings().siteTitle || process.env.SITE_TITLE || getSiteName();
-}
-
-export function getSiteBrandHref(): "/" | "/novels" {
-  return readSiteSettings().brandLinkTarget === "home" ? "/" : "/novels";
-}
-
-export function getSettingsPreviewText(): string {
-  return readSiteSettings().settingsPreviewText;
-}
-
-export function getDefaultNovelLibrarySlug(): string {
-  return readSiteSettings().defaultNovelLibrarySlug || "default";
-}
-
-export function getReaderDefaultFontSize(): number {
-  return readSiteSettings().readerDefaultFontSize;
-}
-
 export function getReaderAdjacentNovelSort(): ReaderAdjacentNovelSort {
   return readSiteSettings().readerAdjacentNovelSort;
-}
-
-export function isNovelCatalogSearchExpandedByDefault(): boolean {
-  return readSiteSettings().novelCatalogSearchExpanded;
 }
 
 function readIntConfig(name: string, fallback: number, min: number, max: number): number {
@@ -90,7 +55,7 @@ function readSettingInt(settingValue: number, envName: string, fallback: number,
   if (configuredEnv !== undefined && configuredEnv.trim() !== "") {
     return readIntConfig(envName, fallback, min, max);
   }
-  if (Number.isFinite(settingValue)) {
+  if (Number.isFinite(settingValue) && settingValue >= min) {
     return Math.min(Math.max(Math.floor(settingValue), min), max);
   }
   return fallback;
@@ -104,41 +69,8 @@ function readBoolConfig(name: string, fallback: boolean): boolean {
   return ["1", "true", "yes", "on"].includes(value.toLowerCase());
 }
 
-export function getGlobalSearchMaxResults(): number {
-  return readSettingInt(readSiteSettings().globalSearchMaxResults, "GLOBAL_SEARCH_MAX_RESULTS", 200, 1, 1000);
-}
-
-export function getCatalogPageSize(): number {
-  return readSettingInt(readSiteSettings().catalogPageSize, "CATALOG_PAGE_SIZE", 15, 1, 100);
-}
-
-export function getSearchResultsPageSize(): number {
-  return readSettingInt(readSiteSettings().searchResultsPageSize, "SEARCH_RESULTS_PAGE_SIZE", 20, 1, 100);
-}
-
 export function getAdminBookPageSize(): number {
   return readSettingInt(readSiteSettings().adminBookPageSize, "ADMIN_BOOK_PAGE_SIZE", 20, 1, 200);
-}
-
-export function isRandomCatalogEnabled(): boolean {
-  return readSiteSettings().randomCatalogEnabled;
-}
-
-export function getCatalogFeatureSettings(): {
-  manualPinnedEnabled: boolean;
-  randomRecommendationsEnabled: boolean;
-  promotionOrder: "manual-first" | "random-first";
-  randomRecommendationCount: number;
-  randomRecommendationIntervalMinutes: number;
-} {
-  const settings = readSiteSettings();
-  return {
-    manualPinnedEnabled: settings.manualPinnedNovelsEnabled,
-    randomRecommendationsEnabled: settings.randomRecommendationsEnabled,
-    promotionOrder: settings.catalogPromotionOrder,
-    randomRecommendationCount: settings.randomRecommendationCount,
-    randomRecommendationIntervalMinutes: settings.randomRecommendationIntervalMinutes,
-  };
 }
 
 export function getNoticeDisplaySeconds(): number {
@@ -217,9 +149,6 @@ export function getOriginalPublishingSettings(): {
   commentMinChars: number;
   maxTags: number;
   pageSize: number;
-  publishNoticeText: string;
-  publishNoticeLinkLabel: string;
-  publishNoticeUrl: string;
 } {
   const settings = readSiteSettings();
   return {
@@ -234,14 +163,7 @@ export function getOriginalPublishingSettings(): {
     commentMinChars: settings.originalCommentMinChars,
     maxTags: settings.originalMaxTags,
     pageSize: settings.originalPageSize,
-    publishNoticeText: settings.originalPublishNoticeText,
-    publishNoticeLinkLabel: settings.originalPublishNoticeLinkLabel,
-    publishNoticeUrl: settings.originalPublishNoticeUrl,
   };
-}
-
-export function getUserDailyRegistrationLimitPerIp(): number {
-  return readSettingInt(readSiteSettings().userDailyRegistrationLimitPerIp, "USER_DAILY_REGISTRATION_LIMIT_PER_IP", 2, 0, 100);
 }
 
 export function getUserDailyReportLimit(): number {
@@ -258,14 +180,6 @@ export function getStationDisplayName(): string {
 
 export function canAccessHomeAnnouncementCard(authenticated: boolean): boolean {
   return canBrowseHomePortal(getHomePortalAccessMode("announcement"), authenticated);
-}
-
-export function getAnnouncementCardTarget(): "list" | "latest" {
-  return readSiteSettings().announcementCardTarget;
-}
-
-export function getHomePortalOrder(): HomePortalCardKey[] {
-  return readSiteSettings().homePortalOrder;
 }
 
 export function getHomePortalAccessMode(key: HomePortalContentCardKey): HomePortalAccessMode {
@@ -289,39 +203,15 @@ export function isAnalyticsEnabled(): boolean {
 }
 
 export function getAnalyticsRealtimeLimit(): number {
-  return readSettingInt(readSiteSettings().analyticsRealtimeLimit, "ANALYTICS_REALTIME_LIMIT", 300, 30, 10_000);
-}
-
-export function isNovelLibraryEnabled(): boolean {
-  return getHomePortalAccessMode("novels") !== "off";
+  return readSettingInt(readSiteSettings().analyticsRealtimeLimit, "ANALYTICS_REALTIME_LIMIT", 300, 30, 100_000);
 }
 
 export function canAccessNovelLibrary(authenticated: boolean): boolean {
   return canBrowseHomePortal(getHomePortalAccessMode("novels"), authenticated);
 }
 
-export function canConsumeNovelLibrary(authenticated: boolean): boolean {
-  return canConsumeHomePortal(getHomePortalAccessMode("novels"), authenticated);
-}
-
 export function isNovelLibraryPublic(): boolean {
   return canBrowseHomePortal(getHomePortalAccessMode("novels"), false);
-}
-
-export function isNovelContentPublic(): boolean {
-  return canConsumeHomePortal(getHomePortalAccessMode("novels"), false);
-}
-
-export function isVideoLibraryEnabled(): boolean {
-  return getHomePortalAccessMode("video") !== "off";
-}
-
-export function isAudioLibraryEnabled(): boolean {
-  return getHomePortalAccessMode("audio") !== "off";
-}
-
-export function isFileLibraryEnabled(): boolean {
-  return getHomePortalAccessMode("file") !== "off";
 }
 
 export function isTagLibraryEnabled(): boolean {
@@ -336,41 +226,12 @@ export function isTagLibraryPublic(): boolean {
   return canAccessTagLibrary(false);
 }
 
-export function isAdvancedTagSearchEnabled(): boolean {
-  const settings = readSiteSettings();
-  return getHomePortalAccessMode("tags") !== "off" && settings.advancedTagSearchEnabled;
-}
-
-export function canAccessAdvancedTagSearch(authenticated: boolean): boolean {
-  const settings = readSiteSettings();
-  return canAccessNovelLibrary(authenticated) &&
-    canBrowseHomePortal(getHomePortalAccessMode("tags"), authenticated) &&
-    settings.advancedTagSearchEnabled &&
-    (authenticated || settings.guestAdvancedTagSearchEnabled);
-}
-
-export function isAdvancedTagSearchPublic(): boolean {
-  return canAccessAdvancedTagSearch(false);
-}
-
 export function areHotwordLinksEnabled(): boolean {
   return readSiteSettings().hotwordLinksEnabled;
 }
 
 export function isGuestLibraryNavEnabled(): boolean {
   return isHomePortalEntryVisible(getHomePortalAccessMode("novels"), false);
-}
-
-export function isGuestVideoNavEnabled(): boolean {
-  return isHomePortalEntryVisible(getHomePortalAccessMode("video"), false);
-}
-
-export function isGuestAudioNavEnabled(): boolean {
-  return isHomePortalEntryVisible(getHomePortalAccessMode("audio"), false);
-}
-
-export function isGuestFileNavEnabled(): boolean {
-  return isHomePortalEntryVisible(getHomePortalAccessMode("file"), false);
 }
 
 export function isGuestTagLibraryNavEnabled(): boolean {
@@ -395,10 +256,6 @@ export function getRelatedVideoSettings(): { count: number; mode: RelatedVideoMo
   return { count: settings.relatedVideoCount, mode: settings.relatedVideoMode };
 }
 
-export function getFrontendSearchConcurrencyLimit(): number {
-  return readSettingInt(readSiteSettings().frontendSearchConcurrencyLimit, "FRONTEND_SEARCH_CONCURRENCY_LIMIT", 10, 1, 100);
-}
-
 export function getContentRateLimitPerMinute(): number {
   return readSettingInt(readSiteSettings().contentRateLimitPerMinute, "CONTENT_RATE_LIMIT_PER_MINUTE", 60, 1, 600);
 }
@@ -415,8 +272,8 @@ export function getContentRateLimitRules(): IpRateLimitRule[] {
   const hasLegacyLimit =
     settings.contentRateLimitPerMinute > 0 ||
     settings.contentRateLimitWindowSeconds > 0 ||
-    process.env.CONTENT_RATE_LIMIT_PER_MINUTE !== undefined ||
-    process.env.CONTENT_RATE_LIMIT_WINDOW_SECONDS !== undefined;
+    Boolean(process.env.CONTENT_RATE_LIMIT_PER_MINUTE?.trim()) ||
+    Boolean(process.env.CONTENT_RATE_LIMIT_WINDOW_SECONDS?.trim());
   if (!hasLegacyLimit) {
     return [];
   }
@@ -433,10 +290,6 @@ export function getContentRateLimitRules(): IpRateLimitRule[] {
       banSeconds: 3_600,
     },
   ];
-}
-
-export function shouldShowProgressBars(): boolean {
-  return readSiteSettings().showProgressBars;
 }
 
 export function isAdminEnabled(): boolean {
@@ -477,13 +330,4 @@ export function getAdminLoginRateLimitPerMinute(): number {
 
 export function isAdminLoginRateLimitEnabled(): boolean {
   return readSiteSettings().adminLoginRateLimitEnabled;
-}
-
-export function getConfiguredPaths() {
-  return {
-    libraryDir: getLibraryDir(),
-    databasePath: getDatabasePath(),
-    contentSearchIndexDirectory: getContentSearchIndexDirectory(),
-    adminSettingsPath: process.env.ADMIN_SETTINGS_PATH || "./data/admin-settings.json",
-  };
 }

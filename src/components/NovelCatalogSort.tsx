@@ -5,9 +5,9 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type {
-  NovelCatalogSort as NovelCatalogSortValue,
-  NovelCatalogSortOrder,
-} from "@/lib/books";
+  PostgresCatalogSort as NovelCatalogSortValue,
+  PostgresCatalogSortOrder as NovelCatalogSortOrder,
+} from "@/domains/catalog/postgres-catalog";
 import { uiText, type AppLocale } from "@/lib/locale";
 
 const SORT_OPTIONS: Array<{ value: NovelCatalogSortValue; label: "时间" | "名称" | "字数" }> = [
@@ -64,6 +64,8 @@ export function NovelCatalogSort({
     else params.set("order", nextOrder);
     params.delete("page");
     params.delete("random");
+    params.delete("cursor");
+    params.delete("trail");
     return `${pathname}${params.size ? `?${params.toString()}` : ""}`;
   }
 

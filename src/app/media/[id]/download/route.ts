@@ -1,39 +1,45 @@
 import { NextRequest, NextResponse } from "next/server";
+import { database } from "@/core/db/postgres";
+import { checkPostgresContentAccess } from "@/domains/access/postgres-content-access";
+import { hasPostgresUserPermission } from "@/domains/identity/postgres-permissions";
 import {
-  getMediaAsset,
+  hasValidPostgresVideoDownloadSession,
+  unlockPostgresVideoDownloadWithSoda,
+} from "@/domains/media/postgres-media-access";
+import {
   hasPublishedMediaHls,
-  incrementMediaDownloadCount,
   isMediaKindConsumable,
-} from "@/lib/media";
+} from "@/domains/media/media-model";
+import { getPostgresMediaAsset, incrementPostgresMediaDownloadCount } from "@/domains/media/postgres-media-catalog";
 import { mediaDeliveryUrl } from "@/lib/media-delivery";
 import { mediaHlsFileUrl } from "@/lib/media-hls-delivery";
-import { hasValidVideoDownloadSession, unlockVideoDownloadWithSoda } from "@/lib/media-access";
-import { checkContentAccess } from "@/lib/content-access";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
-import { hasUserPermission } from "@/lib/user-levels";
 import { getVideoPlaybackMode } from "@/lib/video-playback-mode";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const user = getCurrentUserFromRequest(request);
-  const asset = getMediaAsset(Number((await params).id));
+  const user = await getCurrentUserFromRequest(request);
+  const asset = await getPostgresMediaAsset(database("web"), Number((await params).id));
+  const videoSessionValid = asset?.kind === "video" && user?.role !== "admin"
+    ? await hasValidPostgresVideoDownloadSession(database("web"), {
+        userId: user?.id ?? 0,
+        mediaId: asset.id,
+        token: request.nextUrl.searchParams.get("session") || "",
+      }).catch(() => false)
+    : true;
   if (
     !asset ||
     (asset.kind !== "file" && asset.kind !== "video") ||
     !isMediaKindConsumable(asset.kind, Boolean(user)) ||
     (asset.kind === "video" && (
-      !user || (user.role !== "admin" && !hasValidVideoDownloadSession({
-        userId: user.id,
-        mediaId: asset.id,
-        token: request.nextUrl.searchParams.get("session") || "",
-      }))
+      !user || !videoSessionValid
     ))
   ) {
     return new Response(null, { status: 404 });
   }
-  const access = checkContentAccess(request.headers, {
+  const access = await checkPostgresContentAccess(database("web"), request.headers, {
     scope: asset.kind,
     authenticated: Boolean(user),
     admin: user?.role === "admin",
@@ -44,7 +50,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       headers: access.retryAfterSeconds ? { "Retry-After": String(access.retryAfterSeconds) } : undefined,
     });
   }
-  incrementMediaDownloadCount(asset.id);
+  await incrementPostgresMediaDownloadCount(database("web"), asset.id);
   let location: string;
   try {
     const hlsReady = asset.kind === "video" &&
@@ -78,18 +84,18 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const user = getCurrentUserFromRequest(request);
+  const user = await getCurrentUserFromRequest(request);
   if (!user) {
     return NextResponse.json({ ok: false, message: "请先登录后下载" }, { status: 401 });
   }
-  const asset = getMediaAsset(Number((await params).id));
+  const asset = await getPostgresMediaAsset(database("web"), Number((await params).id));
   if (!asset || asset.kind !== "video" || !isMediaKindConsumable("video", true)) {
     return NextResponse.json({ ok: false, message: "视频不存在" }, { status: 404 });
   }
-  if (user.role !== "admin" && !hasUserPermission(user, "video_download")) {
+  if (user.role !== "admin" && !await hasPostgresUserPermission(database("web"), user, "video_download")) {
     return NextResponse.json({ ok: false, message: "当前等级暂未开放视频下载" }, { status: 403 });
   }
-  const access = checkContentAccess(request.headers, {
+  const access = await checkPostgresContentAccess(database("web"), request.headers, {
     scope: "video",
     authenticated: true,
     admin: user.role === "admin",
@@ -103,7 +109,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       },
     );
   }
-  const result = unlockVideoDownloadWithSoda({ userId: user.id, mediaId: asset.id });
+  const result = await unlockPostgresVideoDownloadWithSoda({ userId: user.id, mediaId: asset.id });
   if (!result.ok) {
     const insufficient = result.reason === "insufficient_soda";
     const dailyLimit = result.reason === "daily_limit";

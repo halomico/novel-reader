@@ -1,20 +1,24 @@
 "use client";
 
 import { Eye, EyeOff, Plus, Save, Tags, Trash2 } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import {
   createAdminVideoCategoryAction,
   deleteAdminVideoCategoryAction,
   updateAdminVideoCategoryAction,
 } from "@/app/admin/actions";
 import { InlineMutationNotice, useInlineMutation } from "@/components/useInlineMutation";
-import type { VideoCategory } from "@/lib/media";
+import type { VideoCategory } from "@/domains/media/media-model";
 
 export function AdminVideoCategoryManager({ categories, returnPath }: { categories: VideoCategory[]; returnPath: string }) {
   const mutation = useInlineMutation();
+  const [prevCategories, setPrevCategories] = useState(categories);
   const [items, setItems] = useState(categories);
 
-  useEffect(() => setItems(categories), [categories]);
+  if (prevCategories !== categories) {
+    setPrevCategories(categories);
+    setItems(categories);
+  }
 
   function applyCategories(next: VideoCategory[] | undefined) {
     if (!next) return;

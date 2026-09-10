@@ -1,28 +1,39 @@
 FROM node:24-bookworm-slim AS deps
 WORKDIR /app
-COPY package*.json ./
+COPY package.json package-lock.json ./
 RUN npm ci
 
-FROM node:24-bookworm-slim AS builder
+FROM deps AS source
 WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-RUN mkdir -p public
+# Explicit copies complement the default-deny context. No host configuration,
+# uploads, database, backup, deployment directory or prebuilt .next is copied.
+COPY package.json package-lock.json tsconfig.json next-env.d.ts next.config.ts ./
+COPY src ./src
+COPY migrations/postgres ./migrations/postgres
+COPY scripts ./scripts
+COPY public/favicon.ico ./public/favicon.ico
+COPY public/default-avatars ./public/default-avatars
+COPY public/avatar-widgets ./public/avatar-widgets
+COPY LICENSE ./
+# Repository contract tests inspect these; neither is copied to the runner.
+COPY Dockerfile .dockerignore docker-compose.yml ./
+
+FROM source AS verify
+RUN npm audit --omit=dev --audit-level=high
+RUN npm run check:runtime
 RUN npm test
+
+FROM source AS builder
+ARG GIT_SHA=development
+ARG BUILD_TIME=development
+ENV DOCKER_BUILD=1
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV APP_GIT_SHA=$GIT_SHA
+ENV APP_BUILD_TIME=$BUILD_TIME
+# Force verification while isolating test-created files in the verify stage.
+COPY --from=verify /app/package.json ./package.json
 RUN npm run build
-RUN ./node_modules/.bin/esbuild scripts/*.ts \
-  --bundle \
-  --platform=node \
-  --format=cjs \
-  --target=node24 \
-  --external:sharp \
-  --outdir=maintenance
-RUN npm pkg set \
-  scripts.start="node server.js" \
-  scripts.scan:books="node maintenance/scan-books.js" \
-  scripts.index:search="node maintenance/build-content-search-index.js" \
-  scripts.optimize:media="node maintenance/optimize-media.js"
-RUN npm pkg set scripts.media:serve="node maintenance/media-node.js"
+RUN node scripts/build-maintenance.mjs
 
 FROM node:24-bookworm-slim AS runner
 ARG GIT_SHA=development
@@ -32,11 +43,10 @@ ENV APP_BUILD_TIME=$BUILD_TIME
 ENV APP_VERSION=2.0.0
 WORKDIR /app
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 ENV NOVEL_LIBRARY_DIR=/app/library/books
-ENV DATABASE_PATH=/app/data/novels.db
-ENV CONTENT_SEARCH_INDEX_DIR=/app/data/content-search
 ENV MEDIA_DIR=/app/data/media
 
 RUN apt-get update \
@@ -45,12 +55,16 @@ RUN apt-get update \
 
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
+COPY --from=builder /app/public/favicon.ico ./public/favicon.ico
+COPY --from=builder /app/public/default-avatars ./public/default-avatars
+COPY --from=builder /app/public/avatar-widgets ./public/avatar-widgets
 COPY --from=builder /app/maintenance ./maintenance
-COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/migrations/postgres ./migrations/postgres
+COPY --from=builder /app/maintenance/package.json ./package.json
+COPY --from=builder /app/LICENSE ./
 
-RUN mkdir -p /app/library/books /app/data/media /app/public/avatars
-RUN addgroup --system --gid 1001 nodejs \
+RUN mkdir -p /app/library/books /app/data/media /app/public/avatars \
+  && addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs \
   && chown -R nextjs:nodejs /app
 USER nextjs

@@ -2,52 +2,50 @@ import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { CatalogBookGrid } from "@/components/CatalogBookGrid";
-import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import { CatalogRandomButton } from "@/components/CatalogRandomButton";
-import { PageContextBar } from "@/components/PageContextBar";
-import { Pagination } from "@/components/Pagination";
+import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import { NovelCatalogSort } from "@/components/NovelCatalogSort";
 import { NovelSourcePicker } from "@/components/NovelSourcePicker";
+import { PageContextBar } from "@/components/PageContextBar";
 import { ResultCount } from "@/components/ResultCount";
+import { Pagination } from "@/components/Pagination";
 import { SearchEventUrlSync } from "@/components/SearchEventUrlSync";
 import { SiteHeader } from "@/components/SiteHeader";
+import { readPostgresSiteSettings } from "@/core/config/site-settings";
+import { database } from "@/core/db/postgres";
+import { checkPostgresContentAccess } from "@/domains/access/postgres-content-access";
 import {
-  normalizeSearchQuerySource,
-  recordSearchQuery,
-  resolveSearchQueryEventKey,
-  updateSearchQueryResults,
-} from "@/lib/analytics";
+  normalizePostgresSearchQuerySource,
+  recordPostgresSearchQuery,
+  resolvePostgresSearchEventKey,
+  updatePostgresSearchQueryResults,
+} from "@/domains/analytics/postgres-search-analytics";
 import {
-  defaultNovelCatalogSortOrder,
-  listNovels,
-  normalizeNovelAccessFilter,
-  normalizeNovelCatalogSort,
-  normalizeNovelCatalogSortOrder,
-} from "@/lib/books";
+  countPostgresCatalog,
+  defaultPostgresCatalogSortOrder,
+  listPostgresCatalogPage,
+  listPostgresNovelSources,
+  listPostgresRandomCatalog,
+  normalizePostgresCatalogAccess,
+  normalizePostgresCatalogSort,
+  normalizePostgresCatalogSortOrder,
+  resolvePostgresNovelLibraryScope,
+  type PostgresPublicNovel,
+} from "@/domains/catalog/postgres-catalog";
+import {
+  countPostgresAdvancedCatalog,
+  searchPostgresCatalogTitles,
+} from "@/domains/catalog/postgres-search";
+import { canBrowseHomePortal, canConsumeHomePortal, isHomePortalEntryVisible } from "@/lib/home-portal";
+import { getRequestLocale, localizeText, localizeTexts, normalizeSearchText } from "@/lib/locale-server";
+import { languageAlternates, uiText, withLocalePath } from "@/lib/locale";
 import {
   DEFAULT_NOVEL_LIBRARY_SLUG,
-  listNovelSources,
-  resolveNovelLibraryScope,
-} from "@/lib/novel-library";
-import { novelLibraryPreferenceCookieName } from "@/lib/novel-library-scope";
-import {
-  canAccessNovelLibrary,
-  getCatalogPageSize,
-  getDefaultNovelLibrarySlug,
-  getSiteTitle,
-  isGuestLibraryNavEnabled,
-  isNovelLibraryPublic,
-  isRandomCatalogEnabled,
-  isTagLibraryEnabled,
-  isTagLibraryPublic,
-} from "@/lib/config";
+  novelLibraryPreferenceCookieName,
+} from "@/lib/novel-library-scope";
+import { parseSimpleAndSearchQuery } from "@/lib/search-query";
 import { canonicalPagePath, NO_INDEX_ROBOTS } from "@/lib/seo";
-import { languageAlternates, uiText, withLocalePath } from "@/lib/locale";
-import { getRequestLocale, localizeText, localizeTexts, normalizeSearchText } from "@/lib/locale-server";
-import { filterTagsByNovelForUser } from "@/lib/tag-preferences";
-import { listTagsForNovels, type Tag } from "@/lib/tags";
 import { getCurrentUser } from "@/lib/user-auth";
-import { checkContentAccess } from "@/lib/content-access";
 
 export const dynamic = "force-dynamic";
 
@@ -68,43 +66,33 @@ type NovelsPageProps = {
 };
 
 export async function generateMetadata({ searchParams }: NovelsPageProps): Promise<Metadata> {
-  const locale = await getRequestLocale();
-  const params = await searchParams;
-  const pageValue = Number(params.page || 1);
-  const page = Number.isInteger(pageValue) && pageValue > 1 ? pageValue : 1;
+  const [locale, params, settings] = await Promise.all([
+    getRequestLocale(),
+    searchParams,
+    readPostgresSiteSettings(),
+  ]);
   const requestedLibrary = params.library || params.sourceLibrary || "";
-  const sortBy = normalizeNovelCatalogSort(params.sort);
-  const sortOrder = normalizeNovelCatalogSortOrder(params.order, sortBy);
+  const sortBy = normalizePostgresCatalogSort(params.sort);
+  const sortOrder = normalizePostgresCatalogSortOrder(params.order, sortBy);
   const isSearchOrRandom = Boolean(
-    params.q?.trim() ||
-    params.random?.trim() ||
-    sortBy !== "updated" ||
-    sortOrder !== "desc" ||
-    params.access === "free" ||
-    params.access === "soda" ||
+    params.q?.trim() || params.random?.trim() || Number(params.page || 1) > 1 ||
+    sortBy !== "updated" || sortOrder !== "desc" ||
+    params.access === "free" || params.access === "soda" ||
     (requestedLibrary && requestedLibrary !== DEFAULT_NOVEL_LIBRARY_SLUG),
   );
-  const isPublic = isNovelLibraryPublic();
-  const canonicalPath = isSearchOrRandom ? "/novels" : canonicalPagePath("/novels", page);
+  const portalMode = settings.homePortalAccessModes.novels;
+  const isPublic = canConsumeHomePortal(portalMode, false);
+  const canonicalPath = canonicalPagePath("/novels", 1);
   const canonical = withLocalePath(canonicalPath, locale);
-  const sourceTitle = params.random?.trim()
-    ? "随便看看"
-    : params.q?.trim()
-      ? "小说搜索"
-      : page > 1
-        ? `小说第 ${page} 页`
-        : "小说";
-  const [title, description] = await localizeTexts(
-    [sourceTitle, "浏览并在线阅读站内小说。"] as const,
-    locale,
-  );
+  const sourceTitle = params.random?.trim() ? "随便看看" : params.q?.trim() ? "小说搜索" : "小说";
+  const [title, description] = await localizeTexts([sourceTitle, "浏览并在线阅读站内小说。"] as const, locale);
   return {
     title,
     description,
     alternates: { canonical, languages: languageAlternates(canonicalPath) },
     robots: isPublic && !isSearchOrRandom ? { index: true, follow: true } : NO_INDEX_ROBOTS,
     openGraph: {
-      title: page === 1 && !isSearchOrRandom ? await localizeText(getSiteTitle(), locale) : title,
+      title: !isSearchOrRandom ? await localizeText(settings.siteTitle || settings.siteName, locale) : title,
       description,
       url: canonical,
     },
@@ -112,164 +100,214 @@ export async function generateMetadata({ searchParams }: NovelsPageProps): Promi
 }
 
 export default async function NovelsPage({ searchParams }: NovelsPageProps) {
-  const params = await searchParams;
-  const locale = await getRequestLocale();
-  const user = await getCurrentUser();
+  const [params, locale, user, settings, requestHeaders] = await Promise.all([
+    searchParams,
+    getRequestLocale(),
+    getCurrentUser(),
+    readPostgresSiteSettings(),
+    headers(),
+  ]);
   const authenticated = Boolean(user);
-  if (!canAccessNovelLibrary(authenticated)) {
-    if (!user && isGuestLibraryNavEnabled()) {
+  const portalMode = settings.homePortalAccessModes.novels;
+  if (!canBrowseHomePortal(portalMode, authenticated)) {
+    if (!user && isHomePortalEntryVisible(portalMode, false)) {
       const gateParams = new URLSearchParams();
       if (params.q) gateParams.set("q", params.q);
-      if (params.page) gateParams.set("page", params.page);
       if (params.library || params.sourceLibrary) gateParams.set("library", params.library || params.sourceLibrary || "");
-      const gateSort = normalizeNovelCatalogSort(params.sort);
-      const gateOrder = normalizeNovelCatalogSortOrder(params.order, gateSort);
-      if (gateSort !== "updated") gateParams.set("sort", gateSort);
-      if (gateOrder !== defaultNovelCatalogSortOrder(gateSort)) gateParams.set("order", gateOrder);
-      if (params.access === "free" || params.access === "soda") gateParams.set("access", params.access);
-      const returnTo = `/novels${gateParams.size ? `?${gateParams.toString()}` : ""}`;
-      return <ContentEntryGatePage locale={locale} label={uiText(locale, "小说")} returnTo={returnTo} />;
+      return <ContentEntryGatePage locale={locale} label={uiText(locale, "小说")} returnTo={`/novels${gateParams.size ? `?${gateParams.toString()}` : ""}`} />;
     }
     notFound();
   }
-  const access = checkContentAccess(await headers(), {
+  const accessResult = await checkPostgresContentAccess(database("web"), requestHeaders, {
     scope: "novel",
     authenticated,
     admin: user?.role === "admin",
     rateLimit: false,
   });
-  if (!access.allowed) notFound();
-  const page = Number(params.page || "1");
-  const query = params.q || "";
-  const normalizedQuery = query ? await normalizeSearchText(query) : "";
-  const pageSize = getCatalogPageSize();
+  if (!accessResult.allowed) notFound();
+
   const requestedLibrary = params.library || params.sourceLibrary;
   const rememberedLibrary = !requestedLibrary && user
     ? (await cookies()).get(novelLibraryPreferenceCookieName(user.id))?.value
     : undefined;
-  const libraryScope = resolveNovelLibraryScope(
-    requestedLibrary || rememberedLibrary || getDefaultNovelLibrarySlug(),
+  const effectiveRequested = requestedLibrary || (
+    rememberedLibrary && rememberedLibrary !== "default" && rememberedLibrary !== settings.defaultNovelLibrarySlug
+      ? rememberedLibrary
+      : undefined
+  );
+  const libraryScope = await resolvePostgresNovelLibraryScope(
+    database("web"),
+    effectiveRequested,
+    settings.defaultNovelLibrarySlug,
   );
   const activeSource = libraryScope.kind === "source" ? libraryScope.source : null;
-  const randomSeed = query ? "" : params.random || "";
-  const sortBy = normalizeNovelCatalogSort(params.sort);
-  const sortOrder = normalizeNovelCatalogSortOrder(params.order, sortBy);
-  const accessFilter = normalizeNovelAccessFilter(params.access);
-  const sourceResult = listNovels({
-    page,
-    q: normalizedQuery,
-    pageSize,
-    randomSeed,
-    sourceId: activeSource?.id,
-    sortBy,
-    sortOrder,
-    access: accessFilter,
-  });
-  const result = { ...sourceResult, query: query.trim() };
-  const searchSource = normalizeSearchQuerySource(params.source);
-  const originNovelId = Number(params.origin || 0);
-  let searchEventKey = result.query ? resolveSearchQueryEventKey(params.searchEvent, result.query) : null;
-  if (result.query && !searchEventKey) {
-    searchEventKey = recordSearchQuery(result.query, "title", {
+  const originalQuery = (params.q || "").trim();
+  const normalizedQuery = originalQuery ? await normalizeSearchText(originalQuery) : "";
+  const validation = normalizedQuery
+    ? parseSimpleAndSearchQuery(normalizedQuery, { mode: "title" })
+    : null;
+  const pageSize = settings.catalogPageSize;
+  const randomSeed = originalQuery ? "" : (params.random || "").trim();
+  const sortBy = normalizePostgresCatalogSort(params.sort);
+  const sortOrder = normalizePostgresCatalogSortOrder(params.order, sortBy);
+  const access = normalizePostgresCatalogAccess(params.access);
+  const rawPage = Math.floor(Number(params.page || 1));
+  const currentPage = Number.isSafeInteger(rawPage) && rawPage > 0
+    ? Math.min(rawPage, Math.floor(2_147_483_647 / pageSize) + 1)
+    : 1;
+  const offset = (currentPage - 1) * pageSize;
+
+  let items: PostgresPublicNovel[] = [];
+  let totalItems = 0;
+  let message = "";
+  if (validation && !validation.ok) {
+    message = validation.message;
+  } else if (randomSeed) {
+    [items, totalItems] = await Promise.all([
+      listPostgresRandomCatalog(database("web"), randomSeed, {
+        sourceId: activeSource?.id,
+        access,
+        limit: pageSize,
+      }),
+      countPostgresCatalog(database("web"), { sourceId: activeSource?.id, access }),
+    ]);
+  } else if (validation?.ok) {
+    const [page, total] = await Promise.all([
+      searchPostgresCatalogTitles(database("web"), validation.query, {
+        sourceId: activeSource?.id,
+        access,
+        limit: pageSize,
+        offset,
+        sortBy,
+        sortOrder,
+      }),
+      countPostgresAdvancedCatalog(database("web"), validation.query, {
+        sourceId: activeSource?.id,
+        access,
+        sortBy,
+        sortOrder,
+      }),
+    ]);
+    items = page.items.map((item) => ({
+      id: item.id,
+      title: item.title,
+      description: item.description,
+      sourceId: item.source_id,
+      storageMode: item.storage_mode,
+      chapterCount: item.chapter_count,
+      accessMode: item.access_mode,
+      sodaPrice: item.soda_price,
+      previewChapterCount: 0,
+      publishedContentVersion: null,
+      sizeBytes: 0,
+      mtimeMs: item.mtime_ms,
+      wordCount: item.word_count,
+      visitCount: 0,
+      createdAt: item.updated_at,
+      updatedAt: item.updated_at,
+    }));
+    totalItems = total;
+  } else {
+    const [page, total] = await Promise.all([
+      listPostgresCatalogPage(database("web"), {
+        sourceId: activeSource?.id,
+        access,
+        limit: pageSize,
+        offset,
+        sortBy,
+        sortOrder,
+      }),
+      countPostgresCatalog(database("web"), { sourceId: activeSource?.id, access }),
+    ]);
+    items = page.items;
+    totalItems = total;
+  }
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+
+  const searchSource = normalizePostgresSearchQuerySource(params.source);
+  const originNovelIdValue = Number(params.origin || 0);
+  const originNovelId = Number.isSafeInteger(originNovelIdValue) && originNovelIdValue > 0 ? originNovelIdValue : null;
+  let searchEventKey = validation?.ok && settings.analyticsEnabled
+    ? await resolvePostgresSearchEventKey(database("web"), params.searchEvent, validation.keyword)
+    : null;
+  if (validation?.ok && settings.analyticsEnabled && !searchEventKey) {
+    searchEventKey = await recordPostgresSearchQuery(database("web"), validation.keyword, "title", {
       source: searchSource,
       userId: user?.id ?? null,
       originNovelId,
-      resultCount: result.totalBooks,
-      resultNovelCount: result.totalBooks,
+      resultCount: totalItems,
+      resultNovelCount: totalItems,
     });
   } else if (searchEventKey) {
-    updateSearchQueryResults(searchEventKey, result.totalBooks, result.totalBooks);
+    await updatePostgresSearchQueryResults(database("web"), searchEventKey, totalItems, totalItems);
   }
-  const showTags = isTagLibraryEnabled() && (authenticated || isTagLibraryPublic());
-  const tagAudience = user?.role === "admin" ? "admin" : user ? "member" : "public";
-  const sourceTagsByNovel = showTags
-    ? listTagsForNovels(result.books.map((book) => book.id), { audience: tagAudience })
-    : new Map();
-  const tagsByNovel = filterTagsByNovelForUser(sourceTagsByNovel, user?.id);
-  const displayBooks = await Promise.all(result.books.map(async (book) => ({
-    ...book,
+
+  const displayBooks = await Promise.all(items.map(async (book) => ({
+    id: book.id,
     title: await localizeText(book.title, locale),
+    storage_mode: book.storageMode,
+    chapter_count: book.chapterCount,
+    soda_price: book.sodaPrice,
+    word_count: book.wordCount,
+    mtime_ms: book.mtimeMs,
+    updated_at: book.updatedAt,
   })));
-  const displayTagsByNovel = new Map<number, Tag[]>();
-  for (const [novelId, tags] of tagsByNovel) {
-    displayTagsByNovel.set(
-      novelId,
-      await Promise.all(tags.map(async (tag) => ({
-        ...tag,
-        name: await localizeText(tag.name, locale),
-      }))),
-    );
-  }
-  const [homeLabel, novelsLabel, randomLabel] = await localizeTexts(
-    ["首页", "小说", "随便看看"] as const,
-    locale,
-  );
-  const returnParams = new URLSearchParams();
-  returnParams.set("page", String(result.page));
-  if (result.query) {
-    returnParams.set("q", result.query);
-    if (searchSource !== "direct") returnParams.set("source", searchSource);
-    if (Number.isInteger(originNovelId) && originNovelId > 0) returnParams.set("origin", String(originNovelId));
-    if (searchEventKey) returnParams.set("searchEvent", searchEventKey);
-  }
-  if (randomSeed) {
-    returnParams.set("random", randomSeed);
-  }
-  if (libraryScope.slug !== DEFAULT_NOVEL_LIBRARY_SLUG) returnParams.set("library", libraryScope.slug);
-  if (sortBy !== "updated") returnParams.set("sort", sortBy);
-  if (sortOrder !== defaultNovelCatalogSortOrder(sortBy)) returnParams.set("order", sortOrder);
-  if (accessFilter !== "all") returnParams.set("access", accessFilter);
-  const returnHref = `/novels?${returnParams.toString()}`;
-  const novelSources = listNovelSources({ includeEmpty: true })
+  const novelSources = (await listPostgresNovelSources(database("web"), { includeEmpty: true }))
     .filter((source) => source.slug === DEFAULT_NOVEL_LIBRARY_SLUG || source.novelCount > 0);
+  const [homeLabel, novelsLabel, randomLabel] = await localizeTexts(["首页", "小说", "随便看看"] as const, locale);
+  const baseParams = new URLSearchParams();
+  if (originalQuery) baseParams.set("q", originalQuery);
+  if (randomSeed) baseParams.set("random", randomSeed);
+  if (libraryScope.slug !== settings.defaultNovelLibrarySlug) baseParams.set("library", libraryScope.slug);
+  if (sortBy !== "updated") baseParams.set("sort", sortBy);
+  if (sortOrder !== defaultPostgresCatalogSortOrder(sortBy)) baseParams.set("order", sortOrder);
+  if (access !== "all") baseParams.set("access", access);
+  if (searchSource !== "direct") baseParams.set("source", searchSource);
+  if (originNovelId) baseParams.set("origin", String(originNovelId));
+  if (searchEventKey) baseParams.set("searchEvent", searchEventKey);
+  const returnParams = new URLSearchParams(baseParams);
+  if (currentPage > 1) returnParams.set("page", String(currentPage));
+  const returnHref = `/novels${returnParams.size ? `?${returnParams.toString()}` : ""}`;
 
   return (
     <main className="appShell catalogShell">
       <SearchEventUrlSync eventKey={searchEventKey} />
-      <SiteHeader query={result.query} novelCatalogSearch currentUser={user} library={libraryScope.slug} />
+      <SiteHeader query={originalQuery} novelCatalogSearch currentUser={user} library={libraryScope.slug} />
       <PageContextBar items={[{ label: homeLabel, href: "/" }, { label: randomSeed ? randomLabel : novelsLabel }]}>
         <NovelSourcePicker
           sources={novelSources}
           activeSlug={libraryScope.slug}
-          access={accessFilter}
+          defaultSlug={settings.defaultNovelLibrarySlug}
+          access={access}
           locale={locale}
           rememberForUserId={user?.id}
         />
         <NovelCatalogSort sortBy={sortBy} sortOrder={sortOrder} locale={locale} />
-        {isRandomCatalogEnabled() && result.totalBooks > 1 ? <CatalogRandomButton /> : null}
-        <ResultCount count={result.totalBooks} />
+        {settings.randomCatalogEnabled && totalItems > 1 ? <CatalogRandomButton /> : null}
+        <ResultCount count={totalItems} />
       </PageContextBar>
 
-      {result.books.length > 0 ? (
+      {displayBooks.length ? (
         <CatalogBookGrid
           books={displayBooks}
           returnHref={returnHref}
           ariaLabel="小说列表"
-          tagsByNovel={displayTagsByNovel}
           searchEventKey={searchEventKey}
           locale={locale}
         />
       ) : (
-        <section className="emptyState">
-          <h2>{result.message || "未找到匹配内容"}</h2>
-        </section>
+        <section className="emptyState"><h2>{message || "未找到匹配内容"}</h2></section>
       )}
 
-      <Pagination
-        page={result.page}
-        totalPages={result.totalPages}
-        query={result.query}
-        basePath="/novels"
-        extraParams={{
-          library: libraryScope.slug === DEFAULT_NOVEL_LIBRARY_SLUG ? undefined : libraryScope.slug,
-          sort: sortBy === "updated" ? undefined : sortBy,
-          order: sortOrder === defaultNovelCatalogSortOrder(sortBy) ? undefined : sortOrder,
-          access: accessFilter === "all" ? undefined : accessFilter,
-          source: searchSource === "direct" ? undefined : searchSource,
-          origin: Number.isInteger(originNovelId) && originNovelId > 0 ? String(originNovelId) : undefined,
-          searchEvent: searchEventKey || undefined,
-        }}
-      />
+      {!randomSeed && !message ? (
+        <Pagination
+          page={Math.min(currentPage, totalPages)}
+          totalPages={totalPages}
+          query={originalQuery}
+          basePath="/novels"
+          extraParams={Object.fromEntries(baseParams)}
+        />
+      ) : null}
     </main>
   );
 }

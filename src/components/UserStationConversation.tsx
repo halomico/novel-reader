@@ -1,12 +1,12 @@
 "use client";
 
-import { Send } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { replyStationThreadInlineAction } from "@/app/messages/actions";
-import type { StationMessage } from "@/lib/station";
+import type { StationMessage } from "@/domains/station/postgres-station";
 import { STATION_MESSAGE_MAX_LENGTH, stationMessageLength } from "@/lib/station-protocol";
 import { LocalDateTime } from "./LocalDateTime";
 import { InlineMutationNotice, useInlineMutation } from "./useInlineMutation";
+import { useStationConversationSync } from "./useStationConversationSync";
 
 type UserStationConversationProps = {
   threadId: number;
@@ -20,15 +20,11 @@ type UserStationConversationProps = {
   closedLabel: string;
 };
 
-function sameMessages(current: StationMessage[], next: StationMessage[]): boolean {
-  return current.length === next.length && current.at(-1)?.id === next.at(-1)?.id;
-}
-
 function resizeReplyTextarea(textarea: HTMLTextAreaElement | null) {
   if (!textarea) return;
   textarea.style.height = "0px";
   const nextHeight = Math.min(textarea.scrollHeight, 120);
-  textarea.style.height = `${Math.max(nextHeight, 36)}px`;
+  textarea.style.height = `${Math.max(nextHeight, 34)}px`;
   textarea.style.overflowY = textarea.scrollHeight > 120 ? "auto" : "hidden";
 }
 
@@ -44,16 +40,27 @@ export function UserStationConversation({
   closedLabel,
 }: UserStationConversationProps) {
   const mutation = useInlineMutation();
-  const [messages, setMessages] = useState(initialMessages);
-  const [status, setStatus] = useState(initialStatus);
-  const [reply, setReply] = useState("");
   const messageListRef = useRef<HTMLDivElement>(null);
   const replyRef = useRef<HTMLTextAreaElement>(null);
+  const [prevThreadId, setPrevThreadId] = useState(threadId);
+  const [reply, setReply] = useState("");
 
-  useEffect(() => {
-    setMessages(initialMessages);
-    setStatus(initialStatus);
-  }, [initialMessages, initialStatus, threadId]);
+  if (prevThreadId !== threadId) {
+    setPrevThreadId(threadId);
+    setReply("");
+  }
+  const {
+    messages,
+    setMessages,
+    status,
+    setStatus,
+    latestMessageIdRef,
+  } = useStationConversationSync({
+    threadId,
+    apiPath: `/api/station/threads/${threadId}`,
+    initialMessages,
+    initialStatus,
+  });
 
   useEffect(() => {
     const list = messageListRef.current;
@@ -63,37 +70,6 @@ export function UserStationConversation({
   useEffect(() => {
     resizeReplyTextarea(replyRef.current);
   }, [reply, threadId]);
-
-  useEffect(() => {
-    let active = true;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    async function syncConversation() {
-      try {
-        const response = await fetch(`/api/station/threads/${threadId}`, { cache: "no-store" });
-        if (response.ok && active) {
-          const payload = await response.json() as {
-            messages?: StationMessage[];
-            status?: "open" | "closed";
-          };
-          if (Array.isArray(payload.messages)) {
-            setMessages((current) => sameMessages(current, payload.messages!) ? current : payload.messages!);
-          }
-          if (payload.status) setStatus(payload.status);
-        }
-      } catch {
-        // Keep the current conversation visible and retry on the next interval.
-      } finally {
-        if (active) timer = setTimeout(syncConversation, 2_000);
-      }
-    }
-
-    timer = setTimeout(syncConversation, 2_000);
-    return () => {
-      active = false;
-      if (timer) clearTimeout(timer);
-    };
-  }, [threadId]);
 
   function submitReply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -108,6 +84,7 @@ export function UserStationConversation({
         if (!result.ok || !result.data) return;
         setMessages(result.data.messages);
         setStatus(result.data.status);
+        latestMessageIdRef.current = result.data.messages.at(-1)?.id ?? latestMessageIdRef.current;
         setReply("");
         replyRef.current?.focus();
       },
@@ -152,7 +129,6 @@ export function UserStationConversation({
             />
           </label>
           <button type="submit" disabled={mutation.pending || !reply.trim()} aria-label={sendLabel} title={sendLabel}>
-            <Send className="stationSendIcon" size={21} strokeWidth={1.8} aria-hidden="true" />
             <span className="stationSendLabel">{sendLabel}</span>
           </button>
         </form>

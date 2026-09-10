@@ -1,23 +1,27 @@
 "use client";
 
 import { ChevronDown, Eye, EyeOff, Plus, Save, Search, Tag, Trash2 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import {
   createAdminVideoTagAction,
   deleteAdminVideoTagAction,
   updateAdminVideoTagAction,
 } from "@/app/admin/actions";
 import { InlineMutationNotice, useInlineMutation } from "@/components/useInlineMutation";
-import type { VideoTag } from "@/lib/media";
+import type { VideoTag } from "@/domains/media/media-model";
 
 const VISIBLE_LIMIT = 80;
 
 export function AdminVideoTagManager({ tags, returnPath }: { tags: VideoTag[]; returnPath: string }) {
   const mutation = useInlineMutation();
+  const [prevTags, setPrevTags] = useState(tags);
   const [items, setItems] = useState(tags);
   const [query, setQuery] = useState("");
 
-  useEffect(() => setItems(tags), [tags]);
+  if (prevTags !== tags) {
+    setPrevTags(tags);
+    setItems(tags);
+  }
 
   const filtered = useMemo(() => {
     const terms = query.normalize("NFKC").toLocaleLowerCase().split(/\s+/u).filter(Boolean);
@@ -77,7 +81,14 @@ export function AdminVideoTagManager({ tags, returnPath }: { tags: VideoTag[]; r
         <input name="returnPath" type="hidden" value={returnPath} />
         <label>
           <span>名称</span>
-          <input name="name" maxLength={40} placeholder="新标签" required />
+          <input
+            name="name"
+            maxLength={40}
+            pattern="[\p{L}\p{N}]+"
+            title="仅支持中英文字母和数字，不支持 # 等特殊符号"
+            placeholder="新标签"
+            required
+          />
         </label>
         <label>
           <span>描述</span>
@@ -92,7 +103,7 @@ export function AdminVideoTagManager({ tags, returnPath }: { tags: VideoTag[]; r
         {visibleItems.map((tag) => (
           <details className="adminVideoTagRow" key={tag.id}>
             <summary>
-              <span className="contentTag">#{tag.name}</span>
+              <span className="contentTag">{tag.name}</span>
               <small>{tag.videoCount} 个视频</small>
               {tag.visible ? <Eye size={15} aria-label="前台显示" /> : <EyeOff size={15} aria-label="前台隐藏" />}
               <ChevronDown size={15} aria-hidden="true" />
@@ -102,7 +113,14 @@ export function AdminVideoTagManager({ tags, returnPath }: { tags: VideoTag[]; r
               <input name="tagId" type="hidden" value={tag.id} />
               <label>
                 <span>名称</span>
-                <input name="name" maxLength={40} defaultValue={tag.name} required />
+                <input
+                  name="name"
+                  maxLength={40}
+                  pattern="[\p{L}\p{N}]+"
+                  title="仅支持中英文字母和数字，不支持 # 等特殊符号"
+                  defaultValue={tag.name}
+                  required
+                />
               </label>
               <label className="adminVideoTagDescription">
                 <span>描述</span>

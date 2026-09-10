@@ -1,5 +1,6 @@
 import { isNovelLibraryPublic } from "@/lib/config";
-import { getDb } from "@/lib/db";
+import { database } from "@/core/db/postgres";
+import { getPostgresSitemapCounts, listPostgresNovelSitemapPage } from "@/domains/navigation/postgres-sitemaps";
 import { absoluteSiteUrl } from "@/lib/seo";
 import {
   BOOKS_PER_SITEMAP,
@@ -12,17 +13,10 @@ import {
 
 export const dynamic = "force-dynamic";
 
-type UpdatedRow = {
-  id: number;
-  updated_at: string;
-};
-
-export function GET(_request: Request, context: { params: Promise<{ page: string }> }) {
-  return context.params.then(({ page: pageValue }) => {
+export async function GET(_request: Request, context: { params: Promise<{ page: string }> }) {
+  const { page: pageValue } = await context.params;
     const novelsPublic = isNovelLibraryPublic();
-    const bookCount = novelsPublic
-      ? (getDb().prepare("SELECT COUNT(*) AS count FROM novels").get() as { count: number }).count
-      : 0;
+    const bookCount = novelsPublic ? (await getPostgresSitemapCounts(database("web"))).novels : 0;
     const page = parseBookSitemapPage(pageValue, getBookSitemapPageCount(bookCount));
     if (!page) return new Response("Not found", { status: 404 });
 
@@ -34,16 +28,13 @@ export function GET(_request: Request, context: { params: Promise<{ page: string
     if (page === 1) {
       entries.push({ url: absoluteSiteUrl("/novels"), changeFrequency: "daily", priority: 0.9 });
     }
-    const novels = getDb()
-      .prepare("SELECT id, updated_at FROM novels ORDER BY id ASC LIMIT ? OFFSET ?")
-      .all(BOOKS_PER_SITEMAP, (page - 1) * BOOKS_PER_SITEMAP) as UpdatedRow[];
+    const novels = await listPostgresNovelSitemapPage(database("web"), BOOKS_PER_SITEMAP, (page - 1) * BOOKS_PER_SITEMAP);
     entries.push(...novels.map((novel) => ({
       url: absoluteSiteUrl(`/books/${novel.id}`),
-      lastModified: novel.updated_at,
+      lastModified: novel.updatedAt,
       changeFrequency: "weekly" as const,
       priority: 0.8,
     })));
 
     return sitemapResponse(renderUrlSet(entries));
-  });
 }

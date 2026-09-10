@@ -8,8 +8,8 @@ import {
   ENTITLEMENT_TARGET_RIGHTS,
   type EntitlementRight,
   type EntitlementTargetType,
-  type UserEntitlementPage,
-} from "@/lib/entitlements";
+} from "@/lib/entitlement-protocol";
+import type { PostgresUserEntitlementPage } from "@/domains/access/postgres-entitlements";
 import { AdminEntitlementPicker } from "./AdminEntitlementPicker";
 import { AdminSelect } from "./AdminSelect";
 import { Pagination } from "./Pagination";
@@ -46,7 +46,7 @@ export function AdminUserEntitlementPanel({
   returnPath,
 }: {
   userId: number;
-  entitlements: UserEntitlementPage;
+  entitlements: PostgresUserEntitlementPage;
   returnPath?: string;
 }) {
   return (

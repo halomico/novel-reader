@@ -1,15 +1,16 @@
 import { absoluteSiteUrl } from "@/lib/seo";
 import { canAccessHomeAnnouncementCard } from "@/lib/config";
-import { listVisibleAnnouncements } from "@/lib/station";
+import { database } from "@/core/db/postgres";
+import { listPostgresVisibleAnnouncements } from "@/domains/station/postgres-station";
 import { renderUrlSet, sitemapResponse } from "@/lib/sitemap";
 
 export const dynamic = "force-dynamic";
 
-export function GET() {
+export async function GET() {
   if (!canAccessHomeAnnouncementCard(false)) {
     return new Response("Not found", { status: 404 });
   }
-  const announcements = listVisibleAnnouncements(false, 200);
+  const announcements = await listPostgresVisibleAnnouncements(database("web"), false, 200);
   if (!announcements.length) {
     return new Response("Not found", { status: 404 });
   }

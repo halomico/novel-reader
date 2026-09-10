@@ -1,28 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
+import { database } from "@/core/db/postgres";
+import { hasPostgresUserPermission } from "@/domains/identity/postgres-permissions";
 import { validateSameOriginMutation } from "@/core/security/origin";
-import { recommendNovelWithSoda } from "@/lib/recommendations";
+import { recommendPostgresNovelWithSoda } from "@/domains/activity/postgres-recommendations";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
-import { hasUserPermission } from "@/lib/user-levels";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function POST(request: NextRequest, {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const guard = validateSameOriginMutation(request);
-  if (guard) return guard; params }: { params: Promise<{ id: string }> }) {
+  if (guard) return guard;
   const fetchSite = request.headers.get("sec-fetch-site");
   if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "same-site") {
     return NextResponse.json({ ok: false, message: "请求无效" }, { status: 403 });
   }
-  const user = getCurrentUserFromRequest(request);
+  const user = await getCurrentUserFromRequest(request);
   if (!user) {
     return NextResponse.json({ ok: false, message: "请先登录" }, { status: 401 });
   }
-  if (!hasUserPermission(user, "novel_feedback")) {
+  if (!await hasPostgresUserPermission(database("web"), user, "novel_feedback")) {
     return NextResponse.json({ ok: false, message: "当前等级暂不能推荐" }, { status: 403 });
   }
 
-  const result = recommendNovelWithSoda(user.id, Number((await params).id));
+  const result = await recommendPostgresNovelWithSoda(user.id, Number((await params).id));
   if (result.ok) {
     return NextResponse.json(result);
   }

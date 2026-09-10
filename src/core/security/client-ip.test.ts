@@ -11,7 +11,7 @@ test("none mode ignores all forwarding headers", () => {
     "cf-connecting-ip": "203.0.113.8",
     "x-forwarded-for": "198.51.100.3",
     "cf-ipcountry": "CN",
-  }), { TRUST_PROXY_MODE: "none" } as NodeJS.ProcessEnv);
+  }), { TRUST_PROXY_MODE: "none" } as unknown as NodeJS.ProcessEnv);
   assert.deepEqual(result, { ip: "unknown", country: "unknown", trusted: false, mode: "none" });
 });
 
@@ -19,7 +19,7 @@ test("signed mode requires a valid shared secret and a single valid IP", () => {
   const env = {
     TRUST_PROXY_MODE: "signed",
     TRUST_PROXY_SECRET: "0123456789abcdef0123456789abcdef",
-  } as NodeJS.ProcessEnv;
+  } as unknown as NodeJS.ProcessEnv;
   assert.equal(getTrustedClientAddress(headers({
     "x-novel-proxy-secret": "wrong",
     "x-novel-client-ip": "203.0.113.8",
@@ -37,8 +37,8 @@ test("signed mode requires a valid shared secret and a single valid IP", () => {
 
 test("Cloudflare headers are read only in explicit cloudflare mode", () => {
   const input = headers({ "cf-connecting-ip": "2001:db8::1", "cf-ipcountry": "JP" });
-  assert.equal(getTrustedClientAddress(input, { TRUST_PROXY_MODE: "none" } as NodeJS.ProcessEnv).trusted, false);
-  assert.deepEqual(getTrustedClientAddress(input, { TRUST_PROXY_MODE: "cloudflare" } as NodeJS.ProcessEnv), {
+  assert.equal(getTrustedClientAddress(input, { TRUST_PROXY_MODE: "none" } as unknown as NodeJS.ProcessEnv).trusted, false);
+  assert.deepEqual(getTrustedClientAddress(input, { TRUST_PROXY_MODE: "cloudflare" } as unknown as NodeJS.ProcessEnv), {
     ip: "2001:db8::1",
     country: "JP",
     trusted: true,

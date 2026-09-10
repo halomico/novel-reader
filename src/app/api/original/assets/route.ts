@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
   if (!contentType.toLowerCase().startsWith("multipart/form-data")) {
     return NextResponse.json({ error: "unsupported_media_type" }, { status: 415 });
   }
-  const user = getCurrentUserFromRequest(request);
+  const user = await getCurrentUserFromRequest(request);
   if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
   let formData: FormData;
   try {

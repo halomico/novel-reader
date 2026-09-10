@@ -1,6 +1,6 @@
 "use client";
 
-import { ShieldBan } from "lucide-react";
+import { ShieldCheck, UserRoundX } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 
@@ -54,7 +54,8 @@ export function OriginalAuthorBlockButton({
   return (
     <span className={`originalAuthorBlockControl${compact ? " isCompact" : ""}`}>
       <button type="button" disabled={pending} onClick={toggle} aria-label={blocked ? "取消屏蔽作者" : "屏蔽作者"} aria-pressed={blocked} title={blocked ? "取消屏蔽" : "屏蔽作者"}>
-        <ShieldBan size={compact ? 14 : 16} aria-hidden="true" /><span>{blocked ? "取消屏蔽" : "屏蔽作者"}</span>
+        {blocked ? <ShieldCheck size={compact ? 14 : 16} aria-hidden="true" /> : <UserRoundX size={compact ? 14 : 16} aria-hidden="true" />}
+        <span>{blocked ? "已屏蔽 · 取消" : "屏蔽作者"}</span>
       </button>
       {notice ? <span className="readerActionToast" role="status">{notice}</span> : null}
     </span>

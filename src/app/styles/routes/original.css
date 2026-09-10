@@ -1,0 +1,23 @@
+/* Styles owned by the original route family.
+ * Migrated from the former global cascade on 2026-09-04. Keep route-only rules in this file.
+ */
+.tagLibraryFilterEmpty {
+  margin: 0;
+  padding: 30px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.originalSortPopover {
+  --catalog-menu-width: 88px;
+}
+
+.originalSortPopover .catalogMenuItem {
+  grid-template-columns: 14px minmax(0, 1fr) 14px;
+  gap: 0;
+  padding-inline: 5px;
+}
+
+.originalSortPopover .catalogMenuItem > span {
+  text-align: center;
+}

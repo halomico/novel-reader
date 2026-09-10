@@ -3,25 +3,25 @@ import { Bell, BookOpen, Clapperboard, File, FilePenLine, Headphones, Tags, type
 import { redirect } from "next/navigation";
 import { AppLink as Link } from "@/components/AppLink";
 import { SiteHeader } from "@/components/SiteHeader";
+import { readPostgresSiteSettings } from "@/core/config/site-settings";
+import { database } from "@/core/db/postgres";
 import {
-  getAnnouncementCardTarget,
-  getHomePortalOrder,
-  getSiteTitle,
-  canAccessHomeAnnouncementCard,
-  isOriginalChannelEnabled,
-} from "@/lib/config";
+  formatPostgresHomeUpdateTime,
+  getPostgresHomeOverview,
+} from "@/domains/navigation/postgres-home-overview";
+import { getPostgresHomeAnnouncement } from "@/domains/station/postgres-station";
 import {
-  isHomePortalCardVisible,
+  canBrowseHomePortal,
+  isHomePortalEntryVisible,
   type HomePortalAccessMode,
   type HomePortalCardKey,
 } from "@/lib/home-portal";
-import { formatHomeUpdateTime, getHomeOverview } from "@/lib/home-overview";
-import type { MediaKind } from "@/lib/media";
+import type { MediaKind } from "@/domains/media/media-model";
 import { languageAlternates, uiText, withLocalePath } from "@/lib/locale";
 import { getRequestLocale, localizeText } from "@/lib/locale-server";
-import { readSiteSettings } from "@/lib/site-settings";
 import { getCurrentUser } from "@/lib/user-auth";
-import { getHomeAnnouncement } from "@/lib/station";
+import "./styles/common.css";
+import "./styles/routes/home.css";
 
 export const dynamic = "force-dynamic";
 
@@ -48,8 +48,8 @@ const MEDIA_CARDS: Record<MediaKind, Omit<PortalCard, "kind" | "accessMode">> = 
 };
 
 export async function generateMetadata(): Promise<Metadata> {
-  const locale = await getRequestLocale();
-  const title = await localizeText(getSiteTitle(), locale);
+  const [locale, settings] = await Promise.all([getRequestLocale(), readPostgresSiteSettings()]);
+  const title = await localizeText(settings.siteTitle || settings.siteName, locale);
   const description = await localizeText("浏览站内小说、标签与已开放的资源。", locale);
   const canonical = withLocalePath("/", locale);
   return {
@@ -66,8 +66,12 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function Home({ searchParams }: HomeProps) {
-  const params = await searchParams;
-  const locale = await getRequestLocale();
+  const [params, locale, user, settings] = await Promise.all([
+    searchParams,
+    getRequestLocale(),
+    getCurrentUser(),
+    readPostgresSiteSettings(),
+  ]);
   const legacyParams = new URLSearchParams();
   if (params.page) legacyParams.set("page", params.page);
   if (params.q) legacyParams.set("q", params.q);
@@ -76,22 +80,20 @@ export default async function Home({ searchParams }: HomeProps) {
     redirect(withLocalePath(`/novels?${legacyParams.toString()}`, locale));
   }
 
-  const user = await getCurrentUser();
   const authenticated = Boolean(user);
-  const settings = readSiteSettings();
   const accessModes = settings.homePortalAccessModes;
   const announcementMode = accessModes.announcement;
-  const showAnnouncement = isHomePortalCardVisible(announcementMode, authenticated);
-  const canReadAnnouncement = canAccessHomeAnnouncementCard(authenticated);
+  const showAnnouncement = isHomePortalEntryVisible(announcementMode, authenticated);
+  const canReadAnnouncement = canBrowseHomePortal(announcementMode, authenticated);
   const announcement = showAnnouncement && canReadAnnouncement
-    ? getHomeAnnouncement(authenticated)
+    ? await getPostgresHomeAnnouncement(database("web"), authenticated)
     : null;
-  const showNovels = isHomePortalCardVisible(accessModes.novels, authenticated);
+  const showNovels = isHomePortalEntryVisible(accessModes.novels, authenticated);
   const cards = new Map<HomePortalCardKey, PortalCard>();
 
   if (showAnnouncement) {
     cards.set("announcement", {
-      href: announcement && getAnnouncementCardTarget() === "latest" ? `/announcements/${announcement.id}` : "/announcements",
+      href: announcement && settings.announcementCardTarget === "latest" ? `/announcements/${announcement.id}` : "/announcements",
       label: "公告",
       kind: "announcement",
       icon: Bell,
@@ -107,7 +109,7 @@ export default async function Home({ searchParams }: HomeProps) {
       accessMode: accessModes.novels,
     });
   }
-  if (isHomePortalCardVisible(accessModes.tags, authenticated)) {
+  if (isHomePortalEntryVisible(accessModes.tags, authenticated)) {
     cards.set("tags", {
       href: "/tags",
       label: "标签",
@@ -116,7 +118,7 @@ export default async function Home({ searchParams }: HomeProps) {
       accessMode: accessModes.tags,
     });
   }
-  if (isOriginalChannelEnabled() && isHomePortalCardVisible(accessModes.original, authenticated)) {
+  if (settings.originalChannelEnabled && isHomePortalEntryVisible(accessModes.original, authenticated)) {
     cards.set("original", {
       href: "/original",
       label: "原创",
@@ -126,12 +128,12 @@ export default async function Home({ searchParams }: HomeProps) {
     });
   }
   for (const kind of Object.keys(MEDIA_CARDS) as MediaKind[]) {
-    if (isHomePortalCardVisible(accessModes[kind], authenticated)) {
+    if (isHomePortalEntryVisible(accessModes[kind], authenticated)) {
       cards.set(kind, { ...MEDIA_CARDS[kind], kind, accessMode: accessModes[kind] });
     }
   }
-  const homePortalOrder = getHomePortalOrder();
-  const overview = getHomeOverview(authenticated, { includeOriginal: cards.has("original") });
+  const homePortalOrder = settings.homePortalOrder;
+  const overview = await getPostgresHomeOverview(database("web"), authenticated);
 
   return (
     <main className="appShell homePortalShell">
@@ -146,12 +148,13 @@ export default async function Home({ searchParams }: HomeProps) {
             <Link
               className={`homePortalCard is-${card.kind} hasNoTrailingIcon`}
               href={card.href}
+              prefetch
               key={card.kind}
             >
               <span className="homePortalCardIcon" aria-hidden="true">
                 <Icon size={26} strokeWidth={1.7} />
               </span>
-              <span className="homePortalCardCopy"><strong>{label}</strong><small>{overview[card.kind]?.count || 0} {card.kind === "announcement" ? "条" : card.kind === "novels" ? "本" : card.kind === "original" ? "篇" : "个"}{label}　最近更新：{formatHomeUpdateTime(overview[card.kind]?.updatedAt || null)}</small></span>
+              <span className="homePortalCardCopy"><strong>{label}</strong><small>{overview[card.kind]?.count || 0} {card.kind === "announcement" ? "条" : card.kind === "novels" ? "本" : card.kind === "original" ? "篇" : "个"}{label}　最近更新：{formatPostgresHomeUpdateTime(overview[card.kind]?.updatedAt || null)}</small></span>
             </Link>
           );
         })}

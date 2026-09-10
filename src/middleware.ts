@@ -1,11 +1,11 @@
 import type { NextRequest } from "next/server";
 import { getTrustedRequestCountry } from "@/core/security/client-ip";
-import { NextResponse } from "next/server";
+import { database } from "@/core/db/postgres";
 import {
-  checkContentAccess,
-  hasGlobalContentAccessRules,
-  hasScopedContentAccessControls,
-} from "@/lib/content-access";
+  checkPostgresContentAccess,
+  readPostgresContentAccessControlState,
+} from "@/domains/access/postgres-content-access";
+import { NextResponse } from "next/server";
 import { isNovelLibraryPublic } from "@/lib/config";
 import {
   isPublicPageCacheCandidate,
@@ -29,6 +29,8 @@ import {
 import { getCurrentUserFromRequest, USER_SESSION_COOKIE } from "@/lib/user-auth";
 import { NOVEL_CATALOG_SEARCH_COOKIE } from "@/lib/ui-preferences";
 import { isPublicUmamiPathname, UMAMI_ROUTE_SCOPE_HEADER } from "@/lib/seo";
+import { validateSameOriginMutation } from "@/core/security/origin";
+import { contentSecurityPolicy } from "@/core/security/content-security-policy";
 
 function bypassGlobalAccess(pathname: string): boolean {
   return (
@@ -124,6 +126,7 @@ function applyDocumentCachePolicy(
   request: NextRequest,
   response: NextResponse,
   pathname = stripLocalePath(request.nextUrl.pathname),
+  hasNovelAccessControls = true,
 ): NextResponse {
   const hasUserSession = request.cookies.has(USER_SESSION_COOKIE);
   const usesNovelCatalogSearchPreference = pathname === "/novels" || pathname === "/novels/recent";
@@ -144,7 +147,7 @@ function applyDocumentCachePolicy(
     allowPublicNovelPages:
       isNovelPage &&
       isNovelLibraryPublic() &&
-      !hasScopedContentAccessControls("novel"),
+      !hasNovelAccessControls,
   });
 
   if (cacheable) {
@@ -162,28 +165,40 @@ function applyDocumentCachePolicy(
   return response;
 }
 
-export function middleware(request: NextRequest) {
+async function handleRequest(request: NextRequest) {
   const normalizedPath = stripLocalePath(request.nextUrl.pathname);
+  if (
+    (normalizedPath === "/admin" || normalizedPath.startsWith("/admin/")) &&
+    ["POST", "PUT", "PATCH", "DELETE"].includes(request.method) &&
+    (request.headers.has("origin") || request.headers.has("sec-fetch-site"))
+  ) {
+    const mutationGuard = validateSameOriginMutation(request, {
+      requireJson: false,
+      requireMutationHeader: false,
+    });
+    if (mutationGuard) return mutationGuard;
+  }
   const locale = resolveRequestedLocale(request);
   const redirectResponse = localeRedirect(request, locale);
   if (redirectResponse) {
     return redirectResponse;
   }
   const localeResponse = createLocaleResponse(request, locale);
+  const accessControls = await readPostgresContentAccessControlState(database("web"));
 
-  if (bypassGlobalAccess(normalizedPath) || !hasGlobalContentAccessRules()) {
-    return applyDocumentCachePolicy(request, localeResponse, normalizedPath);
+  if (bypassGlobalAccess(normalizedPath) || !accessControls.global) {
+    return applyDocumentCachePolicy(request, localeResponse, normalizedPath, accessControls.novel);
   }
 
-  const user = getCurrentUserFromRequest(request);
-  const access = checkContentAccess(request.headers, {
+  const user = await getCurrentUserFromRequest(request);
+  const access = await checkPostgresContentAccess(database("web"), request.headers, {
     scope: "site",
     authenticated: Boolean(user),
     admin: user?.role === "admin",
     rateLimit: false,
   });
   if (access.allowed) {
-    return applyDocumentCachePolicy(request, localeResponse, normalizedPath);
+    return applyDocumentCachePolicy(request, localeResponse, normalizedPath, accessControls.novel);
   }
 
   const responseHeaders = new Headers({ "Cache-Control": "no-store" });
@@ -206,6 +221,12 @@ export function middleware(request: NextRequest) {
   if (access.retryAfterSeconds) {
     response.headers.set("Retry-After", String(access.retryAfterSeconds));
   }
+  return response;
+}
+
+export async function middleware(request: NextRequest) {
+  const response = await handleRequest(request);
+  response.headers.set("Content-Security-Policy", contentSecurityPolicy());
   return response;
 }
 

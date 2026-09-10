@@ -2,7 +2,7 @@
 
 import { ChevronDown, Globe2 } from "lucide-react";
 import { useState } from "react";
-import type { ContentAccessMatchMode, ContentAccessTargetType } from "@/lib/content-access";
+import type { ContentAccessMatchMode, ContentAccessTargetType } from "@/domains/access/postgres-content-access";
 import { AdminSelect } from "./AdminSelect";
 
 const COUNTRY_OPTIONS = [

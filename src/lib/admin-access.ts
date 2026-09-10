@@ -1,7 +1,7 @@
 ﻿import { BlockList, isIP } from "node:net";
+import { readRuntimeSiteSettings } from "@/core/config/runtime-site-settings";
 import { isAdminEnabled } from "./config";
 import { getTrustedClientIp } from "@/core/security/client-ip";
-import { readSiteSettings } from "./site-settings";
 
 export type AdminAccessState = {
   allowed: boolean;
@@ -134,7 +134,7 @@ export function getAdminAccessState(headers: Headers): AdminAccessState {
   if (!isAdminEnabled()) {
     return { allowed: false, clientIp, reason: "后台管理未启用" };
   }
-  const settings = readSiteSettings();
+  const settings = readRuntimeSiteSettings();
   if (
     settings.adminIpAllowlistEnabled &&
     !settings.adminAllowedNetworks.some((rule) => matchesIpRule(clientIp, rule))

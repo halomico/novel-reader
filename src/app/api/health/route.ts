@@ -1,19 +1,9 @@
-import { getDb } from "@/lib/db";
+import { database } from "@/core/db/postgres";
+import { createHealthResponse } from "./response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export function GET() {
-  try {
-    getDb().prepare("SELECT 1").get();
-    return Response.json(
-      { ok: true },
-      { headers: { "Cache-Control": "no-store" } },
-    );
-  } catch {
-    return Response.json(
-      { ok: false },
-      { status: 503, headers: { "Cache-Control": "no-store" } },
-    );
-  }
+export async function GET(): Promise<Response> {
+  return createHealthResponse(database("web"));
 }

@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { validateSameOriginMutation } from "@/core/security/origin";
+import { readJsonBody } from "@/core/security/request-body";
 import { createOrResumeOriginalDraft, OriginalDraftError } from "@/features/original-editor/server";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 
@@ -18,16 +19,18 @@ function errorResponse(error: unknown): NextResponse {
 export async function POST(request: NextRequest) {
   const guard = validateSameOriginMutation(request);
   if (guard) return guard;
-  const user = getCurrentUserFromRequest(request);
+  const user = await getCurrentUserFromRequest(request);
   if (!user) return NextResponse.json({ error: "请先登录" }, { status: 401 });
-  let input: { clientKey?: unknown; articleSlug?: unknown };
-  try {
-    input = await request.json();
-  } catch {
-    return NextResponse.json({ error: "请求格式无效" }, { status: 400 });
+  const parsed = await readJsonBody<{ clientKey?: unknown; articleSlug?: unknown }>(request, 16 * 1024);
+  if (!parsed.ok) {
+    return NextResponse.json(
+      { error: parsed.reason === "too_large" ? "请求内容过大" : "请求格式无效" },
+      { status: parsed.reason === "too_large" ? 413 : 400 },
+    );
   }
+  const input = parsed.value;
   try {
-    const draft = createOrResumeOriginalDraft({
+    const draft = await createOrResumeOriginalDraft({
       authorId: user.id,
       clientKey: String(input.clientKey || ""),
       articleSlug: input.articleSlug ? String(input.articleSlug) : undefined,

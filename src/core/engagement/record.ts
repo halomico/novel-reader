@@ -1,4 +1,5 @@
-import type { DatabaseSync } from "node:sqlite";
+import type { QueryResultRow } from "pg";
+import type { SqlExecutor } from "@/core/db/postgres";
 
 export type EngagementContentType = "novel" | "original" | "video" | "audio" | "file";
 export type EngagementAction = "detail_view" | "read_open" | "play_start";
@@ -26,51 +27,40 @@ export function validateEngagementEventId(value: unknown): string | null {
   return EVENT_ID_PATTERN.test(eventId) ? eventId : null;
 }
 
-export function recordEngagementEvent(
-  db: DatabaseSync,
+export async function recordPostgresEngagementEvent(
+  executor: SqlExecutor,
   input: EngagementEventInput,
-  onCount: (db: DatabaseSync) => void,
-): EngagementRecordResult {
+  onCount: (executor: SqlExecutor) => Promise<void>,
+): Promise<EngagementRecordResult> {
   const now = input.now ?? Date.now();
   const windowMs = Math.min(Math.max(input.dedupeWindowMs ?? 30 * 60_000, 10_000), 24 * 60 * 60_000);
-  const existing = db.prepare(
-    "SELECT counted FROM engagement_events WHERE event_id = ?",
-  ).get(input.eventId) as { counted: number } | undefined;
-  if (existing) {
-    return { accepted: true, counted: existing.counted === 1, duplicateEvent: true };
+  await executor.query({
+    text: `SELECT pg_advisory_xact_lock(hashtextextended(
+      concat_ws(':', $1::text, $2::text, $3::text, $4::text), 0
+    ))`,
+    values: [input.viewerKey, input.contentType, input.contentId, input.action],
+  });
+  const existing = await executor.query<QueryResultRow & { counted: boolean }>({
+    text: "SELECT counted FROM engagement_events WHERE event_id = $1",
+    values: [input.eventId],
+  });
+  if (existing.rows[0]) {
+    return { accepted: true, counted: existing.rows[0].counted === true, duplicateEvent: true };
   }
-
-  const recent = db.prepare(
-    `SELECT 1 AS found
-     FROM engagement_events
-     WHERE viewer_key = ? AND content_type = ? AND content_id = ? AND action = ?
-       AND counted = 1 AND created_at >= ?
-     LIMIT 1`,
-  ).get(
-    input.viewerKey,
-    input.contentType,
-    input.contentId,
-    input.action,
-    now - windowMs,
-  );
-  const counted = !recent;
-  db.prepare(
-    `INSERT INTO engagement_events (
-       event_id, viewer_key, content_type, content_id, action, counted, created_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    input.eventId,
-    input.viewerKey,
-    input.contentType,
-    input.contentId,
-    input.action,
-    counted ? 1 : 0,
-    now,
-  );
-  if (counted) onCount(db);
+  const recent = await executor.query({
+    text: `SELECT 1 FROM engagement_events
+      WHERE viewer_key = $1 AND content_type = $2 AND content_id = $3 AND action = $4
+        AND counted = TRUE AND created_at >= $5
+      LIMIT 1`,
+    values: [input.viewerKey, input.contentType, input.contentId, input.action, new Date(now - windowMs)],
+  });
+  const counted = !recent.rowCount;
+  await executor.query({
+    text: `INSERT INTO engagement_events
+      (event_id, viewer_key, content_type, content_id, action, counted, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    values: [input.eventId, input.viewerKey, input.contentType, input.contentId, input.action, counted, new Date(now)],
+  });
+  if (counted) await onCount(executor);
   return { accepted: true, counted, duplicateEvent: false };
-}
-
-export function pruneEngagementEvents(db: DatabaseSync, before: number): number {
-  return Number(db.prepare("DELETE FROM engagement_events WHERE created_at < ?").run(before).changes);
 }

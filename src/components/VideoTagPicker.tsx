@@ -1,8 +1,8 @@
 "use client";
 
 import { Search, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import type { VideoTag } from "@/lib/media";
+import { useMemo, useState } from "react";
+import type { VideoTag } from "@/domains/media/media-model";
 
 const RESULT_LIMIT = 60;
 
@@ -18,12 +18,14 @@ export function VideoTagPicker({
   disabled?: boolean;
 }) {
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState(() => new Set(selectedIds));
   const selectedKey = selectedIds.join(",");
+  const [prevSelectedKey, setPrevSelectedKey] = useState(selectedKey);
+  const [selected, setSelected] = useState(() => new Set(selectedIds));
 
-  useEffect(() => {
-    setSelected(new Set(selectedKey ? selectedKey.split(",").map(Number) : []));
-  }, [selectedKey]);
+  if (prevSelectedKey !== selectedKey) {
+    setPrevSelectedKey(selectedKey);
+    setSelected(new Set(selectedIds));
+  }
 
   const filtered = useMemo(() => {
     const terms = query.normalize("NFKC").toLocaleLowerCase().split(/\s+/u).filter(Boolean);
@@ -60,7 +62,7 @@ export function VideoTagPicker({
           const active = selected.has(tag.id);
           return (
             <button className={active ? "isActive" : ""} type="button" onClick={() => toggle(tag.id)} disabled={disabled} aria-pressed={active} key={tag.id}>
-              <span className="contentTag">#{tag.name}</span>
+              <span className="contentTag">{tag.name}</span>
             </button>
           );
         })}

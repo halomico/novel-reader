@@ -1,25 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
+import { readPostgresSiteSettings } from "@/core/config/site-settings";
 import { validateSameOriginMutation } from "@/core/security/origin";
-import { getNovelById } from "@/lib/books";
-import { canConsumeNovelLibrary } from "@/lib/config";
-import { unlockNovelWithSoda } from "@/lib/novel-access";
+import { unlockPostgresNovelWithSoda } from "@/domains/reading/postgres-reader-interactions";
+import { canConsumeHomePortal } from "@/lib/home-portal";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function POST(request: NextRequest, {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const guard = validateSameOriginMutation(request);
-  if (guard) return guard; params }: { params: Promise<{ id: string }> }) {
-  const user = getCurrentUserFromRequest(request);
+  if (guard) return guard;
+  const user = await getCurrentUserFromRequest(request);
   if (!user) {
     return NextResponse.json({ ok: false, message: "请先登录" }, { status: 401 });
   }
   const novelId = Number((await params).id);
-  if (!Number.isInteger(novelId) || novelId < 1 || !getNovelById(novelId) || !canConsumeNovelLibrary(true)) {
+  const settings = await readPostgresSiteSettings();
+  if (!Number.isInteger(novelId) || novelId < 1 ||
+      !canConsumeHomePortal(settings.homePortalAccessModes.novels, true)) {
     return NextResponse.json({ ok: false, message: "小说不存在" }, { status: 404 });
   }
-  const result = unlockNovelWithSoda(user.id, novelId);
+  const result = await unlockPostgresNovelWithSoda(user.id, novelId);
   if (!result.ok) {
     const message = result.reason === "insufficient_soda"
       ? "苏打不足"

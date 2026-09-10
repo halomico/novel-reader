@@ -13,10 +13,14 @@ import {
   getLocalMediaStorageUploadOffset,
   startMediaStorageUpload,
 } from "@/lib/media-upload-service";
-import { scheduleMediaPreparation } from "@/lib/media-maintenance";
-import { scheduleMediaPlaybackPreparation } from "@/lib/media-playback-preparation";
+import {
+  schedulePostgresMediaPlaybackPreparation,
+  schedulePostgresMediaPreparation,
+} from "@/domains/media/postgres-media-preparation";
 import { isRemoteMediaStorage, MediaStorageConfigurationError } from "@/lib/media-storage-config";
 import { getVideoPlaybackMode } from "@/lib/video-playback-mode";
+import { validateSameOriginMutation } from "@/core/security/origin";
+import { readJsonBody } from "@/core/security/request-body";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -78,15 +82,19 @@ async function readUploadChunk(request: NextRequest): Promise<Buffer> {
 }
 
 export async function POST(request: NextRequest) {
+  const action = request.nextUrl.searchParams.get("action");
+  const guard = validateSameOriginMutation(request, {
+    requireJson: action === "start",
+    requireMutationHeader: false,
+  });
+  if (guard) return guard;
   const authorizationError = await authorize(request);
   if (authorizationError) {
     return authorizationError;
   }
-  const action = request.nextUrl.searchParams.get("action");
-
   try {
     if (action === "start") {
-      const body = (await request.json()) as {
+      const parsed = await readJsonBody<{
         kind?: unknown;
         categoryId?: unknown;
         title?: unknown;
@@ -96,7 +104,9 @@ export async function POST(request: NextRequest) {
         fileName?: unknown;
         mimeType?: unknown;
         sizeBytes?: unknown;
-      };
+      }>(request, 32 * 1024);
+      if (!parsed.ok) return jsonError(parsed.reason === "too_large" ? "上传参数过大" : "上传参数格式有误", parsed.reason === "too_large" ? 413 : 400);
+      const body = parsed.value;
       const result = await startMediaStorageUpload({
         kind: body.kind,
         categoryId: body.categoryId,
@@ -127,9 +137,9 @@ export async function POST(request: NextRequest) {
 
     if (action === "finish") {
       const asset = await finishMediaStorageUpload(uploadId);
-      scheduleMediaPreparation([asset]);
+      await schedulePostgresMediaPreparation([asset]);
       if (asset.kind === "video" && getVideoPlaybackMode() !== "mp4") {
-        scheduleMediaPlaybackPreparation(asset);
+        await schedulePostgresMediaPlaybackPreparation(asset);
       }
       revalidatePath("/media");
       revalidatePath("/admin");
@@ -156,6 +166,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const guard = validateSameOriginMutation(request, { requireJson: false, requireMutationHeader: false });
+  if (guard) return guard;
   const authorized = await authorize(request);
   if (authorized instanceof NextResponse) {
     return authorized;

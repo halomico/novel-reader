@@ -1,16 +1,25 @@
 import { NextRequest } from "next/server";
-import { hasValidVideoDownloadSession } from "@/lib/media-access";
-import { checkContentAccess } from "@/lib/content-access";
+import { database } from "@/core/db/postgres";
+import { checkPostgresContentAccess } from "@/domains/access/postgres-content-access";
+import { hasValidPostgresVideoDownloadSession } from "@/domains/media/postgres-media-access";
+import { getPostgresMediaAsset } from "@/domains/media/postgres-media-catalog";
+import { hasPublishedMediaHls, isMediaKindConsumable } from "@/domains/media/media-model";
 import { serveLocalMediaHlsFile } from "@/lib/media-hls-delivery";
-import { getMediaAsset, hasPublishedMediaHls, isMediaKindConsumable } from "@/lib/media";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 async function deliver(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const user = getCurrentUserFromRequest(request);
-  const asset = getMediaAsset(Number((await params).id));
+  const user = await getCurrentUserFromRequest(request);
+  const asset = await getPostgresMediaAsset(database("web"), Number((await params).id));
+  const sessionValid = user && asset?.kind === "video" && user.role !== "admin"
+    ? await hasValidPostgresVideoDownloadSession(database("web"), {
+        userId: user.id,
+        mediaId: asset.id,
+        token: request.nextUrl.searchParams.get("session") || "",
+      })
+    : true;
   if (
     !user ||
     !asset ||
@@ -20,15 +29,11 @@ async function deliver(request: NextRequest, { params }: { params: Promise<{ id:
     request.nextUrl.searchParams.get("v") !== asset.playbackVersion ||
     !hasPublishedMediaHls(asset) ||
     !asset.playbackManifestPath ||
-    (user.role !== "admin" && !hasValidVideoDownloadSession({
-      userId: user.id,
-      mediaId: asset.id,
-      token: request.nextUrl.searchParams.get("session") || "",
-    }))
+    !sessionValid
   ) {
     return new Response(null, { status: 404 });
   }
-  const access = checkContentAccess(request.headers, {
+  const access = await checkPostgresContentAccess(database("web"), request.headers, {
     scope: "video",
     authenticated: true,
     admin: user.role === "admin",

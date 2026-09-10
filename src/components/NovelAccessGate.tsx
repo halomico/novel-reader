@@ -3,6 +3,7 @@
 import { CupSoda, LoaderCircle, LogIn } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { jsonMutationRequest } from "@/core/security/browser-mutation";
 
 export function NovelAccessGate({
   novelId,
@@ -23,7 +24,10 @@ export function NovelAccessGate({
     setLoading(true);
     setMessage("");
     try {
-      const response = await fetch(`/api/novels/${novelId}/unlock`, { method: "POST" });
+      const response = await fetch(
+        `/api/novels/${novelId}/unlock`,
+        jsonMutationRequest({ method: "POST" }),
+      );
       const body = await response.json() as { ok?: boolean; message?: string };
       if (!response.ok || !body.ok) throw new Error(body.message || "暂时无法解锁");
       router.refresh();

@@ -10,22 +10,18 @@ import { canAccessOriginalChannel, isOriginalChannelEnabled, isOriginalChannelEn
 import { getRequestLocale, localizeText } from "@/lib/locale-server";
 import { uiText } from "@/lib/locale";
 import { getCurrentUser } from "@/lib/user-auth";
-import { getOriginalTagBySlug, listOriginalArticles, type OriginalSort } from "@/lib/original";
+import { defaultOriginalSortOrder, getOriginalTagBySlug, listOriginalArticles, normalizeOriginalSort, normalizeOriginalSortOrder } from "@/domains/originals/postgres-originals";
 
 export const dynamic = "force-dynamic";
 
 type OriginalTagPageProps = {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ sort?: string; page?: string }>;
+  searchParams: Promise<{ sort?: string; order?: string; page?: string }>;
 };
-
-function normalizeSort(value: string | undefined): OriginalSort {
-  return value === "popular" || value === "name" ? value : "latest";
-}
 
 export async function generateMetadata({ params }: OriginalTagPageProps): Promise<Metadata> {
   const locale = await getRequestLocale();
-  const tag = getOriginalTagBySlug((await params).slug, { publishedOnly: true });
+  const tag = await getOriginalTagBySlug((await params).slug, { publishedOnly: true });
   return { title: tag ? `${await localizeText(tag.name, locale)} · ${uiText(locale, "原创")}` : uiText(locale, "标签") };
 }
 
@@ -41,10 +37,11 @@ export default async function OriginalTagPage({ params, searchParams }: Original
     notFound();
   }
   const [{ slug }, query] = await Promise.all([params, searchParams]);
-  const tag = getOriginalTagBySlug(slug, { publishedOnly: true });
+  const tag = await getOriginalTagBySlug(slug, { publishedOnly: true });
   if (!tag) notFound();
-  const sort = normalizeSort(query.sort);
-  const result = listOriginalArticles({ tagSlug: tag.slug, sort, page: Number(query.page || 1), viewerId: user?.id });
+  const sort = normalizeOriginalSort(query.sort);
+  const order = normalizeOriginalSortOrder(query.order, sort);
+  const result = await listOriginalArticles({ tagSlug: tag.slug, sort, sortOrder: order, page: Number(query.page || 1), viewerId: user?.id });
   const displayTagName = await localizeText(tag.name, locale);
   const items = await Promise.all(result.items.map(async (article) => ({
     ...article,
@@ -56,19 +53,22 @@ export default async function OriginalTagPage({ params, searchParams }: Original
   return (
     <main className="appShell originalShell originalTagDetailShell">
       <SiteHeader currentUser={user} />
-      <PageContextBar items={[{ label: tr("首页"), href: "/" }, { label: tr("原创"), href: "/original" }, { label: tr("标签"), href: "/original/tags" }, { label: displayTagName }]} />
+      <PageContextBar
+        items={[{ label: tr("首页"), href: "/" }, { label: tr("原创"), href: "/original" }, { label: tr("标签"), href: "/original/tags" }, { label: displayTagName }]}
+        search={<OriginalBrowseControls q="" tag={tag.slug} sort={sort} order={order} locale={locale} />}
+      />
       <section className="originalPage">
-        <header className="originalTagDetailHeader">
-          <div>
-            <span className="originalSectionKicker">{tr("标签")}</span>
+        <header className="tagDetailHeader originalTagDetailHeader">
+          <div className="tagDetailHeadingRow">
             <h1>{displayTagName}</h1>
           </div>
-          <span className="originalTagDetailCount">{result.totalItems} {tr("篇文章")}</span>
+          <div className="tagDetailMeta">
+            <span className="resultCount originalTagDetailCount">{result.totalItems.toLocaleString("zh-CN")} {tr("篇文章")}</span>
+          </div>
         </header>
-        <OriginalBrowseControls q="" tag={tag.slug} sort={sort} locale={locale} signedIn={Boolean(user)} />
-        <OriginalArticleRows items={items} locale={locale} query={{ q: "", sort }} />
+        <OriginalArticleRows items={items} locale={locale} query={{ q: "", sort, order }} />
         {!items.length ? <p className="originalEmpty">{tr("暂无文章")}</p> : null}
-        <Pagination page={result.page} totalPages={result.totalPages} query="" basePath={`/original/tags/${tag.slug}`} extraParams={{ sort: sort === "latest" ? undefined : sort }} />
+        <Pagination page={result.page} totalPages={result.totalPages} query="" basePath={`/original/tags/${tag.slug}`} extraParams={{ sort: sort === "latest" ? undefined : sort, order: order === defaultOriginalSortOrder(sort) ? undefined : order }} />
       </section>
     </main>
   );

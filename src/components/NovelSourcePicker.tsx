@@ -4,7 +4,7 @@ import { Check, Filter } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import type { NovelAccessFilter } from "@/lib/books";
+import type { PostgresCatalogAccessFilter } from "@/domains/catalog/postgres-catalog";
 import { uiText, type AppLocale } from "@/lib/locale";
 import {
   ALL_NOVEL_LIBRARIES_SLUG,
@@ -12,18 +12,28 @@ import {
   novelLibraryDisplayName,
   novelLibraryPreferenceCookieName,
 } from "@/lib/novel-library-scope";
-import type { NovelSource } from "@/lib/novel-library";
+
+type NovelSourceOption = {
+  id: number;
+  slug: string;
+  name: string;
+  novelCount: number;
+  singleNovelCount: number;
+  chapterNovelCount: number;
+};
 
 export function NovelSourcePicker({
   sources,
   activeSlug,
+  defaultSlug = DEFAULT_NOVEL_LIBRARY_SLUG,
   access,
   locale,
   rememberForUserId,
 }: {
-  sources: NovelSource[];
+  sources: NovelSourceOption[];
   activeSlug: string;
-  access: NovelAccessFilter;
+  defaultSlug?: string;
+  access: PostgresCatalogAccessFilter;
   locale: AppLocale;
   rememberForUserId?: number;
 }) {
@@ -57,31 +67,39 @@ export function NovelSourcePicker({
   function sourceHref(slug: string): string {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("sourceLibrary");
-    if (slug && slug !== DEFAULT_NOVEL_LIBRARY_SLUG) params.set("library", slug);
+    if (slug && slug !== defaultSlug) params.set("library", slug);
     else params.delete("library");
     params.delete("page");
     params.delete("random");
+    params.delete("cursor");
+    params.delete("trail");
     return `${pathname}${params.size ? `?${params.toString()}` : ""}`;
   }
 
   function rememberSource(slug: string) {
     if (!rememberForUserId) return;
-    document.cookie = `${novelLibraryPreferenceCookieName(rememberForUserId)}=${slug}; Path=/; Max-Age=31536000; SameSite=Lax`;
+    if (!slug || slug === defaultSlug) {
+      document.cookie = `${novelLibraryPreferenceCookieName(rememberForUserId)}=; Path=/; Max-Age=0; SameSite=Lax`;
+    } else {
+      document.cookie = `${novelLibraryPreferenceCookieName(rememberForUserId)}=${slug}; Path=/; Max-Age=31536000; SameSite=Lax`;
+    }
   }
 
-  function accessHref(value: NovelAccessFilter): string {
+  function accessHref(value: PostgresCatalogAccessFilter): string {
     const params = new URLSearchParams(searchParams.toString());
     if (value === "all") params.delete("access");
     else params.set("access", value);
     params.delete("page");
     params.delete("random");
+    params.delete("cursor");
+    params.delete("trail");
     return `${pathname}${params.size ? `?${params.toString()}` : ""}`;
   }
 
   return (
     <div className="catalogMenuControl novelFilterControl" ref={pickerRef}>
       <button
-        className={"catalogMenuTrigger" + (activeSlug !== DEFAULT_NOVEL_LIBRARY_SLUG || access !== "all" ? " isActive" : "")}
+        className={"catalogMenuTrigger" + (activeSlug !== defaultSlug || access !== "all" ? " isActive" : "")}
         type="button"
         aria-label={`${tr("筛选")}：${activeLabel} · ${accessLabel}`}
         aria-expanded={open}
@@ -93,24 +111,27 @@ export function NovelSourcePicker({
       </button>
       {open ? (
         <div className="catalogMenuPopover catalogFilterPopover" role="menu" aria-label={tr("筛选小说")}>
+          <div className="catalogFilterGroup" role="group" aria-label={tr("书库")}>
           <Link
             className={activeSlug === ALL_NOVEL_LIBRARIES_SLUG ? "catalogMenuItem isActive isAllLibraries" : "catalogMenuItem isAllLibraries"}
             href={sourceHref(ALL_NOVEL_LIBRARIES_SLUG)}
-            role="menuitem"
+            role="menuitemradio"
+            aria-checked={activeSlug === ALL_NOVEL_LIBRARIES_SLUG}
             onClick={() => {
               rememberSource(ALL_NOVEL_LIBRARIES_SLUG);
               setOpen(false);
             }}
           >
             {activeSlug === ALL_NOVEL_LIBRARIES_SLUG ? <Check size={14} aria-hidden="true" /> : <i className="catalogMenuItemMarker" aria-hidden="true" />}
-            <span>{tr("全部")}</span>
+            <span>{tr("全部书库")}</span>
             <small>{sources.reduce((total, source) => total + source.novelCount, 0)}</small>
           </Link>
           {sources.map((source) => (
             <Link
               className={source.slug === activeSlug ? "catalogMenuItem isActive" : "catalogMenuItem"}
               href={sourceHref(source.slug)}
-              role="menuitem"
+              role="menuitemradio"
+              aria-checked={source.slug === activeSlug}
               onClick={() => {
                 rememberSource(source.slug);
                 setOpen(false);
@@ -122,22 +143,26 @@ export function NovelSourcePicker({
               <small>{source.novelCount}</small>
             </Link>
           ))}
-          <span className="catalogMenuDivider" role="presentation" />
+          </div>
+          <div className="catalogFilterGroup" role="group" aria-label={tr("阅读方式")}>
+          <div className="catalogFilterAccess">
           {(["all", "free", "soda"] as const).map((value) => {
             const label = value === "free" ? tr("免费") : value === "soda" ? tr("苏打") : tr("全部");
             return (
               <Link
                 className={access === value ? "catalogMenuItem isActive" : "catalogMenuItem"}
                 href={accessHref(value)}
-                role="menuitem"
+                role="menuitemradio"
+                aria-checked={access === value}
                 onClick={() => setOpen(false)}
                 key={value}
               >
-                {access === value ? <Check size={14} aria-hidden="true" /> : <i className="catalogMenuItemMarker" aria-hidden="true" />}
                 <span>{label}</span>
               </Link>
             );
           })}
+          </div>
+          </div>
         </div>
       ) : null}
     </div>

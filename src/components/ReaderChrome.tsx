@@ -1,7 +1,8 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
+import { useFocusTrap } from "@/lib/focus-trap";
 import { READER_CHROME_SHOW_EVENT, READER_KEEP_CHROME_SESSION_KEY } from "@/lib/reader-layout";
 
 export function keepReaderChromeVisible() {
@@ -26,17 +27,17 @@ export function ReaderSidePanel({
   onClose: () => void;
   children: ReactNode;
 }) {
-  useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose]);
+  const panelRef = useRef<HTMLElement>(null);
+
+  useFocusTrap({
+    active: true,
+    containerRef: panelRef,
+    onEscape: onClose,
+  });
 
   return (
     <div className="readerPanelBackdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className={`readerSidePanel is-${kind}`} role="dialog" aria-modal="true" aria-label={title}>
+      <section ref={panelRef} className={`readerSidePanel is-${kind}`} role="dialog" aria-modal="true" aria-label={title}>
         <header>
           <div><strong>{title}</strong>{meta}</div>
           <button type="button" onClick={onClose} aria-label="关闭"><X size={19} aria-hidden="true" /></button>

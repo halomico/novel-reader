@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { MediaAsset } from "@/domains/media/media-model";
+import { mediaFilePath } from "@/domains/media/media-storage-model";
 import { getMediaDir } from "./config";
-import { mediaFilePath, type MediaAsset } from "./media";
 import { ensureMediaDuration } from "./media-metadata";
 import { generateVideoThumbnailFile } from "./media-processing";
 

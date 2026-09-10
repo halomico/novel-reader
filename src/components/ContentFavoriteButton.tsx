@@ -2,6 +2,7 @@
 
 import { Bookmark } from "lucide-react";
 import { useEffect, useOptimistic, useState, useTransition } from "react";
+import { jsonMutationRequest } from "@/core/security/browser-mutation";
 
 type FavoriteCollection = "novels" | "media" | "original";
 
@@ -16,12 +17,20 @@ export function ContentFavoriteButton({
   initialFavorite: boolean;
   showLabel?: boolean;
 }) {
+  const contentKey = `${collection}:${contentId}`;
+  const [prevContentKey, setPrevContentKey] = useState(contentKey);
   const [favorite, setFavorite] = useState(initialFavorite);
   const [optimisticFavorite, setOptimisticFavorite] = useOptimistic(
     favorite,
     (_current, next: boolean) => next,
   );
   const [message, setMessage] = useState("");
+
+  if (prevContentKey !== contentKey) {
+    setPrevContentKey(contentKey);
+    setFavorite(initialFavorite);
+    setMessage("");
+  }
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -36,7 +45,10 @@ export function ContentFavoriteButton({
     startTransition(async () => {
       setOptimisticFavorite(nextFavorite);
       try {
-        const response = await fetch(`/api/${collection}/${contentId}/favorite`, { method: "POST" });
+        const response = await fetch(
+          `/api/${collection}/${contentId}/favorite`,
+          jsonMutationRequest({ method: "POST" }),
+        );
         const result = await response.json() as { ok?: boolean; favorite?: boolean; message?: string };
         if (!response.ok || !result.ok) {
           setMessage(result.message || "操作失败，请稍后重试");

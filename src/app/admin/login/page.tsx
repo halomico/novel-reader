@@ -41,10 +41,10 @@ export default async function AdminLoginPage({ searchParams }: AdminLoginPagePro
   const noticeDisplaySeconds = getNoticeDisplaySeconds();
 
   return (
-    <main className="appShell adminLoginShell">
+    <main className="appShell">
       <SiteHeader currentUser={null} showPrimaryNavigation={false} authMode />
       <section className="authPage">
-        <div className="userPanel authPanel adminLoginPanel">
+        <form className="userPanel authPanel" action={loginAdminAction}>
           <div className="userPanelHeader"><div><h1>后台登录</h1></div></div>
 
         {!configured ? (
@@ -64,7 +64,6 @@ export default async function AdminLoginPage({ searchParams }: AdminLoginPagePro
           />
         ) : null}
 
-        <form className="adminLoginForm" action={loginAdminAction}>
           <label>
             <span>用户名</span>
             <input name="username" autoComplete="username" defaultValue={String(params.username || "").slice(0, 64)} disabled={!configured} />
@@ -73,11 +72,10 @@ export default async function AdminLoginPage({ searchParams }: AdminLoginPagePro
             <span>密码</span>
             <input name="password" type="password" autoComplete="current-password" disabled={!configured} />
           </label>
-          <button type="submit" disabled={!configured}>
+          <button className="authPrimaryButton" type="submit" disabled={!configured}>
             登录
           </button>
         </form>
-        </div>
       </section>
     </main>
   );

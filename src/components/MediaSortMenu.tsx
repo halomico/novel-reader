@@ -2,7 +2,7 @@
 
 import { ArrowUpDown, Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { MediaSortBy, MediaSortOrder } from "@/lib/media";
+import type { MediaSortBy, MediaSortOrder } from "@/domains/media/media-model";
 
 export type MediaSortOption = {
   value: MediaSortBy;

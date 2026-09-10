@@ -21,21 +21,10 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { adminNavKeyForPathname, type AdminNavKey } from "@/lib/admin-navigation";
 import { ADMIN_SIDEBAR_STORAGE_KEY } from "@/lib/ui-preferences";
 
-export type AdminNavKey =
-  | "home"
-  | "books"
-  | "indexes"
-  | "settings"
-  | "users"
-  | "analytics"
-  | "media"
-  | "market"
-  | "tags"
-  | "original"
-  | "access"
-  | "station";
+export type { AdminNavKey } from "@/lib/admin-navigation";
 
 const navItems = [
   { href: "/admin", label: "后台首页", value: "home", icon: House },
@@ -52,28 +41,42 @@ const navItems = [
   { href: "/admin/settings", label: "系统设置", value: "settings", icon: Settings },
 ] as const;
 
-function AdminNavLinks({ active, onNavigate }: { active: AdminNavKey; onNavigate?: () => void }) {
+function AdminNavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
+  const active = adminNavKeyForPathname(pathname);
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  const [pendingActive, setPendingActive] = useState<AdminNavKey | null>(null);
+
+  if (prevPathname !== pathname) {
+    setPrevPathname(pathname);
+    setPendingActive(null);
+  }
+
+  const currentActive = pendingActive ?? active;
 
   return (
     <nav className="adminSideNav" aria-label="后台导航">
       {navItems.map((item) => {
         const Icon = item.icon;
+        const isItemActive = item.value === currentActive;
         return (
           <Link
-            className={item.value === active ? "isActive" : ""}
+            className={isItemActive ? "isActive" : ""}
             href={item.href}
             key={item.value}
             title={item.label}
-            aria-current={item.value === active ? "page" : undefined}
-            onPointerEnter={() => {
+            aria-current={isItemActive ? "page" : undefined}
+            prefetch
+            onPointerDown={() => {
               if (item.href !== pathname) router.prefetch(item.href);
             }}
-            onFocus={() => {
-              if (item.href !== pathname) router.prefetch(item.href);
+            onClick={() => {
+              if (item.value !== active) {
+                setPendingActive(item.value);
+              }
+              onNavigate?.();
             }}
-            onClick={onNavigate}
           >
             <Icon size={18} aria-hidden="true" />
             <span>{item.label}</span>
@@ -87,11 +90,9 @@ function AdminNavLinks({ active, onNavigate }: { active: AdminNavKey; onNavigate
 type AdminLogoutAction = () => void | Promise<void>;
 
 export function AdminSidebarNavigation({
-  active,
   siteName,
   logoutAction,
 }: {
-  active: AdminNavKey;
   siteName: string;
   logoutAction: AdminLogoutAction;
 }) {
@@ -125,7 +126,7 @@ export function AdminSidebarNavigation({
           <span>{siteName}</span>
         </Link>
       </div>
-      <AdminNavLinks active={active} />
+      <AdminNavLinks />
       <div className="adminSidebarFooter">
         <form action={logoutAction}>
           <button className="adminSidebarLogout" type="submit" title="退出登录">
@@ -147,7 +148,7 @@ export function AdminSidebarNavigation({
   );
 }
 
-export function AdminMobileNavigation({ active, logoutAction }: { active: AdminNavKey; logoutAction: AdminLogoutAction }) {
+export function AdminMobileNavigation({ logoutAction }: { logoutAction: AdminLogoutAction }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -192,7 +193,7 @@ export function AdminMobileNavigation({ active, logoutAction }: { active: AdminN
       </button>
       {open ? (
         <div className="adminMobileMenuPanel">
-          <AdminNavLinks active={active} onNavigate={() => setOpen(false)} />
+          <AdminNavLinks onNavigate={() => setOpen(false)} />
           <form action={logoutAction}>
             <button className="adminMobileLogout" type="submit">
               <LogOut size={18} aria-hidden="true" />

@@ -1,45 +1,35 @@
 import { AppLink as Link } from "@/components/AppLink";
 import { cookies } from "next/headers";
-import {
-  canAccessAdvancedTagSearch,
-  getDefaultNovelLibrarySlug,
-  getNoticeDisplaySeconds,
-  getSiteBrandHref,
-  getSiteName,
-  isGuestAudioNavEnabled,
-  isGuestFileNavEnabled,
-  isGuestLibraryNavEnabled,
-  isGuestVideoNavEnabled,
-  isAudioLibraryEnabled,
-  isFileLibraryEnabled,
-  isGuestTagLibraryNavEnabled,
-  isMarketEnabled,
-  isNovelLibraryEnabled,
-  isNovelCatalogSearchExpandedByDefault,
-  isOriginalChannelEntryVisible,
-  isUserLoginEnabled,
-  isUserRegistrationEnabled,
-  isTagLibraryEnabled,
-  isVideoLibraryEnabled,
-} from "@/lib/config";
+import { readPostgresSiteSettings } from "@/core/config/site-settings";
+import { database } from "@/core/db/postgres";
+import { readPostgresUserNavigationState } from "@/domains/identity/postgres-navigation";
+import { isHomePortalEntryVisible } from "@/lib/home-portal";
 import { getCurrentUser } from "@/lib/user-auth";
-import { hasUserPermission } from "@/lib/user-levels";
-import type { UserProfile } from "@/lib/users";
+import type { PostgresUserProfile as UserProfile } from "@/domains/identity/postgres-users";
 import { getRequestLocale, localizeText, localizeTexts } from "@/lib/locale-server";
-import { countUserUnreadMessages } from "@/lib/station";
 import { novelLibraryPreferenceCookieName } from "@/lib/novel-library-scope";
-import { isNovelSourceFullTextSearchEnabled } from "@/lib/novel-search-policy";
 import {
   NOVEL_CATALOG_SEARCH_COOKIE,
   normalizeNovelCatalogSearchExpanded,
 } from "@/lib/ui-preferences";
 import { HeaderSearch } from "./HeaderSearch";
-import { HeaderMediaSearch } from "./HeaderMediaSearch";
 import { HeaderPrimaryNav } from "./HeaderPrimaryNav";
 import { ReaderHeaderBehavior } from "./ReaderHeaderBehavior";
 import { HeaderUserMenu } from "./HeaderUserMenu";
 import { MobileContextBackLink } from "./MobileContextBackLink";
 import { ThemeToggle } from "./ThemeToggle";
+import { getSiteIconHref } from "@/lib/site-icon";
+
+function enabledByEnvironment(name: string): boolean {
+  const value = process.env[name]?.trim().toLocaleLowerCase("en-US");
+  return !value || ["1", "true", "yes", "on"].includes(value);
+}
+
+function configuredNoticeSeconds(value: number): number {
+  const environment = process.env.NOTICE_DISPLAY_SECONDS?.trim();
+  const candidate = environment ? Number(environment) : value;
+  return Number.isFinite(candidate) ? Math.min(Math.max(Math.floor(candidate), 0), 60) : 5;
+}
 
 export async function SiteHeader({
   query = "",
@@ -60,7 +50,6 @@ export async function SiteHeader({
   unreadMessages,
   mobileBackHref,
   mobileBackLabel = "返回上一级",
-  mediaSearchKind,
 }: {
   query?: string;
   defaultSearchMode?: "title" | "content" | "current";
@@ -80,54 +69,76 @@ export async function SiteHeader({
   unreadMessages?: number;
   mobileBackHref?: string;
   mobileBackLabel?: string;
-  mediaSearchKind?: "video" | "audio" | "file";
 }) {
-  const locale = await getRequestLocale();
-  const siteName = await localizeText(getSiteName(), locale);
+  const [locale, settings, resolvedUser] = await Promise.all([
+    getRequestLocale(),
+    readPostgresSiteSettings(),
+    currentUser === undefined ? getCurrentUser() : Promise.resolve(currentUser),
+  ]);
+  const siteName = await localizeText(settings.siteName || process.env.SITE_NAME || "Example Reader", locale);
   const [homeLabel, novelsLabel] = await localizeTexts(
     ["返回首页", "前往小说"] as const,
     locale,
   );
-  const brandHref = getSiteBrandHref();
-  const user = currentUser === undefined ? await getCurrentUser() : currentUser;
-  const cookieStore = (library === undefined && user) || novelCatalogSearch ? await cookies() : null;
+  const brandHref = settings.brandLinkTarget === "home" ? "/" : "/novels";
+  const siteIconHref = getSiteIconHref(settings);
+  const user = resolvedUser;
+  const marketEnabled = settings.marketEnabled && enabledByEnvironment("MARKET_ENABLED");
+  const needsNavigationState = Boolean(
+    user
+    && showTools
+    && (unreadMessages === undefined || marketEnabled),
+  );
+  const needsCookieStore = showTools && ((library === undefined && Boolean(user)) || novelCatalogSearch);
+  const [cookieStore, navigationState] = await Promise.all([
+    needsCookieStore ? cookies() : Promise.resolve(null),
+    needsNavigationState && user
+      ? readPostgresUserNavigationState(database("web"), user)
+      : Promise.resolve(null),
+  ]);
   const rememberedLibrary = library === undefined && user
     ? cookieStore?.get(novelLibraryPreferenceCookieName(user.id))?.value
     : undefined;
-  const activeLibrary = library || rememberedLibrary || getDefaultNovelLibrarySlug();
-  const loginEnabled = isUserLoginEnabled();
-  const registrationEnabled = isUserRegistrationEnabled();
+  const activeLibrary = library || rememberedLibrary || settings.defaultNovelLibrarySlug;
+  const loginEnabled = settings.userLoginEnabled && enabledByEnvironment("USER_LOGIN_ENABLED");
+  const configuredRegistrationMode = process.env.USER_REGISTRATION_MODE?.trim().toLocaleLowerCase("en-US");
+  const registrationMode = !enabledByEnvironment("USER_REGISTRATION_ENABLED") || !settings.userRegistrationEnabled
+    ? "closed"
+    : configuredRegistrationMode === "closed" || configuredRegistrationMode === "invite" || configuredRegistrationMode === "open"
+      ? configuredRegistrationMode
+      : settings.userRegistrationMode;
+  const registrationEnabled = registrationMode !== "closed";
+  const portal = settings.homePortalAccessModes;
   const enabledMediaKinds = [
-    isVideoLibraryEnabled() ? "video" : null,
-    isAudioLibraryEnabled() ? "audio" : null,
-    isFileLibraryEnabled() ? "file" : null,
+    portal.video !== "off" ? "video" : null,
+    portal.audio !== "off" ? "audio" : null,
+    portal.file !== "off" ? "file" : null,
   ].filter((kind): kind is "video" | "audio" | "file" => kind !== null);
-  const showLibraryNav = isNovelLibraryEnabled() && (Boolean(user) || isGuestLibraryNavEnabled());
-  const showTagNav = isTagLibraryEnabled() && (Boolean(user) || isGuestTagLibraryNavEnabled());
-  const showOriginalNav = isOriginalChannelEntryVisible(Boolean(user));
+  const showLibraryNav = portal.novels !== "off" && isHomePortalEntryVisible(portal.novels, Boolean(user));
+  const showTagNav = portal.tags !== "off" && isHomePortalEntryVisible(portal.tags, Boolean(user));
+  const showOriginalNav = settings.originalChannelEnabled && isHomePortalEntryVisible(portal.original, Boolean(user));
   const mediaKinds = user
     ? enabledMediaKinds
     : enabledMediaKinds.filter((kind) => (
-      kind === "video" ? isGuestVideoNavEnabled() : kind === "audio" ? isGuestAudioNavEnabled() : isGuestFileNavEnabled()
+      isHomePortalEntryVisible(portal[kind], false)
     ));
   const showPrimaryNav = showPrimaryNavigation && (showLibraryNav || showTagNav || showOriginalNav || mediaKinds.length > 0);
-  const noticeDisplaySeconds = getNoticeDisplaySeconds();
-  const unreadCount = user ? unreadMessages ?? countUserUnreadMessages(user.id) : 0;
-  const showAdvancedSearch = canAccessAdvancedTagSearch(false) ||
-    (canAccessAdvancedTagSearch(Boolean(user)) && hasUserPermission(user, "advanced_search"));
-  const showMarket = Boolean(user && isMarketEnabled() && hasUserPermission(user, "market_access"));
+  const noticeDisplaySeconds = configuredNoticeSeconds(settings.noticeDisplaySeconds);
+  const unreadCount = user ? unreadMessages ?? navigationState?.unreadMessages ?? 0 : 0;
+  const showMarket = Boolean(user && marketEnabled && navigationState?.marketAccess);
   const canShowNovelSearch = showSearch && !authMode && (readerMode || showLibraryNav);
-  const canShowSearch = Boolean(mediaSearchKind) || canShowNovelSearch;
-  const contentSearchEnabled = activeLibrary === "all" || isNovelSourceFullTextSearchEnabled(activeLibrary);
+  const canShowSearch = canShowNovelSearch;
+  const contentSearchEnabled = activeLibrary === "all" || settings.novelSourceSearchModes[activeLibrary] !== "book";
   const resolvedSearchExpanded = novelCatalogSearch
     ? normalizeNovelCatalogSearchExpanded(
         cookieStore?.get(NOVEL_CATALOG_SEARCH_COOKIE)?.value,
-        isNovelCatalogSearchExpandedByDefault(),
+        settings.novelCatalogSearchExpanded,
       )
     : defaultSearchExpanded;
 
   const headerClassName = [
     "siteHeader",
+    "isStandardHeader",
     showPrimaryNav ? "hasPrimaryNav" : "",
     isHomePage ? "isHomeHeader" : "",
     readerMode ? "readerSiteHeader" : "",
@@ -145,21 +156,21 @@ export async function SiteHeader({
           </div>
         ) : null}
         <Link className="brand" href={brandHref} aria-label={brandHref === "/novels" ? novelsLabel : homeLabel}>
+          {siteIconHref ? (
+            <img className="siteBrandIcon" src={siteIconHref} alt="" width={22} height={22} />
+          ) : null}
           <span>{siteName}</span>
         </Link>
         {readerMode ? <ReaderHeaderBehavior hideOnScroll={readerAutoHideOnScroll} /> : null}
         {showPrimaryNav ? <HeaderPrimaryNav mediaKinds={mediaKinds} showLibrary={showLibraryNav} showTags={showTagNav} showOriginal={showOriginalNav} /> : null}
         {showTools ? (
           <div className={canShowSearch ? "headerTools" : "headerTools hasNoSearch"}>
-            {mediaSearchKind ? (
-              <HeaderMediaSearch kind={mediaSearchKind} />
-            ) : canShowNovelSearch ? (
+            {canShowNovelSearch ? (
               <HeaderSearch
                 query={query}
                 defaultMode={defaultSearchMode}
                 defaultExpanded={resolvedSearchExpanded}
                 showCurrentSearch={showCurrentSearch}
-                showAdvancedSearch={showAdvancedSearch}
                 noticeDisplaySeconds={noticeDisplaySeconds}
                 library={activeLibrary}
                 contentSearchEnabled={contentSearchEnabled}

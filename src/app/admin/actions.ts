@@ -1,126 +1,123 @@
-﻿"use server";
+"use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { database } from "@/core/db/postgres";
+import {
+  readFreshPostgresSiteSettingsSnapshot,
+  writePostgresSiteSettings,
+} from "@/core/config/site-settings";
+import type { SiteSettings } from "@/core/config/site-settings-schema";
+import { installRuntimeSiteSettings } from "@/core/config/runtime-site-settings";
+import { recordPostgresAdminLogin } from "@/domains/identity/postgres-admin-overview";
 import { getAdminAccessState, getClientIp, matchesIpRule, normalizeAdminNetworkRules } from "@/lib/admin-access";
 import { clearAdminSession, getAdminSession, setAdminSession, verifyAdminCredentials } from "@/lib/admin-auth";
-import { recordAdminLogin } from "@/lib/admin-login-records";
+import { ROOT_SHELL_CACHE_TAG } from "@/lib/root-shell";
 import {
-  getAdminBookPageSize,
   getAdminLoginRateLimitPerMinute,
-  getCatalogPageSize,
-  getFrontendSearchConcurrencyLimit,
-  getGlobalSearchMaxResults,
-  getNoticeDisplaySeconds,
-  getSearchResultsPageSize,
-  getUserDailyRegistrationLimitPerIp,
   isAdminLoginRateLimitEnabled,
-  getUserAvatarMaxBytes,
 } from "@/lib/config";
-import { cancelContentJobs, countActiveContentJobs } from "@/lib/content-jobs";
-import { invalidateContentSearchResultCache } from "@/lib/content-search-cache";
-import { deleteContentSearchDatabase } from "@/lib/content-search-db";
-import { invalidateNovelContentSearchIndex } from "@/lib/content-search-maintenance";
 import {
   normalizeHomePortalOrder,
   type HomePortalAccessMode,
   type HomePortalAccessModes,
 } from "@/lib/home-portal";
 import {
-  createVideoCategory,
-  createVideoTag,
-  createMediaFolder,
-  deleteVideoCategory,
-  deleteVideoTag,
-  deleteMediaAssets,
-  deleteMediaFolder,
-  getMediaAsset,
   isMediaKind,
-  listMediaAssetsByIds,
-  listVideoCategories,
-  listVideoTags,
-  listVideoTagsForAssets,
-  MediaCategoryError,
-  MediaFolderError,
-  MediaTagError,
-  renameMediaFolder,
-  setVideoCategoryForAssets,
-  setVideoTagsForAssets,
-  syncMediaLibrary,
   type MediaAsset,
   type MediaKind,
   type VideoCategory,
   type VideoTag,
-  updateVideoCategory,
-  updateVideoTag,
-  updateMediaAsset,
-  updateVideoPublishingSettings,
-} from "@/lib/media";
+} from "@/domains/media/media-model";
+import {
+  getPostgresMediaAsset,
+  listPostgresMediaAssetsByIds,
+  listPostgresVideoCategories,
+  listPostgresVideoTags,
+  listPostgresVideoTagsForAssets,
+} from "@/domains/media/postgres-media-catalog";
+import {
+  createPostgresVideoCategory,
+  createPostgresVideoTag,
+  createPostgresMediaFolder,
+  deletePostgresMediaFolder,
+  deletePostgresMediaAssets,
+  deletePostgresVideoCategory,
+  deletePostgresVideoTag,
+  MediaCategoryError,
+  MediaFolderError,
+  MediaTagError,
+  renamePostgresMediaFolder,
+  setPostgresVideoCategoryForAssets,
+  setPostgresVideoTagsForAssets,
+  updatePostgresMediaAsset,
+  updatePostgresVideoCategory,
+  updatePostgresVideoPublishingSettings,
+  updatePostgresVideoTag,
+} from "@/domains/media/postgres-media-admin";
+import { syncPostgresMediaLibrary } from "@/domains/media/postgres-media-sync";
 import { mutationResult, type MutationResult } from "@/lib/mutation-result";
 import {
-  grantUserEntitlement,
-  parseEntitlementDefinition,
-  revokeUserEntitlement,
-  updateUserEntitlement,
-} from "@/lib/entitlements";
-import { scheduleMissingMediaPreparation } from "@/lib/media-maintenance";
+  grantPostgresUserEntitlement,
+  revokePostgresUserEntitlement,
+  updatePostgresUserEntitlement,
+} from "@/domains/access/postgres-entitlements";
+import { parseEntitlementDefinition } from "@/lib/entitlement-protocol";
+import { scheduleMissingPostgresMediaPreparation } from "@/domains/media/postgres-media-preparation";
 import { clearMediaThumbnails } from "@/lib/media-thumbnail";
 import { clearRemoteMediaThumbnails } from "@/lib/media-node-client";
 import { isRemoteMediaStorage, listRemoteMediaNodes } from "@/lib/media-storage-config";
+import { ALL_NOVEL_LIBRARIES_SLUG } from "@/lib/novel-library-scope";
 import {
-  createNovelSource,
-  deleteEmptyNovelSource,
-  deleteNovelChapterIds,
-  deleteNovelIds,
-  renameNovelFile,
-  updateNovelFile,
-  updateNovelSourceSettings,
-} from "@/lib/novel-files";
+  getPostgresAdminNovelSource,
+  replacePostgresPinnedNovels,
+  setPostgresNovelRecommendationPool,
+  togglePostgresPinnedNovel,
+  updatePostgresNovelChapterOverrides,
+  updatePostgresNovelMetadata,
+  updatePostgresNovelTitles,
+} from "@/domains/catalog/postgres-admin-novels";
 import {
-  ALL_NOVEL_LIBRARIES_SLUG,
-  getNovelSourceById,
-  listNovelSources,
-  updateNovelAccessPolicy,
-  updateNovelChapterOverrides,
-  updateNovelDescription,
-} from "@/lib/novel-library";
-import { getNovelSourceSearchMode, removeNovelSourceSearchMode, setNovelSourceSearchMode } from "@/lib/novel-search-policy";
-import { hashPassword } from "@/lib/password";
-import { replacePinnedNovels, togglePinnedNovel } from "@/lib/pinned-novels";
+  createPostgresNovelSource,
+  deletePostgresEmptyNovelSource,
+  deletePostgresNovelChapterIds,
+  deletePostgresNovelIds,
+  updatePostgresNovelFile,
+  updatePostgresNovelSourceSettings,
+} from "@/domains/catalog/postgres-novel-storage";
+import { listPostgresNovelSources } from "@/domains/catalog/postgres-catalog";
+import { hashPasswordAsync, PasswordVerificationUnavailableError } from "@/lib/password";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { setNovelRecommendationPool } from "@/lib/recommendation-pool";
-import { validateSearchKeyword } from "@/lib/search";
+import { validateSearchKeyword } from "@/lib/search-query";
 import { detectSiteIconFormat, MAX_SITE_ICON_BYTES, removeSiteIconFile, writeSiteIconFile } from "@/lib/site-icon";
-import { readSiteSettings, type SiteSettings, writeSiteSettings } from "@/lib/site-settings";
-import { isColorPalette, normalizeReaderLineHeight, normalizeReaderTagsMode } from "@/lib/ui-preferences";
 import {
-  createTag,
-  deleteTag,
-  listHotwordsForNovel,
-  listTagsForNovel,
-  parseHotwordInput,
-  setNovelHotwords,
-  setNovelTags,
-  updateTag,
-} from "@/lib/tags";
+  DEFAULT_READER_PAGE_TURN,
+  isColorPalette,
+  normalizeReaderLineHeight,
+  normalizeReaderPageTurn,
+  normalizeReaderTagsMode,
+} from "@/lib/ui-preferences";
+import {
+  createPostgresCatalogTag, updatePostgresCatalogTag, deletePostgresCatalogTag,
+  replacePostgresNovelTagsAndHotwords, addPostgresNovelTagsAndHotwords,
+  parsePostgresNovelHotwords as parseHotwordInput,
+} from "@/domains/catalog/postgres-tags";
 import { deleteUserSessions, hashUserPassword } from "@/lib/user-auth";
-import { recalculateUserLevels, saveUserLevelDefinition } from "@/lib/user-levels";
-import { updateUserGrowth } from "@/lib/user-economy";
-import { setNovelRecommendationCount } from "@/lib/recommendations";
+import { validateDisplayName, validatePassword, validateUsername } from "@/domains/identity/account-input";
+import { recalculatePostgresUserLevels, savePostgresUserLevelDefinition } from "@/domains/identity/postgres-permissions";
+import { updatePostgresUserGrowth } from "@/domains/identity/postgres-user-economy";
 import {
-  clearBrowseHistory,
-  createUserRecord,
-  deleteBrowseHistoryItem,
-  anonymizeUserIds,
-  getUserById,
-  updateUserRecord,
-  updateUserStatus,
-  type UserProfile,
-  validateDisplayName,
-  validatePassword,
-  validateUsername,
-} from "@/lib/users";
+  anonymizePostgresUsers,
+  clearPostgresBrowseHistory,
+  createPostgresManagedUser,
+  deletePostgresBrowseHistoryItems,
+  getPostgresUserById,
+  updatePostgresManagedUser,
+  updatePostgresUserStatus,
+  type PostgresUserProfile as UserProfile,
+} from "@/domains/identity/postgres-users";
+import { setPostgresNovelRecommendationCount } from "@/domains/activity/postgres-recommendations";
 
 function adminNotice(message: string, tone: "success" | "warning" | "error" = "success", path = "/admin/books"): never {
   const separator = path.includes("?") ? "&" : "?";
@@ -189,13 +186,15 @@ function mediaFolderReturnPath(formData: FormData, kind: MediaKind, folder: stri
 }
 
 function mediaFolderMessage(error: unknown): string {
-  return error instanceof MediaFolderError ? error.message : "文件夹操作失败，请检查媒体目录权限";
+  return error instanceof Error && error.message ? error.message : "文件夹操作失败，请检查媒体目录权限";
 }
 
 function mediaOperationMessage(error: unknown): string {
   return error instanceof MediaFolderError || error instanceof MediaCategoryError || error instanceof MediaTagError
     ? error.message
-    : "资源操作失败，请检查媒体目录和数据库状态";
+    : error instanceof Error && error.message
+      ? error.message
+      : "资源操作失败，请检查媒体目录和数据库状态";
 }
 
 function loginNotice(message: string, username = ""): never {
@@ -235,17 +234,7 @@ function numberField(formData: FormData, name: string, fallback: number, min: nu
   return Math.min(Math.max(value, min), max);
 }
 
-function optionalIntField(formData: FormData, name: string, min: number, max: number): number | null {
-  const raw = String(formData.get(name) || "").trim();
-  if (!raw) {
-    return null;
-  }
-  const value = Number(raw);
-  if (!Number.isFinite(value)) {
-    return null;
-  }
-  return Math.min(Math.max(Math.floor(value), min), max);
-}
+
 
 function mediaAccessModeField(formData: FormData, name: string): "off" | "user" | "public" {
   const value = formData.get(name);
@@ -258,7 +247,8 @@ function homeCardAccessModeField(formData: FormData, name: string): HomePortalAc
 }
 
 function isUsernameConflict(error: unknown): boolean {
-  return error instanceof Error && error.message.includes("UNIQUE constraint failed: users.username");
+  return Boolean(error && typeof error === "object" && (error as { code?: unknown; constraint?: unknown }).code === "23505" &&
+    (error as { constraint?: unknown }).constraint === "users_username_key");
 }
 
 export async function loginAdminAction(formData: FormData) {
@@ -281,13 +271,22 @@ export async function loginAdminAction(formData: FormData) {
     }
   }
 
-  if (!verifyAdminCredentials(username, password)) {
+  let credentialsValid = false;
+  try {
+    credentialsValid = await verifyAdminCredentials(username, password);
+  } catch (error) {
+    if (error instanceof PasswordVerificationUnavailableError) {
+      loginNotice("登录服务繁忙，请稍后再试", username);
+    }
+    throw error;
+  }
+  if (!credentialsValid) {
     loginNotice("用户名或密码不正确，或后台密钥尚未配置", username);
   }
 
   await setAdminSession(username);
   try {
-    recordAdminLogin(username, access.clientIp, headerStore.get("user-agent") || "");
+    await recordPostgresAdminLogin(database("web"), username, access.clientIp, headerStore.get("user-agent") || "");
   } catch {
     // 登录记录不能影响后台登录本身。
   }
@@ -297,12 +296,6 @@ export async function loginAdminAction(formData: FormData) {
 export async function logoutAdminAction() {
   await clearAdminSession();
   redirect("/admin/login");
-}
-
-export async function cancelFrontendSearchJobsAction() {
-  await requireAdminRequest();
-  cancelContentJobs("search");
-  adminNotice("已请求停止所有前台全文搜索任务", "success", "/admin/settings");
 }
 
 export async function uploadSiteIconAction(formData: FormData) {
@@ -332,44 +325,61 @@ export async function uploadSiteIconAction(formData: FormData) {
     adminNotice("站点图标文件保存失败，请检查数据目录权限和磁盘空间", "error", "/admin/settings");
   }
 
-  const previous = readSiteSettings();
-  try {
-    writeSiteSettings({
-      ...previous,
-      siteIconFileName: stored.fileName,
-      siteIconMimeType: stored.mimeType,
-      siteIconUpdatedAt: stored.updatedAt,
-    });
-  } catch {
+  const previousSnapshot = await readFreshPostgresSiteSettingsSnapshot().catch((error: unknown) => {
     removeSiteIconFile(stored.fileName);
+    console.error("Failed to read PostgreSQL site settings", error);
+    adminNotice("站点设置读取失败，请稍后重试", "error", "/admin/settings");
+  });
+  const previous = previousSnapshot.value;
+  const written = await writePostgresSiteSettings({
+    ...previous,
+    siteIconFileName: stored.fileName,
+    siteIconMimeType: stored.mimeType,
+    siteIconUpdatedAt: stored.updatedAt,
+  }, previousSnapshot.version).catch((error: unknown) => {
+    removeSiteIconFile(stored.fileName);
+    console.error("Failed to save PostgreSQL site icon settings", error);
     adminNotice("站点图标保存失败", "error", "/admin/settings");
+  });
+  if (!written.ok) {
+    removeSiteIconFile(stored.fileName);
+    adminNotice("设置已被其他管理员更新，请刷新后重试", "warning", "/admin/settings");
   }
+  installRuntimeSiteSettings(written.snapshot.value, written.snapshot.version);
   if (previous.siteIconFileName && previous.siteIconFileName !== stored.fileName) {
     removeSiteIconFile(previous.siteIconFileName);
   }
   revalidatePath("/", "layout");
+  revalidateTag(ROOT_SHELL_CACHE_TAG);
   revalidatePath("/admin/settings");
   adminNotice("站点图标已更新", "success", "/admin/settings");
 }
 
 export async function deleteSiteIconAction() {
   await requireAdminRequest();
-  const previous = readSiteSettings();
-  try {
-    writeSiteSettings({
-      ...previous,
-      siteIconFileName: "",
-      siteIconMimeType: "",
-      siteIconUpdatedAt: "",
-    });
-  } catch (error) {
-    console.error("Failed to clear site icon settings", error);
-    adminNotice("站点图标删除失败，请检查数据目录权限", "error", "/admin/settings");
+  const previousSnapshot = await readFreshPostgresSiteSettingsSnapshot().catch((error: unknown) => {
+    console.error("Failed to read PostgreSQL site settings", error);
+    adminNotice("站点设置读取失败，请稍后重试", "error", "/admin/settings");
+  });
+  const previous = previousSnapshot.value;
+  const written = await writePostgresSiteSettings({
+    ...previous,
+    siteIconFileName: "",
+    siteIconMimeType: "",
+    siteIconUpdatedAt: "",
+  }, previousSnapshot.version).catch((error: unknown) => {
+    console.error("Failed to clear PostgreSQL site icon settings", error);
+    adminNotice("站点图标删除失败，请稍后重试", "error", "/admin/settings");
+  });
+  if (!written.ok) {
+    adminNotice("设置已被其他管理员更新，请刷新后重试", "warning", "/admin/settings");
   }
+  installRuntimeSiteSettings(written.snapshot.value, written.snapshot.version);
   if (previous.siteIconFileName) {
     removeSiteIconFile(previous.siteIconFileName);
   }
   revalidatePath("/", "layout");
+  revalidateTag(ROOT_SHELL_CACHE_TAG);
   revalidatePath("/admin/settings");
   adminNotice(previous.siteIconFileName ? "站点图标已删除" : "当前没有自定义站点图标", previous.siteIconFileName ? "success" : "warning", "/admin/settings");
 }
@@ -386,7 +396,7 @@ export async function deleteNovelsAction(formData: FormData) {
     adminNotice("请选择要删除的小说", "warning", returnPath);
   }
 
-  const result = deleteNovelIds(ids);
+  const result = await deletePostgresNovelIds(ids);
   revalidatePath("/");
   revalidatePath("/admin/books");
   if (result.fileDeleteFailures.length) {
@@ -402,7 +412,7 @@ export async function deleteNovelsAction(formData: FormData) {
 export async function createNovelSourceAction(formData: FormData) {
   await requireAdminRequest();
   try {
-    createNovelSource({
+    await createPostgresNovelSource({
       folderName: String(formData.get("folderName") || ""),
       name: String(formData.get("name") || ""),
     });
@@ -415,49 +425,93 @@ export async function createNovelSourceAction(formData: FormData) {
   adminNotice("小说来源已创建", "success", "/admin/books/sources");
 }
 
-export async function saveNovelSourceAction(formData: FormData) {
+export async function setDefaultNovelSourceAction(formData: FormData) {
   await requireAdminRequest();
   try {
     const sourceId = Number(formData.get("sourceId") || 0);
-    const source = getNovelSourceById(sourceId);
+    const source = await getPostgresAdminNovelSource(database(), sourceId);
+    if (!source) throw new Error("小说来源不存在");
+    const snapshot = await readFreshPostgresSiteSettingsSnapshot();
+    const written = await writePostgresSiteSettings({
+      ...snapshot.value,
+      defaultNovelLibrarySlug: source.slug,
+    }, snapshot.version);
+    if (!written.ok) throw new Error("设置已被其他管理员更新，请刷新后重试");
+    installRuntimeSiteSettings(written.snapshot.value, written.snapshot.version);
+  } catch (error) {
+    adminNotice(error instanceof Error ? error.message : "设置默认来源失败", "warning", "/admin/books/sources");
+  }
+  revalidatePath("/admin/books");
+  revalidatePath("/admin/books/sources");
+  revalidatePath("/admin/settings");
+  revalidatePath("/novels");
+  revalidatePath("/search");
+  adminNotice("已切换默认书库", "success", "/admin/books/sources");
+}
+
+export async function saveNovelSourceAction(formData: FormData) {
+  await requireAdminRequest();
+  let isSetDefault = false;
+  try {
+    const sourceId = Number(formData.get("sourceId") || 0);
+    const source = await getPostgresAdminNovelSource(database(), sourceId);
     if (!source) throw new Error("小说来源不存在");
     const nextSearchMode = formData.get("searchMode") === "book" ? "book" : "full";
-    if (nextSearchMode === "book" && getNovelSourceSearchMode(source.slug) !== "book" && countActiveContentJobs("index") > 0) {
-      throw new Error("索引任务运行期间不能切换为轻量书库");
-    }
-    updateNovelSourceSettings(sourceId, {
+    isSetDefault = formData.get("setDefault") === "1";
+    await updatePostgresNovelSourceSettings(sourceId, {
       name: String(formData.get("name") || ""),
       sortOrder: Number(formData.get("sortOrder") || 0),
     });
-    setNovelSourceSearchMode(source.slug, nextSearchMode);
-    if (nextSearchMode === "book") deleteContentSearchDatabase(source.id);
-    invalidateContentSearchResultCache();
+    const snapshot = await readFreshPostgresSiteSettingsSnapshot();
+    const modes = { ...snapshot.value.novelSourceSearchModes };
+    const slug = source.slug.toLocaleLowerCase("en-US");
+    if (nextSearchMode === "book") modes[slug] = "book";
+    else delete modes[slug];
+    const nextDefaultSlug = isSetDefault ? source.slug : snapshot.value.defaultNovelLibrarySlug;
+    const written = await writePostgresSiteSettings({
+      ...snapshot.value,
+      defaultNovelLibrarySlug: nextDefaultSlug,
+      novelSourceSearchModes: modes,
+    }, snapshot.version);
+    if (!written.ok) throw new Error("设置已被其他管理员更新，请刷新后重试");
+    installRuntimeSiteSettings(written.snapshot.value, written.snapshot.version);
   } catch (error) {
     adminNotice(error instanceof Error ? error.message : "小说来源保存失败", "warning", "/admin/books/sources");
   }
   revalidatePath("/admin/books");
   revalidatePath("/admin/books/sources");
+  revalidatePath("/admin/settings");
   revalidatePath("/admin/indexes");
   revalidatePath("/novels");
   revalidatePath("/search");
-  adminNotice("来源设置已保存", "success", "/admin/books/sources");
+  adminNotice(isSetDefault ? "已设为默认书库并保存" : "来源设置已保存", "success", "/admin/books/sources");
 }
 
 export async function deleteNovelSourceAction(formData: FormData) {
   await requireAdminRequest();
   try {
     const sourceId = Number(formData.get("sourceId") || 0);
-    const source = getNovelSourceById(sourceId);
-    deleteEmptyNovelSource(sourceId);
+    const source = await getPostgresAdminNovelSource(database(), sourceId);
+    await deletePostgresEmptyNovelSource(sourceId);
     if (source) {
-      removeNovelSourceSearchMode(source.slug);
-      deleteContentSearchDatabase(source.id);
+      const snapshot = await readFreshPostgresSiteSettingsSnapshot();
+      const modes = { ...snapshot.value.novelSourceSearchModes };
+      delete modes[source.slug.toLocaleLowerCase("en-US")];
+      const nextDefault = snapshot.value.defaultNovelLibrarySlug === source.slug ? "default" : snapshot.value.defaultNovelLibrarySlug;
+      const written = await writePostgresSiteSettings({
+        ...snapshot.value,
+        defaultNovelLibrarySlug: nextDefault,
+        novelSourceSearchModes: modes,
+      }, snapshot.version);
+      if (!written.ok) throw new Error("设置已被其他管理员更新，请刷新后重试");
+      installRuntimeSiteSettings(written.snapshot.value, written.snapshot.version);
     }
   } catch (error) {
     adminNotice(error instanceof Error ? error.message : "小说来源删除失败", "warning", "/admin/books/sources");
   }
   revalidatePath("/admin/books");
   revalidatePath("/admin/books/sources");
+  revalidatePath("/admin/settings");
   revalidatePath("/novels");
   adminNotice("空来源已删除", "success", "/admin/books/sources");
 }
@@ -468,7 +522,7 @@ export async function togglePinnedNovelAction(formData: FormData) {
   if (!Number.isInteger(novelId) || novelId < 1) {
     return;
   }
-  togglePinnedNovel(novelId);
+  await togglePostgresPinnedNovel(novelId);
   revalidatePath("/");
   revalidatePath(`/books/${novelId}`);
   revalidatePath("/admin/books");
@@ -481,7 +535,7 @@ export async function savePinnedNovelsAction(formData: FormData): Promise<Mutati
     .map(Number)
     .filter((id) => Number.isInteger(id) && id > 0);
   try {
-    replacePinnedNovels(novelIds);
+    await replacePostgresPinnedNovels(novelIds);
   } catch (error) {
     return mutationResult(false, error instanceof Error ? error.message : "置顶列表保存失败", "warning");
   }
@@ -505,7 +559,7 @@ export async function saveAdminTagAction(formData: FormData) {
   await requireAdminRequest();
   try {
     if (Number.isInteger(tagId) && tagId > 0) {
-      const updated = updateTag({
+      const updated = await updatePostgresCatalogTag({
         id: tagId,
         parentId: String(formData.get("parentId") || ""),
         name: String(formData.get("name") || ""),
@@ -519,7 +573,7 @@ export async function saveAdminTagAction(formData: FormData) {
         adminNotice("标签不存在", "warning", returnPath);
       }
     } else {
-      const created = createTag({
+      const created = await createPostgresCatalogTag({
         parentId: String(formData.get("parentId") || ""),
         name: String(formData.get("name") || ""),
         slug: String(formData.get("slug") || ""),
@@ -546,7 +600,7 @@ export async function deleteAdminTagAction(formData: FormData) {
   if (!Number.isInteger(tagId) || tagId < 1) {
     adminNotice("标签不存在", "warning", returnPath);
   }
-  const deleted = deleteTag(tagId);
+  const deleted = await deletePostgresCatalogTag(database("web"), tagId);
   revalidatePath("/", "layout");
   revalidatePath("/tags");
   revalidatePath("/admin/tags");
@@ -576,8 +630,8 @@ export async function saveNovelTaggingAction(formData: FormData) {
       adminNotice(`热词“${term}”：${validation.message}`, "warning", returnPath);
     }
   }
-  setNovelTags(bookId, tagIds);
-  setNovelHotwords(bookId, hotwords);
+  const saved = await replacePostgresNovelTagsAndHotwords(bookId, tagIds, hotwords);
+  if (!saved) adminNotice("小说不存在", "warning", returnPath);
   revalidatePath(`/books/${bookId}`);
   revalidatePath("/tags");
   revalidatePath("/admin/books");
@@ -614,27 +668,28 @@ export async function saveNovelEditorAction(formData: FormData) {
       }
     }
     if (formData.has("content")) {
-      updateNovelFile(bookId, String(formData.get("title") || ""), String(formData.get("content") || ""));
-    } else {
-      renameNovelFile(bookId, String(formData.get("title") || ""));
+      await updatePostgresNovelFile({ novelId: bookId, title: String(formData.get("title") || ""), content: String(formData.get("content") || "") });
     }
-    updateNovelDescription(bookId, String(formData.get("description") || ""));
-    setNovelTags(bookId, tagIds);
-    setNovelHotwords(bookId, hotwords);
-    setNovelRecommendationPool(
-      bookId,
-      formData.get("recommendationPool") === "on",
-    );
-    setNovelRecommendationCount(
-      bookId,
-      intField(formData, "recommendationCount", 0, 0, 2_000_000_000),
-    );
     const accessMode = formData.get("accessMode") === "soda" ? "soda" : "inherit";
-    updateNovelAccessPolicy(bookId, {
+    await updatePostgresNovelMetadata({
+      novelId: bookId,
+      title: String(formData.get("title") || ""),
+      description: String(formData.get("description") || ""),
       accessMode,
       sodaPrice: intField(formData, "sodaPrice", 1, 0, 1_000_000),
       previewChapterCount: intField(formData, "previewChapterCount", 0, 0, 100_000),
     });
+    if (!await replacePostgresNovelTagsAndHotwords(bookId, tagIds, hotwords)) {
+      throw new Error("小说不存在");
+    }
+    await setPostgresNovelRecommendationPool(
+      bookId,
+      formData.get("recommendationPool") === "on",
+    );
+    await setPostgresNovelRecommendationCount(database("web"),
+      bookId,
+      intField(formData, "recommendationCount", 0, 0, 2_000_000_000),
+    );
   } catch (error) {
     adminNotice(error instanceof Error ? error.message : "小说保存失败，请检查小说目录权限", "warning", editorPath);
   }
@@ -660,7 +715,7 @@ export async function saveNovelChaptersAction(formData: FormData) {
   try {
     if (intent === "delete") {
       const chapterIds = formData.getAll("selectedChapterIds").map(Number);
-      const deleted = deleteNovelChapterIds(bookId, chapterIds);
+      const deleted = await deletePostgresNovelChapterIds(bookId, chapterIds);
       if (!deleted) adminNotice("请选择要删除的章节", "warning", returnPath);
       revalidatePath(`/books/${bookId}`);
       revalidatePath(`/books/${bookId}/chapters`);
@@ -674,10 +729,8 @@ export async function saveNovelChaptersAction(formData: FormData) {
       title: String(formData.get(`chapterTitle:${id}`) || ""),
       sortOrder: Math.max(0, Math.floor(Number(formData.get(`chapterSort:${id}`) || 1)) - 1),
     }));
-    const saved = updateNovelChapterOverrides(bookId, updates);
+    const saved = await updatePostgresNovelChapterOverrides(bookId, updates);
     if (!saved) adminNotice("当前页没有可保存的章节", "warning", returnPath);
-    invalidateNovelContentSearchIndex(bookId);
-    invalidateContentSearchResultCache();
     revalidatePath(`/books/${bookId}`);
     revalidatePath(`/books/${bookId}/chapters`);
     revalidatePath(returnPath);
@@ -721,14 +774,10 @@ export async function batchUpdateNovelsAction(formData: FormData) {
       }
     }
 
+    await updatePostgresNovelTitles(ids.map((id) => ({ id, novelId: id, title: String(formData.get(`title-${id}`) || "") })));
     for (const id of ids) {
-      renameNovelFile(id, String(formData.get(`title-${id}`) || ""));
-      if (addedTagIds.length) {
-        const currentTagIds = listTagsForNovel(id, { includeHidden: true }).map((tag) => tag.id);
-        setNovelTags(id, [...currentTagIds, ...addedTagIds]);
-      }
-      if (addedHotwords.length) {
-        setNovelHotwords(id, [...listHotwordsForNovel(id), ...addedHotwords]);
+      if (addedTagIds.length || addedHotwords.length) {
+        if (!await addPostgresNovelTagsAndHotwords(id, addedTagIds, addedHotwords)) throw new Error("小说不存在");
       }
       revalidatePath(`/books/${id}`);
     }
@@ -746,7 +795,11 @@ export async function batchUpdateNovelsAction(formData: FormData) {
 export async function saveAdminSettingsAction(formData: FormData) {
   await requireAdminRequest();
   const headerStore = await headers();
-  const previous = readSiteSettings();
+  const previousSnapshot = await readFreshPostgresSiteSettingsSnapshot().catch((error: unknown) => {
+    console.error("Failed to read PostgreSQL site settings", error);
+    adminNotice("后台设置读取失败，请稍后重试", "error", "/admin/settings");
+  });
+  const previous = previousSnapshot.value;
   const adminUsername = String(formData.get("adminUsername") || "").trim();
   const newPassword = String(formData.get("newAdminPassword") || "");
   const confirmPassword = String(formData.get("confirmAdminPassword") || "");
@@ -761,7 +814,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
     adminNotice(`后台${adminPasswordError}`, "warning", "/admin/settings");
   }
 
-  const userAvatarMaxMb = numberField(formData, "userAvatarMaxMb", getUserAvatarMaxBytes() / 1024 ** 2, 0.1, 10);
+  const userAvatarMaxMb = numberField(formData, "userAvatarMaxMb", previous.userAvatarMaxBytes / 1024 ** 2, 0.1, 10);
   const novelAccessMode = homeCardAccessModeField(formData, "novelAccessMode");
   const videoAccessMode = homeCardAccessModeField(formData, "videoAccessMode");
   const audioAccessMode = homeCardAccessModeField(formData, "audioAccessMode");
@@ -788,7 +841,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
     .slice(0, 64);
   const availableNovelLibrarySlugs = new Set([
     ALL_NOVEL_LIBRARIES_SLUG,
-    ...listNovelSources({ includeEmpty: true }).map((source) => source.slug),
+    ...(await listPostgresNovelSources(database("web"), { includeEmpty: true })).map((source) => source.slug),
   ]);
   if (!availableNovelLibrarySlugs.has(defaultNovelLibrarySlug)) {
     adminNotice("默认进入书库不存在，请重新选择", "warning", "/admin/settings");
@@ -807,7 +860,6 @@ export async function saveAdminSettingsAction(formData: FormData) {
     siteName: String(formData.get("siteName") || "").trim(),
     siteTitle: String(formData.get("siteTitle") || "").trim(),
     brandLinkTarget: formData.get("brandLinkTarget") === "home" ? "home" : "novels",
-    settingsPreviewText: String(formData.get("settingsPreviewText") || "").trim(),
     defaultNovelLibrarySlug,
     readerDefaultFontSize: intField(formData, "readerDefaultFontSize", previous.readerDefaultFontSize || 18, 8, 25),
     readerDefaultLineHeight: normalizeReaderLineHeight(
@@ -817,6 +869,10 @@ export async function saveAdminSettingsAction(formData: FormData) {
     readerDefaultTagsMode: normalizeReaderTagsMode(
       String(formData.get("readerDefaultTagsMode") || ""),
       previous.readerDefaultTagsMode,
+    ),
+    readerDefaultPageTurn: normalizeReaderPageTurn(
+      String(formData.get("readerDefaultPageTurn") || ""),
+      previous.readerDefaultPageTurn || DEFAULT_READER_PAGE_TURN,
     ),
     readerAdjacentNovelSort: formData.get("readerAdjacentNovelSort") === "name" ? "name" : "updated",
     novelCatalogSearchExpanded: formData.get("novelCatalogSearchExpanded") === "on",
@@ -830,15 +886,15 @@ export async function saveAdminSettingsAction(formData: FormData) {
       10_080,
     ),
     adminUsername,
-    adminPasswordHash: newPassword ? await hashPassword(newPassword) : previous.adminPasswordHash,
+    adminPasswordHash: newPassword ? await hashPasswordAsync(newPassword) : previous.adminPasswordHash,
     adminPasswordSha256: newPassword ? "" : previous.adminPasswordSha256,
     adminLoginRateLimitPerMinute: intField(formData, "adminLoginRateLimitPerMinute", previous.adminLoginRateLimitPerMinute || 6, 1, 120),
     adminLoginRateLimitEnabled: formData.get("adminLoginRateLimitEnabled") === "on",
     adminIpAllowlistEnabled,
     adminAllowedNetworks,
-    catalogPageSize: intField(formData, "catalogPageSize", previous.catalogPageSize || getCatalogPageSize(), 1, 100),
-    searchResultsPageSize: intField(formData, "searchResultsPageSize", previous.searchResultsPageSize || getSearchResultsPageSize(), 1, 100),
-    adminBookPageSize: intField(formData, "adminBookPageSize", previous.adminBookPageSize || getAdminBookPageSize(), 1, 200),
+    catalogPageSize: intField(formData, "catalogPageSize", previous.catalogPageSize, 1, 100),
+    searchResultsPageSize: intField(formData, "searchResultsPageSize", previous.searchResultsPageSize, 1, 100),
+    adminBookPageSize: intField(formData, "adminBookPageSize", previous.adminBookPageSize, 1, 200),
     randomCatalogEnabled: formData.get("randomCatalogEnabled") === "on",
     manualPinnedNovelsEnabled: formData.get("manualPinnedNovelsEnabled") === "on",
     randomRecommendationsEnabled: formData.get("randomRecommendationsEnabled") === "on",
@@ -857,12 +913,12 @@ export async function saveAdminSettingsAction(formData: FormData) {
       1,
       10_080,
     ),
-    noticeDisplaySeconds: intField(formData, "noticeDisplaySeconds", previous.noticeDisplaySeconds || getNoticeDisplaySeconds(), 0, 60),
+    noticeDisplaySeconds: intField(formData, "noticeDisplaySeconds", previous.noticeDisplaySeconds, 0, 60),
     audioDefaultPlaybackMode:
       formData.get("audioDefaultPlaybackMode") === "stop" || formData.get("audioDefaultPlaybackMode") === "repeat-one"
         ? formData.get("audioDefaultPlaybackMode") as "stop" | "repeat-one"
         : "next",
-    globalSearchMaxResults: intField(formData, "globalSearchMaxResults", previous.globalSearchMaxResults || getGlobalSearchMaxResults(), 1, 1000),
+    globalSearchMaxResults: intField(formData, "globalSearchMaxResults", previous.globalSearchMaxResults, 1, 10_000),
     userLoginEnabled: formData.get("userLoginEnabled") === "on",
     userRegistrationEnabled: formData.get("userRegistrationMode") !== "closed",
     userRegistrationMode:
@@ -895,13 +951,10 @@ export async function saveAdminSettingsAction(formData: FormData) {
     originalCommentMinChars: intField(formData, "originalCommentMinChars", previous.originalCommentMinChars, 1, 200),
     originalMaxTags: intField(formData, "originalMaxTags", previous.originalMaxTags, 1, 20),
     originalPageSize: intField(formData, "originalPageSize", previous.originalPageSize, 5, 100),
-    originalPublishNoticeText: String(formData.get("originalPublishNoticeText") || "").normalize("NFKC").trim().slice(0, 120),
-    originalPublishNoticeLinkLabel: String(formData.get("originalPublishNoticeLinkLabel") || "").normalize("NFKC").trim().slice(0, 40),
-    originalPublishNoticeUrl: String(formData.get("originalPublishNoticeUrl") || "").trim().slice(0, 500),
     userDailyRegistrationLimitPerIp: intField(
       formData,
       "userDailyRegistrationLimitPerIp",
-      previous.userDailyRegistrationLimitPerIp || getUserDailyRegistrationLimitPerIp(),
+      previous.userDailyRegistrationLimitPerIp,
       0,
       100,
     ),
@@ -916,7 +969,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
     homePortalOrder: normalizeHomePortalOrder(formData.get("homePortalOrder")),
     homePortalAccessModes: homeCardModes,
     analyticsEnabled: formData.get("analyticsEnabled") === "on",
-    analyticsRealtimeLimit: intField(formData, "analyticsRealtimeLimit", previous.analyticsRealtimeLimit || 300, 30, 10_000),
+    analyticsRealtimeLimit: intField(formData, "analyticsRealtimeLimit", previous.analyticsRealtimeLimit || 300, 30, 100_000),
     advancedTagSearchEnabled: advancedTagAccessMode !== "off",
     hotwordLinksEnabled: hotwordAccessMode !== "off",
     guestAdvancedTagSearchEnabled: advancedTagAccessMode === "public",
@@ -924,7 +977,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
     frontendSearchConcurrencyLimit: intField(
       formData,
       "frontendSearchConcurrencyLimit",
-      previous.frontendSearchConcurrencyLimit || getFrontendSearchConcurrencyLimit(),
+      previous.frontendSearchConcurrencyLimit,
       1,
       100,
     ),
@@ -934,12 +987,15 @@ export async function saveAdminSettingsAction(formData: FormData) {
         : "system",
     showProgressBars: formData.get("showProgressBars") === "on",
   };
-  try {
-    writeSiteSettings(next);
-  } catch (error) {
-    console.error("Failed to save admin settings", error);
-    adminNotice("后台设置保存失败，请检查数据目录权限和磁盘空间", "error", "/admin/settings");
+  const written = await writePostgresSiteSettings(next, previousSnapshot.version).catch((error: unknown) => {
+    console.error("Failed to save PostgreSQL admin settings", error);
+    adminNotice("后台设置保存失败，请稍后重试", "error", "/admin/settings");
+  });
+  if (!written.ok) {
+    adminNotice("设置已被其他管理员更新，请刷新后重试", "warning", "/admin/settings");
   }
+  installRuntimeSiteSettings(written.snapshot.value, written.snapshot.version);
+  revalidateTag(ROOT_SHELL_CACHE_TAG);
   revalidatePath("/");
   revalidatePath("/login");
   revalidatePath("/register");
@@ -970,7 +1026,7 @@ export async function loadAdminMediaSelectionAction(requestedIds: number[]) {
   const ids = Array.from(new Set(
     requestedIds.filter((id) => Number.isInteger(id) && id > 0),
   )).slice(0, 100);
-  return listMediaAssetsByIds(ids);
+  return listPostgresMediaAssetsByIds(database(), ids);
 }
 
 export async function updateAdminMediaAction(
@@ -980,7 +1036,7 @@ export async function updateAdminMediaAction(
   const id = Number(formData.get("mediaId"));
   const title = String(formData.get("title") || "").trim();
   const description = String(formData.get("description") || "").trim();
-  const asset = Number.isInteger(id) && id > 0 ? getMediaAsset(id) : null;
+  const asset = Number.isInteger(id) && id > 0 ? await getPostgresMediaAsset(database(), id) : null;
   if (!asset) {
     return mutationResult(false, "资源不存在", "warning");
   }
@@ -995,22 +1051,22 @@ export async function updateAdminMediaAction(
     return mutationResult(false, "作者不能超过 80 个字符", "warning");
   }
   try {
-    const updated = await updateMediaAsset(
+    const updated = await updatePostgresMediaAsset({
       id,
       title,
       artist,
       description,
-      String(formData.get("targetFolder") || ""),
-      asset.kind === "video" && formData.has("categoryId") ? formData.get("categoryId") : undefined,
-    );
+      folder: String(formData.get("targetFolder") || ""),
+      categoryValue: asset.kind === "video" && formData.has("categoryId") ? formData.get("categoryId") : undefined,
+    });
     if (!updated) {
       return mutationResult(false, "资源不存在", "warning");
     }
     if (asset.kind === "video") {
-      setVideoTagsForAssets([id], formData.getAll("tagIds").map(Number));
+      await setPostgresVideoTagsForAssets([id], formData.getAll("tagIds").map(Number));
       const latestAction = String(formData.get("latestAction") || "keep");
       const newDays = Math.min(Math.max(Math.floor(Number(formData.get("newDays")) || 14), 1), 365);
-      updateVideoPublishingSettings({
+      await updatePostgresVideoPublishingSettings(database(), {
         id,
         playSodaPrice: Number(formData.get("playSodaPrice") || 0),
         downloadSodaPrice: Number(formData.get("downloadSodaPrice") || 0),
@@ -1020,7 +1076,7 @@ export async function updateAdminMediaAction(
           : latestAction === "clear" ? null : asset.newUntil,
       });
     }
-    const nextAsset = getMediaAsset(id);
+    const nextAsset = await getPostgresMediaAsset(database(), id);
     if (!nextAsset) {
       return mutationResult(false, "资源不存在", "warning");
     }
@@ -1029,7 +1085,7 @@ export async function updateAdminMediaAction(
     revalidatePath(`/media/${id}`);
     return mutationResult(true, "资源信息已更新", "success", {
       asset: nextAsset,
-      tags: listVideoTagsForAssets([id])[id] || [],
+      tags: (await listPostgresVideoTagsForAssets(database(), [id]))[id] || [],
     });
   } catch (error) {
     return mutationResult(false, mediaOperationMessage(error), "warning");
@@ -1073,20 +1129,20 @@ export async function batchUpdateAdminMediaAction(
   let updated = 0;
   try {
     for (const id of ids) {
-      const asset = getMediaAsset(id);
+      const asset = await getPostgresMediaAsset(database(), id);
       if (!asset) continue;
       const title = String(formData.get(`title-${id}`) || "").trim();
-      await updateMediaAsset(
+      await updatePostgresMediaAsset({
         id,
         title,
-        asset.kind !== "file" && applyArtist ? artist : asset.kind !== "file" ? asset.artist : "",
-        applyDescription ? description : asset.description,
-        targetFolder === "__keep__" ? undefined : targetFolder,
-        asset.kind === "video" && categoryId !== "__keep__" ? categoryId : undefined,
-      );
-      if (asset.kind === "video" && applyTags) setVideoTagsForAssets([id], tagIds);
+        artist: asset.kind !== "file" && applyArtist ? artist : asset.kind !== "file" ? asset.artist : "",
+        description: applyDescription ? description : asset.description,
+        folder: targetFolder === "__keep__" ? undefined : targetFolder,
+        categoryValue: asset.kind === "video" && categoryId !== "__keep__" ? categoryId : undefined,
+      });
+      if (asset.kind === "video" && applyTags) await setPostgresVideoTagsForAssets([id], tagIds);
       if (asset.kind === "video" && (applyVideoPrice || applyVideoDownloadPrice || latestAction !== "keep")) {
-        updateVideoPublishingSettings({
+        await updatePostgresVideoPublishingSettings(database(), {
           id,
           playSodaPrice: applyVideoPrice ? Number(formData.get("playSodaPrice") || 0) : asset.playSodaPrice,
           downloadSodaPrice: applyVideoDownloadPrice
@@ -1106,7 +1162,10 @@ export async function batchUpdateAdminMediaAction(
       false,
       mediaOperationMessage(error),
       "warning",
-      { assets: listMediaAssetsByIds(ids), tagsByAsset: listVideoTagsForAssets(ids) },
+      {
+        assets: await listPostgresMediaAssetsByIds(database(), ids),
+        tagsByAsset: await listPostgresVideoTagsForAssets(database(), ids),
+      },
     );
   }
   revalidatePath("/media");
@@ -1116,7 +1175,10 @@ export async function batchUpdateAdminMediaAction(
     updated > 0,
     `已更新 ${updated} 个资源`,
     updated ? "success" : "warning",
-    { assets: listMediaAssetsByIds(ids), tagsByAsset: listVideoTagsForAssets(ids) },
+    {
+      assets: await listPostgresMediaAssetsByIds(database(), ids),
+      tagsByAsset: await listPostgresVideoTagsForAssets(database(), ids),
+    },
   );
 }
 
@@ -1125,13 +1187,13 @@ export async function createAdminVideoCategoryAction(
 ): Promise<MutationResult<{ categories: VideoCategory[] }>> {
   await requireAdminRequest();
   try {
-    createVideoCategory(String(formData.get("name") || ""));
+    await createPostgresVideoCategory(String(formData.get("name") || ""));
   } catch (error) {
     return mutationResult(false, mediaOperationMessage(error), "warning");
   }
   revalidatePath("/media");
   return mutationResult(true, "视频分类已创建", "success", {
-    categories: listVideoCategories({ includeHidden: true }),
+    categories: await listPostgresVideoCategories(database(), { includeHidden: true }),
   });
 }
 
@@ -1142,7 +1204,8 @@ export async function updateAdminVideoCategoryAction(
   const id = Number(formData.get("categoryId"));
   let updated = false;
   try {
-    updated = updateVideoCategory(
+    updated = await updatePostgresVideoCategory(
+      database(),
       id,
       String(formData.get("name") || ""),
       Number(formData.get("sortOrder") || 0),
@@ -1156,7 +1219,7 @@ export async function updateAdminVideoCategoryAction(
   }
   revalidatePath("/media");
   return mutationResult(true, "视频分类已更新", "success", {
-    categories: listVideoCategories({ includeHidden: true }),
+    categories: await listPostgresVideoCategories(database(), { includeHidden: true }),
   });
 }
 
@@ -1164,13 +1227,13 @@ export async function deleteAdminVideoCategoryAction(
   formData: FormData,
 ): Promise<MutationResult<{ categories: VideoCategory[] }>> {
   await requireAdminRequest();
-  const deleted = deleteVideoCategory(Number(formData.get("categoryId")));
+  const deleted = await deletePostgresVideoCategory(database(), Number(formData.get("categoryId")));
   revalidatePath("/media");
   return mutationResult(
     deleted,
     deleted ? "视频分类已删除，原视频已归入未分类" : "视频分类不存在",
     deleted ? "success" : "warning",
-    { categories: listVideoCategories({ includeHidden: true }) },
+    { categories: await listPostgresVideoCategories(database(), { includeHidden: true }) },
   );
 }
 
@@ -1187,7 +1250,7 @@ export async function assignAdminVideoCategoryAction(
   }
   let updated = 0;
   try {
-    updated = setVideoCategoryForAssets(ids, formData.get("categoryId"));
+    updated = await setPostgresVideoCategoryForAssets(database(), ids, formData.get("categoryId"));
   } catch (error) {
     return mutationResult(false, mediaOperationMessage(error), "warning");
   }
@@ -1196,7 +1259,7 @@ export async function assignAdminVideoCategoryAction(
     updated > 0,
     updated ? `已归类 ${updated} 个视频` : "所选视频不存在",
     updated ? "success" : "warning",
-    { assets: listMediaAssetsByIds(ids) },
+    { assets: await listPostgresMediaAssetsByIds(database(), ids) },
   );
 }
 
@@ -1205,7 +1268,7 @@ export async function createAdminVideoTagAction(
 ): Promise<MutationResult<{ tags: VideoTag[] }>> {
   await requireAdminRequest();
   try {
-    createVideoTag(formData.get("name"), formData.get("description"));
+    await createPostgresVideoTag(formData.get("name"), formData.get("description"));
   } catch (error) {
     return mutationResult(false, mediaOperationMessage(error), "warning");
   }
@@ -1213,7 +1276,7 @@ export async function createAdminVideoTagAction(
   revalidatePath("/media/tags");
   revalidatePath("/sitemap/media.xml");
   return mutationResult(true, "视频标签已创建", "success", {
-    tags: listVideoTags({ includeHidden: true, pageSize: 5_000 }).tags,
+    tags: (await listPostgresVideoTags(database(), { includeHidden: true, pageSize: 5_000 })).tags,
   });
 }
 
@@ -1223,7 +1286,8 @@ export async function updateAdminVideoTagAction(
   await requireAdminRequest();
   let updated = false;
   try {
-    updated = updateVideoTag(
+    updated = await updatePostgresVideoTag(
+      database(),
       Number(formData.get("tagId")),
       formData.get("name"),
       formData.get("description"),
@@ -1238,7 +1302,7 @@ export async function updateAdminVideoTagAction(
   revalidatePath("/media/tags");
   revalidatePath("/sitemap/media.xml");
   return mutationResult(true, "视频标签已更新", "success", {
-    tags: listVideoTags({ includeHidden: true, pageSize: 5_000 }).tags,
+    tags: (await listPostgresVideoTags(database(), { includeHidden: true, pageSize: 5_000 })).tags,
   });
 }
 
@@ -1246,7 +1310,7 @@ export async function deleteAdminVideoTagAction(
   formData: FormData,
 ): Promise<MutationResult<{ tags: VideoTag[] }>> {
   await requireAdminRequest();
-  const deleted = deleteVideoTag(Number(formData.get("tagId")));
+  const deleted = await deletePostgresVideoTag(database(), Number(formData.get("tagId")));
   revalidatePath("/media");
   revalidatePath("/media/tags");
   revalidatePath("/sitemap/media.xml");
@@ -1254,7 +1318,7 @@ export async function deleteAdminVideoTagAction(
     deleted,
     deleted ? "视频标签已删除" : "视频标签不存在",
     deleted ? "success" : "warning",
-    { tags: listVideoTags({ includeHidden: true, pageSize: 5_000 }).tags },
+    { tags: (await listPostgresVideoTags(database(), { includeHidden: true, pageSize: 5_000 })).tags },
   );
 }
 
@@ -1266,7 +1330,7 @@ export async function assignAdminVideoTagsAction(
   if (!ids.length) return mutationResult(false, "请选择视频", "warning");
   let updated = 0;
   try {
-    updated = setVideoTagsForAssets(ids, formData.getAll("tagIds").map(Number));
+    updated = await setPostgresVideoTagsForAssets(ids, formData.getAll("tagIds").map(Number));
   } catch (error) {
     return mutationResult(false, mediaOperationMessage(error), "warning");
   }
@@ -1277,37 +1341,43 @@ export async function assignAdminVideoTagsAction(
     updated > 0,
     updated ? `已更新 ${updated} 个视频的标签` : "所选视频不存在",
     updated ? "success" : "warning",
-    { tagsByAsset: listVideoTagsForAssets(ids) },
+    { tagsByAsset: await listPostgresVideoTagsForAssets(database(), ids) },
   );
 }
 
 export async function saveAdminMediaDisplaySettingsAction(formData: FormData) {
   await requireAdminRequest();
   const returnPath = mediaReturnPath(formData);
-  const previous = readSiteSettings();
+  const previousSnapshot = await readFreshPostgresSiteSettingsSnapshot().catch((error: unknown) => {
+    console.error("Failed to read PostgreSQL site settings", error);
+    adminNotice("视频展示设置读取失败，请稍后重试", "error", returnPath);
+  });
+  const previous = previousSnapshot.value;
   const next: SiteSettings = {
     ...previous,
     videoThumbnailSinglePercent: intField(formData, "videoThumbnailSinglePercent", previous.videoThumbnailSinglePercent, 1, 99),
     relatedVideoCount: intField(formData, "relatedVideoCount", previous.relatedVideoCount, 0, 20),
     relatedVideoMode: formData.get("relatedVideoMode") === "random" ? "random" : "next",
   };
-  try {
-    writeSiteSettings(next);
-    if (previous.videoThumbnailSinglePercent !== next.videoThumbnailSinglePercent) {
-      if (isRemoteMediaStorage()) {
-        await Promise.all(
-          listRemoteMediaNodes().map((node) => clearRemoteMediaThumbnails(node.id)),
-        ).catch((error) => {
-          console.warn("Failed to clear remote media thumbnails", error);
-        });
-      } else {
-        clearMediaThumbnails();
-      }
-      scheduleMissingMediaPreparation();
+  const written = await writePostgresSiteSettings(next, previousSnapshot.version).catch((error: unknown) => {
+    console.error("Failed to save PostgreSQL media display settings", error);
+    adminNotice("视频展示设置保存失败，请稍后重试", "error", returnPath);
+  });
+  if (!written.ok) {
+    adminNotice("设置已被其他管理员更新，请刷新后重试", "warning", returnPath);
+  }
+  installRuntimeSiteSettings(written.snapshot.value, written.snapshot.version);
+  if (previous.videoThumbnailSinglePercent !== next.videoThumbnailSinglePercent) {
+    if (isRemoteMediaStorage()) {
+      await Promise.all(
+        listRemoteMediaNodes().map((node) => clearRemoteMediaThumbnails(node.id)),
+      ).catch((error) => {
+        console.warn("Failed to clear remote media thumbnails", error);
+      });
+    } else {
+      clearMediaThumbnails();
     }
-  } catch (error) {
-    console.error("Failed to save media display settings", error);
-    adminNotice("视频展示设置保存失败", "error", returnPath);
+    await scheduleMissingPostgresMediaPreparation();
   }
   revalidatePath("/media");
   revalidatePath("/admin/media");
@@ -1329,8 +1399,8 @@ export async function deleteAdminMediaAction(
   if (!ids.length) {
     return mutationResult(false, "请选择要删除的资源", "warning");
   }
-  const result = await deleteMediaAssets(ids);
-  const remainingIds = new Set(listMediaAssetsByIds(ids).map((asset) => asset.id));
+  const result = await deletePostgresMediaAssets(ids);
+  const remainingIds = new Set((await listPostgresMediaAssetsByIds(database(), ids)).map((asset) => asset.id));
   const deletedIds = ids.filter((id) => !remainingIds.has(id));
   revalidatePath("/media");
   revalidatePath("/admin");
@@ -1353,10 +1423,10 @@ export async function deleteAdminMediaAction(
 export async function syncAdminMediaAction(formData: FormData) {
   await requireAdminRequest();
   const returnPath = mediaReturnPath(formData);
-  let result: Awaited<ReturnType<typeof syncMediaLibrary>>;
+  let result: Awaited<ReturnType<typeof syncPostgresMediaLibrary>>;
   try {
-    result = await syncMediaLibrary({ force: true });
-    scheduleMissingMediaPreparation();
+    result = await syncPostgresMediaLibrary({ force: true });
+    await scheduleMissingPostgresMediaPreparation();
   } catch {
     adminNotice("媒体同步失败，请检查存储目录或媒体节点状态", "error", returnPath);
   }
@@ -1373,7 +1443,7 @@ export async function createAdminMediaFolderAction(formData: FormData) {
   }
   let folder: string;
   try {
-    folder = await createMediaFolder(kindValue, String(formData.get("parentFolder") || ""), String(formData.get("folderName") || ""));
+    folder = await createPostgresMediaFolder(kindValue, String(formData.get("parentFolder") || ""), String(formData.get("folderName") || ""));
   } catch (error) {
     adminNotice(mediaFolderMessage(error), "warning", mediaReturnPath(formData));
   }
@@ -1390,7 +1460,7 @@ export async function renameAdminMediaFolderAction(formData: FormData) {
   }
   let folder: string;
   try {
-    folder = await renameMediaFolder(kindValue, String(formData.get("folder") || ""), String(formData.get("folderName") || ""));
+    folder = await renamePostgresMediaFolder(kindValue, String(formData.get("folder") || ""), String(formData.get("folderName") || ""));
   } catch (error) {
     adminNotice(mediaFolderMessage(error), "warning", mediaReturnPath(formData));
   }
@@ -1409,7 +1479,7 @@ export async function deleteAdminMediaFolderAction(formData: FormData) {
   const parent = folder.replace(/\\/g, "/").split("/").slice(0, -1).join("/");
   let deleted: boolean;
   try {
-    deleted = await deleteMediaFolder(kindValue, folder);
+    deleted = await deletePostgresMediaFolder(kindValue, folder);
   } catch (error) {
     adminNotice(mediaFolderMessage(error), "warning", mediaReturnPath(formData));
   }
@@ -1449,10 +1519,10 @@ export async function createAdminUserAction(formData: FormData) {
   }
 
   try {
-    createUserRecord({
+    await createPostgresManagedUser(database("web"), {
       username,
       displayName,
-      passwordHash: hashUserPassword(password),
+      passwordHash: await hashUserPassword(password),
       status,
       role,
       sodaBalance: Math.max(Math.floor(Number(formData.get("sodaBalance")) || 0), 0),
@@ -1500,18 +1570,18 @@ export async function updateAdminUserAction(
     return mutationResult(false, passwordError, "warning");
   }
 
-  const previousUser = getUserById(userId);
-  const updated = updateUserRecord({
+  const previousUser = await getPostgresUserById(database("web"), userId);
+  const updated = await updatePostgresManagedUser(database("web"), {
     id: userId,
     displayName,
     status,
     role,
-    passwordHash: newPassword ? hashUserPassword(newPassword) : undefined,
+    passwordHash: newPassword ? await hashUserPassword(newPassword) : undefined,
   });
   if (!updated) {
     return mutationResult(false, "用户不存在", "warning");
   }
-  updateUserGrowth({
+  await updatePostgresUserGrowth({
     userId,
     sodaBalance,
     sodaExperience,
@@ -1519,9 +1589,9 @@ export async function updateAdminUserAction(
     adminName: session.username,
   });
   if (newPassword || status === "disabled" || previousUser?.role !== role) {
-    deleteUserSessions(userId);
+    await deleteUserSessions(userId);
   }
-  const user = getUserById(userId);
+  const user = await getPostgresUserById(database("web"), userId);
   return user
     ? mutationResult(true, "用户已更新", "success", { user })
     : mutationResult(false, "用户不存在", "warning");
@@ -1534,7 +1604,7 @@ function adminUserEntitlementPath(userId: number): string {
 export async function grantAdminUserEntitlementAction(formData: FormData) {
   const session = await requireAdminRequest();
   const userId = Number(formData.get("userId"));
-  if (!Number.isInteger(userId) || userId < 1 || !getUserById(userId)) {
+  if (!Number.isInteger(userId) || userId < 1 || !await getPostgresUserById(database("web"), userId)) {
     adminNotice("用户不存在", "warning", "/admin/users");
   }
   const durationDays = Math.min(Math.max(Math.floor(Number(formData.get("durationDays") || 0)), 0), 3650);
@@ -1547,7 +1617,10 @@ export async function grantAdminUserEntitlementAction(formData: FormData) {
   if (!definition) {
     adminNotice("请选择资源和至少一项权限", "warning", adminUserEntitlementPath(userId));
   }
-  grantUserEntitlement({ userId, definition, grantedBy: session.username });
+  const granted = await grantPostgresUserEntitlement({ userId, definition, grantedBy: session.username });
+  if (!granted) {
+    adminNotice("用户或资源不存在", "warning", adminUserEntitlementPath(userId));
+  }
   revalidatePath("/account");
   revalidatePath(`/admin/users/${userId}`);
   adminNotice("权益已授予", "success", adminUserEntitlementPath(userId));
@@ -1566,7 +1639,7 @@ export async function updateAdminUserEntitlementAction(formData: FormData) {
       : durationDays
         ? new Date(Date.now() + durationDays * 86_400_000).toISOString()
         : undefined;
-  const updated = updateUserEntitlement({
+  const updated = await updatePostgresUserEntitlement(database("web"), {
     id: entitlementId,
     userId,
     rights: formData.getAll("rights").map(String),
@@ -1582,7 +1655,7 @@ export async function revokeAdminUserEntitlementAction(formData: FormData) {
   await requireAdminRequest();
   const userId = Number(formData.get("userId"));
   const entitlementId = Number(formData.get("entitlementId"));
-  const revoked = revokeUserEntitlement(entitlementId, userId);
+  const revoked = await revokePostgresUserEntitlement(database("web"), entitlementId, userId);
   revalidatePath("/account");
   revalidatePath(`/admin/users/${userId}`);
   adminNotice(revoked ? "权益已撤销" : "权益不存在", revoked ? "success" : "warning", adminUserEntitlementPath(userId));
@@ -1610,7 +1683,7 @@ export async function saveUserLevelsAction(formData: FormData) {
   }
   let saved = 0;
   for (const level of levels) {
-    if (saveUserLevelDefinition({
+    if (await savePostgresUserLevelDefinition(database("web"), {
       level: level.level,
       name: level.name,
       sodaRequired: level.sodaRequired,
@@ -1624,7 +1697,7 @@ export async function saveUserLevelsAction(formData: FormData) {
   if (saved !== 7) {
     adminNotice("等级名称不能为空", "warning", "/admin/users/levels");
   }
-  recalculateUserLevels();
+  await recalculatePostgresUserLevels(database("web"));
   revalidatePath("/account");
   revalidatePath("/admin/users");
   revalidatePath("/admin/users/levels");
@@ -1642,13 +1715,13 @@ export async function updateAdminUserStatusAction(
       ? "pending"
       : "active";
 
-  if (!Number.isInteger(userId) || userId < 1 || !updateUserStatus(userId, status)) {
+  if (!Number.isInteger(userId) || userId < 1 || !await updatePostgresUserStatus(database("web"), userId, status)) {
     return mutationResult(false, "用户不存在", "warning");
   }
   if (status === "disabled") {
-    deleteUserSessions(userId);
+    await deleteUserSessions(userId);
   }
-  const user = getUserById(userId);
+  const user = await getPostgresUserById(database("web"), userId);
   return user
     ? mutationResult(true, status === "active" ? "用户已启用" : "用户已停用", "success", { user })
     : mutationResult(false, "用户不存在", "warning");
@@ -1667,7 +1740,7 @@ export async function deleteAdminUsersAction(
     return mutationResult(false, "请选择要停用并匿名化的用户", "warning");
   }
 
-  const deleted = anonymizeUserIds(ids, "admin-panel");
+  const deleted = await anonymizePostgresUsers(ids, "admin-panel");
   const deletedIds = deleted > 0 ? ids : [];
   return mutationResult(
     deleted > 0,
@@ -1692,7 +1765,7 @@ export async function deleteAdminUserHistoryAction(formData: FormData) {
   if (!historyKeys.length) {
     adminNotice("请选择要删除的浏览记录", "warning", returnPath);
   }
-  const deleted = historyKeys.reduce((count, key) => count + Number(deleteBrowseHistoryItem(userId, key)), 0);
+  const deleted = await deletePostgresBrowseHistoryItems(userId, historyKeys);
   revalidatePath(`/admin/users/${userId}`);
   adminNotice(`已删除 ${deleted} 条浏览记录`, deleted ? "success" : "warning", returnPath);
 }
@@ -1704,7 +1777,7 @@ export async function clearAdminUserHistoryAction(formData: FormData) {
   if (!Number.isInteger(userId) || userId < 1) {
     adminNotice("用户不存在", "warning", "/admin/users");
   }
-  const deleted = clearBrowseHistory(userId);
+  const deleted = await clearPostgresBrowseHistory(userId);
   revalidatePath(`/admin/users/${userId}`);
   adminNotice(`已删除 ${deleted} 条浏览记录`, deleted ? "success" : "warning", returnPath);
 }

@@ -1,15 +1,15 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { recordEngagementEvent, validateEngagementEventId } from "@/core/engagement/record";
+import { readPostgresSiteSettings } from "@/core/config/site-settings";
+import { database } from "@/core/db/postgres";
+import { validateEngagementEventId } from "@/core/engagement/record";
 import { engagementViewerKey } from "@/core/engagement/viewer";
 import { validateSameOriginMutation } from "@/core/security/origin";
-import { recordAnalyticsEvent } from "@/lib/analytics";
-import { getNovelById } from "@/lib/books";
-import { canAccessNovelLibrary } from "@/lib/config";
-import { checkContentAccess } from "@/lib/content-access";
-import { getDb } from "@/lib/db";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { readJsonBody } from "@/core/security/request-body";
+import { checkPostgresContentAccess } from "@/domains/access/postgres-content-access";
+import { getPostgresPublicNovel } from "@/domains/catalog/postgres-catalog";
+import { recordPostgresNovelView } from "@/domains/reading/postgres-reader-interactions";
+import { canBrowseHomePortal } from "@/lib/home-portal";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
-import { recordNovelVisit } from "@/lib/users";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,32 +17,50 @@ export const runtime = "nodejs";
 export async function POST(request: NextRequest) {
   const guard = validateSameOriginMutation(request);
   if (guard) return guard;
-  let body: { novelId?: unknown; eventId?: unknown };
-  try { body = await request.json(); } catch { return NextResponse.json({ error: "invalid_body" }, { status: 400 }); }
+  const parsed = await readJsonBody<{ novelId?: unknown; eventId?: unknown }>(request, 16 * 1024);
+  if (!parsed.ok) return NextResponse.json({ error: parsed.reason === "too_large" ? "body_too_large" : "invalid_body" }, { status: parsed.reason === "too_large" ? 413 : 400 });
+  const body = parsed.value;
   const novelId = Number(body.novelId);
   const eventId = validateEngagementEventId(body.eventId);
-  const user = getCurrentUserFromRequest(request);
-  if (!eventId || !Number.isSafeInteger(novelId) || novelId < 1 || !canAccessNovelLibrary(Boolean(user))) {
+  const [user, settings] = await Promise.all([
+    getCurrentUserFromRequest(request),
+    readPostgresSiteSettings(),
+  ]);
+  if (!eventId || !Number.isSafeInteger(novelId) || novelId < 1 ||
+      !canBrowseHomePortal(settings.homePortalAccessModes.novels, Boolean(user))) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  const book = getNovelById(novelId);
+  const executor = database("web");
+  const book = await getPostgresPublicNovel(executor, novelId);
   if (!book) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  const access = checkContentAccess(request.headers, { scope: "novel", authenticated: Boolean(user), admin: user?.role === "admin", rateLimit: false });
-  if (!access.allowed) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  const access = await checkPostgresContentAccess(executor, request.headers, {
+    scope: "novel",
+    authenticated: Boolean(user),
+    admin: user?.role === "admin",
+  });
+  if (!access.allowed) {
+    return NextResponse.json(
+      { error: access.status === 429 ? "rate_limited" : "not_found" },
+      {
+        status: access.status === 429 ? 429 : 404,
+        headers: access.retryAfterSeconds ? { "Retry-After": String(access.retryAfterSeconds) } : undefined,
+      },
+    );
+  }
   const viewerKey = engagementViewerKey(request.headers, user?.id);
-  const limit = checkRateLimit({ key: `novel-view:${viewerKey}`, limit: 40, windowMs: 60_000 });
-  if (!limit.allowed) return NextResponse.json({ error: "rate_limited" }, { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } });
-  const db = getDb();
-  db.exec("BEGIN IMMEDIATE");
   try {
-    const result = recordEngagementEvent(db, { eventId, viewerKey, contentType: "novel", contentId: novelId, action: "detail_view" }, () => {
-      recordNovelVisit(book.id, viewerKey, request.headers.get("user-agent") || "");
-      recordAnalyticsEvent({ headers: request.headers, userId: user?.id ?? null, eventType: "book_view", path: `/books/${book.id}`, referrer: request.headers.get("referer"), novelId: book.id });
+    const result = await recordPostgresNovelView({
+      eventId,
+      viewerKey,
+      novelId: book.id,
+      userId: user?.id,
+      headers: request.headers,
+      referrer: request.headers.get("referer"),
+      analyticsEnabled: settings.analyticsEnabled,
     });
-    db.exec("COMMIT");
+    if (!result.accepted) return NextResponse.json({ error: "not_found" }, { status: 404 });
     return NextResponse.json({ counted: result.counted, duplicate: result.duplicateEvent }, { status: result.counted ? 201 : 200, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    db.exec("ROLLBACK");
     console.error("Failed to record novel engagement", error);
     return NextResponse.json({ error: "record_failed" }, { status: 500 });
   }

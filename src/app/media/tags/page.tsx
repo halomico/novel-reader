@@ -9,10 +9,12 @@ import { PageContextBar } from "@/components/PageContextBar";
 import { Pagination } from "@/components/Pagination";
 import { ResultCount } from "@/components/ResultCount";
 import { SiteHeader } from "@/components/SiteHeader";
-import { checkContentAccess } from "@/lib/content-access";
+import { database } from "@/core/db/postgres";
+import { checkPostgresContentAccess } from "@/domains/access/postgres-content-access";
+import { isMediaKindAccessible, isMediaKindEntryVisible, isMediaKindPublic } from "@/domains/media/media-model";
+import { listPostgresVideoTags } from "@/domains/media/postgres-media-catalog";
 import { languageAlternates, uiText, withLocalePath } from "@/lib/locale";
 import { getRequestLocale, localizeText, normalizeSearchText } from "@/lib/locale-server";
-import { isMediaKindAccessible, isMediaKindEntryVisible, isMediaKindPublic, listVideoTags } from "@/lib/media";
 import { NO_INDEX_ROBOTS } from "@/lib/seo";
 import { getCurrentUser } from "@/lib/user-auth";
 
@@ -51,16 +53,16 @@ export default async function VideoTagsPage({ searchParams }: VideoTagsPageProps
     }
     notFound();
   }
-  if (!checkContentAccess(headerStore, {
+  if (!(await checkPostgresContentAccess(database("web"), headerStore, {
     scope: "video",
     authenticated: Boolean(user),
     admin: user?.role === "admin",
     rateLimit: false,
-  }).allowed) notFound();
+  })).allowed) notFound();
 
   const params = await searchParams;
   const queryInput = String(params.q || "").trim().slice(0, 80);
-  const result = listVideoTags({
+  const result = await listPostgresVideoTags(database("web"), {
     query: queryInput ? await normalizeSearchText(queryInput) : "",
     page: Number(params.page || 1),
     pageSize: 96,
@@ -100,7 +102,7 @@ export default async function VideoTagsPage({ searchParams }: VideoTagsPageProps
           <div className="mediaTagGrid">
             {tags.map((tag) => (
               <Link className="mediaTagItem" href={`/media?${new URLSearchParams({ kind: "video", tag: tag.slug }).toString()}`} key={tag.id}>
-                <strong>#{tag.name}</strong>
+                <strong>{tag.name}</strong>
                 <span>{tag.videoCount.toLocaleString("zh-CN")}</span>
               </Link>
             ))}

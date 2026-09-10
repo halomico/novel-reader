@@ -5,21 +5,22 @@ import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
+import { database } from "@/core/db/postgres";
+import { deletePostgresContentReport, setPostgresContentReportStatus } from "@/domains/activity/postgres-reports";
 import { mutationResult, type MutationResult } from "@/lib/mutation-result";
-import { deleteContentReport, setContentReportStatus } from "@/lib/reports";
 import {
-  addStationReply,
-  createAdminStationThread,
-  deleteAnnouncement,
-  deleteStationThread,
-  listStationMessages,
-  findStationRecipientId,
-  saveAnnouncement,
-  setStationThreadStatus,
+  addPostgresStationReply,
+  createPostgresAdminStationThread,
+  deletePostgresAnnouncement,
+  deletePostgresStationThread,
+  listPostgresStationMessages,
+  findPostgresStationRecipientId,
+  savePostgresAnnouncement,
+  setPostgresStationThreadStatus,
   StationInputError,
   type Announcement,
   type StationMessage,
-} from "@/lib/station";
+} from "@/domains/station/postgres-station";
 
 async function requireAdmin() {
   const headerStore = await headers();
@@ -41,10 +42,10 @@ export async function createAdminStationThreadInlineAction(
   bodyValue: string,
 ): Promise<MutationResult<{ threadId: number }>> {
   await requireAdmin();
-  const userId = findStationRecipientId(usernameValue);
+  const userId = await findPostgresStationRecipientId(database("web"), usernameValue);
   if (!userId) return mutationResult(false, "用户不存在或不可用", "warning");
   try {
-    const threadId = createAdminStationThread(userId, subjectValue, bodyValue);
+    const threadId = await createPostgresAdminStationThread(userId, subjectValue, bodyValue);
     revalidateStationPaths(threadId);
     return mutationResult(true, "消息已发送", "success", { threadId });
   } catch (error) {
@@ -70,7 +71,7 @@ export async function saveAnnouncementInlineAction(
 ): Promise<MutationResult<{ announcement: Announcement }>> {
   await requireAdmin();
   try {
-    const announcement = saveAnnouncement({
+    const announcement = await savePostgresAnnouncement({
       id: Number(formData.get("id") || 0),
       title: formData.get("title"),
       body: formData.get("body"),
@@ -97,7 +98,7 @@ export async function saveAnnouncementInlineAction(
 
 export async function deleteAnnouncementInlineAction(idValue: number): Promise<MutationResult> {
   await requireAdmin();
-  const deleted = deleteAnnouncement(Math.floor(Number(idValue)));
+  const deleted = await deletePostgresAnnouncement(database("web"), Math.floor(Number(idValue)));
   if (!deleted) return mutationResult(false, "公告不存在", "warning");
   revalidatePath("/");
   revalidatePath("/announcements");
@@ -107,7 +108,7 @@ export async function deleteAnnouncementInlineAction(idValue: number): Promise<M
 
 export async function deleteStationThreadInlineAction(idValue: number): Promise<MutationResult> {
   await requireAdmin();
-  const deleted = deleteStationThread(Math.floor(Number(idValue)));
+  const deleted = await deletePostgresStationThread(database("web"), Math.floor(Number(idValue)));
   if (!deleted) return mutationResult(false, "留言不存在", "warning");
   revalidateStationPaths();
   return mutationResult(true, "留言已删除", "success");
@@ -120,11 +121,11 @@ export async function replyStationThreadInlineAction(
   await requireAdmin();
   const threadId = Math.floor(Number(threadIdValue));
   try {
-    const replied = addStationReply({ threadId, body: bodyValue, authorRole: "admin" });
+    const replied = await addPostgresStationReply({ threadId, body: bodyValue, authorRole: "admin" });
     if (!replied) return mutationResult(false, "该留言已结束", "warning");
     revalidateStationPaths(threadId);
     return mutationResult(true, "回复已发送", "success", {
-      messages: listStationMessages(threadId),
+      messages: await listPostgresStationMessages(database("web"), threadId),
     });
   } catch (error) {
     return mutationResult(false, stationError(error, "回复发送失败"), "warning");
@@ -137,7 +138,7 @@ export async function setStationThreadStatusInlineAction(
 ): Promise<MutationResult<{ status: "open" | "closed" }>> {
   await requireAdmin();
   const threadId = Math.floor(Number(threadIdValue));
-  if (!setStationThreadStatus(threadId, status)) {
+  if (!await setPostgresStationThreadStatus(database("web"), threadId, status)) {
     return mutationResult(false, "留言不存在", "warning");
   }
   revalidateStationPaths(threadId);
@@ -155,7 +156,7 @@ export async function setContentReportStatusInlineAction(
 ): Promise<MutationResult<{ status: "open" | "resolved" }>> {
   const session = await requireAdmin();
   const reportId = Math.floor(Number(reportIdValue));
-  if (!setContentReportStatus(reportId, status, session.username)) {
+  if (!await setPostgresContentReportStatus(database("web"), reportId, status, session.username)) {
     return mutationResult(false, "反馈记录不存在", "warning");
   }
   return mutationResult(
@@ -168,7 +169,7 @@ export async function setContentReportStatusInlineAction(
 
 export async function deleteContentReportInlineAction(idValue: number): Promise<MutationResult> {
   await requireAdmin();
-  const deleted = deleteContentReport(Math.floor(Number(idValue)));
+  const deleted = await deletePostgresContentReport(database("web"), Math.floor(Number(idValue)));
   return deleted
     ? mutationResult(true, "反馈记录已删除", "success")
     : mutationResult(false, "反馈记录不存在", "warning");

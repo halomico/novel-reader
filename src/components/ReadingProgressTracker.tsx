@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { ReadingProgress } from "@/lib/reading-progress";
+import type { PostgresReadingProgress as ReadingProgress } from "@/domains/reading/postgres-reading-progress";
 import { READER_LAYOUT_CHANGE_EVENT, resolveReaderPageMetrics } from "@/lib/reader-layout";
 import { normalizeReaderPageTurn } from "@/lib/ui-preferences";
 
@@ -132,6 +132,12 @@ export function ReadingProgressTracker({
       : null,
   );
   const interactedRef = useRef(false);
+  const prevChapterIdRef = useRef(chapterId);
+  if (prevChapterIdRef.current !== chapterId) {
+    prevChapterIdRef.current = chapterId;
+    interactedRef.current = false;
+    currentRef.current = null;
+  }
   const flushTimerRef = useRef<number | null>(null);
   const frameRef = useRef<number | null>(null);
 

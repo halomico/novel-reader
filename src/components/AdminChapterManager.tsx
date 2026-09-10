@@ -3,7 +3,7 @@
 import { Save, Trash2 } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { saveNovelChaptersAction } from "@/app/admin/actions";
-import type { NovelChapter } from "@/lib/novel-library";
+import type { NovelChapter } from "@/domains/catalog/postgres-admin-novels";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -20,7 +20,14 @@ export function AdminChapterManager({
   page: number;
   chapters: NovelChapter[];
 }) {
+  const pageKey = `${novelId}:${page}`;
+  const [prevPageKey, setPrevPageKey] = useState(pageKey);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+
+  if (prevPageKey !== pageKey) {
+    setPrevPageKey(pageKey);
+    setSelected(new Set());
+  }
   const allSelected = chapters.length > 0 && chapters.every((chapter) => selected.has(chapter.id));
 
   function toggleAll() {
