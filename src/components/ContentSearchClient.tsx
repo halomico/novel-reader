@@ -33,6 +33,7 @@ type SearchApiResponse = {
   ok: boolean;
   message?: string;
   items?: PostgresContentSearchItem[];
+  nextCursor?: string | null;
   totalItems?: number;
   totalNovels?: number;
   totalPages?: number;
@@ -83,10 +84,12 @@ export function ContentSearchClient({
   const queryKey = `${keyword}::${library}::${novelId ?? ""}::${requestFiltersKey}`;
   const [prevQueryKey, setPrevQueryKey] = useState(queryKey);
   const [page, setPage] = useState(() => Math.max(1, initialPage));
+  const cursorByPageRef = useRef<Map<number, string>>(new Map());
 
   if (prevQueryKey !== queryKey) {
     setPrevQueryKey(queryKey);
     setPage(Math.max(1, initialPage));
+    cursorByPageRef.current = new Map();
   }
 
   const [items, setItems] = useState<PostgresContentSearchItem[]>([]);
@@ -98,6 +101,7 @@ export function ContentSearchClient({
 
   useEffect(() => {
     const controller = new AbortController();
+    const cursor = page > 1 ? cursorByPageRef.current.get(page) : undefined;
     setLoading(true);
     setMessage("");
     void fetch("/api/search/content", {
@@ -107,7 +111,7 @@ export function ContentSearchClient({
         q: keyword,
         library,
         novelId,
-        page,
+        ...(cursor ? { cursor } : { page }),
         ...(requestFiltersKey === "null" ? {} : { filters: JSON.parse(requestFiltersKey) }),
       }),
       cache: "no-store",
@@ -125,6 +129,11 @@ export function ContentSearchClient({
         updateHistory(resultPages, true);
         setPage(resultPages);
         return;
+      }
+      if (typeof data.nextCursor === "string" && data.nextCursor) {
+        cursorByPageRef.current.set(page + 1, data.nextCursor);
+      } else {
+        cursorByPageRef.current.delete(page + 1);
       }
       setItems(data.items);
       setTotalNovels(Number(data.totalNovels));
@@ -164,7 +173,7 @@ export function ContentSearchClient({
   }, []);
 
   function goToPage(nextPage: number) {
-    if (loading || nextPage === page || nextPage < 1 || nextPage > totalPages) return;
+    if (nextPage === page || nextPage < 1 || nextPage > totalPages) return;
     updateHistory(nextPage);
     setPage(nextPage);
   }
