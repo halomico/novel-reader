@@ -20,9 +20,9 @@ jobs:
       - name: Archive exact branch source
         run: |
           git rev-parse HEAD > SOURCE_SHA.txt
-          tar --exclude=.git --exclude=node_modules --exclude=.next -czf source-snapshot.tgz .
+          tar --exclude=.git --exclude=node_modules --exclude=.next -czf "$RUNNER_TEMP/source-snapshot.tgz" .
       - uses: actions/upload-artifact@v4
         with:
           name: audit-source-snapshot-${{ github.sha }}
-          path: source-snapshot.tgz
+          path: ${{ runner.temp }}/source-snapshot.tgz
           retention-days: 7
