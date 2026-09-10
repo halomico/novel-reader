@@ -1,0 +1,28 @@
+name: Audit source snapshot
+
+on:
+  push:
+    branches:
+      - audit/full-system-20260911
+    paths:
+      - .github/workflows/audit-source-snapshot.yml
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: audit/full-system-20260911
+      - name: Archive exact branch source
+        run: |
+          git rev-parse HEAD > SOURCE_SHA.txt
+          tar --exclude=.git --exclude=node_modules --exclude=.next -czf source-snapshot.tgz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: audit-source-snapshot-${{ github.sha }}
+          path: source-snapshot.tgz
+          retention-days: 7
