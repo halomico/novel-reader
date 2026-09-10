@@ -2,7 +2,7 @@ import React, { type CSSProperties } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { preserveOriginalMarkdownSpacing } from "@/lib/original-constants";
-import { originalHeadingId } from "@/lib/original-outline";
+import { originalHeadingId, originalHeadingIdsByLine } from "@/lib/original-outline";
 
 type HastNode = {
   type: string;
@@ -12,39 +12,73 @@ type HastNode = {
   children?: HastNode[];
 };
 
-function markText(value: string): HastNode[] {
-  const pattern = /==([^=\n]+)==|~~([^~\n]+)~~/gu;
-  const nodes: HastNode[] = [];
-  let lastIndex = 0;
-  for (const match of value.matchAll(pattern)) {
-    const index = match.index ?? 0;
-    if (index > lastIndex) nodes.push({ type: "text", value: value.slice(lastIndex, index) });
-    const tagName = match[1] !== undefined ? "u" : "del";
-    nodes.push({ type: "element", tagName, properties: {}, children: [{ type: "text", value: match[1] ?? match[2] ?? "" }] });
-    lastIndex = index + match[0].length;
-  }
-  if (lastIndex < value.length) nodes.push({ type: "text", value: value.slice(lastIndex) });
-  return nodes.length ? nodes : [{ type: "text", value }];
+/**
+ * Raw HTML stays disabled — user articles must not be able to inject markup. Underline
+ * is the one element the editor emits, so `<u>` is swapped for private-use sentinels
+ * before parsing and turned back into a real element afterwards. Nothing else in the
+ * document can produce these code points, and text inside code blocks is restored
+ * verbatim so a literal `<u>` in a sample still reads as `<u>`.
+ */
+const UNDERLINE_OPEN_SENTINEL = "\uE000";
+const UNDERLINE_CLOSE_SENTINEL = "\uE001";
+
+function encodeUnderlineTags(value: string): string {
+  let inFence = false;
+  return value.split("\n").map((line) => {
+    if (/^\s*(```|~~~)/u.test(line)) {
+      inFence = !inFence;
+      return line;
+    }
+    if (inFence) return line;
+    return line
+      .replace(/[\uE000\uE001]/gu, " ")
+      .replace(/<u>/giu, UNDERLINE_OPEN_SENTINEL)
+      .replace(/<\/u>/giu, UNDERLINE_CLOSE_SENTINEL);
+  }).join("\n");
 }
 
-/** Add the small forum-friendly ==underline== syntax without allowing HTML. */
-function rehypeForumMarks() {
+function decodeSentinels(value: string): string {
+  return value.replace(/\uE000/gu, "<u>").replace(/\uE001/gu, "</u>");
+}
+
+const MARK_PATTERN = new RegExp(`${UNDERLINE_OPEN_SENTINEL}([^${UNDERLINE_OPEN_SENTINEL}${UNDERLINE_CLOSE_SENTINEL}\n]+)${UNDERLINE_CLOSE_SENTINEL}|==([^=\n]+)==`, "gu");
+
+function markText(value: string): HastNode[] {
+  const nodes: HastNode[] = [];
+  let lastIndex = 0;
+  for (const match of value.matchAll(MARK_PATTERN)) {
+    const index = match.index ?? 0;
+    if (index > lastIndex) nodes.push({ type: "text", value: decodeSentinels(value.slice(lastIndex, index)) });
+    nodes.push({
+      type: "element",
+      tagName: "u",
+      properties: {},
+      children: [{ type: "text", value: decodeSentinels(match[1] ?? match[2] ?? "") }],
+    });
+    lastIndex = index + match[0].length;
+  }
+  if (lastIndex < value.length) nodes.push({ type: "text", value: decodeSentinels(value.slice(lastIndex)) });
+  return nodes.length ? nodes : [{ type: "text", value: decodeSentinels(value) }];
+}
+
+function rehypeUnderline() {
   return (tree: HastNode) => {
-    const visit = (node: HastNode) => {
-      if (node.tagName === "code" || node.tagName === "pre") return;
+    const visit = (node: HastNode, insideCode: boolean) => {
       if (!node.children) return;
+      const code = insideCode || node.tagName === "code" || node.tagName === "pre";
       const children: HastNode[] = [];
       for (const child of node.children) {
         if (child.type === "text" && typeof child.value === "string") {
-          children.push(...markText(child.value));
-        } else {
-          visit(child);
-          children.push(child);
+          if (code) children.push({ ...child, value: decodeSentinels(child.value) });
+          else children.push(...markText(child.value));
+          continue;
         }
+        visit(child, code);
+        children.push(child);
       }
       node.children = children;
     };
-    visit(tree);
+    visit(tree, false);
   };
 }
 
@@ -63,7 +97,11 @@ function safeHref(href: string | undefined): string | null {
 export function OriginalMarkdown({ children }: { children: string }) {
   let headingIndex = 0;
   let imageIndex = 0;
-  const source = preserveOriginalMarkdownSpacing(children);
+  const spaced = preserveOriginalMarkdownSpacing(children);
+  // Heading ids come from the same scan the outline uses, keyed by source line, so a
+  // table of contents entry and the heading it points at can never drift apart.
+  const headingIds = originalHeadingIdsByLine(spaced);
+  const source = encodeUnderlineTags(spaced);
   const sourceLines = source.split("\n");
   const paragraphGap = (line: number | undefined) => {
     let gap = 0;
@@ -74,9 +112,8 @@ export function OriginalMarkdown({ children }: { children: string }) {
     children: headingChildren,
     node,
     ...props
-  }: React.HTMLAttributes<HTMLHeadingElement> & { children?: React.ReactNode; node?: unknown }) => {
-    void node;
-    const id = originalHeadingId(headingIndex);
+  }: React.HTMLAttributes<HTMLHeadingElement> & { children?: React.ReactNode; node?: { position?: { start: { line: number } } } }) => {
+    const id = headingIds.get(node?.position?.start.line ?? -1) || originalHeadingId(headingIndex);
     headingIndex += 1;
     return <Tag {...props} id={id}>{headingChildren}</Tag>;
   };
@@ -84,7 +121,7 @@ export function OriginalMarkdown({ children }: { children: string }) {
     <ReactMarkdown
       skipHtml
       remarkPlugins={[remarkGfm]}
-      rehypePlugins={[rehypeForumMarks]}
+      rehypePlugins={[rehypeUnderline]}
       components={{
         a: ({ children: linkChildren, href }) => {
           const target = safeHref(href);

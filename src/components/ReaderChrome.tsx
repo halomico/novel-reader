@@ -19,31 +19,49 @@ export function ReaderSidePanel({
   title,
   meta,
   onClose,
+  docked = false,
   children,
 }: {
   kind: string;
   title: string;
   meta?: ReactNode;
   onClose: () => void;
+  /**
+   * A docked panel sits beside the text rather than on top of it: no backdrop, no
+   * focus trap, no `aria-modal`. The table of contents is meant to stay open while
+   * the reader keeps reading and scrolling, which a modal dialog cannot do.
+   */
+  docked?: boolean;
   children: ReactNode;
 }) {
   const panelRef = useRef<HTMLElement>(null);
 
   useFocusTrap({
-    active: true,
+    active: !docked,
     containerRef: panelRef,
     onEscape: onClose,
   });
 
+  const panel = (
+    <section
+      ref={panelRef}
+      className={`readerSidePanel is-${kind}${docked ? " isDocked" : ""}`}
+      role={docked ? "region" : "dialog"}
+      aria-modal={docked ? undefined : true}
+      aria-label={title}
+    >
+      <header>
+        <div><strong>{title}</strong>{meta}</div>
+        <button type="button" onClick={onClose} aria-label="关闭"><X size={19} aria-hidden="true" /></button>
+      </header>
+      {children}
+    </section>
+  );
+
+  if (docked) return panel;
   return (
     <div className="readerPanelBackdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section ref={panelRef} className={`readerSidePanel is-${kind}`} role="dialog" aria-modal="true" aria-label={title}>
-        <header>
-          <div><strong>{title}</strong>{meta}</div>
-          <button type="button" onClick={onClose} aria-label="关闭"><X size={19} aria-hidden="true" /></button>
-        </header>
-        {children}
-      </section>
+      {panel}
     </div>
   );
 }

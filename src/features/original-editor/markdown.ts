@@ -1,7 +1,15 @@
 "use client";
 
 import { CHECK_LIST, HEADING, HIGHLIGHT, TRANSFORMERS, UNORDERED_LIST, type Transformer } from "@lexical/markdown";
-import { $createParagraphNode, $createTextNode, type ElementNode, type LexicalNode } from "lexical";
+import {
+  $createParagraphNode,
+  $createTextNode,
+  $getSelection,
+  $isRangeSelection,
+  $isTextNode,
+  type ElementNode,
+  type LexicalNode,
+} from "lexical";
 import type { HeadingTagType } from "@lexical/rich-text";
 import {
   $createTableCellNode,
@@ -51,6 +59,48 @@ function safeImageSrc(value: unknown): string {
     return "";
   }
 }
+
+/**
+ * Underline has no CommonMark syntax. `_x_` is emphasis and `__x__` is strong, so
+ * neither may be reused for it, and `==x==` means *highlight* in the dialects that
+ * define it at all. The document therefore stores the one representation that is
+ * unambiguous and survives a round trip through every renderer: an explicit `<u>`
+ * element. `==x==` stays readable on import so drafts written before this keep
+ * their underlines, but everything is exported as `<u>`.
+ */
+function underlineTransformer(importRegExp: RegExp, regExp: RegExp, trigger: string, exportable: boolean): Transformer {
+  return {
+    type: "text-match",
+    dependencies: [],
+    importRegExp,
+    regExp,
+    trigger,
+    replace: (textNode, match) => {
+      const surroundingFormat = textNode.getFormat();
+      const replacement = $createTextNode(match[1]);
+      replacement.setFormat(surroundingFormat);
+      replacement.toggleFormat("underline");
+      textNode.replace(replacement);
+      // Without this the caret keeps the underline and everything typed after the
+      // closing tag is silently underlined too, unlike `**` and `~~`, whose built-in
+      // transformers reset the pending format for exactly this reason.
+      replacement.selectEnd();
+      const selection = $getSelection();
+      if ($isRangeSelection(selection)) selection.setFormat(surroundingFormat);
+      return replacement;
+    },
+    export: exportable
+      ? (node, _children, exportFormat) => {
+        // `exportFormat` still applies bold/italic/code, so `<u>` composes with them.
+        if (!$isTextNode(node) || !node.hasFormat("underline")) return null;
+        return `<u>${exportFormat(node, node.getTextContent())}</u>`;
+      }
+      : undefined,
+  };
+}
+
+const UNDERLINE = underlineTransformer(/<u>([^<>\n]+)<\/u>/u, /<u>([^<>\n]+)<\/u>$/u, ">", true);
+const LEGACY_UNDERLINE = underlineTransformer(/==([^=\n]+)==/u, /==([^=\n]+)==$/u, "=", false);
 
 /** Import/export GitHub-style tables so source, visual mode and reader preview share one document. */
 const GFM_TABLE: Transformer = {
@@ -160,10 +210,15 @@ export const ORIGINAL_MARKDOWN_TRANSFORMERS: Transformer[] = [
       heading.selectEnd();
     },
   },
-  { type: "text-format", tag: "==", format: ["underline"] },
+  UNDERLINE,
+  LEGACY_UNDERLINE,
   CHECK_LIST,
   ...TRANSFORMERS.filter((transformer) => (
     transformer !== HEADING && transformer !== HIGHLIGHT && transformer !== UNORDERED_LIST
   )),
   UNORDERED_LIST,
 ];
+
+/** The canonical underline markers, shared with the source editor and the renderer. */
+export const UNDERLINE_OPEN = "<u>";
+export const UNDERLINE_CLOSE = "</u>";

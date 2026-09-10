@@ -300,15 +300,42 @@ test("navigation keeps the current surface while loading and paged readers avoid
   const composer = read("src/features/original-editor/OriginalComposerShell.tsx");
   assert.doesNotMatch(composer, /FloatingSelectionToolbarPlugin/);
   assert.doesNotMatch(composer, /serverTimer/);
-  assert.match(composer, /label="章节"/);
-  assert.match(composer, /data-tooltip=\{label\}/);
-  assert.doesNotMatch(composer, /label="H2 标题"|label="H2 小标题"|label="行内代码"|label="有序列表"|label="无序列表"|label="代码块"/);
-  assert.match(composer, /label="下划线"/);
-  assert.match(composer, /label="删除线"/);
-  assert.match(composer, /label="清除格式"/);
+  // The writing toolbar is one flat row of exactly the commands long-form fiction
+  // needs. Lists, inline code and sub-heading levels stay supported as Markdown
+  // syntax but do not earn a permanent button; 目录 belongs with 设置 in the top bar.
+  // Lockable formats are declared through `formatButton`, so both spellings count.
+  for (const label of ["撤销", "重做", "清除格式", "加粗", "斜体", "下划线", "删除线", "章节标题", "引用", "链接", "分隔线", "付费分界"]) {
+    assert.ok(
+      composer.includes(`label="${label}"`) || composer.includes(`, "${label}",`),
+      `toolbar is missing ${label}`,
+    );
+  }
+  const desktopToolbar = composer.slice(composer.indexOf("styles.desktopToolbar"), composer.indexOf("styles.mobileToolbar"));
+  assert.doesNotMatch(desktopToolbar, /label="(无序列表|有序列表|行内代码|小节标题|正文|目录)"/);
+  assert.doesNotMatch(desktopToolbar, /toolGroup|toolDivider|toolSpacer/);
+  // Icon-only buttons must say what they are; the attribute existed but nothing drew it.
+  assert.match(composer, /data-tooltip=\{hint \? `\$\{label\} · \$\{hint\}` : label\}/);
+  assert.match(
+    read("src/features/original-editor/OriginalComposer.module.css"),
+    /\.toolbar button\[data-tooltip\]::after[\s\S]*content: attr\(data-tooltip\)/,
+  );
+  assert.match(composer, /styles\.outlineButton[\s\S]*aria-label="目录"/);
   assert.match(composer, /<Eraser size=\{18\}/);
-  assert.match(composer, /sourceMode \? "渲染" : "源码"/);
-  assert.doesNotMatch(composer, /toolDivider/);
+  // A single click must act at once. Waiting out a double-click timer made every
+  // format land a third of a second late; the pair is read from `event.detail`.
+  assert.doesNotMatch(composer, /clickTimerRef/);
+  assert.match(composer, /event\.detail >= 2/);
+  assert.match(composer, /toolLocked/);
+  // Escape releases a format lock without editing a character of the draft, and the
+  // lock is reachable without a double click on a touch screen.
+  assert.match(composer, /KEY_ESCAPE_COMMAND/);
+  // Word count, outline and the paid-boundary flag are debounced, never deferred again
+  // to requestIdleCallback: a writer who does not pause — or a throttled tab — was left
+  // looking at numbers and a paid state that belonged to an older draft.
+  assert.doesNotMatch(composer, /requestIdleCallback\(/);
+  assert.match(composer, /flushEditorMetadata/);
+  assert.match(composer, /MOBILE_LOCKABLE_FORMATS/);
+  assert.match(composer, /formatLockToggle/);
   assert.doesNotMatch(composer, /styles\.primaryButton.*发布/);
   assert.match(composer, /styles\.topPublishButton/);
   assert.match(composer, /styles\.bottomPublishButton/);
@@ -329,12 +356,14 @@ test("navigation keeps the current surface while loading and paged readers avoid
   assert.doesNotMatch(composer, /originalComposerGuard|"popstate"/);
   assert.match(composer, /addEventListener\("beforeunload"/);
   assert.doesNotMatch(composer, /ImagePlus|ImagePastePlugin|uploadImage|图片已插入|ComposerPromptDialog|pendingImage|图片替代文本/);
-  // Inline image syntax still settles as you type; the pattern is now a hoisted constant
-  // so the scan does not rebuild it (or the transformer index) on every keystroke.
-  const bufferedMarkdown = read("src/features/original-editor/buffered-markdown.ts");
-  assert.match(bufferedMarkdown, /IMAGE_RE = .*original\\\/assets/);
-  assert.match(bufferedMarkdown, /const image = IMAGE_RE\.exec\(text\)/);
-  assert.match(bufferedMarkdown, /inlineIndexes = new WeakMap/);
+  // Markdown shortcuts are Lexical's own engine over the project's transformer list —
+  // there is no second, hand-rolled scanner. The previous one called editor.update()
+  // from inside an update listener, which merged the following keystrokes into a
+  // tagged update; Lexical's engine then saw the caret jump two offsets at once and
+  // skipped the transform, so block syntax never rendered and lists never continued.
+  const shortcutPlugins = read("src/features/original-editor/plugins.tsx");
+  assert.match(shortcutPlugins, /MarkdownShortcutPlugin transformers=\{ORIGINAL_MARKDOWN_TRANSFORMERS\}/);
+  assert.doesNotMatch(composer, /buffered-markdown|commitBufferedMarkdown/);
   const imageNode = read("src/features/original-editor/nodes/OriginalImageNode.tsx");
   assert.match(imageNode, /document\.createElement\("div"\)/);
   assert.match(imageNode, /isInline\(\): false/);
@@ -364,7 +393,11 @@ test("navigation keeps the current surface while loading and paged readers avoid
   assert.doesNotMatch(composer, /window\.(prompt|confirm)/);
   assert.match(read("src/app/api/original/tags/route.ts"), /export async function GET/);
   assert.match(read("src/features/original-editor/server.ts"), /listOriginalEditorTagsByIds/);
-  assert.match(composerCss, /\.paidGateCard\s*\{[\s\S]*grid-template-columns: minmax\(36px, 1fr\) auto minmax\(36px, 1fr\)/);
+  // The boundary the writer places and the gate the reader meets are one feature seen
+  // at two moments, so the editing card borrows the reader gate's card shape rather
+  // than being a bare rule across the page.
+  assert.match(composerCss, /\.paidGateCard\s*\{[\s\S]*border-radius: 9px;[\s\S]*justify-items: center/);
+  assert.match(composerCss, /\.paidGateRemove\s*\{/);
   assert.match(composerCss, /\.editorParagraph\s*\{ margin: 0 0 1em;/);
   assert.match(read("src/app/styles/core.css"), /--original-font-size: 17px;[\s\S]*--original-line-height: 1\.7;/);
   assert.match(originalStyles, /originalMarkdownParagraph \+ \.originalMarkdownParagraph[\s\S]*1em/);

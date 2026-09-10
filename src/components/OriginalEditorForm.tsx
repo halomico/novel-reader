@@ -62,7 +62,9 @@ const MARK_ACTIONS: MarkAction[] = [
   { label: "加粗", icon: Bold, prefix: "**", suffix: "**", placeholder: "文字" },
   { label: "斜体", icon: Italic, prefix: "*", suffix: "*", placeholder: "文字" },
   { label: "删除线", icon: Strikethrough, prefix: "~~", suffix: "~~", placeholder: "文字" },
-  { label: "下划线", icon: Underline, prefix: "==", suffix: "==", placeholder: "文字" },
+  // `<u>` is the composer's canonical underline; `==` means highlight elsewhere and
+  // has no place in a Markdown document this project also renders.
+  { label: "下划线", icon: Underline, prefix: "<u>", suffix: "</u>", placeholder: "文字" },
   { label: "引用", icon: Quote, prefix: "> ", placeholder: "引用内容", line: true },
   { label: "插入链接", icon: Link2, prefix: "[", suffix: "](https://example.com)", placeholder: "链接文字" },
 ];

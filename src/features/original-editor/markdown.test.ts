@@ -86,10 +86,25 @@ test("keeps local Markdown images as visual image nodes", () => {
   assert.match(result.output, /original-image-size:640x360/u);
 });
 
-test("keeps inline underline syntax through visual-editor conversion", () => {
-  const result = importAndExport("这是 ==重点== 文本");
-  const paragraph = result.json.root.children[0] as unknown as { children?: Array<{ text?: string; format?: number }> };
-  const underlined = paragraph.children?.find((child) => child.text === "重点");
-  assert.equal(underlined?.format, 8);
-  assert.match(result.output, /==重点==/u);
+// CommonMark has no underline: `_x_` is emphasis and `__x__` is strong, and `==x==`
+// means highlight where it is defined at all. The document therefore stores `<u>`,
+// while `==x==` is still read so drafts written before this keep their underlines.
+test("underline round-trips as <u> and still imports the legacy == marker", () => {
+  for (const source of ["这是 <u>重点</u> 文本", "这是 ==重点== 文本"]) {
+    const result = importAndExport(source);
+    const paragraph = result.json.root.children[0] as unknown as { children?: Array<{ text?: string; format?: number }> };
+    const underlined = paragraph.children?.find((child) => child.text === "重点");
+    assert.equal(underlined?.format, 8, `underline format missing for ${source}`);
+    assert.match(result.output, /<u>重点<\/u>/u);
+    assert.doesNotMatch(result.output, /==/u);
+  }
+});
+
+test("underline never claims the emphasis markers CommonMark already defines", () => {
+  const italic = importAndExport("这是 _斜体_ 文本");
+  const italicParagraph = italic.json.root.children[0] as unknown as { children?: Array<{ text?: string; format?: number }> };
+  assert.equal(italicParagraph.children?.find((child) => child.text === "斜体")?.format, 2);
+  const bold = importAndExport("这是 __粗体__ 文本");
+  const boldParagraph = bold.json.root.children[0] as unknown as { children?: Array<{ text?: string; format?: number }> };
+  assert.equal(boldParagraph.children?.find((child) => child.text === "粗体")?.format, 1);
 });

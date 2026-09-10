@@ -9,8 +9,9 @@ const composerCssRaw = readFileSync(
   "utf8",
 );
 
-/** Declarations only: prose in comments must not satisfy or trip these guards. */
-const composerCss = composerCssRaw.replace(/\/\*[^]*?\*\//gu, " ");
+/** Declarations only, with newlines normalized: prose in comments must not satisfy or
+ *  trip these guards, and a CRLF checkout must not change what the selectors match. */
+const composerCss = composerCssRaw.replace(/\r\n/gu, "\n").replace(/\/\*[^]*?\*\//gu, " ");
 
 function ruleBody(selector: string): string {
   const start = composerCss.indexOf(`${selector} {`);
@@ -52,4 +53,28 @@ test("tag slugs keep Han characters instead of collapsing to the article fallbac
   // article rule did by falling back to `article-<timestamp>` for every Han name.
   assert.notEqual(originalTagSlug("玄幻"), originalTagSlug("都市"));
   assert.equal(originalTagSlug("!!!"), "tag");
+});
+
+// A button the writer had just switched *off* still looked switched on the moment the
+// pointer rested on it, because hover reused the active rule (with `!important`, so
+// nothing could override it). Hover is an affordance; active and locked are states.
+test("toolbar hover styling is distinct from the active and locked states", () => {
+  const hover = ruleBody(".toolbar button:hover:not(:disabled),\n.toolbar button:focus-visible");
+  assert.doesNotMatch(hover, /--composer-accent/);
+  assert.doesNotMatch(hover, /!important/);
+  const active = ruleBody(".toolbar button.toolActive");
+  assert.match(active, /color: var\(--composer-accent\)/);
+  assert.match(composerCss, /\.toolbar button\.toolLocked/);
+});
+
+// The outline is a column beside the page, shown and hidden by one button. While it is
+// hidden it must take no width at all, or the page sits permanently off-centre.
+test("the outline column collapses when it is closed", () => {
+  // This stylesheet declares `.workspace` more than once, so checking only the first
+  // rule would pass while a later one silently reserved the column again.
+  const tracks = [...composerCss.matchAll(/\.workspace\s*\{[^}]*grid-template-columns:([^;]+);/gu)]
+    .map((match) => match[1].trim());
+  assert.ok(tracks.length > 0, "no .workspace grid rule found");
+  for (const track of tracks) assert.match(track, /minmax\(0, 760px\) 0$/u, `outline column not collapsed: ${track}`);
+  assert.match(composerCss, /\.workspace\[data-outline="open"\][^{]*\{[^}]*grid-template-columns: minmax\(0, 760px\) 244px/);
 });

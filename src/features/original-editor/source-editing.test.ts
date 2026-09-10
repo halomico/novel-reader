@@ -4,8 +4,15 @@ import { editMarkdownSource } from "./source-editing";
 
 test("source underline uses an unambiguous marker instead of italic syntax", () => {
   const result = editMarkdownSource("下划线", 0, 3, "underline");
-  assert.equal(result.value, "==下划线==");
-  assert.deepEqual([result.start, result.end], [2, 5]);
+  assert.equal(result.value, "<u>下划线</u>");
+  assert.deepEqual([result.start, result.end], [3, 6]);
+  // Applying it again unwraps, so the button toggles rather than nesting markers.
+  assert.equal(editMarkdownSource(result.value, 0, result.value.length, "underline").value, "下划线");
+});
+
+test("source clear strips inline markers and link targets but keeps images whole", () => {
+  const result = editMarkdownSource("**粗**<u>下</u>[标签](https://a.cn)![图](/original/assets/1)", 0, 52, "clear");
+  assert.equal(result.value, "粗下标签![图](/original/assets/1)");
 });
 
 test("source quote preserves selected line breaks and does not absorb the next paragraph", () => {

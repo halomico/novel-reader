@@ -67,10 +67,21 @@ export function composeOriginalEditorBody(publicBody: string, paidBody: string):
   return `${left}${ORIGINAL_PAID_MARKER}${right}`;
 }
 
-/** Join the two stored sections exactly as authored; the paid marker line is
- * already represented by the surrounding newlines in the stored sections. */
+/**
+ * Join the two stored sections back into one document. The paid boundary is not a
+ * character in either section, so a block separator has to be supplied here — without
+ * it the public part's last line and the paid part's first line ran together, which
+ * turned the paid section's heading anchor into inline text and broke every table of
+ * contents link into the paid half. Sections that already end or start with blank
+ * lines keep exactly the spacing the writer chose.
+ */
 export function joinOriginalBodies(publicBody: string, paidBody: string): string {
-  return `${publicBody || ""}${paidBody || ""}`;
+  const left = publicBody || "";
+  const right = paidBody || "";
+  if (!left || !right) return `${left}${right}`;
+  const trailing = /\n\s*\n\s*$/u.test(left);
+  const leading = /^\s*\n\s*\n/u.test(right);
+  return trailing || leading ? `${left}${right}` : `${left}\n\n${right}`;
 }
 
 /** Insert a Markdown block on its own line while preserving every existing

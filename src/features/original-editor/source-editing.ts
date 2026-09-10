@@ -2,13 +2,22 @@ export type SourceTool = "bold" | "italic" | "underline" | "strikethrough" | "in
 
 export function editMarkdownSource(value: string, start: number, end: number, tool: SourceTool) {
   const selected = value.slice(start, end);
-  const markers = { bold: "**", italic: "*", underline: "==", strikethrough: "~~", inlineCode: "`" };
+  // Underline is the one inline format with distinct open and close markers, because
+  // CommonMark has no underline and neither `_` nor `==` may be redefined to mean one.
+  const markers: Record<string, readonly [string, string]> = {
+    bold: ["**", "**"],
+    italic: ["*", "*"],
+    underline: ["<u>", "</u>"],
+    strikethrough: ["~~", "~~"],
+    inlineCode: ["`", "`"],
+  };
   if (tool in markers) {
-    const marker = markers[tool as keyof typeof markers];
-    const wrapped = selected.startsWith(marker) && selected.endsWith(marker) && selected.length > marker.length * 2;
-    const text = wrapped ? selected.slice(marker.length, -marker.length) : marker + selected + marker;
-    const offset = wrapped ? 0 : marker.length;
-    return { value: value.slice(0, start) + text + value.slice(end), start: start + offset, end: start + text.length - offset };
+    const [open, close] = markers[tool];
+    const wrapped = selected.startsWith(open) && selected.endsWith(close) && selected.length > open.length + close.length;
+    const text = wrapped ? selected.slice(open.length, -close.length) : open + selected + close;
+    const startOffset = wrapped ? 0 : open.length;
+    const endOffset = wrapped ? 0 : close.length;
+    return { value: value.slice(0, start) + text + value.slice(end), start: start + startOffset, end: start + text.length - endOffset };
   }
   if (tool === "code" || tool === "divider" || tool === "paid") {
     const text = tool === "code" ? "```\n" + selected + "\n```" : tool === "divider" ? "---" : "<!-- original-paid -->";
@@ -32,7 +41,13 @@ export function editMarkdownSource(value: string, start: number, end: number, to
   const unquote = tool === "quote" && lines.every((line) => !line.trim() || /^>\s?/u.test(line));
   const text = lines.map((line, index) => {
     const content = removePrefix(line);
-    if (tool === "clear") return content.replace(/(\*\*|__|~~|==|\*|_|`)(.*?)\1/g, "$2");
+    if (tool === "clear") {
+      return content
+        .replace(/<u>(.*?)<\/u>/gu, "$1")
+        // Links lose the target but keep their label; images stay whole.
+        .replace(/(?<!!)\[([^\]]*)\]\([^)]*\)/gu, "$1")
+        .replace(/(\*\*|__|~~|==|\*|_|`)(.*?)\1/gu, "$2");
+    }
     if (tool === "quote" && unquote) return content;
     const prefix = { h1: "# ", h2: "## ", paragraph: "", quote: "> ", unordered: "- ", ordered: `${index + 1}. ` };
     return prefix[tool as keyof typeof prefix] + content;

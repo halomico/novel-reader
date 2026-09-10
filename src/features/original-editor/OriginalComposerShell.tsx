@@ -12,8 +12,11 @@ import {
   Italic,
   Link2,
   List,
+  Lock,
   LockKeyhole,
+  LockOpen,
   Minus,
+  Pilcrow,
   Plus,
   Search,
   Strikethrough,
@@ -38,7 +41,6 @@ import { ListPlugin } from "@lexical/react/LexicalListPlugin";
 import { CheckListPlugin } from "@lexical/react/LexicalCheckListPlugin";
 import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
 import { TablePlugin } from "@lexical/react/LexicalTablePlugin";
-import { BufferedMarkdownPlugin, commitBufferedMarkdown } from "./BufferedMarkdownPlugin";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $convertFromMarkdownString, $convertToMarkdownString } from "@lexical/markdown";
 import { $setBlocksType } from "@lexical/selection";
@@ -61,11 +63,10 @@ import {
   $setSelection,
   CAN_REDO_COMMAND,
   CAN_UNDO_COMMAND,
-  COMMAND_PRIORITY_HIGH,
   COMMAND_PRIORITY_LOW,
   FORMAT_TEXT_COMMAND,
-  KEY_BACKSPACE_COMMAND,
-  PASTE_COMMAND,
+  KEY_ENTER_COMMAND,
+  KEY_ESCAPE_COMMAND,
   REDO_COMMAND,
   SELECTION_CHANGE_COMMAND,
   SKIP_DOM_SELECTION_TAG,
@@ -73,11 +74,36 @@ import {
   type EditorState,
   type LexicalEditor,
   type LexicalNode,
+  type TextFormatType,
 } from "lexical";
 import { mergeRegister } from "@lexical/utils";
-import { isValidOriginalTagName, normalizeOriginalTagName } from "@/lib/original-constants";
+import { isValidOriginalTagName, joinOriginalBodies, normalizeOriginalTagName } from "@/lib/original-constants";
 import { countOriginalMarkdownCharacters, PAID_GATE_TOKEN, serializeOriginalEditorState } from "./serialization";
 import { ORIGINAL_MARKDOWN_TRANSFORMERS } from "./markdown";
+import {
+  $applyLockedFormats,
+  $clearFormatting,
+  $lockedFormatsMissing,
+  $selectionIsInCode,
+  EMPTY_TEXT_FORMATS,
+  readSelectionFormats,
+  type OriginalTextFormat,
+} from "./editor-commands";
+import {
+  BlockEscapePlugin,
+  MARKDOWN_PASTE_PATTERN,
+  MarkdownPastePlugin,
+  OriginalMarkdownPlugin,
+  PaidGateSafetyPlugin,
+} from "./plugins";
+import {
+  anchorFromBlocks,
+  anchorFromLine,
+  lineFromAnchor,
+  scrollTopFromBlocks,
+  TOP_ANCHOR,
+  type ViewAnchor,
+} from "./view-anchor";
 import { deleteLocalOriginalDraft, readLocalOriginalDraft, writeLocalOriginalDraft } from "./local-draft";
 import { DividerNode, $createDividerNode } from "./nodes/DividerNode";
 import { OriginalHeadingNode, $createOriginalHeadingNode, $isOriginalHeadingNode } from "./nodes/OriginalHeadingNode";
@@ -108,6 +134,7 @@ export type OriginalComposerTag = { id: number; name: string };
 
 type SaveState = "clean" | "dirty" | "saving" | "saved" | "offline" | "error" | "conflict";
 type ComposerMode = "visual" | "source" | "preview";
+type SourceHistoryEntry = { value: string; start: number; end: number };
 type OutlineItem = { id: string; level: number; text: string; paid: boolean };
 type SelectionBookmark = {
   anchor: { key: string; offset: number; type: "text" | "element" };
@@ -118,8 +145,37 @@ const MAX_TITLE_LENGTH = 100;
 const EDITOR_METADATA_DEBOUNCE_MS = 260;
 const LOCAL_RECOVERY_DEBOUNCE_MS = 1_200;
 const LOCAL_RECOVERY_POLL_MS = 2_000;
-const EMPTY_TEXT_FORMATS = { bold: false, italic: false, underline: false, strikethrough: false };
-const MARKDOWN_PASTE_PATTERN = /(?:^|\n)\s{0,3}(?:#{1,6}\s|>\s?|[-+*]\s|\d+[.)]\s|!\[[^\]\n]*\]\(|```|~~~|---\s*$)|(?:^|\n)\s*\|[^\n]+\|\s*\n\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?|(?:\*\*|__|~~|==|`|!?\[[^\]\n]+\]\()/u;
+const ORIGINAL_TEXT_FORMAT_KEYS = Object.keys(EMPTY_TEXT_FORMATS) as OriginalTextFormat[];
+
+/**
+ * Run `task` once the browser has laid the new view out. Two animation frames is the
+ * accurate signal; the timer is a fallback, because a background tab throttles frames
+ * indefinitely and the reader's position must not be lost just because they switched
+ * away mid-transition. Whichever arrives first wins — the task never runs twice.
+ */
+function afterLayout(task: () => void): () => void {
+  let done = false;
+  const run = () => {
+    if (done) return;
+    done = true;
+    task();
+  };
+  const frame = requestAnimationFrame(() => requestAnimationFrame(run));
+  const timer = window.setTimeout(run, 64);
+  return () => {
+    done = true;
+    cancelAnimationFrame(frame);
+    window.clearTimeout(timer);
+  };
+}
+
+function sourceLineHeight(input: HTMLTextAreaElement): number {
+  const parsed = Number.parseFloat(getComputedStyle(input).lineHeight);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 24;
+}
+
+/** How far below the sticky chrome an outline target should come to rest. */
+const OUTLINE_SCROLL_MARGIN = 24;
 function randomId(prefix: string): string {
   return `${prefix}_${typeof crypto.randomUUID === "function" ? crypto.randomUUID().replace(/-/g, "") : `${Date.now()}_${Math.random().toString(36).slice(2)}`}`;
 }
@@ -248,12 +304,17 @@ function editorMetadata(state: EditorState): { wordCount: number; outline: Outli
   return { wordCount, outline, hasPaidGate };
 }
 
+/**
+ * Drafts saved before the rich-text composer stored raw Markdown in plain paragraphs.
+ * Convert those once on open so the writer sees a document, not source. Anything the
+ * composer itself wrote is already structured and skips this entirely.
+ */
 function normalizeMarkdownParagraphs(editor: LexicalEditor) {
   editor.update(() => {
     for (const node of $getRoot().getChildren()) {
       if (!$isParagraphNode(node) || !node.getChildren().every($isTextNode)) continue;
       const text = node.getTextContent();
-      if (!MARKDOWN_PASTE_PATTERN.test(text) && !/(?:^|\n)\s{0,3}(?:<!-- original-heading:)|(?:\*\*[^*\n]+\*\*|__[^_\n]+__|~~[^~\n]+~~|==[^=\n]+==|`[^`\n]+`)/u.test(text)) continue;
+      if (!MARKDOWN_PASTE_PATTERN.test(text) && !text.includes("<!-- original-heading:")) continue;
       const holder = $createParagraphNode();
       $convertFromMarkdownString(text, ORIGINAL_MARKDOWN_TRANSFORMERS, holder);
       const converted = holder.getChildren();
@@ -304,21 +365,6 @@ function replaceCurrentBlock(editor: LexicalEditor, kind: "paragraph" | "h1" | "
   });
 }
 
-function clearCurrentFormatting(editor: LexicalEditor) {
-  editor.update(() => {
-    const selection = $getSelection();
-    if (!$isRangeSelection(selection)) return;
-    if (selection.isCollapsed()) {
-      selection.setFormat(0);
-      return;
-    }
-    for (const node of selection.getNodes()) {
-      if ($isTextNode(node)) node.setFormat(0);
-    }
-    $setBlocksType(selection, () => $createParagraphNode());
-  });
-}
-
 function insertPaidGateIntoEditor(editor: LexicalEditor) {
   let alreadyExists = false;
   editor.update(() => {
@@ -333,61 +379,70 @@ function insertPaidGateIntoEditor(editor: LexicalEditor) {
   }
 }
 
+/**
+ * One toolbar button.
+ *
+ * A single click acts immediately — no timer waits to see whether a double click is
+ * coming, because that made every format feel a third of a second late. The second
+ * click of a double click arrives as a normal click with `detail === 2`, so the pair
+ * is read directly from the event instead of being reconstructed with timers. Click
+ * one toggles, click two engages the lock and forces the format on, which makes a
+ * double click land on the same result whether the format started on or off.
+ */
 function ToolbarButton({
   label,
+  hint,
   active = false,
+  locked = false,
   disabled = false,
   onClick,
-  onDoubleClick,
+  onLock,
   children,
 }: {
   label: string;
+  hint?: string;
   active?: boolean;
+  locked?: boolean;
   disabled?: boolean;
   onClick: () => void;
-  onDoubleClick?: () => void;
+  onLock?: () => void;
   children: React.ReactNode;
 }) {
-  const clickTimerRef = useRef<number | null>(null);
-  useEffect(() => () => {
-    if (clickTimerRef.current !== null) window.clearTimeout(clickTimerRef.current);
-  }, []);
-
-  function handleClick() {
-    if (!onDoubleClick) {
-      onClick();
-      return;
-    }
-    if (clickTimerRef.current !== null) window.clearTimeout(clickTimerRef.current);
-    clickTimerRef.current = window.setTimeout(() => {
-      clickTimerRef.current = null;
-      onClick();
-    }, 300);
-  }
-
-  function handleDoubleClick() {
-    if (!onDoubleClick) return;
-    if (clickTimerRef.current !== null) window.clearTimeout(clickTimerRef.current);
-    clickTimerRef.current = null;
-    onDoubleClick();
-  }
-
   return (
     <button
       type="button"
       aria-label={label}
-      aria-pressed={active || undefined}
-      data-tooltip={label}
-      className={active ? styles.toolActive : undefined}
+      aria-pressed={onLock || active ? active || locked : undefined}
+      data-tooltip={hint ? `${label} · ${hint}` : label}
+      data-locked={locked || undefined}
+      className={`${active || locked ? styles.toolActive : ""}${locked ? ` ${styles.toolLocked}` : ""}`.trim() || undefined}
       disabled={disabled}
+      // Keeping the caret and the selection is the whole point: without this the
+      // editor loses focus on mousedown and the command has nothing to apply to.
       onMouseDown={(event) => event.preventDefault()}
-      onClick={handleClick}
-      onDoubleClick={handleDoubleClick}
+      onClick={(event) => {
+        if (onLock && event.detail >= 2) {
+          onLock();
+          return;
+        }
+        onClick();
+      }}
     >
       {children}
     </button>
   );
 }
+
+const LOCKABLE_HINT = "双击锁定，Esc 解除";
+
+/** The inline formats that make sense to keep on while typing. Images, links, the
+ *  paid boundary and "clear formatting" are one-shot commands and are excluded. */
+const MOBILE_LOCKABLE_FORMATS: Array<{ format: OriginalTextFormat; label: string; Icon: typeof Bold }> = [
+  { format: "bold", label: "加粗", Icon: Bold },
+  { format: "italic", label: "斜体", Icon: Italic },
+  { format: "underline", label: "下划线", Icon: Underline },
+  { format: "strikethrough", label: "删除线", Icon: Strikethrough },
+];
 
 function ComposerToolbar({
   onLinkRequest,
@@ -409,9 +464,12 @@ function ComposerToolbar({
   const [editor] = useLexicalComposerContext();
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
-  const [formats, setFormats] = useState({ bold: false, italic: false, underline: false, strikethrough: false });
+  const [formats, setFormats] = useState(EMPTY_TEXT_FORMATS);
+  const [locked, setLocked] = useState<OriginalTextFormat[]>([]);
   const [mobilePanel, setMobilePanel] = useState<"format" | "insert" | null>(null);
   const mobileDialogRef = useRef<HTMLDialogElement>(null);
+  const lockedRef = useRef(locked);
+  lockedRef.current = locked;
 
   useEffect(() => {
     const dialog = mobileDialogRef.current;
@@ -427,19 +485,10 @@ function ComposerToolbar({
 
   const refreshFormats = useCallback(() => {
     editor.getEditorState().read(() => {
-      const selection = $getSelection();
-      const next = $isRangeSelection(selection) ? {
-        bold: selection.hasFormat("bold"),
-        italic: selection.hasFormat("italic"),
-        underline: selection.hasFormat("underline"),
-        strikethrough: selection.hasFormat("strikethrough"),
-      } : EMPTY_TEXT_FORMATS;
+      const next = readSelectionFormats();
       // Re-render only on a real change; this runs after every commit.
       setFormats((current) => (
-        current.bold === next.bold && current.italic === next.italic
-          && current.underline === next.underline && current.strikethrough === next.strikethrough
-          ? current
-          : next
+        ORIGINAL_TEXT_FORMAT_KEYS.every((key) => current[key] === next[key]) ? current : next
       ));
     });
   }, [editor]);
@@ -457,50 +506,76 @@ function ComposerToolbar({
     editor.registerUpdateListener(() => refreshFormats()),
   ), [editor, refreshFormats]);
 
+  // Re-assert locked formats after the caret moves. The read-only check first is what
+  // keeps this off the typing hot path: while the lock is already satisfied — which is
+  // the case for every keystroke after the first — no editor update is queued at all.
+  // Queuing one per keystroke would merge the next keystrokes into a tagged update and
+  // break the Markdown shortcut engine, which is how block syntax stopped rendering.
+  useEffect(() => {
+    if (!locked.length) return;
+    const reassert = () => {
+      if (!editor.getEditorState().read(() => $lockedFormatsMissing(lockedRef.current))) return;
+      editor.update(() => { $applyLockedFormats(lockedRef.current); }, { tag: "format-lock" });
+    };
+    reassert();
+    return mergeRegister(
+      editor.registerCommand(SELECTION_CHANGE_COMMAND, () => { reassert(); return false; }, COMMAND_PRIORITY_LOW),
+      editor.registerCommand(KEY_ENTER_COMMAND, () => { queueMicrotask(reassert); return false; }, COMMAND_PRIORITY_LOW),
+    );
+  }, [editor, locked]);
+
+  // Escape releases the lock and stops the format for what comes next, without
+  // touching a single character that is already written.
+  useEffect(() => editor.registerCommand(KEY_ESCAPE_COMMAND, () => {
+    const held = lockedRef.current;
+    if (!held.length) return false;
+    setLocked([]);
+    editor.update(() => {
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection) || !selection.isCollapsed()) return;
+      for (const format of held) {
+        if (selection.hasFormat(format as TextFormatType)) selection.formatText(format as TextFormatType);
+      }
+    }, { tag: "format-lock" });
+    queueMicrotask(refreshFormats);
+    return true;
+  }, COMMAND_PRIORITY_LOW), [editor, refreshFormats]);
+
   function run(tool: SourceTool, action: () => void) {
     if (sourceMode) onSourceTool(tool); else action();
   }
 
-  function toggleTextFormat(format: "bold" | "italic" | "underline" | "strikethrough") {
+  /** Single click: toggle the format over the selection, or the format the next
+   *  keystrokes will use when there is no selection. */
+  function toggleTextFormat(format: OriginalTextFormat) {
     if (sourceMode) {
-      onSourceTool(format);
+      onSourceTool(format === "code" ? "inlineCode" : format, true);
       return;
     }
-    editor.update(() => {
+    if (locked.includes(format)) setLocked((current) => current.filter((item) => item !== format));
+    const blocked = editor.getEditorState().read(() => {
       const selection = $getSelection();
-      if (!$isRangeSelection(selection)) return;
-      // A double click means "keep formatting for what I type next". Collapse
-      // an existing range to its focus edge first so the selected text itself
-      // is left to the single-click command, just like a mature word processor.
-      if (!selection.isCollapsed()) {
-        selection.anchor.set(selection.focus.key, selection.focus.offset, selection.focus.type);
-      }
-      selection.formatText(format);
+      return $isRangeSelection(selection) ? $selectionIsInCode(selection) : true;
     });
+    if (blocked) return;
+    editor.dispatchCommand(FORMAT_TEXT_COMMAND, format as TextFormatType);
     queueMicrotask(refreshFormats);
   }
 
-  function formatSelectionOnly(format: "bold" | "italic" | "underline" | "strikethrough") {
-    if (sourceMode) {
-      onSourceTool(format, true);
-      return;
-    }
-    const hasSelection = editor.getEditorState().read(() => {
-      const selection = $getSelection();
-      return $isRangeSelection(selection) && !selection.isCollapsed();
-    });
-    if (!hasSelection) {
-      editor.focus();
-      return;
-    }
-    editor.dispatchCommand(FORMAT_TEXT_COMMAND, format);
+  /** Double click: keep writing in this format until it is switched off. */
+  function lockTextFormat(format: OriginalTextFormat) {
+    if (sourceMode) return;
+    setLocked((current) => current.includes(format) ? current : [...current, format]);
+    editor.update(() => { $applyLockedFormats([format]); }, { tag: "format-lock" });
     queueMicrotask(refreshFormats);
   }
 
   function clearFormatting() {
+    setLocked([]);
     run("clear", () => {
-      clearCurrentFormatting(editor);
+      editor.update(() => { $clearFormatting(); });
       setFormats(EMPTY_TEXT_FORMATS);
+      queueMicrotask(refreshFormats);
     });
   }
 
@@ -509,27 +584,43 @@ function ComposerToolbar({
   }
 
   function insertDivider() {
-    run("divider", () => editor.update(() => $insertNodes([$createDividerNode(), $createParagraphNode()])));
+    run("divider", () => editor.update(() => { $insertNodes([$createDividerNode(), $createParagraphNode()]); }));
   }
 
+  const formatButton = (format: OriginalTextFormat, label: string, icon: React.ReactNode) => (
+    <ToolbarButton
+      label={label}
+      hint={LOCKABLE_HINT}
+      active={formats[format]}
+      locked={locked.includes(format)}
+      onClick={() => toggleTextFormat(format)}
+      onLock={sourceMode ? undefined : () => lockTextFormat(format)}
+    >
+      {icon}
+    </ToolbarButton>
+  );
+
+  // One flat row, in the order a novelist reaches for things. Lists, inline code and
+  // heading levels below the chapter title stay *supported* as Markdown syntax — they
+  // just do not earn a permanent button in a long-form writing surface.
   return (
     <div className={styles.toolbar} role="toolbar" aria-label="文章格式工具">
       <div className={styles.desktopToolbar}>
-      <ToolbarButton label="撤销" disabled={sourceMode ? !sourceUndo : !canUndo} onClick={() => sourceMode ? onSourceHistory(false) : editor.dispatchCommand(UNDO_COMMAND, undefined)}><Undo2 size={18} /></ToolbarButton>
-      <ToolbarButton label="重做" disabled={sourceMode ? !sourceRedo : !canRedo} onClick={() => sourceMode ? onSourceHistory(true) : editor.dispatchCommand(REDO_COMMAND, undefined)}><Redo2 size={18} /></ToolbarButton>
-      <ToolbarButton label="清除格式" onClick={clearFormatting}><Eraser size={18} /></ToolbarButton>
-      <ToolbarButton label="章节" onClick={() => run("h1", () => replaceCurrentBlock(editor, "h1"))}><Heading1 size={18} /></ToolbarButton>
-      <ToolbarButton label="加粗" active={formats.bold} onClick={() => formatSelectionOnly("bold")} onDoubleClick={() => toggleTextFormat("bold")}><Bold size={18} /></ToolbarButton>
-      <ToolbarButton label="斜体" active={formats.italic} onClick={() => formatSelectionOnly("italic")} onDoubleClick={() => toggleTextFormat("italic")}><Italic size={18} /></ToolbarButton>
-      <ToolbarButton label="下划线" active={formats.underline} onClick={() => formatSelectionOnly("underline")} onDoubleClick={() => toggleTextFormat("underline")}><Underline size={18} /></ToolbarButton>
-      <ToolbarButton label="删除线" active={formats.strikethrough} onClick={() => formatSelectionOnly("strikethrough")} onDoubleClick={() => toggleTextFormat("strikethrough")}><Strikethrough size={18} /></ToolbarButton>
-      <ToolbarButton label="引用" onClick={() => run("quote", () => replaceCurrentBlock(editor, "quote"))}><Quote size={18} /></ToolbarButton>
-      <ToolbarButton label="分隔线" onClick={insertDivider}><Minus size={18} /></ToolbarButton>
-      <ToolbarButton label="链接" onClick={onLinkRequest}><Link2 size={18} /></ToolbarButton>
-      <ToolbarButton label={sourceMode ? "渲染" : "源码"} active={sourceMode} onClick={onSourceToggle}>
-        <Code2 size={18} />
-      </ToolbarButton>
-      <ToolbarButton label="付费分界" onClick={insertPaidGate}><LockKeyhole size={18} /></ToolbarButton>
+        <ToolbarButton label="撤销" hint="Ctrl+Z" disabled={sourceMode ? !sourceUndo : !canUndo} onClick={() => sourceMode ? onSourceHistory(false) : editor.dispatchCommand(UNDO_COMMAND, undefined)}><Undo2 size={18} /></ToolbarButton>
+        <ToolbarButton label="重做" hint="Ctrl+Shift+Z" disabled={sourceMode ? !sourceRedo : !canRedo} onClick={() => sourceMode ? onSourceHistory(true) : editor.dispatchCommand(REDO_COMMAND, undefined)}><Redo2 size={18} /></ToolbarButton>
+        <ToolbarButton label="清除格式" hint="选中即清除选区，未选中则清除后续输入" onClick={clearFormatting}><Eraser size={18} /></ToolbarButton>
+        {formatButton("bold", "加粗", <Bold size={18} />)}
+        {formatButton("italic", "斜体", <Italic size={18} />)}
+        {formatButton("underline", "下划线", <Underline size={18} />)}
+        {formatButton("strikethrough", "删除线", <Strikethrough size={18} />)}
+        <ToolbarButton label="章节标题" hint="行首输入 # 也可以" onClick={() => run("h1", () => replaceCurrentBlock(editor, "h1"))}><Heading1 size={18} /></ToolbarButton>
+        <ToolbarButton label="引用" hint="行首输入 > 也可以" onClick={() => run("quote", () => replaceCurrentBlock(editor, "quote"))}><Quote size={18} /></ToolbarButton>
+        <ToolbarButton label="链接" hint="Ctrl+K" onClick={onLinkRequest}><Link2 size={18} /></ToolbarButton>
+        <ToolbarButton label="分隔线" hint="场景分隔" onClick={insertDivider}><Minus size={18} /></ToolbarButton>
+        <ToolbarButton label="付费分界" hint="此处之后需解锁阅读" onClick={insertPaidGate}><LockKeyhole size={18} /></ToolbarButton>
+        <ToolbarButton label={sourceMode ? "退出源码" : "Markdown 源码"} hint="查看并直接编辑源码" active={sourceMode} onClick={onSourceToggle}>
+          <Code2 size={18} />
+        </ToolbarButton>
       </div>
       <div className={styles.mobileToolbar}>
         <ToolbarButton label="文字格式" active={mobilePanel === "format"} onClick={() => setMobilePanel("format")}><Type size={22} /></ToolbarButton>
@@ -541,64 +632,40 @@ function ComposerToolbar({
         <header><strong>{mobilePanel === "insert" ? "插入内容" : "文字格式"}</strong><button type="button" onClick={() => mobileDialogRef.current?.close()} aria-label="关闭菜单"><X size={19} /></button></header>
         <div className={styles.formatGrid}>
           {mobilePanel === "format" ? <>
-            <button type="button" aria-pressed={formats.bold} onClick={() => applyMobileTool(() => toggleTextFormat("bold"))}><Bold size={21} /><span>加粗</span></button>
-            <button type="button" aria-pressed={formats.italic} onClick={() => applyMobileTool(() => toggleTextFormat("italic"))}><Italic size={21} /><span>斜体</span></button>
+            {/* A double click is not a gesture a touch screen offers, so every lockable
+                format carries its own lock toggle here instead of the lock being a
+                desktop-only capability. Tapping the tile applies the format once;
+                tapping the small lock keeps it on for what is typed next. */}
+            {MOBILE_LOCKABLE_FORMATS.map(({ format, label, Icon }) => (
+              <span className={styles.formatCell} key={format}>
+                <button type="button" aria-pressed={formats[format]} onClick={() => applyMobileTool(() => toggleTextFormat(format))}><Icon size={21} /><span>{label}</span></button>
+                <button
+                  type="button"
+                  className={styles.formatLockToggle}
+                  aria-label={`${locked.includes(format) ? "解除锁定" : "锁定"}${label}`}
+                  aria-pressed={locked.includes(format)}
+                  onClick={() => locked.includes(format)
+                    ? setLocked((current) => current.filter((item) => item !== format))
+                    : lockTextFormat(format)}
+                >
+                  {locked.includes(format) ? <Lock size={13} /> : <LockOpen size={13} />}
+                </button>
+              </span>
+            ))}
             <button type="button" onClick={() => applyMobileTool(clearFormatting)}><Eraser size={21} /><span>清除格式</span></button>
-            <button type="button" onClick={() => applyMobileTool(() => run("h1", () => replaceCurrentBlock(editor, "h1")))}><Heading1 size={21} /><span>章节</span></button>
-            <button type="button" onClick={() => applyMobileTool(() => run("paragraph", () => replaceCurrentBlock(editor, "paragraph")))}><Type size={21} /><span>正文</span></button>
-            <button type="button" aria-pressed={formats.underline} onClick={() => applyMobileTool(() => toggleTextFormat("underline"))}><Underline size={21} /><span>下划线</span></button>
-            <button type="button" aria-pressed={formats.strikethrough} onClick={() => applyMobileTool(() => toggleTextFormat("strikethrough"))}><Strikethrough size={21} /><span>删除线</span></button>
           </> : <>
-            <button type="button" onClick={() => { mobileDialogRef.current?.close(); onLinkRequest(); }}><Link2 size={21} /><span>链接</span></button>
+            <button type="button" onClick={() => applyMobileTool(() => run("h1", () => replaceCurrentBlock(editor, "h1")))}><Heading1 size={21} /><span>章节标题</span></button>
+            <button type="button" onClick={() => applyMobileTool(() => run("paragraph", () => replaceCurrentBlock(editor, "paragraph")))}><Pilcrow size={21} /><span>正文</span></button>
             <button type="button" onClick={() => applyMobileTool(() => run("quote", () => replaceCurrentBlock(editor, "quote")))}><Quote size={21} /><span>引用</span></button>
+            <button type="button" onClick={() => { mobileDialogRef.current?.close(); onLinkRequest(); }}><Link2 size={21} /><span>链接</span></button>
             <button type="button" onClick={() => applyMobileTool(insertDivider)}><Minus size={21} /><span>分隔线</span></button>
-            <button type="button" onClick={() => { mobileDialogRef.current?.close(); onSourceToggle(); }}><Code2 size={21} /><span>源码</span></button>
             <button type="button" onClick={() => applyMobileTool(insertPaidGate)}><LockKeyhole size={21} /><span>付费分界</span></button>
+            <button type="button" onClick={() => { mobileDialogRef.current?.close(); onSourceToggle(); }}><Code2 size={21} /><span>源码</span></button>
           </>}
         </div>
       </dialog>
     </div>
   );
-}
-
-function StructuralSafetyPlugin({ onRemoveGate }: { onRemoveGate: (remove: () => void) => void }) {
-  const [editor] = useLexicalComposerContext();
-  useEffect(() => editor.registerCommand(KEY_BACKSPACE_COMMAND, (event) => {
-    const selection = $getSelection();
-    if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
-    const node = selection.anchor.getNode();
-    const previous = node.getPreviousSibling();
-    if (!$isPaidGateNode(previous)) return false;
-    event?.preventDefault();
-    onRemoveGate(() => previous.remove());
-    return true;
-  }, COMMAND_PRIORITY_LOW), [editor, onRemoveGate]);
-  return null;
-}
-
-function MarkdownPastePlugin() {
-  const [editor] = useLexicalComposerContext();
-  useEffect(() => editor.registerCommand(
-    PASTE_COMMAND,
-    (event) => {
-      const text = (event as ClipboardEvent).clipboardData?.getData("text/plain") || "";
-      if (!text || !MARKDOWN_PASTE_PATTERN.test(text)) return false;
-      const hasRangeSelection = editor.getEditorState().read(() => $isRangeSelection($getSelection()));
-      if (!hasRangeSelection) return false;
-      (event as ClipboardEvent).preventDefault();
-      editor.update(() => {
-        const selection = $getSelection();
-        if (!$isRangeSelection(selection)) return;
-        const holder = $createParagraphNode();
-        $convertFromMarkdownString(text, ORIGINAL_MARKDOWN_TRANSFORMERS, holder);
-        const nodes = holder.getChildren();
-        if (nodes.length) selection.insertNodes(nodes);
-      }, { tag: "markdown-paste" });
-      return true;
-    },
-    COMMAND_PRIORITY_HIGH,
-  ), [editor]);
-  return null;
 }
 
 function EditorBridge({
@@ -693,6 +760,84 @@ function ComposerConfirmDialog({
   );
 }
 
+/**
+ * The composer's table of contents: a column docked to the right of the page, toggled
+ * by one button, never a drawer stacked on another drawer.
+ *
+ * Navigation scrolls the workspace — the element that actually scrolls — and stops the
+ * target below the sticky chrome instead of under it. Ids come from the heading anchors
+ * the document carries, so Chinese titles, repeated titles and reordered chapters all
+ * resolve correctly, and nothing here touches the document or its undo history.
+ */
+function ComposerOutline({
+  items,
+  containerRef,
+  onClose,
+}: {
+  items: OutlineItem[];
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  onClose: () => void;
+}) {
+  const [activeId, setActiveId] = useState("");
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !items.length) return;
+    const headings = items
+      .map((item) => container.querySelector<HTMLElement>(`[id="${CSS.escape(item.id)}"]`))
+      .filter((element): element is HTMLElement => Boolean(element));
+    if (!headings.length) return;
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((left, right) => left.boundingClientRect.top - right.boundingClientRect.top)[0];
+      if (visible?.target.id) setActiveId(visible.target.id);
+    }, { root: container, rootMargin: "0px 0px -70% 0px", threshold: 0 });
+    headings.forEach((heading) => observer.observe(heading));
+    return () => observer.disconnect();
+  }, [containerRef, items]);
+
+  function goTo(id: string) {
+    const container = containerRef.current;
+    const target = container?.querySelector<HTMLElement>(`[id="${CSS.escape(id)}"]`);
+    if (!container || !target) return;
+    const offset = target.getBoundingClientRect().top - container.getBoundingClientRect().top;
+    container.scrollTo({
+      top: Math.max(0, container.scrollTop + offset - OUTLINE_SCROLL_MARGIN),
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    });
+    setActiveId(id);
+  }
+
+  return (
+    <aside className={styles.outline} aria-label="文章目录">
+      <header>
+        <strong>目录</strong>
+        <span className={styles.outlineCount}>{items.length} 节</span>
+        <button type="button" onClick={onClose} aria-label="关闭目录"><X size={18} /></button>
+      </header>
+      {items.length ? (
+        <nav>
+          {items.map((item) => (
+            <button
+              type="button"
+              key={item.id}
+              className={item.id === activeId ? styles.outlineActive : undefined}
+              aria-current={item.id === activeId ? "location" : undefined}
+              style={{ paddingInlineStart: `${8 + Math.min(Math.max(item.level - 1, 0), 3) * 12}px` }}
+              title={item.text}
+              onClick={() => goTo(item.id)}
+            >
+              {item.paid ? <LockKeyhole size={13} aria-hidden="true" /> : null}
+              <span>{item.text}</span>
+            </button>
+          ))}
+        </nav>
+      ) : <p className={styles.outlineEmpty}>添加标题后，这里会生成目录。</p>}
+    </aside>
+  );
+}
+
 export function OriginalComposerShell({
   initialDraft,
   tags,
@@ -718,16 +863,16 @@ export function OriginalComposerShell({
   // Keep the three editor views mutually exclusive. Two independent booleans
   // allowed preview and source state to drift out of sync during fast toggles.
   const [mode, setMode] = useState<ComposerMode>("visual");
+  const [previewVersion, setPreviewVersion] = useState(0);
   const preview = mode === "preview";
   const sourceMode = mode === "source";
   const [markdown, setMarkdown] = useState("");
   const [sourceWordCount, setSourceWordCount] = useState(0);
   const markdownRef = useRef("");
   const sourceElementRef = useRef<HTMLTextAreaElement>(null);
-  const sourceScrollTopRef = useRef(0);
   const workspaceRef = useRef<HTMLDivElement>(null);
-  const sourceUndoRef = useRef<string[]>([]);
-  const sourceRedoRef = useRef<string[]>([]);
+  const sourceUndoRef = useRef<SourceHistoryEntry[]>([]);
+  const sourceRedoRef = useRef<SourceHistoryEntry[]>([]);
   const sourceHistoryAtRef = useRef(0);
   const sourceWordCountTimerRef = useRef<number | null>(null);
   const sourceDirtyRef = useRef(false);
@@ -814,14 +959,28 @@ export function OriginalComposerShell({
     setHasPaidGate(metadata.hasPaidGate);
   }, []);
 
+  /** Word count, outline and the paid-boundary flag are refreshed lazily while typing.
+   *  Anything that reads them as fact — the settings dialog, the outline panel — has to
+   *  settle them first, or it can show the writer a state the document left behind. */
+  const flushEditorMetadata = useCallback(() => {
+    if (editorMetadataTimerRef.current !== null) {
+      window.clearTimeout(editorMetadataTimerRef.current);
+      editorMetadataTimerRef.current = null;
+    }
+    const state = latestEditorStateRef.current || editorRef.current?.getEditorState();
+    if (state) applyEditorMetadata(state);
+  }, [applyEditorMetadata]);
+
   const scheduleEditorMetadata = useCallback((state: EditorState) => {
     latestEditorStateRef.current = state;
     if (editorMetadataTimerRef.current !== null) window.clearTimeout(editorMetadataTimerRef.current);
+    // One debounce, no idle callback. The walk is already off the keystroke path, and
+    // deferring it again to `requestIdleCallback` meant a writer who never stopped
+    // typing — or a tab the browser had throttled — kept looking at a word count and a
+    // paid-boundary state that belonged to an older version of the document.
     editorMetadataTimerRef.current = window.setTimeout(() => {
       editorMetadataTimerRef.current = null;
-      const run = () => applyEditorMetadata(state);
-      const idle = (window as Window & { requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number }).requestIdleCallback;
-      if (idle) idle(run, { timeout: 500 }); else run();
+      applyEditorMetadata(state);
     }, EDITOR_METADATA_DEBOUNCE_MS);
   }, [applyEditorMetadata]);
 
@@ -835,7 +994,12 @@ export function OriginalComposerShell({
     if (history) {
       const now = performance.now();
       if (now - sourceHistoryAtRef.current > 700) {
-        sourceUndoRef.current = [...sourceUndoRef.current.slice(-19), markdownRef.current];
+        const input = sourceElementRef.current;
+        sourceUndoRef.current = [...sourceUndoRef.current.slice(-19), {
+          value: markdownRef.current,
+          start: input?.selectionStart ?? markdownRef.current.length,
+          end: input?.selectionEnd ?? markdownRef.current.length,
+        }];
         sourceHistoryAtRef.current = now;
       }
       sourceRedoRef.current = [];
@@ -852,9 +1016,15 @@ export function OriginalComposerShell({
   }
 
   function focusSource(start: number, end = start) {
-    requestAnimationFrame(() => {
-      sourceElementRef.current?.focus();
-      sourceElementRef.current?.setSelectionRange(start, end);
+    afterLayout(() => {
+      const input = sourceElementRef.current;
+      if (!input) return;
+      // Preserve the view: focusing a textarea scrolls the caret into view, which in a
+      // long draft would otherwise yank the page after every toolbar command.
+      const scrollTop = input.scrollTop;
+      input.focus();
+      input.setSelectionRange(start, end);
+      input.scrollTop = scrollTop;
     });
   }
 
@@ -877,11 +1047,18 @@ export function OriginalComposerShell({
   function sourceHistory(redo: boolean) {
     const from = redo ? sourceRedoRef.current : sourceUndoRef.current;
     const to = redo ? sourceUndoRef.current : sourceRedoRef.current;
-    const value = from.pop();
-    if (value === undefined) return;
-    to.push(markdownRef.current);
-    updateSource(value, false);
-    focusSource(value.length);
+    const entry = from.pop();
+    if (!entry) return;
+    const input = sourceElementRef.current;
+    // Each step remembers where the caret was, so undo returns the writer to the edit
+    // it reversed instead of dumping them at the end of the document.
+    to.push({
+      value: markdownRef.current,
+      start: input?.selectionStart ?? 0,
+      end: input?.selectionEnd ?? 0,
+    });
+    updateSource(entry.value, false);
+    focusSource(Math.min(entry.start, entry.value.length), Math.min(entry.end, entry.value.length));
   }
 
   function insertSource(text: string) {
@@ -892,56 +1069,85 @@ export function OriginalComposerShell({
     focusSource(start + text.length);
   }
 
-  function changeMode(nextMode: ComposerMode) {
-    if (nextMode === mode) return;
-    if (nextMode === "preview") setOutlineOpen(false);
-    const workspaceScrollTop = workspaceRef.current?.scrollTop ?? 0;
-    sourceScrollTopRef.current = sourceElementRef.current?.scrollTop ?? sourceScrollTopRef.current;
-    const restoreWorkspaceScroll = () => requestAnimationFrame(() => {
-      if (workspaceRef.current) workspaceRef.current.scrollTop = workspaceScrollTop;
-      if (nextMode === "source" && sourceElementRef.current) sourceElementRef.current.scrollTop = sourceScrollTopRef.current;
-    });
+  function bodyContainer(target: ComposerMode): HTMLElement | null {
+    const workspace = workspaceRef.current;
+    if (!workspace) return null;
+    return target === "preview"
+      ? workspace.querySelector<HTMLElement>(".originalBody")
+      : workspace.querySelector<HTMLElement>(`.${styles.contentEditable}`);
+  }
 
-    // A Markdown draft may contain GFM that visual mode deliberately leaves
-    // untouched (for example a table). Source and reader preview can switch
-    // between those two representations without first normalizing it through
-    // the rich-text document.
-    if (sourceDirtyRef.current && (nextMode === "source" || nextMode === "preview")) {
-      setMarkdown(markdownRef.current);
-      setLinkPopoverOpen(false);
-      setMode(nextMode);
-      restoreWorkspaceScroll();
+  /** Block geometry measured against the container itself, so a change of padding or
+   *  of positioned ancestors cannot skew the mapping. */
+  function measureBlocks(container: HTMLElement) {
+    const containerTop = container.getBoundingClientRect().top;
+    return Array.from(container.children).map((child) => {
+      const rect = child.getBoundingClientRect();
+      return { offsetTop: rect.top - containerTop, offsetHeight: rect.height };
+    });
+  }
+
+  /** The block-level position currently on screen, in whichever view is active. */
+  function readViewAnchor(): ViewAnchor {
+    const workspace = workspaceRef.current;
+    if (mode === "source") {
+      const input = sourceElementRef.current;
+      if (!input) return TOP_ANCHOR;
+      return anchorFromLine(markdownRef.current, Math.round(input.scrollTop / sourceLineHeight(input)));
+    }
+    const container = bodyContainer(mode);
+    if (!container || !workspace) return TOP_ANCHOR;
+    const viewportTop = workspace.getBoundingClientRect().top - container.getBoundingClientRect().top;
+    return anchorFromBlocks(measureBlocks(container), viewportTop);
+  }
+
+  function applyViewAnchor(nextMode: ComposerMode, anchor: ViewAnchor) {
+    const workspace = workspaceRef.current;
+    if (!workspace) return;
+    if (nextMode === "source") {
+      const input = sourceElementRef.current;
+      if (!input) return;
+      input.scrollTop = lineFromAnchor(markdownRef.current, anchor) * sourceLineHeight(input);
       return;
     }
+    const container = bodyContainer(nextMode);
+    if (!container) return;
+    const within = scrollTopFromBlocks(measureBlocks(container), anchor);
+    const delta = container.getBoundingClientRect().top - workspace.getBoundingClientRect().top + within;
+    workspace.scrollTop = Math.max(0, workspace.scrollTop + delta - OUTLINE_SCROLL_MARGIN);
+  }
 
-    // A visual edit needs a Lexical document, so only this path commits the
-    // pending source value. This makes source → preview lossless.
+  function changeMode(nextMode: ComposerMode) {
+    if (nextMode === mode) return;
+    const anchor = readViewAnchor();
+
+    // Every view is derived from one canonical document: the Lexical editor state.
+    // Source edits are committed into it first, so there is never a second, subtly
+    // different parse of the same draft in play.
     flushMarkdown();
     const editor = editorRef.current;
     if (editor) {
-      commitBufferedMarkdown(editor);
       latestEditorStateRef.current = editor.getEditorState();
       serializedEditorStateRef.current = null;
       syncEditorSnapshotToUi();
     }
 
-    // Both source and preview are derived from the same canonical Lexical
-    // document. Refresh the Markdown snapshot on every entry so neither view
-    // can retain stale text from a previous mode.
-    if (nextMode === "source" || nextMode === "preview") {
+    if (nextMode === "source") {
       const source = editor?.getEditorState().read(() => $convertToMarkdownString(ORIGINAL_MARKDOWN_TRANSFORMERS)) || "";
       markdownRef.current = source;
       setMarkdown(source);
       setSourceWordCount(countOriginalMarkdownCharacters(source));
-      if (nextMode === "source") {
-        sourceUndoRef.current = [];
-        sourceRedoRef.current = [];
-      }
+      sourceUndoRef.current = [];
+      sourceRedoRef.current = [];
     }
 
     setLinkPopoverOpen(false);
+    if (nextMode === "preview") {
+      flushEditorMetadata();
+      setPreviewVersion((version) => version + 1);
+    }
     setMode(nextMode);
-    restoreWorkspaceScroll();
+    afterLayout(() => applyViewAnchor(nextMode, anchor));
   }
 
   useEffect(() => {
@@ -1105,19 +1311,6 @@ export function OriginalComposerShell({
   }, [hasUnsavedWork]);
 
   useEffect(() => {
-    const saveShortcut = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
-        event.preventDefault();
-        void manualSave();
-      }
-    };
-    window.addEventListener("keydown", saveShortcut);
-    return () => {
-      window.removeEventListener("keydown", saveShortcut);
-    };
-  }, [manualSave]);
-
-  useEffect(() => {
     void readLocalOriginalDraft(initialDraft.id).then((local) => {
       if (!local || local.savedAt <= initialDraft.updatedAt || !local.editorStateJson) return;
       if (local.title === initialDraft.title && local.editorStateJson === initialDraft.editorStateJson
@@ -1165,10 +1358,10 @@ export function OriginalComposerShell({
     latestEditorStateRef.current = state;
     if (editor.isComposing()) return;
     scheduleEditorMetadata(state);
-    // Source synchronization and the final buffered-markdown commit are
+    // Synchronizing the source view and re-asserting a locked format are
     // normalization steps, not user edits. They must not turn a clean draft
-    // dirty merely because the user changed views.
-    if (!tags.has("source-sync") && !tags.has("buffered-markdown")) markDirty();
+    // dirty merely because the user changed views or moved the caret.
+    if (!tags.has("source-sync") && !tags.has("format-lock")) markDirty();
   }, [markDirty, scheduleEditorMetadata]);
 
   const handleEditorReady = useCallback((_state: EditorState, editor: LexicalEditor) => {
@@ -1248,6 +1441,30 @@ export function OriginalComposerShell({
     setLinkPopoverOpen((prev) => !prev);
   }, [sourceMode]);
 
+  useEffect(() => {
+    const shortcuts = (event: KeyboardEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      const key = event.key.toLowerCase();
+      // Saving is a document-level action, so it works from the title and the tag
+      // fields too. Inserting a link is not: it would hijack the browser's own
+      // Ctrl+K anywhere else on the page, so it only fires inside the manuscript.
+      if (key === "s") {
+        event.preventDefault();
+        void manualSave();
+        return;
+      }
+      if (key !== "k" || event.shiftKey || event.altKey) return;
+      const active = document.activeElement;
+      const inManuscript = active instanceof HTMLElement
+        && (active.isContentEditable || active === sourceElementRef.current);
+      if (!inManuscript) return;
+      event.preventDefault();
+      openLinkPopover();
+    };
+    window.addEventListener("keydown", shortcuts);
+    return () => window.removeEventListener("keydown", shortcuts);
+  }, [manualSave, openLinkPopover]);
+
   const confirmInlineLink = useCallback((text: string, url: string) => {
     const trimmedUrl = url.trim();
     if (!trimmedUrl) return;
@@ -1301,7 +1518,6 @@ export function OriginalComposerShell({
     try {
       flushMarkdown();
       if (editorRef.current) {
-        commitBufferedMarkdown(editorRef.current);
         latestEditorStateRef.current = editorRef.current.getEditorState();
         serializedEditorStateRef.current = null;
       }
@@ -1409,20 +1625,30 @@ export function OriginalComposerShell({
       .filter((tag): tag is OriginalComposerTag => Boolean(tag));
   }, [tagIds, availableTags]);
 
+  // The preview renders exactly what publishing would store, through the same
+  // serializer and the same Markdown component the reader uses. Deriving it from a
+  // second, preview-only conversion is what let preview and the published article
+  // disagree about spacing, headings and the paid boundary.
   const previewDoc = useMemo(() => {
-    if (!preview) return { publicMarkdown: "", paidMarkdown: "", fullMarkdown: "" };
-    const raw = sourceMode || sourceDirtyRef.current
-      ? markdown
-      : editorRef.current?.getEditorState().read(() => $convertToMarkdownString(ORIGINAL_MARKDOWN_TRANSFORMERS)) || markdown;
-    const parts = raw.split(/(?:<!--\s*paid-gate\s*-->|NOVEL_READER_PAID_GATE_NODE_V1|<!--\s*original-paid\s*-->)/iu);
-    const publicMarkdown = (parts[0] || "").trim();
-    const paidMarkdown = (parts[1] || "").trim();
-    return {
-      publicMarkdown,
-      paidMarkdown,
-      fullMarkdown: paidMarkdown ? `${publicMarkdown}\n\n${paidMarkdown}` : publicMarkdown,
-    };
-  }, [preview, sourceMode, markdown]);
+    if (!preview) return { publicMarkdown: "", paidMarkdown: "", outline: [] as OutlineItem[] };
+    try {
+      const document = serializeOriginalEditorState(latestJsonRef.current);
+      return {
+        publicMarkdown: document.publicMarkdown,
+        paidMarkdown: document.paidMarkdown,
+        outline: document.outline,
+      };
+    } catch {
+      return { publicMarkdown: "", paidMarkdown: "", outline: [] as OutlineItem[] };
+    }
+  }, [preview, previewVersion]);
+  // A paid article previews the way a reader without access sees it: public part plus
+  // the unlock card. A free one shows both halves joined, exactly as the reader does.
+  const previewLocked = price > 0 && hasPaidGate;
+  const previewBody = previewLocked
+    ? previewDoc.publicMarkdown
+    : joinOriginalBodies(previewDoc.publicMarkdown, previewDoc.paidMarkdown);
+  const previewOutline = previewLocked ? previewDoc.outline.filter((item) => !item.paid) : previewDoc.outline;
   const displayedWordCount = sourceDirtyRef.current ? sourceWordCount : wordCount;
 
   return (
@@ -1434,10 +1660,17 @@ export function OriginalComposerShell({
           </button>
           <span className={styles.workspaceTitle} aria-live="polite">{preview ? "文章预览" : sourceMode ? "Markdown 源码" : "写文章"}</span>
           <div className={styles.topBarActions}>
-            <button type="button" className={`${styles.actionButton} ${styles.outlineButton}`} aria-label="目录" title="目录" aria-expanded={outlineOpen} onClick={() => setOutlineOpen((open) => !open)}>
-              <List size={16} /><span>目录</span>
+            <button
+              type="button"
+              className={`${styles.actionButton} ${styles.outlineButton}${outlineOpen ? ` ${styles.outlineButtonActive}` : ""}`}
+              aria-label="目录"
+              title="显示或隐藏目录"
+              aria-expanded={outlineOpen}
+              onClick={() => { flushEditorMetadata(); setOutlineOpen((open) => !open); }}
+            >
+              <List size={17} /><span>目录</span>
             </button>
-            <button type="button" className={`${styles.actionButton} ${styles.settingsButton}`} aria-label="文章设置" title="文章设置" onClick={() => setSettingsOpen(true)}><Settings2 size={17} /><span>设置</span></button>
+            <button type="button" className={`${styles.actionButton} ${styles.settingsButton}`} aria-label="文章设置" title="文章设置" onClick={() => { flushEditorMetadata(); setSettingsOpen(true); }}><Settings2 size={17} /><span>设置</span></button>
             <button type="button" className={`${styles.actionButton} ${styles.publishButton} ${styles.topPublishButton}`} disabled={publishing} onClick={() => void publish()}>
               发布
             </button>
@@ -1509,13 +1742,13 @@ export function OriginalComposerShell({
           </div>
         ) : null}
 
-        <div ref={workspaceRef} className={styles.workspace}>
+        <div ref={workspaceRef} className={styles.workspace} data-outline={outlineOpen ? "open" : "closed"}>
           {preview ? (
             <div className={`readerShell originalReaderShell ${styles.readerPreviewSurface}`} data-reader-theme="app">
               <button type="button" className={styles.previewExitButton} aria-label="返回编辑" title="返回编辑" onClick={() => changeMode("visual")}>
                 <ChevronLeft size={22} strokeWidth={1.9} aria-hidden="true" /><span>返回编辑</span>
               </button>
-              <button type="button" className={styles.previewOutlineButton} aria-label="目录" title="目录" aria-expanded={outlineOpen} onClick={() => setOutlineOpen((open) => !open)}>
+              <button type="button" className={styles.previewOutlineButton} aria-label="目录" title="目录" aria-expanded={outlineOpen} onClick={() => { flushEditorMetadata(); setOutlineOpen((open) => !open); }}>
                 <List size={18} aria-hidden="true" /><span>目录</span>
               </button>
               <article className="readerPage originalDetail">
@@ -1542,11 +1775,11 @@ export function OriginalComposerShell({
               <div className="originalReadingLayout">
                 <div className="originalReaderStage">
                   <div className="readerText originalBody">
-                    <OriginalMarkdown>{price > 0 && hasPaidGate ? previewDoc.publicMarkdown : previewDoc.fullMarkdown}</OriginalMarkdown>
+                    <OriginalMarkdown>{previewBody}</OriginalMarkdown>
                   </div>
                 </div>
               </div>
-              {price > 0 && hasPaidGate ? (
+              {previewLocked ? (
                 <section className="originalGate" aria-live="polite">
                   <LockKeyhole size={23} aria-hidden="true" />
                   <strong>解锁完整内容 · {price} 苏打</strong>
@@ -1598,8 +1831,9 @@ export function OriginalComposerShell({
               <LinkPlugin />
               <TablePlugin hasCellMerge={false} hasCellBackgroundColor={false} hasHorizontalScroll />
               <EditorTabPlugin />
-              <BufferedMarkdownPlugin />
-              <StructuralSafetyPlugin onRemoveGate={removeGate} />
+              <OriginalMarkdownPlugin />
+              <BlockEscapePlugin />
+              <PaidGateSafetyPlugin onRemoveGate={removeGate} />
               <MarkdownPastePlugin />
               <EditorBridge
                 onState={handleEditorState}
@@ -1609,24 +1843,11 @@ export function OriginalComposerShell({
             </div>
           </article>
           {outlineOpen ? (
-            <aside className={`${styles.outline} ${preview ? styles.previewOutline : ""} ${outlineOpen ? styles.outlineOpen : ""}`} aria-label="文章目录">
-              <header><strong>目录</strong><button type="button" onClick={() => setOutlineOpen(false)} aria-label="关闭目录"><X size={18} /></button></header>
-              {outline.length ? <nav>
-                {outline.map((item, index) => (
-                  <button
-                    type="button"
-                    key={item.id}
-                    className={item.level > 1 ? styles.outlineLevel2 : undefined}
-                    onClick={() => {
-                      document.getElementById(preview ? `original-heading-${index + 1}` : item.id)?.scrollIntoView({ behavior: "smooth", block: "center" });
-                      if (preview) setOutlineOpen(false);
-                    }}
-                  >
-                    {item.paid ? <LockKeyhole size={13} aria-hidden="true" /> : null}{item.text}
-                  </button>
-                ))}
-              </nav> : <p className={styles.outlineEmpty}>添加标题后，这里会生成目录。</p>}
-            </aside>
+            <ComposerOutline
+              items={preview ? previewOutline : outline}
+              containerRef={workspaceRef}
+              onClose={() => setOutlineOpen(false)}
+            />
           ) : null}
         </div>
 
@@ -1909,24 +2130,33 @@ function PublishDialog({
           </div>
           {paid ? (
             <div className={styles.publishPaidOptions}>
-              <label className={styles.fieldLabel}><span>价格</span>
-              <span className={styles.priceControl}>
-                <input type="number" min={1} max={1_000_000} inputMode="numeric" value={price} onChange={(event) => onPrice(Math.max(1, Math.floor(Number(event.target.value) || 1)))} />
-                <span>苏打</span>
-              </span>
-            </label>
-            {hasPaidGate ? (
-              <p className={styles.validLine}>
-                <Check size={14} aria-hidden="true" />已设置付费分界
-              </p>
-            ) : (
-              <div className={styles.paidGatePrompt}>
-                <p className={styles.paidGateHint}>在正文插入付费分界，前面免费，后面需解锁。</p>
-                <button type="button" className={styles.insertPaidGateButton} onClick={onInsertPaidGate}>
-                  插入分界
-                </button>
-              </div>
-            )}
+              <label className={styles.fieldLabel}>
+                <span>价格</span>
+                <span className={styles.priceControl}>
+                  <input
+                    type="number"
+                    min={1}
+                    max={1_000_000}
+                    inputMode="numeric"
+                    value={price}
+                    onChange={(event) => onPrice(Math.max(1, Math.floor(Number(event.target.value) || 1)))}
+                  />
+                  <span>苏打</span>
+                </span>
+              </label>
+              {hasPaidGate ? (
+                <p className={styles.validLine}>
+                  <Check size={14} aria-hidden="true" />
+                  已设置付费分界
+                </p>
+              ) : (
+                <div className={styles.paidGatePrompt}>
+                  <p className={styles.paidGateHint}>在正文插入付费分界，前面免费，后面需解锁。</p>
+                  <button type="button" className={styles.insertPaidGateButton} onClick={onInsertPaidGate}>
+                    插入分界
+                  </button>
+                </div>
+              )}
             </div>
           ) : null}
         </section>

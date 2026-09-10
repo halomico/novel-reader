@@ -107,7 +107,13 @@ export function OriginalReaderExperienceControls({
           </button>
         )}
         {items.length ? (
-          <button className="readerToolItem isDirectory" type="button" onClick={() => setPanel("directory")}>
+          <button
+            className="readerToolItem isDirectory"
+            type="button"
+            aria-expanded={panel === "directory"}
+            // One button, two states: show the outline and hide it again.
+            onClick={() => setPanel((current) => current === "directory" ? null : "directory")}
+          >
             <List size={20} aria-hidden="true" /><span>目录</span>
           </button>
         ) : <button className="readerToolItem isDirectory" type="button" disabled><List size={20} aria-hidden="true" /><span>目录</span></button>}
@@ -139,8 +145,10 @@ export function OriginalReaderExperienceControls({
         <button className="readerToolItem isMore" type="button" onClick={() => setPanel("more")}><Ellipsis size={21} aria-hidden="true" /><span>更多</span></button>
       </ReaderToolRail>
       {panel ? (
-        <ReaderSidePanel kind={panel} title={panel === "directory" ? "目录" : panel === "info" ? "详情" : panel === "settings" ? "阅读设置" : "更多"} meta={panel === "directory" ? <small>{items.length} 节</small> : null} onClose={closePanel}>
-          {panel === "directory" ? (items.length ? <OutlineLinks items={items} activeId={activeId} onNavigate={closePanel} /> : <p className="readerPanelEmpty">正文没有标题目录。</p>) : null}
+        <ReaderSidePanel kind={panel} docked={panel === "directory"} title={panel === "directory" ? "目录" : panel === "info" ? "详情" : panel === "settings" ? "阅读设置" : "更多"} meta={panel === "directory" ? <small>{items.length} 节</small> : null} onClose={closePanel}>
+          {/* The outline stays open while the reader keeps reading, so navigating
+              inside it must not close it. */}
+          {panel === "directory" ? (items.length ? <OutlineLinks items={items} activeId={activeId} /> : <p className="readerPanelEmpty">正文没有标题目录。</p>) : null}
           {panel === "info" ? <div className="readerBookInfo"><h2>{title}</h2><dl><div><dt>字数</dt><dd>{wordCount.toLocaleString("zh-CN")} 字</dd></div><div><dt>目录</dt><dd>{items.length} 节</dd></div></dl></div> : null}
           {panel === "settings" ? <ReaderDisplaySettingsPanel preferences={preferences} showPageTurn={false} /> : null}
           {panel === "more" ? <div className="readerMoreMenu" role="menu" aria-label="更多阅读操作">
@@ -177,14 +185,41 @@ function OutlineLinks({
           aria-current={item.id === activeId ? "location" : undefined}
           href={`#${item.id}`}
           key={item.id}
-          onClick={() => {
+          title={item.text}
+          onClick={(event) => {
+            // A bare `#id` jump parks the heading under the fixed site header. Scroll
+            // it to a readable position instead, and still leave the plain link in the
+            // markup so it works without JavaScript and can be copied.
+            const target = document.getElementById(item.id);
+            if (target) {
+              event.preventDefault();
+              window.scrollTo({
+                top: Math.max(0, window.scrollY + target.getBoundingClientRect().top - readerHeadingOffset()),
+                behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+              });
+              history.replaceState(null, "", `#${item.id}`);
+            }
             keepReaderChromeVisible();
             onNavigate?.();
           }}
         >
-          <span style={{ paddingInlineStart: `${Math.max(item.level - 1, 0) * 10}px` }}>{item.text}</span>
+          <span style={{ paddingInlineStart: `${Math.min(Math.max(item.level - 1, 0), 3) * 12}px` }}>{item.text}</span>
         </a>
       ))}
     </nav>
   );
+}
+
+/**
+ * Height of the chrome that floats over the top of the article, plus breathing room.
+ * Sticky counts as well as fixed: a sticky site header parks itself over the first
+ * lines of whatever a plain `#id` jump scrolls to, which is exactly the "the toolbar
+ * covers the heading I clicked" complaint.
+ */
+function readerHeadingOffset(): number {
+  const header = document.querySelector<HTMLElement>(".siteHeader");
+  if (!header) return 20;
+  const position = getComputedStyle(header).position;
+  const overlaps = position === "fixed" || position === "sticky";
+  return (overlaps ? header.getBoundingClientRect().height : 0) + 20;
 }

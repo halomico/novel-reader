@@ -32,6 +32,8 @@ type SerializedNode = {
   width?: number;
   height?: number;
   language?: string;
+  value?: number;
+  checked?: boolean;
   headerState?: number;
   children?: SerializedNode[];
 };
@@ -79,7 +81,9 @@ function serializeInline(node: SerializedNode): string {
   const format = textFormat(node.format);
   if (format & 16) text = `\`${text.replace(/`/g, "\\`")}\``;
   if (format & 4) text = `~~${text}~~`;
-  if (format & 8) text = `==${text}==`;
+  // Underline has no CommonMark syntax; `<u>` is the one representation that renders
+  // and round-trips everywhere. See ORIGINAL_MARKDOWN_TRANSFORMERS.
+  if (format & 8) text = `<u>${text}</u>`;
   if (format & 2) text = `*${text}*`;
   if (format & 1) text = `**${text}**`;
   return text;
@@ -91,10 +95,48 @@ function plainText(node: SerializedNode): string {
   return (node.children || []).map(plainText).join("");
 }
 
-function stableHeadingId(value: unknown, index: number): string {
+function stableHeadingId(value: unknown, index: number, used: Set<string>): string {
   const candidate = String(value || "").trim();
-  if (/^heading_[A-Za-z0-9_-]{8,80}$/u.test(candidate)) return candidate;
-  return `heading_legacy_${String(index + 1).padStart(4, "0")}`;
+  const base = /^heading_[A-Za-z0-9_-]{8,80}$/u.test(candidate)
+    ? candidate
+    : `heading_legacy_${String(index + 1).padStart(4, "0")}`;
+  // Copying a heading clones its anchor, so uniqueness is enforced at the one place
+  // that writes the stored document rather than trusted from the editor state.
+  let id = base;
+  for (let suffix = 2; used.has(id); suffix += 1) id = `${base}-${suffix}`;
+  used.add(id);
+  return id;
+}
+
+/**
+ * Serialize a node's children, whichever kind they are. Lexical puts inline content
+ * directly inside quotes and list items rather than wrapping it in a paragraph, so a
+ * container has to handle both instead of assuming one.
+ */
+function serializeChildren(
+  children: SerializedNode[],
+  state: Parameters<typeof serializeBlock>[1],
+  depth: number,
+): string {
+  const blocks: string[] = [];
+  let inline: SerializedNode[] = [];
+  const flush = () => {
+    if (!inline.length) return;
+    const text = inline.map(serializeInline).join("").trimEnd();
+    if (text) blocks.push(text);
+    inline = [];
+  };
+  for (const child of children) {
+    if (child.type === "text" || child.type === "linebreak" || child.type === "link" || child.type === "autolink") {
+      inline.push(child);
+      continue;
+    }
+    flush();
+    const block = serializeBlock(child, state, depth + 1);
+    if (block) blocks.push(block);
+  }
+  flush();
+  return blocks.join("\n\n");
 }
 
 function serializeBlock(
@@ -105,6 +147,7 @@ function serializeBlock(
     publicAssets: Set<number>;
     paidAssets: Set<number>;
     headingIndex: number;
+    headingIds: Set<string>;
   },
   depth = 0,
 ): string {
@@ -113,12 +156,14 @@ function serializeBlock(
   if (node.type === "heading" || node.type === "original-heading") {
     const text = plainText(node).trim();
     const level = /^h[1-6]$/u.test(String(node.tag)) ? Number(String(node.tag).slice(1)) : 1;
-    const id = stableHeadingId(node.anchorId, state.headingIndex++);
+    const id = stableHeadingId(node.anchorId, state.headingIndex++, state.headingIds);
     if (text) state.outline.push({ id, level, text, paid: state.paid });
     return text ? `<!-- original-heading:${id} -->\n${"#".repeat(level)} ${escapeMarkdown(text)}` : "";
   }
   if (node.type === "quote") {
-    return children.map((child) => serializeBlock(child, state, depth + 1)).join("\n\n")
+    // A quote holds inline children directly, not paragraphs. Routing them through
+    // `serializeBlock` produced an empty `>` line and silently dropped the quotation.
+    return serializeChildren(children, state, depth)
       .split("\n").map((line) => `> ${line}`).join("\n");
   }
   if (node.type === "code") {
@@ -141,13 +186,26 @@ function serializeBlock(
   }
   if (node.type === "list") {
     const ordered = node.listType === "number";
-    return children.map((child, index) => {
-      const content = serializeBlock(child, state, depth + 1).replace(/\n/g, "\n  ");
-      return `${ordered ? `${index + 1}.` : "-"} ${content}`;
-    }).join("\n");
+    const check = node.listType === "check";
+    let number = 0;
+    return children.map((child) => {
+      const content = serializeBlock(child, state, depth + 1).replace(/\n/gu, "\n  ");
+      // A list item that only wraps a nested list is structure, not an entry, so it
+      // must not consume a number of its own.
+      const wrapper = (child.children || []).every((grandChild) => grandChild.type === "list");
+      if (wrapper) return content ? `  ${content}` : "";
+      if (ordered) number = Number.isSafeInteger(Number(child.value)) && Number(child.value) > 0 ? Number(child.value) : number + 1;
+      const marker = ordered ? `${number}.` : check ? `- [${child.checked ? "x" : " "}]` : "-";
+      return `${marker} ${content}`;
+    }).filter(Boolean).join("\n");
   }
   if (node.type === "listitem") {
-    return children.map((child) => serializeBlock(child, state, depth + 1)).filter(Boolean).join("\n\n");
+    // Inline children are the item's text; a nested list is a block below it.
+    const inline = children.filter((child) => child.type !== "list");
+    const nested = children.filter((child) => child.type === "list");
+    const parts = [serializeChildren(inline, state, depth)];
+    for (const list of nested) parts.push(serializeBlock(list, state, depth + 1));
+    return parts.filter(Boolean).join("\n");
   }
   if (node.type === "table") {
     const rows = children.filter((child) => child.type === "tablerow");
@@ -173,6 +231,7 @@ export function countOriginalMarkdownCharacters(markdown: string): number {
     .replace(/```[^]*?```/g, (block) => block.replace(/^```[^\n]*|```$/g, ""))
     .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
     .replace(/\[[^\]]*\]\([^)]*\)/g, (match) => match.replace(/^\[|\]\([^)]*\)$/g, ""))
+    .replace(/<\/?u>/gu, "")
     .replace(/^\s*[-+*]\s+\[[ xX]\]\s+/gmu, "")
     .replace(/[#>*_`~\-|]+/g, " ")
     .replace(/\s+/g, "")
@@ -203,6 +262,7 @@ export function serializeOriginalEditorState(value: string): SerializedOriginalD
     publicAssets: new Set<number>(),
     paidAssets: new Set<number>(),
     headingIndex: 0,
+    headingIds: new Set<string>(),
   };
   const publicBlocks: string[] = [];
   const paidBlocks: string[] = [];
