@@ -1,0 +1,89 @@
+name: GPT Chinese search benchmark v3
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: mkdir -p audit-search-v3 && npm ci
+      - name: Start PostgreSQL 18 plus pg_bigm
+        shell: bash
+        run: |
+          set -e
+          docker build --pull -f docker/postgres/Dockerfile -t audit-pg-v3 . > audit-search-v3/pg-build.log 2>&1
+          docker run -d --name audit-pg-v3 --memory=4g --cpus=2 -p 127.0.0.1:55434:5432 --env POSTGRES_PASSWORD=audit-only --env POSTGRES_DB=novel_reader --env POSTGRES_INITDB_ARGS='--encoding=UTF8 --locale=C' audit-pg-v3
+          for i in $(seq 1 40); do docker exec audit-pg-v3 pg_isready -U postgres -d novel_reader && break; sleep 1; done
+          DATABASE_URL=postgresql://postgres:audit-only@127.0.0.1:55434/novel_reader npm run db:pg:init > audit-search-v3/db-init.log 2>&1
+      - name: Seed low-compressibility CJK corpus
+        shell: bash
+        run: |
+          set +e
+          cat > /tmp/v3.sql <<'SQL'
+          \timing on
+          SET statement_timeout='25min';
+          INSERT INTO novel_sources(id,slug,name,relative_path) OVERRIDING SYSTEM VALUE VALUES (910001,'audit-v3','审计V3','audit-v3') ON CONFLICT DO NOTHING;
+          INSERT INTO novels(id,title,title_search_original,title_search_hans,normalization_version,description,file_name,relative_path,source_id,storage_mode,content_hash,published_content_version,size_bytes,mtime_ms,word_count)
+          OVERRIDING SYSTEM VALUE VALUES (910001,'审计随机中文','审计随机中文',NULL,2,'','audit-v3.txt','audit-v3/audit-v3.txt',910001,'single',repeat('b',64),'sha256:audit-v3',72000000,999999999998,24000000) ON CONFLICT DO NOTHING;
+          INSERT INTO novel_documents(id,novel_id,chapter_id,active_generation,active_content_version,normalization_version,state,next_generation)
+          OVERRIDING SYSTEM VALUE VALUES (910001,910001,NULL,1,'sha256:audit-v3',2,'ready',2) ON CONFLICT DO NOTHING;
+          INSERT INTO novel_content_generations(document_id,generation,build_token,source_content_version,expected_published_version,content_version,normalization_version,total_utf16_length,stored_utf16_length,block_count,state)
+          VALUES (910001,1,'00000000-0000-0000-0000-000000000003',repeat('b',64),NULL,'sha256:audit-v3',2,24000000,24000000,20000,'published') ON CONFLICT DO NOTHING;
+          CREATE TEMP TABLE cjk_base AS
+          SELECT b, string_agg(chr(19968 + ((b * 7919 + i * 104729 + b * i * 17) % 20900)), '' ORDER BY i) AS body
+          FROM generate_series(0,4999) b CROSS JOIN generate_series(1,1200) i GROUP BY b;
+          INSERT INTO novel_content_blocks(document_id,generation,block_no,char_start,char_end,search_window_start,search_window_end,original_text,search_text_original,search_text_hans)
+          SELECT 910001,1,g,g*1200,(g+1)*1200,g*1200,(g+1)*1200,
+                 left((CASE WHEN g%20=0 THEN '修仙龙门长生' WHEN g%20=1 THEN '案件法医真相' WHEN g%20=2 THEN '江湖剑气少年' ELSE '' END) || c.body,1200),
+                 left((CASE WHEN g%20=0 THEN '修仙龙门长生' WHEN g%20=1 THEN '案件法医真相' WHEN g%20=2 THEN '江湖剑气少年' ELSE '' END) || c.body,1200),
+                 NULL
+          FROM generate_series(0,19999) g JOIN cjk_base c ON c.b=(g%5000) ON CONFLICT DO NOTHING;
+          ANALYZE novel_content_blocks;
+          SELECT count(*) AS blocks FROM novel_content_blocks WHERE document_id=910001;
+          SELECT 72000000::bigint AS source_bytes,
+                 pg_relation_size('novel_content_blocks') heap_bytes,
+                 pg_indexes_size('novel_content_blocks') index_bytes,
+                 pg_total_relation_size('novel_content_blocks') total_bytes,
+                 round(pg_total_relation_size('novel_content_blocks')::numeric/72000000,3) AS total_to_source_ratio,
+                 round(pg_indexes_size('novel_content_blocks')::numeric/72000000,3) AS index_to_source_ratio;
+          SELECT pg_size_pretty(pg_relation_size('novel_content_blocks')) heap,pg_size_pretty(pg_indexes_size('novel_content_blocks')) indexes,pg_size_pretty(pg_total_relation_size('novel_content_blocks')) total;
+          SQL
+          /usr/bin/time -v docker exec -i audit-pg-v3 psql -U postgres -d novel_reader < /tmp/v3.sql > audit-search-v3/seed.log 2> audit-search-v3/seed.time
+          echo $? > audit-search-v3/seed.exit
+          docker stats --no-stream audit-pg-v3 > audit-search-v3/pg-seed-stats.txt 2>&1
+          exit 0
+      - name: Benchmark search shapes
+        shell: bash
+        run: |
+          set +e
+          cat > /tmp/q.sql <<'SQL'
+          \timing on
+          SET statement_timeout='60s';
+          \echo SINGLE_COMMON
+          EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT DISTINCT document_id,generation FROM novel_content_blocks WHERE search_text_original LIKE '%修仙%';
+          \echo SINGLE_MEDIUM
+          EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT DISTINCT document_id,generation FROM novel_content_blocks WHERE search_text_original LIKE '%法医%';
+          \echo SINGLE_ABSENT
+          EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT DISTINCT document_id,generation FROM novel_content_blocks WHERE search_text_original LIKE '%不存在的关键词甲乙丙%';
+          \echo TWO_TERMS
+          EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT document_id,generation FROM novel_content_blocks WHERE search_text_original LIKE '%修仙%' INTERSECT SELECT document_id,generation FROM novel_content_blocks WHERE search_text_original LIKE '%龙门%';
+          \echo THREE_TERMS
+          EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT document_id,generation FROM novel_content_blocks WHERE search_text_original LIKE '%修仙%' INTERSECT SELECT document_id,generation FROM novel_content_blocks WHERE search_text_original LIKE '%龙门%' INTERSECT SELECT document_id,generation FROM novel_content_blocks WHERE search_text_original LIKE '%长生%';
+          SQL
+          for run in $(seq 1 10); do echo RUN=$run >> audit-search-v3/search.log; docker exec -i audit-pg-v3 psql -U postgres -d novel_reader < /tmp/q.sql >> audit-search-v3/search.log 2>&1; done
+          docker stats --no-stream audit-pg-v3 > audit-search-v3/pg-search-stats.txt 2>&1
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: search-v3-${{ github.sha }}
+          path: audit-search-v3/
+          retention-days: 7
