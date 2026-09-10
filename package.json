@@ -19,7 +19,7 @@
     "check:push": "node scripts/check-repository-files.mjs --pending",
     "test:navigation": "node --import tsx --test src/lib/context-navigation.test.ts",
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
-    "test:postgres": "node --import tsx scripts/test-postgres-integration.ts",
+    "test:postgres": "node --import tsx --test scripts/test-postgres-integration.ts",
     "check": "npm run check:runtime && npm run typecheck && npm test && npm run build",
     "db:verify": "node --import tsx scripts/db-verify-postgres.ts",
     "db:pg:migrate": "node --import tsx scripts/db-migrate-postgres.ts",
