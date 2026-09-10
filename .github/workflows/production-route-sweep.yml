@@ -1,0 +1,93 @@
+name: GPT production route sweep
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  sweep:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      DATABASE_URL: postgresql://postgres:audit-only@127.0.0.1:55435/novel_reader
+      PG_INTEGRATION_ADMIN_URL: postgresql://postgres:audit-only@127.0.0.1:55435/postgres
+      SITE_URL: http://127.0.0.1:3000
+      NOVEL_LIBRARY_DIR: /tmp/novel-library
+      MEDIA_DIR: /tmp/novel-media
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: AuditPassword12345
+      ADMIN_SESSION_SECRET: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      READINESS_TOKEN: 0123456789abcdef0123456789abcdef0123456789abcdef
+      TRUSTED_PROXY_CIDRS: 127.0.0.1/32
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: mkdir -p audit-prod /tmp/novel-library /tmp/novel-media && npm ci
+      - name: Start database and initialize
+        shell: bash
+        run: |
+          set -e
+          docker build --pull -f docker/postgres/Dockerfile -t audit-prod-pg . > audit-prod/pg-build.log 2>&1
+          docker run -d --name audit-prod-pg --memory=4g --cpus=2 -p 127.0.0.1:55435:5432 --env POSTGRES_PASSWORD=audit-only --env POSTGRES_DB=novel_reader --env POSTGRES_INITDB_ARGS='--encoding=UTF8 --locale=C' audit-prod-pg
+          for i in $(seq 1 40); do docker exec audit-prod-pg pg_isready -U postgres -d novel_reader && break; sleep 1; done
+          npm run db:pg:init > audit-prod/db-init.log 2>&1
+          docker exec audit-prod-pg psql -U postgres -d novel_reader -c "UPDATE site_settings SET value=jsonb_set(jsonb_set(jsonb_set(jsonb_set(jsonb_set(value,'{homePortalAccessModes,novels}','\"public\"'::jsonb),'{homePortalAccessModes,tags}','\"public\"'::jsonb),'{homePortalAccessModes,original}','\"public\"'::jsonb),'{homePortalAccessModes,video}','\"public\"'::jsonb),'{homePortalAccessModes,audio}','\"public\"'::jsonb), version=version+1;" > audit-prod/settings.log 2>&1
+      - name: Production build with initialized database
+        shell: bash
+        run: |
+          set +e
+          /usr/bin/time -v npm run build > audit-prod/build.log 2> audit-prod/build.time
+          echo $? > audit-prod/build.exit
+          exit 0
+      - name: Start production server
+        shell: bash
+        run: |
+          set +e
+          if [ "$(cat audit-prod/build.exit)" != 0 ]; then exit 0; fi
+          NODE_ENV=production HOSTNAME=127.0.0.1 PORT=3000 node .next/standalone/server.js > audit-prod/server.log 2>&1 &
+          echo $! > audit-prod/server.pid
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:3000/api/live >/dev/null && break; sleep 1; done
+          ps -o pid,rss,vsz,pcpu,pmem,etime,cmd -p $(cat audit-prod/server.pid) > audit-prod/process.txt 2>&1
+          curl -sS -H "x-readiness-token: $READINESS_TOKEN" http://127.0.0.1:3000/api/ready > audit-prod/readiness.json
+          exit 0
+      - name: Browser route and non-submit-button sweep
+        shell: bash
+        run: |
+          set +e
+          if ! curl -fsS http://127.0.0.1:3000/api/live >/dev/null; then echo '{"fatal":"server unavailable"}' > audit-prod/browser.json; exit 0; fi
+          npm install --no-save --package-lock=false playwright@1.55.0 > audit-prod/playwright-install.log 2>&1
+          npx playwright install chromium >> audit-prod/playwright-install.log 2>&1
+          cat > route-sweep.cjs <<'JS'
+          const { chromium }=require('playwright'); const fs=require('fs'); const path=require('path');
+          function routeFromFile(file){let r=file.replace(/^src\/app/,'').replace(/\/page\.tsx$/,'');r=r.replace(/\/\([^/]+\)/g,'');r=r.replace(/\[\.\.\.([^\]]+)\]/g,'sample').replace(/\[([^\]]+)\]/g,(m,n)=>/id/i.test(n)?'1':'sample');return r||'/';}
+          const files=require('child_process').execSync("find src/app -name page.tsx -print",{encoding:'utf8'}).trim().split(/\n+/).filter(Boolean);
+          const routes=[...new Set(files.map(routeFromFile))].sort();
+          (async()=>{const browser=await chromium.launch({headless:true});const ctx=await browser.newContext();const p=await ctx.newPage();const out={routes:[],pageErrors:[],consoleErrors:[],buttons:[],adminLogin:null};let current='';
+          p.on('pageerror',e=>out.pageErrors.push({route:current,error:String(e)}));p.on('console',m=>{if(m.type()==='error')out.consoleErrors.push({route:current,text:m.text()})});
+          async function visit(route){current=route;const t=performance.now();let status=null,err=null;try{const r=await p.goto('http://127.0.0.1:3000'+route,{waitUntil:'domcontentloaded',timeout:15000});status=r?.status();await p.waitForTimeout(80)}catch(e){err=String(e)}const ms=performance.now()-t;out.routes.push({route,status,ms,err});return status}
+          for(const route of routes.filter(r=>!r.startsWith('/admin'))){await visit(route)}
+          await visit('/admin/login'); try{await p.locator('input[name=username]').fill('admin');await p.locator('input[name=password]').fill('AuditPassword12345');const t=performance.now();await Promise.all([p.waitForURL(/\/admin(?:\/|$)/,{timeout:10000}),p.locator('button[type=submit]').click()]);out.adminLogin={ok:true,ms:performance.now()-t,url:p.url()}}catch(e){out.adminLogin={ok:false,error:String(e)}}
+          for(const route of routes.filter(r=>r.startsWith('/admin')&&!r.includes('/login'))){const status=await visit(route);if(status!==200)continue;const buttons=p.locator('button:visible:not([type=submit])');const n=Math.min(await buttons.count().catch(()=>0),25);for(let i=0;i<n;i++){await visit(route);const b=p.locator('button:visible:not([type=submit])').nth(i);const label=((await b.getAttribute('aria-label').catch(()=>null))||(await b.innerText().catch(()=>''))).trim().slice(0,100);const t=performance.now();let ok=true,err=null;try{await b.click({timeout:1500});await p.waitForTimeout(50)}catch(e){ok=false;err=String(e).slice(0,240)}out.buttons.push({route,index:i,label,ok,ms:performance.now()-t,err})}}
+          fs.writeFileSync('audit-prod/browser.json',JSON.stringify(out,null,2));await browser.close()})().catch(e=>fs.writeFileSync('audit-prod/browser-fatal.txt',String(e)));
+          JS
+          node route-sweep.cjs
+          exit 0
+      - name: Warm HTTP timing and DB metrics
+        shell: bash
+        run: |
+          set +e
+          for path in / /novels /tags /original /media /search /admin /admin/books /admin/users /admin/settings; do
+            echo PATH=$path >> audit-prod/http.txt
+            for i in $(seq 1 20); do curl -sS -o /dev/null -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}\n' "http://127.0.0.1:3000$path" >> audit-prod/http.txt; done
+          done
+          curl -sS -H "x-readiness-token: $READINESS_TOKEN" http://127.0.0.1:3000/api/ready > audit-prod/readiness-after.json
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: production-sweep-${{ github.sha }}
+          path: audit-prod/
+          retention-days: 7
