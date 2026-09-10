@@ -1,0 +1,51 @@
+name: GPT code gates audit
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  gates:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: mkdir -p audit-code-gates && npm ci
+      - name: Typecheck
+        shell: bash
+        run: |
+          set +e
+          /usr/bin/time -v npm run typecheck > audit-code-gates/typecheck.log 2> audit-code-gates/typecheck.time
+          echo $? > audit-code-gates/typecheck.exit
+          exit 0
+      - name: Unit tests
+        shell: bash
+        run: |
+          set +e
+          /usr/bin/time -v npm test > audit-code-gates/tests.log 2> audit-code-gates/tests.time
+          echo $? > audit-code-gates/tests.exit
+          exit 0
+      - name: Python tests
+        shell: bash
+        run: |
+          set +e
+          /usr/bin/time -v python3 -m unittest discover -s scripts -p 'test_*.py' -v > audit-code-gates/python-tests.log 2> audit-code-gates/python-tests.time
+          echo $? > audit-code-gates/python-tests.exit
+          exit 0
+      - name: Production build
+        shell: bash
+        run: |
+          set +e
+          /usr/bin/time -v npm run build > audit-code-gates/build.log 2> audit-code-gates/build.time
+          echo $? > audit-code-gates/build.exit
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: code-gates-${{ github.sha }}
+          path: audit-code-gates/
+          retention-days: 7
