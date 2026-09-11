@@ -8,7 +8,7 @@ import {
   readFreshPostgresSiteSettingsSnapshot,
   writePostgresSiteSettings,
 } from "@/core/config/site-settings";
-import type { SiteSettings } from "@/core/config/site-settings-schema";
+import { MAX_GLOBAL_SEARCH_RESULTS, type SiteSettings } from "@/core/config/site-settings-schema";
 import { installRuntimeSiteSettings } from "@/core/config/runtime-site-settings";
 import { recordPostgresAdminLogin } from "@/domains/identity/postgres-admin-overview";
 import { getAdminAccessState, getClientIp, matchesIpRule, normalizeAdminNetworkRules } from "@/lib/admin-access";
@@ -918,7 +918,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
       formData.get("audioDefaultPlaybackMode") === "stop" || formData.get("audioDefaultPlaybackMode") === "repeat-one"
         ? formData.get("audioDefaultPlaybackMode") as "stop" | "repeat-one"
         : "next",
-    globalSearchMaxResults: intField(formData, "globalSearchMaxResults", previous.globalSearchMaxResults, 1, 10_000),
+    globalSearchMaxResults: intField(formData, "globalSearchMaxResults", previous.globalSearchMaxResults, 1, MAX_GLOBAL_SEARCH_RESULTS),
     userLoginEnabled: formData.get("userLoginEnabled") === "on",
     userRegistrationEnabled: formData.get("userRegistrationMode") !== "closed",
     userRegistrationMode:
@@ -1591,6 +1591,7 @@ export async function updateAdminUserAction(
   if (newPassword || status === "disabled" || previousUser?.role !== role) {
     await deleteUserSessions(userId);
   }
+  if (status === "disabled") revalidatePath("/original", "layout");
   const user = await getPostgresUserById(database("web"), userId);
   return user
     ? mutationResult(true, "用户已更新", "success", { user })
@@ -1720,6 +1721,7 @@ export async function updateAdminUserStatusAction(
   }
   if (status === "disabled") {
     await deleteUserSessions(userId);
+    revalidatePath("/original", "layout");
   }
   const user = await getPostgresUserById(database("web"), userId);
   return user
@@ -1741,6 +1743,7 @@ export async function deleteAdminUsersAction(
   }
 
   const deleted = await anonymizePostgresUsers(ids, "admin-panel");
+  if (deleted > 0) revalidatePath("/original", "layout");
   const deletedIds = deleted > 0 ? ids : [];
   return mutationResult(
     deleted > 0,

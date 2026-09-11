@@ -14,6 +14,14 @@ export type PublicPageCacheRequest = {
   allowPublicNovelPages: boolean;
 };
 
+const NOVEL_READER_PATH = /^\/books\/[1-9]\d*(?:\/chapters\/[1-9]\d*)?$/;
+const ORIGINAL_ARTICLE_PATH = /^\/original\/(?!(?:new|mine|tags)$)[^/]+$/;
+
+/** Published reading pages change rarely and get the longer edge lifetime. */
+export function isPublicReaderPath(pathname: string): boolean {
+  return NOVEL_READER_PATH.test(pathname) || ORIGINAL_ARTICLE_PATH.test(pathname);
+}
+
 function hasOnlyPositivePage(searchParams: URLSearchParams): boolean {
   const entries = Array.from(searchParams.entries());
   return entries.length === 0 ||
@@ -36,13 +44,14 @@ function isCacheablePublicPath(
   if (pathname === "/") {
     return searchParams.size === 0;
   }
-  if (pathname === "/novels" || /^\/tags\/[^/]+$/.test(pathname)) {
+  if (pathname === "/novels" || pathname === "/original" || /^\/tags\/[^/]+$/.test(pathname)) {
     return hasOnlyPositivePage(searchParams);
   }
-  if (
-    allowPublicNovelPages &&
-    (/^\/books\/[1-9]\d*$/.test(pathname) || /^\/books\/[1-9]\d*\/chapters\/[1-9]\d*$/.test(pathname))
-  ) {
+  if (ORIGINAL_ARTICLE_PATH.test(pathname)) {
+    // `comments`, `notice` and `resume` change what an article renders.
+    return searchParams.size === 0;
+  }
+  if (allowPublicNovelPages && NOVEL_READER_PATH.test(pathname)) {
     return hasSafeReaderReturnPath(searchParams);
   }
   return pathname === "/tags" && searchParams.size === 0;
@@ -60,7 +69,10 @@ export function isPublicPageCacheCandidate(request: PublicPageCacheRequest): boo
     return false;
   }
 
-  if (request.accept && request.accept !== "*/*" && !request.accept.includes("text/html")) {
+  // Next.js strips its flight headers and the `_rsc` parameter before middleware
+  // runs, so Accept is the reliable signal: document navigations ask for HTML,
+  // router fetches and prefetches send `*/*`. Only HTML may enter the edge cache.
+  if (!request.accept?.includes("text/html")) {
     return false;
   }
 

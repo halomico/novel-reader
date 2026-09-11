@@ -196,24 +196,39 @@ export async function createPostgresManagedUser(executor: SqlExecutor, input: {
   return positiveId(Number(result.rows[0]?.id), "created user id");
 }
 
+/** Hides a disabled author's published articles in the same statement that disables
+ *  them, so the original pages can never keep listing them. */
+const HIDE_DISABLED_AUTHOR_ARTICLES = `hidden_articles AS (
+        UPDATE original_articles SET status = 'hidden', is_pinned = FALSE, pinned_at = NULL, updated_at = clock_timestamp()
+        WHERE author_id IN (SELECT id FROM updated WHERE status = 'disabled') AND status = 'published'
+      )`;
+
 export async function updatePostgresManagedUser(executor: SqlExecutor, input: {
   id: number; displayName: string; status: PostgresUserStatus; role: PostgresUserRole; passwordHash?: string;
 }): Promise<boolean> {
-  const result = await executor.query({
-    text: `UPDATE users SET display_name = $2, status = $3, role = $4,
-      password_hash = COALESCE($5::text, password_hash), updated_at = clock_timestamp()
-      WHERE id = $1 AND deleted_at IS NULL`,
+  const result = await executor.query<QueryResultRow & { updated: number }>({
+    text: `WITH updated AS (
+        UPDATE users SET display_name = $2, status = $3, role = $4,
+          password_hash = COALESCE($5::text, password_hash), updated_at = clock_timestamp()
+        WHERE id = $1 AND deleted_at IS NULL
+        RETURNING id, status
+      ), ${HIDE_DISABLED_AUTHOR_ARTICLES}
+      SELECT count(*)::int AS updated FROM updated`,
     values: [positiveId(input.id, "user id"), input.displayName.trim(), input.status, input.role, input.passwordHash ?? null],
   });
-  return result.rowCount === 1;
+  return result.rows[0]?.updated === 1;
 }
 
 export async function updatePostgresUserStatus(executor: SqlExecutor, userIdValue: number, status: PostgresUserStatus): Promise<boolean> {
-  const result = await executor.query({
-    text: "UPDATE users SET status = $2, updated_at = clock_timestamp() WHERE id = $1 AND deleted_at IS NULL",
+  const result = await executor.query<QueryResultRow & { updated: number }>({
+    text: `WITH updated AS (
+        UPDATE users SET status = $2, updated_at = clock_timestamp() WHERE id = $1 AND deleted_at IS NULL
+        RETURNING id, status
+      ), ${HIDE_DISABLED_AUTHOR_ARTICLES}
+      SELECT count(*)::int AS updated FROM updated`,
     values: [positiveId(userIdValue, "user id"), status],
   });
-  return result.rowCount === 1;
+  return result.rows[0]?.updated === 1;
 }
 
 export async function anonymizePostgresUsers(
@@ -241,6 +256,11 @@ export async function anonymizePostgresUsers(
           last_login_ip = NULL, last_login_at = NULL, deleted_at = clock_timestamp(), updated_at = clock_timestamp()
           WHERE id = $1`,
         values: [id, anonymousUsername, `disabled:${anonymousUsername}`],
+      });
+      await tx.query({
+        text: `UPDATE original_articles SET status = 'hidden', is_pinned = FALSE, pinned_at = NULL, updated_at = clock_timestamp()
+          WHERE author_id = $1 AND status = 'published'`,
+        values: [id],
       });
       await tx.query({
         text: "INSERT INTO admin_user_anonymization_audit (user_id, previous_username, actor) VALUES ($1, $2, $3)",

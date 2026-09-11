@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import Link from "@/components/LocalizedLink";
+import { AppLink as Link } from "@/components/AppLink";
 
 export function WorkspacePage({
   className = "",
@@ -50,7 +50,7 @@ export function WorkspacePrimaryTabs({
   return (
     <nav className={`workspacePrimaryTabs${className ? ` ${className}` : ""}`} aria-label={label}>
       {items.map(({ href, label: itemLabel, icon: Icon, active }) => (
-        <Link className={active ? "isActive" : ""} href={href} prefetch={!active} aria-current={active ? "page" : undefined} key={href}>
+        <Link className={active ? "isActive" : ""} href={href} prefetch={active ? false : undefined} aria-current={active ? "page" : undefined} key={href}>
           <Icon size={14} aria-hidden="true" />
           <span>{itemLabel}</span>
         </Link>
@@ -71,7 +71,7 @@ export function WorkspaceSegmentedTabs({
   return (
     <nav className={`workspaceSegmentedTabs${className ? ` ${className}` : ""}`} aria-label={label}>
       {items.map(({ href, label: itemLabel, icon: Icon, active }) => (
-        <Link className={active ? "isActive" : ""} href={href} prefetch={!active} aria-current={active ? "page" : undefined} key={href}>
+        <Link className={active ? "isActive" : ""} href={href} prefetch={active ? false : undefined} aria-current={active ? "page" : undefined} key={href}>
           <Icon size={14} aria-hidden="true" />
           <span>{itemLabel}</span>
         </Link>

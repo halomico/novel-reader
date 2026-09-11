@@ -1,14 +1,19 @@
 import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { readPostgresSiteSettings } from "@/core/config/site-settings";
+import { MAX_GLOBAL_SEARCH_RESULTS } from "@/core/config/site-settings-schema";
 import { database } from "@/core/db/postgres";
 import { validateSameOriginMutation } from "@/core/security/origin";
 import { readJsonBody } from "@/core/security/request-body";
 import { checkPostgresContentAccess } from "@/domains/access/postgres-content-access";
+import { getPostgresPublicNovel } from "@/domains/catalog/postgres-catalog";
 import { hasPostgresUserPermission } from "@/domains/identity/postgres-permissions";
+import { getPostgresNovelReadAccess } from "@/domains/reading/postgres-novel-access";
 import {
+  readOnlyContentSearchTransaction,
   searchPostgresContent,
   type PostgresContentSearchCursor,
+  type PostgresContentSearchPage,
 } from "@/domains/reading/postgres-content-search";
 import {
   findNormalizedChineseSearchRanges,
@@ -17,6 +22,7 @@ import {
 import { canBrowseHomePortal, canConsumeHomePortal } from "@/lib/home-portal";
 import { LOCALE_COOKIE, normalizeLocale, TRADITIONAL_LOCALE } from "@/lib/locale";
 import { localizeTexts, normalizeSearchText as normalizeLocaleSearchText } from "@/lib/locale-server";
+import { acquireSearchSlot } from "@/lib/search-admission";
 import { parseSimpleAndSearchQuery, validateSearchKeyword } from "@/lib/search-query";
 import { getCurrentUserFromRequest } from "@/lib/user-auth";
 
@@ -25,6 +31,8 @@ export const runtime = "nodejs";
 
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_CURSOR_BYTES = 512;
+/** How long a search waits for a free slot before the client is asked to retry. */
+const SEARCH_QUEUE_WAIT_MS = 2_000;
 
 type SearchFilters = {
   includeTags: string[];
@@ -42,9 +50,11 @@ type SearchBody = {
 };
 
 type CursorPayload = {
-  v: 1;
+  v: 2;
   m: string;
   d: string;
+  /** Results already listed, so a cursor walk cannot page past the result cap. */
+  n: number;
   s: string;
 };
 
@@ -101,14 +111,15 @@ function decodeCursor(value: unknown, scope: string): PostgresContentSearchCurso
     const parsed: unknown = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid_cursor");
     const cursor = parsed as Partial<CursorPayload>;
-    if (cursor.v !== 1 || cursor.s !== scope || typeof cursor.m !== "string" || typeof cursor.d !== "string") {
+    if (cursor.v !== 2 || cursor.s !== scope || typeof cursor.m !== "string" || typeof cursor.d !== "string" ||
+        !Number.isSafeInteger(cursor.n) || Number(cursor.n) < 0 || Number(cursor.n) > MAX_GLOBAL_SEARCH_RESULTS) {
       throw new Error("invalid_cursor");
     }
     if (!/^(?:0|[1-9]\d{0,18})$/u.test(cursor.m) || !/^[1-9]\d{0,18}$/u.test(cursor.d) ||
         BigInt(cursor.m) > 9_223_372_036_854_775_807n || BigInt(cursor.d) > 9_223_372_036_854_775_807n) {
       throw new Error("invalid_cursor");
     }
-    return { mtimeMs: cursor.m, documentId: cursor.d };
+    return { mtimeMs: cursor.m, documentId: cursor.d, shown: Number(cursor.n) };
   } catch {
     throw new Error("invalid_cursor");
   }
@@ -116,7 +127,7 @@ function decodeCursor(value: unknown, scope: string): PostgresContentSearchCurso
 
 function encodeCursor(cursor: PostgresContentSearchCursor | null, scope: string): string | null {
   if (!cursor) return null;
-  const payload: CursorPayload = { v: 1, m: cursor.mtimeMs, d: cursor.documentId, s: scope };
+  const payload: CursorPayload = { v: 2, m: cursor.mtimeMs, d: cursor.documentId, n: cursor.shown, s: scope };
   return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
 }
 
@@ -150,13 +161,29 @@ export async function POST(request: NextRequest) {
     return response;
   }
 
+  if (parsed.value.novelId !== undefined && typeof parsed.value.novelId !== "number") {
+    return jsonError("小说参数无效", 400);
+  }
+  const novelId = parsed.value.novelId;
+  if (novelId !== undefined && (!Number.isSafeInteger(novelId) || novelId < 1 || novelId > 2_147_483_647)) {
+    return jsonError("小说参数无效", 400);
+  }
+
   let library: string;
   try {
     library = normalizedSlug(parsed.value.library === undefined ? settings.defaultNovelLibrarySlug : parsed.value.library);
   } catch {
     return jsonError("书库参数无效", 400);
   }
-  if (library !== "all" && settings.novelSourceSearchModes[library] === "book") {
+  if (novelId !== undefined) {
+    // In-book search returns passages of the book, so it needs the same right as reading
+    // it. It is also the search that "book"-mode libraries are left with, so the library
+    // search mode does not apply to it.
+    const book = await getPostgresPublicNovel(database("web"), novelId);
+    if (!book) return jsonError("小说不存在", 404);
+    const readAccess = await getPostgresNovelReadAccess(database("web"), book, user, settings.homePortalAccessModes.novels);
+    if (!readAccess.allowed) return jsonError("无权搜索这本书的正文", 403);
+  } else if (library !== "all" && settings.novelSourceSearchModes[library] === "book") {
     return jsonError("该书库未加入全站正文索引，请进入具体书籍后使用“本书”搜索", 400);
   }
 
@@ -177,20 +204,15 @@ export async function POST(request: NextRequest) {
     : null;
   if (titleValidation && !titleValidation.ok) return jsonError(titleValidation.message, 400);
 
-  const novelId = parsed.value.novelId === undefined || typeof parsed.value.novelId !== "number"
-    ? undefined
-    : parsed.value.novelId;
-  if (parsed.value.novelId !== undefined && typeof parsed.value.novelId !== "number") {
-    return jsonError("小说参数无效", 400);
-  }
-  if (novelId !== undefined && (!Number.isSafeInteger(novelId) || novelId < 1 || novelId > 2_147_483_647)) {
-    return jsonError("小说参数无效", 400);
-  }
   const pageSize = settings.searchResultsPageSize;
+  const maxResults = settings.globalSearchMaxResults;
+  const lastPage = Math.max(1, Math.ceil(maxResults / pageSize));
   const pageInput = parsed.value.page === undefined ? 1 : Number(parsed.value.page);
-  if (!Number.isSafeInteger(pageInput) || pageInput < 1 || pageInput > Math.floor(2_147_483_647 / pageSize) + 1) {
+  if (!Number.isSafeInteger(pageInput) || pageInput < 1) {
     return jsonError("分页参数无效", 400);
   }
+  // A bookmarked page can outlive a lower result cap; list the last page instead of failing.
+  const requestedPage = Math.min(pageInput, lastPage);
   const scope = searchScope(validation.keyword, library, novelId, filters);
   let cursor: PostgresContentSearchCursor | undefined;
   try {
@@ -203,19 +225,37 @@ export async function POST(request: NextRequest) {
     .filter(([, mode]) => mode === "book")
     .map(([slug]) => slug);
   const usingCursor = parsed.value.page === undefined && cursor !== undefined;
-  const page = await searchPostgresContent(database("web"), validation.query, {
-    novelId,
-    sourceSlug: library,
-    excludedSourceSlugs,
-    includeTagSlugs: filters?.includeTags,
-    excludeTagSlugs: filters?.excludeTags,
-    titleQuery: titleValidation?.ok ? titleValidation.query : undefined,
-    audience: user?.role === "admin" ? "admin" : user ? "member" : "public",
-    cursor: parsed.value.page === undefined ? cursor : undefined,
-    offset: parsed.value.page === undefined && cursor ? undefined : (pageInput - 1) * pageSize,
-    limit: pageSize,
-    includeTotals: !usingCursor,
-  });
+  const slot = await acquireSearchSlot(settings.frontendSearchConcurrencyLimit, SEARCH_QUEUE_WAIT_MS);
+  if (!slot) {
+    const response = jsonError("搜索人数较多，请稍后再试", 429);
+    response.headers.set("Retry-After", "2");
+    return response;
+  }
+  let page: PostgresContentSearchPage;
+  try {
+    page = await searchPostgresContent(readOnlyContentSearchTransaction, validation.query, {
+      novelId,
+      // The book's own library and search mode were settled by its read-access check.
+      sourceSlug: novelId === undefined ? library : undefined,
+      excludedSourceSlugs: novelId === undefined ? excludedSourceSlugs : [],
+      includeTagSlugs: filters?.includeTags,
+      excludeTagSlugs: filters?.excludeTags,
+      titleQuery: titleValidation?.ok ? titleValidation.query : undefined,
+      audience: user?.role === "admin" ? "admin" : user ? "member" : "public",
+      maxResults,
+      pageSize,
+      page: usingCursor ? undefined : requestedPage,
+      cursor: usingCursor ? cursor : undefined,
+    });
+  } catch (error) {
+    console.error(JSON.stringify({
+      event: "search.content.failed",
+      message: error instanceof Error ? error.message : String(error),
+    }));
+    return jsonError("搜索暂时不可用，请稍后再试", 503);
+  } finally {
+    slot.release();
+  }
   const locale = normalizeLocale(request.cookies.get(LOCALE_COOKIE)?.value);
   const highlightNeedles = locale === TRADITIONAL_LOCALE
     ? await normalizeChineseSearchNeedles(validation.query.highlightTerms.map((term) => term.value))
@@ -234,9 +274,13 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     ok: true,
     items,
+    page: page.page,
     nextCursor: encodeCursor(page.nextCursor, scope),
     totalItems: page.totalItems,
     totalNovels: page.totalNovels,
     totalPages: page.totalItems === null ? null : Math.max(1, Math.ceil(page.totalItems / pageSize)),
+    capped: page.capped,
+    partial: page.partial,
+    maxResults,
   }, { headers: { "Cache-Control": "private, no-store" } });
 }

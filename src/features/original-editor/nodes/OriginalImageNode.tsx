@@ -13,6 +13,7 @@ import {
   type SerializedLexicalNode,
   type Spread,
 } from "lexical";
+import { useBlockSelection } from "./block-selection";
 import styles from "../OriginalComposer.module.css";
 
 export type OriginalImagePayload = {
@@ -134,9 +135,10 @@ function OriginalImage({
   height: number;
 }) {
   const [editor] = useLexicalComposerContext();
+  const [selected, ref] = useBlockSelection<HTMLElement>(nodeKey);
   const known = width > 1 && height > 1;
   return (
-    <figure className={styles.editorImage} contentEditable={false}>
+    <figure ref={ref} className={`${styles.editorImage}${selected ? ` ${styles.blockSelected}` : ""}`} contentEditable={false}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={src}

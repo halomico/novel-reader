@@ -52,7 +52,7 @@ export default async function OriginalPage({ searchParams }: OriginalPageProps) 
 
   return (
     <main className="appShell originalShell">
-      <SiteHeader currentUser={user} />
+      <SiteHeader currentUser={user} searchScope="originals" />
       <PageContextBar
         items={[{ label: tr("首页"), href: "/" }, { label: tr("原创") }]}
         search={<OriginalBrowseControls q={q} tag={tag} sort={sort} order={order} locale={locale} />}

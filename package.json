@@ -4,7 +4,7 @@
   "description": "A clean Chinese novel reader with configurable local library storage.",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
     "build": "next build && node scripts/sanitize-standalone.mjs",
     "start": "node --env-file=.env .next/standalone/server.js",
     "scan:books": "node --import tsx scripts/scan-books.ts",

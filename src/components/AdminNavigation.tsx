@@ -18,10 +18,10 @@ import {
   Tags,
   Users,
 } from "lucide-react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { adminNavKeyForPathname, type AdminNavKey } from "@/lib/admin-navigation";
+import { adminNavKeyForPathname } from "@/lib/admin-navigation";
 import { ADMIN_SIDEBAR_STORAGE_KEY } from "@/lib/ui-preferences";
 
 export type { AdminNavKey } from "@/lib/admin-navigation";
@@ -41,25 +41,46 @@ const navItems = [
   { href: "/admin/settings", label: "系统设置", value: "settings", icon: Settings },
 ] as const;
 
+/** Marks its link while the destination is loading; rendered inside the link. */
+function AdminNavLabel({ label }: { label: string }) {
+  const { pending } = useLinkStatus();
+  return <span data-pending={pending || undefined}>{label}</span>;
+}
+
 function AdminNavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
+  // The highlight follows the committed URL only. Click feedback comes from each
+  // link's own pending status, so an interrupted or superseded navigation can never
+  // leave a stale item highlighted next to a different page.
   const active = adminNavKeyForPathname(pathname);
-  const [prevPathname, setPrevPathname] = useState(pathname);
-  const [pendingActive, setPendingActive] = useState<AdminNavKey | null>(null);
+  const intentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  if (prevPathname !== pathname) {
-    setPrevPathname(pathname);
-    setPendingActive(null);
+  useEffect(() => () => {
+    if (intentTimerRef.current) clearTimeout(intentTimerRef.current);
+  }, []);
+
+  // Admin pages are dynamic and data heavy: prefetch the one the pointer rests
+  // on instead of rendering every section whenever the sidebar is visible.
+  function cancelIntentPrefetch() {
+    if (intentTimerRef.current) clearTimeout(intentTimerRef.current);
+    intentTimerRef.current = null;
   }
 
-  const currentActive = pendingActive ?? active;
+  function scheduleIntentPrefetch(href: string) {
+    cancelIntentPrefetch();
+    if (href === pathname) return;
+    intentTimerRef.current = setTimeout(() => {
+      intentTimerRef.current = null;
+      router.prefetch(href);
+    }, 60);
+  }
 
   return (
     <nav className="adminSideNav" aria-label="后台导航">
       {navItems.map((item) => {
         const Icon = item.icon;
-        const isItemActive = item.value === currentActive;
+        const isItemActive = item.value === active;
         return (
           <Link
             className={isItemActive ? "isActive" : ""}
@@ -67,19 +88,18 @@ function AdminNavLinks({ onNavigate }: { onNavigate?: () => void }) {
             key={item.value}
             title={item.label}
             aria-current={isItemActive ? "page" : undefined}
-            prefetch
+            prefetch={false}
+            onPointerEnter={() => scheduleIntentPrefetch(item.href)}
+            onPointerLeave={cancelIntentPrefetch}
+            onFocus={() => scheduleIntentPrefetch(item.href)}
             onPointerDown={() => {
+              cancelIntentPrefetch();
               if (item.href !== pathname) router.prefetch(item.href);
             }}
-            onClick={() => {
-              if (item.value !== active) {
-                setPendingActive(item.value);
-              }
-              onNavigate?.();
-            }}
+            onClick={onNavigate}
           >
             <Icon size={18} aria-hidden="true" />
-            <span>{item.label}</span>
+            <AdminNavLabel label={item.label} />
           </Link>
         );
       })}

@@ -1,10 +1,11 @@
 "use client";
 
 import type { JSX } from "react";
-import { LockKeyhole, Trash2 } from "lucide-react";
+import { LockKeyhole } from "lucide-react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
   $applyNodeReplacement,
+  $createParagraphNode,
   $getNodeByKey,
   $isElementNode,
   DecoratorNode,
@@ -14,6 +15,7 @@ import {
   type SerializedLexicalNode,
   type Spread,
 } from "lexical";
+import { useBlockSelection } from "./block-selection";
 import styles from "../OriginalComposer.module.css";
 
 export type SerializedPaidGateNode = Spread<
@@ -58,37 +60,54 @@ export class PaidGateNode extends DecoratorNode<JSX.Element> {
   }
 
   decorate(): JSX.Element {
-    return <PaidGateCard nodeKey={this.__key} />;
+    return <PaidGateMarker nodeKey={this.__key} />;
   }
 }
 
 /**
- * The boundary is a block the writer can see and act on, not an invisible marker.
- * Removing it here goes through the editor so it is a single undoable step, and the
- * caret is put back in the document rather than left inside a decorator.
+ * The boundary is a thin labelled rule in the flow of the text, not a card: the prose
+ * stays the thing the eye lands on. One click selects it (Backspace removes it, the
+ * arrow keys step over it); the remove button does the same in one step and puts the
+ * caret back into the text, so it is a single undoable edit on a touch screen too.
  */
-function PaidGateCard({ nodeKey }: { nodeKey: NodeKey }): JSX.Element {
+function PaidGateMarker({ nodeKey }: { nodeKey: NodeKey }): JSX.Element {
   const [editor] = useLexicalComposerContext();
+  const [selected, ref] = useBlockSelection<HTMLDivElement>(nodeKey);
   return (
-    <div className={styles.paidGateCard} contentEditable={false}>
-      <LockKeyhole size={17} aria-hidden="true" />
-      <strong>公开内容到此结束</strong>
-      <small>以下内容仅在读者解锁后显示</small>
+    <div
+      ref={ref}
+      className={`${styles.paidGateMarker}${selected ? ` ${styles.blockSelected}` : ""}`}
+      contentEditable={false}
+      role="separator"
+      aria-label="付费分界"
+    >
+      <span className={styles.paidGateLabel}>
+        <LockKeyhole size={14} aria-hidden="true" />以下内容需付费解锁
+      </span>
       <button
         type="button"
         className={styles.paidGateRemove}
         onMouseDown={(event) => event.preventDefault()}
-        onClick={() => {
+        onClick={(event) => {
+          event.stopPropagation();
           editor.update(() => {
             const node = $getNodeByKey(nodeKey);
-            const focus = node?.getNextSibling() || node?.getPreviousSibling();
-            node?.remove();
-            if ($isElementNode(focus)) focus.selectStart();
+            if (!node) return;
+            const previous = node.getPreviousSibling();
+            const next = node.getNextSibling();
+            node.remove();
+            if ($isElementNode(previous)) previous.selectEnd();
+            else if ($isElementNode(next)) next.selectStart();
+            else {
+              const paragraph = $createParagraphNode();
+              if (next) next.insertBefore(paragraph); else if (previous) previous.insertAfter(paragraph);
+              paragraph.select();
+            }
           });
           editor.focus();
         }}
       >
-        <Trash2 size={13} aria-hidden="true" />移除分界
+        移除
       </button>
     </div>
   );

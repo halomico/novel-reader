@@ -5,12 +5,11 @@ import {
   Bookmark,
   ChevronLeft,
   ChevronRight,
+  Ellipsis,
   Flag,
   Info,
   List,
-  Moon,
   Settings2,
-  Sun,
   Trees,
 } from "lucide-react";
 import Link from "@/components/LocalizedLink";
@@ -28,7 +27,7 @@ import { ReaderDisplaySettingsPanel, useReaderDisplayPreferences } from "./Reade
 
 type ChapterItem = { id: number; title: string; wordCount: number };
 type NavigationItem = { id: number; title: string };
-type ReaderPanel = "directory" | "info" | "settings" | null;
+type ReaderPanel = "directory" | "info" | "settings" | "more" | null;
 
 const MOBILE_READER_QUERY = "(max-width: 820px)";
 
@@ -108,7 +107,7 @@ export function ReaderExperienceControls({
     }
   }
 
-  const panelTitle = panel === "directory" ? "章节目录" : panel === "info" ? "详情" : "设置";
+  const panelTitle = panel === "directory" ? "章节目录" : panel === "info" ? "详情" : panel === "more" ? "更多" : "设置";
   // The reader rail is a document-level navigator. Keep its wording stable
   // across chapter and single-file novels; horizontal page turns stay a
   // gesture/edge interaction rather than a second set of page buttons.
@@ -141,39 +140,38 @@ export function ReaderExperienceControls({
             <ChevronRight size={20} aria-hidden="true" /><span>{nextLabel}</span>
           </span>
         )}
-        <button className="readerToolItem isInfo" type="button" onClick={() => setPanel("info")}>
+        <button className="readerToolItem isInfo isSecondary" type="button" onClick={() => setPanel("info")}>
           <Info size={20} aria-hidden="true" /><span>详情</span>
         </button>
-        <button className="readerToolItem isTheme" type="button" onClick={preferences.toggleTheme}>
-          {preferences.readerIsDark ? <Sun size={20} aria-hidden="true" /> : <Moon size={20} aria-hidden="true" />}
-          <span>{preferences.readerIsDark ? "日间" : "夜间"}</span>
-        </button>
         {authenticated ? (
-          <span className="readerToolItem readerToolAction isGrove"><GroveButton contentType="novel" contentId={bookId} initialPlanted={initialInGrove} showLabel /></span>
+          <span className="readerToolItem readerToolAction isGrove isSecondary"><GroveButton contentType="novel" contentId={bookId} initialPlanted={initialInGrove} showLabel /></span>
         ) : (
-          <Link className="readerToolItem readerToolAction isGrove" href={`/login?returnTo=${encodeURIComponent(returnHref || pathname)}`} title="登录后加入回响林">
+          <Link className="readerToolItem readerToolAction isGrove isSecondary" href={`/login?returnTo=${encodeURIComponent(returnHref || pathname)}`} title="登录后加入回响林">
             <Trees size={20} aria-hidden="true" /><span>回响林</span>
           </Link>
         )}
         {authenticated ? (
-          <span className="readerToolItem readerToolAction isFavorite"><NovelFavoriteButton novelId={bookId} initialFavorite={initialFavorite} showLabel /></span>
+          <span className="readerToolItem readerToolAction isFavorite isSecondary"><NovelFavoriteButton novelId={bookId} initialFavorite={initialFavorite} showLabel /></span>
         ) : (
-          <Link className="readerToolItem readerToolAction isFavorite" href={`/login?returnTo=${encodeURIComponent(returnHref || pathname)}`} title="登录后收藏">
+          <Link className="readerToolItem readerToolAction isFavorite isSecondary" href={`/login?returnTo=${encodeURIComponent(returnHref || pathname)}`} title="登录后收藏">
             <Bookmark size={20} aria-hidden="true" /><span>收藏</span>
           </Link>
         )}
         {canReport ? (
-          <span className="readerToolItem readerToolAction isReport"><ReportNovelButton novelId={bookId} title={title} variant="responsive" /></span>
+          <span className="readerToolItem readerToolAction isReport isSecondary"><ReportNovelButton novelId={bookId} title={title} variant="responsive" /></span>
         ) : (
-          <Link className="readerToolItem readerToolAction isReport" href={`/login?returnTo=${encodeURIComponent(returnHref || pathname)}`} title="登录后反馈问题">
+          <Link className="readerToolItem readerToolAction isReport isSecondary" href={`/login?returnTo=${encodeURIComponent(returnHref || pathname)}`} title="登录后反馈问题">
             <Flag size={20} aria-hidden="true" /><span>反馈</span>
           </Link>
         )}
         <button className="readerToolItem isSettings" type="button" onClick={() => setPanel("settings")}>
           <Settings2 size={20} aria-hidden="true" /><span>设置</span>
         </button>
-        <button className="readerToolItem isBackTop" type="button" onClick={preferences.scrollTop}>
+        <button className="readerToolItem isBackTop isSecondary" type="button" onClick={preferences.scrollTop}>
           <ArrowUp size={20} aria-hidden="true" /><span>回顶</span>
+        </button>
+        <button className="readerToolItem isMore" type="button" onClick={() => setPanel("more")}>
+          <Ellipsis size={21} aria-hidden="true" /><span>更多</span>
         </button>
       </ReaderToolRail>
       {panel ? (
@@ -198,6 +196,27 @@ export function ReaderExperienceControls({
             ) : null}
             {panel === "settings" ? (
               <ReaderDisplaySettingsPanel preferences={preferences} showPageTurn showJustify />
+            ) : null}
+            {panel === "more" ? (
+              <div className="readerMoreMenu" role="menu" aria-label="更多阅读操作">
+                <button className="readerMoreAction" type="button" onClick={() => setPanel("info")}><Info size={20} aria-hidden="true" /><span>详情</span></button>
+                {authenticated ? (
+                  <span className="readerMoreAction readerToolAction"><GroveButton contentType="novel" contentId={bookId} initialPlanted={initialInGrove} showLabel /></span>
+                ) : (
+                  <Link className="readerMoreAction" href={`/login?returnTo=${encodeURIComponent(returnHref || pathname)}`}><Trees size={20} aria-hidden="true" /><span>回响林</span></Link>
+                )}
+                {authenticated ? (
+                  <span className="readerMoreAction readerToolAction"><NovelFavoriteButton novelId={bookId} initialFavorite={initialFavorite} showLabel /></span>
+                ) : (
+                  <Link className="readerMoreAction" href={`/login?returnTo=${encodeURIComponent(returnHref || pathname)}`}><Bookmark size={20} aria-hidden="true" /><span>收藏</span></Link>
+                )}
+                {canReport ? (
+                  <span className="readerMoreAction readerToolAction"><ReportNovelButton novelId={bookId} title={title} variant="responsive" /></span>
+                ) : (
+                  <Link className="readerMoreAction" href={`/login?returnTo=${encodeURIComponent(returnHref || pathname)}`}><Flag size={20} aria-hidden="true" /><span>反馈</span></Link>
+                )}
+                <button className="readerMoreAction" type="button" onClick={() => { closeReaderPanel(); preferences.scrollTop(); }}><ArrowUp size={20} aria-hidden="true" /><span>回顶</span></button>
+              </div>
             ) : null}
         </ReaderSidePanel>
       ) : null}

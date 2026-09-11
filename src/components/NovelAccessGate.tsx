@@ -9,10 +9,13 @@ export function NovelAccessGate({
   novelId,
   price,
   loginRequired,
+  notice,
 }: {
   novelId: number;
   price: number;
   loginRequired: boolean;
+  /** Why the reader landed on the gate, e.g. a search hit inside a locked chapter. */
+  notice?: string;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -41,20 +44,30 @@ export function NovelAccessGate({
   const returnTo = `${pathname}${searchParams.size ? `?${searchParams.toString()}` : ""}`;
   return (
     <section className="novelAccessGate" aria-live="polite">
-      <div>
+      <div className="novelAccessGateAction">
         <strong>{loginRequired ? "登录后继续阅读" : "解锁完整内容"}</strong>
+        {loginRequired ? (
+          <button
+            type="button"
+            className="novelAccessGateButton"
+            onClick={() => router.push(`/login?returnTo=${encodeURIComponent(returnTo)}`)}
+          >
+            <LogIn size={17} aria-hidden="true" />登录
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="novelAccessGateButton"
+            onClick={() => void unlock()}
+            disabled={loading}
+          >
+            {loading ? <LoaderCircle className="isSpinning" size={17} aria-hidden="true" /> : <CupSoda size={17} aria-hidden="true" />}
+            {price} 苏打
+          </button>
+        )}
       </div>
-      {loginRequired ? (
-        <button type="button" onClick={() => router.push(`/login?returnTo=${encodeURIComponent(returnTo)}`)}>
-          <LogIn size={17} aria-hidden="true" />登录
-        </button>
-      ) : (
-        <button type="button" onClick={() => void unlock()} disabled={loading}>
-          {loading ? <LoaderCircle className="isSpinning" size={17} aria-hidden="true" /> : <CupSoda size={17} aria-hidden="true" />}
-          {price} 苏打
-        </button>
-      )}
-      {message ? <small role="alert">{message}</small> : null}
+      {notice ? <small className="novelAccessGateNotice">{notice}</small> : null}
+      {message ? <small className="novelAccessGateError" role="alert">{message}</small> : null}
     </section>
   );
 }

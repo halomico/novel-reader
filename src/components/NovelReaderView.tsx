@@ -94,8 +94,6 @@ function ReaderSegments({
   });
 }
 
-type ReaderDisplayTag = { id: number; name: string; slug: string };
-
 function ReaderPagedIntro({
   title,
   subtitle,
@@ -104,27 +102,14 @@ function ReaderPagedIntro({
 }: {
   title: string;
   subtitle?: string;
-  tags: ReaderDisplayTag[];
+  tags: Array<{ id: number; name: string; slug: string }>;
   library: string;
 }) {
   return (
     <header className="readerPagedIntro">
       <h1>{title}</h1>
       {subtitle ? <p>{subtitle}</p> : null}
-      {tags.length ? (
-        <nav className="readerPagedIntroTags" aria-label="文章标签">
-          {tags.map((tag) => (
-            <Link
-              className="tagChip contentTagLink"
-              href={`/tags/${tag.slug}${library === "default" ? "" : `?library=${encodeURIComponent(library)}`}`}
-              key={tag.id}
-              prefetch={false}
-            >
-              {tag.name}
-            </Link>
-          ))}
-        </nav>
-      ) : null}
+      <ReaderTagLinks tags={tags} library={library} />
     </header>
   );
 }
@@ -247,7 +232,7 @@ async function ReaderContent({
   nextContentBytes?: number | null;
   pagedTitle: string;
   pagedSubtitle?: string;
-  pagedTags: ReaderDisplayTag[];
+  pagedTags: Array<{ id: number; name: string; slug: string }>;
   library: string;
 }) {
   const chapter = chapterContext?.chapter || null;
@@ -293,6 +278,12 @@ async function ReaderContent({
         <div className="readerText">
           <ReaderPagedIntro title={pagedTitle} subtitle={pagedSubtitle} tags={pagedTags} library={library} />
           <ReaderSegments segments={segments} hitSegment={resolvedHitSegment} />
+          {/* Locked books stay searchable, so a hit can sit past the free preview. The
+              reader then lands on the last free paragraph; say why instead of leaving
+              the matched passage silently missing. */}
+          {preview && !chapter && Number.isSafeInteger(hitCharOffset) && hitCharOffset >= published.totalUtf16Length ? (
+            <p className="readerSearchHitLocked" role="note">搜索命中的段落位于付费部分，解锁后即可继续阅读。</p>
+          ) : null}
         </div>
         <ReaderPageTurnController
           previousHref={previousHref}
@@ -518,6 +509,11 @@ export async function NovelReaderView({
             novelId={book.id}
             price={readAccess.price}
             loginRequired={readAccess.reason === "login_required"}
+            notice={Number.isSafeInteger(hitCharOffset)
+              ? readAccess.reason === "login_required"
+                ? "登录后即可继续阅读搜索命中的段落。"
+                : "搜索命中的段落位于付费章节，解锁后即可阅读。"
+              : undefined}
           />
         )}
         {!readAccess.allowed ? (

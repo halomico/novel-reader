@@ -20,7 +20,6 @@ import {
   UI_PREFERENCES_MIGRATION_KEY,
   UI_PREFERENCES_MIGRATION_VERSION,
   DEFAULT_READER_LINE_HEIGHT,
-  getColorPaletteTextTokens,
   getReaderThemeSystemTheme,
   type ColorPalette,
   type ReaderLineHeight,
@@ -28,6 +27,7 @@ import {
   type ReaderTagsMode,
 } from "@/lib/ui-preferences";
 import { READER_KEEP_CHROME_SESSION_KEY } from "@/lib/reader-layout";
+import { colorPaletteProperties } from "@/lib/palette-client";
 import {
   DEFAULT_LOCALE,
   LOCALE_COOKIE,
@@ -50,10 +50,7 @@ export function ThemeScript({
   defaultReaderTagsMode?: ReaderTagsMode;
   defaultPageTurn?: ReaderPageTurn;
 }) {
-  const paletteTokens = Object.fromEntries(COLOR_PALETTES.map((palette) => [palette.value, {
-    ...palette,
-    ...getColorPaletteTextTokens(palette),
-  }]));
+  const paletteTokens = Object.fromEntries(COLOR_PALETTES.map((palette) => [palette.value, colorPaletteProperties(palette.value)]));
   const readerThemeSystemThemes = Object.fromEntries(
     READER_THEME_OPTIONS.map((theme) => [theme.value, getReaderThemeSystemTheme(theme.value)]),
   );
@@ -80,7 +77,8 @@ export function ThemeScript({
         var theme = localStorage.getItem("novel-theme") || ${JSON.stringify(defaultTheme)};
         var paletteName = localStorage.getItem(${JSON.stringify(PALETTE_STORAGE_KEY)}) || ${JSON.stringify(defaultPalette)};
         var palettes = ${JSON.stringify(paletteTokens)};
-        var palette = palettes[paletteName] || palettes[${JSON.stringify(defaultPalette)}];
+        var validPalette = Object.prototype.hasOwnProperty.call(palettes, paletteName) ? paletteName : ${JSON.stringify(defaultPalette)};
+        var palette = palettes[validPalette];
         var readerTags = localStorage.getItem(${JSON.stringify(READER_TAGS_STORAGE_KEY)});
         var readerHotwords = localStorage.getItem(${JSON.stringify(READER_HOTWORDS_STORAGE_KEY)});
         var readerLineHeights = ${JSON.stringify(READER_LINE_HEIGHTS)};
@@ -124,7 +122,7 @@ export function ThemeScript({
         } else {
           root.removeAttribute("data-theme");
         }
-        root.dataset.palette = palette.value;
+        root.dataset.palette = validPalette;
         root.dataset.readerTags = readerTags === "collapsed"
           ? "collapsed"
           : (readerTags === "hidden" || readerTags === "hide"
@@ -144,12 +142,7 @@ export function ThemeScript({
         } else {
           root.style.setProperty("--reader-preferred-paper-width", readerWidth + "px");
         }
-        root.style.setProperty("--palette-light-accent", palette.lightAccent);
-        root.style.setProperty("--palette-light-strong", palette.lightStrong);
-        root.style.setProperty("--palette-dark-accent", palette.darkAccent);
-        root.style.setProperty("--palette-dark-strong", palette.darkStrong);
-        root.style.setProperty("--palette-light-text", palette.lightText);
-        root.style.setProperty("--palette-dark-text", palette.darkText);
+        Object.keys(palette).forEach(function(property) { root.style.setProperty(property, palette[property]); });
         if (localStorage.getItem(${JSON.stringify(UI_PREFERENCES_MIGRATION_KEY)}) !== ${JSON.stringify(UI_PREFERENCES_MIGRATION_VERSION)}) {
           ${JSON.stringify(LEGACY_UI_STORAGE_KEYS)}.forEach(function(key) { localStorage.removeItem(key); });
           document.cookie = "novel-page-size=; Path=/; Max-Age=0; SameSite=Lax";

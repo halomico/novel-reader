@@ -3,42 +3,57 @@
 import { $isCodeNode } from "@lexical/code";
 import { $isLinkNode } from "@lexical/link";
 import { $isListItemNode, $isListNode } from "@lexical/list";
-import { $isQuoteNode } from "@lexical/rich-text";
+import { $createQuoteNode, $isHeadingNode, $isQuoteNode } from "@lexical/rich-text";
 import { $setBlocksType } from "@lexical/selection";
 import {
   $createParagraphNode,
   $getSelection,
   $isElementNode,
+  $isParagraphNode,
   $isRangeSelection,
   $isTextNode,
   type ElementNode,
   type LexicalNode,
   type RangeSelection,
-  type TextFormatType,
 } from "lexical";
+import { $createOriginalHeadingNode } from "./nodes/OriginalHeadingNode";
 
-/** The inline formats the toolbar can apply, lock and clear. */
-export const ORIGINAL_TEXT_FORMATS = ["bold", "italic", "underline", "strikethrough", "code"] as const;
+/** The inline formats the toolbar toggles and clears. */
+export const ORIGINAL_TEXT_FORMATS = ["bold", "italic", "underline", "strikethrough"] as const;
 export type OriginalTextFormat = (typeof ORIGINAL_TEXT_FORMATS)[number];
 
-export const EMPTY_TEXT_FORMATS: Record<OriginalTextFormat, boolean> = {
-  bold: false,
-  italic: false,
-  underline: false,
-  strikethrough: false,
-  code: false,
+/** The block kinds the toolbar can switch the current block to and back. */
+export type OriginalBlockKind = "paragraph" | "heading" | "quote" | "other";
+
+export type OriginalSelectionState = {
+  formats: Record<OriginalTextFormat, boolean>;
+  block: OriginalBlockKind;
 };
 
-export function readSelectionFormats(): Record<OriginalTextFormat, boolean> {
+export const EMPTY_SELECTION_STATE: OriginalSelectionState = {
+  formats: { bold: false, italic: false, underline: false, strikethrough: false },
+  block: "paragraph",
+};
+
+/** What the toolbar should show as pressed for the current selection, including the
+ *  pending format a collapsed caret will type with. */
+export function $readSelectionState(): OriginalSelectionState {
   const selection = $getSelection();
-  if (!$isRangeSelection(selection)) return EMPTY_TEXT_FORMATS;
+  if (!$isRangeSelection(selection)) return EMPTY_SELECTION_STATE;
+  const top = selection.anchor.getNode().getTopLevelElement();
   return {
-    bold: selection.hasFormat("bold"),
-    italic: selection.hasFormat("italic"),
-    underline: selection.hasFormat("underline"),
-    strikethrough: selection.hasFormat("strikethrough"),
-    code: selection.hasFormat("code"),
+    formats: {
+      bold: selection.hasFormat("bold"),
+      italic: selection.hasFormat("italic"),
+      underline: selection.hasFormat("underline"),
+      strikethrough: selection.hasFormat("strikethrough"),
+    },
+    block: $isHeadingNode(top) ? "heading" : $isQuoteNode(top) ? "quote" : $isParagraphNode(top) ? "paragraph" : "other",
   };
+}
+
+export function sameSelectionState(left: OriginalSelectionState, right: OriginalSelectionState): boolean {
+  return left.block === right.block && ORIGINAL_TEXT_FORMATS.every((format) => left.formats[format] === right.formats[format]);
 }
 
 /** A fenced code block stores literal text; inline styles there would be lost on export. */
@@ -49,6 +64,23 @@ export function $selectionIsInCode(selection: RangeSelection): boolean {
     }
   }
   return false;
+}
+
+/** One click turns the blocks under the selection into `kind`; a second click on the
+ *  same button turns them back into body text. */
+export function $toggleBlock(kind: "heading" | "quote"): void {
+  const selection = $getSelection();
+  if (!$isRangeSelection(selection)) return;
+  const current = $readSelectionState().block;
+  $setBlocksType(selection, () => {
+    if (current === kind) return $createParagraphNode();
+    return kind === "heading" ? $createOriginalHeadingNode("h1") : $createQuoteNode();
+  });
+}
+
+export function $setParagraphBlocks(): void {
+  const selection = $getSelection();
+  if ($isRangeSelection(selection)) $setBlocksType(selection, () => $createParagraphNode());
 }
 
 function orderedPoints(selection: RangeSelection) {
@@ -154,7 +186,7 @@ export function $clearFormatting(): void {
       block.remove();
       continue;
     }
-    if ($isQuoteNode(block) || block.getType() === "heading" || block.getType() === "original-heading") {
+    if ($isQuoteNode(block) || $isHeadingNode(block)) {
       const paragraph = $createParagraphNode();
       paragraph.append(...block.getChildren());
       block.replace(paragraph);
@@ -162,18 +194,10 @@ export function $clearFormatting(): void {
   }
 }
 
-/** Turn the blocks touched by the selection into `create()` without disturbing others. */
-export function $setSelectedBlocks(create: () => ElementNode): void {
-  const selection = $getSelection();
-  if (!$isRangeSelection(selection)) return;
-  $setBlocksType(selection, create);
-}
-
 /**
- * A guaranteed way out of any block. Code blocks legitimately contain blank lines and
- * quotes legitimately contain blank paragraphs, so "press Enter twice" cannot be the
- * only exit. This inserts a fresh paragraph directly after the enclosing top-level
- * block and puts the caret in it.
+ * A guaranteed way out of any block (Ctrl/⌘+Enter). Code blocks legitimately contain
+ * blank lines, so "press Enter on an empty line" cannot be their only exit. This inserts
+ * a fresh paragraph directly after the enclosing top-level block and puts the caret in it.
  */
 export function $escapeCurrentBlock(): boolean {
   const selection = $getSelection();
@@ -184,26 +208,4 @@ export function $escapeCurrentBlock(): boolean {
   block.insertAfter(paragraph);
   paragraph.select();
   return true;
-}
-
-/** Apply the formats the toolbar has locked to a collapsed caret. Returns true when
- *  something actually changed, so callers can skip a pointless editor update. */
-export function $applyLockedFormats(locked: readonly OriginalTextFormat[]): boolean {
-  const selection = $getSelection();
-  if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
-  if ($selectionIsInCode(selection)) return false;
-  let changed = false;
-  for (const format of locked) {
-    if (selection.hasFormat(format as TextFormatType)) continue;
-    selection.formatText(format as TextFormatType);
-    changed = true;
-  }
-  return changed;
-}
-
-export function $lockedFormatsMissing(locked: readonly OriginalTextFormat[]): boolean {
-  const selection = $getSelection();
-  if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
-  if ($selectionIsInCode(selection)) return false;
-  return locked.some((format) => !selection.hasFormat(format as TextFormatType));
 }

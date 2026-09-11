@@ -29,7 +29,7 @@ import {
   publishPostgresContent,
   readPublishedContentWindow,
 } from "../src/domains/reading/postgres-content";
-import { searchPostgresContent } from "../src/domains/reading/postgres-content-search";
+import { readOnlyContentSearchTransaction, searchPostgresContent } from "../src/domains/reading/postgres-content-search";
 import {
   getOriginalArticleBySlug,
   listOriginalArticles,
@@ -343,7 +343,7 @@ test("real PostgreSQL 18 + pg_bigm integration", { timeout: 180_000 }, async (t)
         title_search_original, content_search_original, normalization_version
       ) VALUES (
         'pg-original-integration', $1, '繁體原創', '集成摘要', '公开正文', '付费正文', 8,
-        'paid', 3, 'published', clock_timestamp(), '繁體原創', '公开正文付费正文', 1
+        'paid', 3, 'published', clock_timestamp(), '繁體原創', '公开正文', 1
       ) RETURNING id
     `, [authorId]);
     const articleId = Number(inserted.rows[0].id);
@@ -355,18 +355,16 @@ test("real PostgreSQL 18 + pg_bigm integration", { timeout: 180_000 }, async (t)
     assert.equal(detail?.paidBodyMarkdown, "付费正文");
 
     const paidContentQuery = parsedContentQuery("付费正文");
+    for (const viewer of [null, { id: readerId, role: "user" as const }, { id: authorId, role: "user" as const }]) {
+      assert.deepEqual((await searchPostgresOriginalArticles(database(), {
+        viewer,
+        contentQuery: paidContentQuery,
+      })).items, [], "paid original bodies are never indexed, whoever searches");
+    }
     assert.deepEqual((await searchPostgresOriginalArticles(database(), {
       viewer: null,
-      contentQuery: paidContentQuery,
-    })).items, [], "guests must not discover paid original content");
-    assert.deepEqual((await searchPostgresOriginalArticles(database(), {
-      viewer: { id: readerId, role: "user" },
-      contentQuery: paidContentQuery,
-    })).items, [], "locked readers must not discover paid original content");
-    assert.deepEqual((await searchPostgresOriginalArticles(database(), {
-      viewer: { id: authorId, role: "user" },
-      contentQuery: paidContentQuery,
-    })).items.map((article) => article.id), [articleId], "authors retain search access to their paid article");
+      contentQuery: parsedContentQuery("公开正文"),
+    })).items.map((article) => article.id), [articleId], "the public part of a paid original stays discoverable");
 
     const firstPurchase = await purchaseOriginalArticle(articleId, readerId);
     assert.deepEqual(firstPurchase, { purchased: true, price: 3 });
@@ -375,7 +373,7 @@ test("real PostgreSQL 18 + pg_bigm integration", { timeout: 180_000 }, async (t)
     assert.deepEqual((await searchPostgresOriginalArticles(database(), {
       viewer: { id: readerId, role: "user" },
       contentQuery: paidContentQuery,
-    })).items.map((article) => article.id), [articleId], "purchased paid originals become searchable");
+    })).items, [], "unlocking changes what a reader can open, not what search indexes");
     const balances = await pool.query<{ username: string; soda_balance: string }>(
       "SELECT username, soda_balance FROM users WHERE id = ANY($1::bigint[]) ORDER BY username",
       [[authorId, readerId]],
@@ -415,7 +413,7 @@ test("real PostgreSQL 18 + pg_bigm integration", { timeout: 180_000 }, async (t)
     const first = await readPublishedContentWindow(database(), { documentId: build.documentId, contentVersion: build.contentVersion, blockNo: 0 });
     assert.equal(first.blocks.length, 2);
     assert.equal(first.blocks[0].originalText + first.blocks[1].originalText, text.slice(0, first.blocks[1].charEnd));
-    const contentMatches = await searchPostgresContent(database(), parsedContentQuery("繁体龙门 终章"));
+    const contentMatches = await searchPostgresContent(readOnlyContentSearchTransaction, parsedContentQuery("繁体龙门 终章"), { maxResults: 1_000 });
     assert.deepEqual(contentMatches.items.map((item) => item.novelId), [novelId!]);
     await assert.rejects(
       readPublishedContentWindow(database(), { documentId: build.documentId, contentVersion: "stale", blockNo: 0 }),

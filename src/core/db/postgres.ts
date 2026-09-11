@@ -57,15 +57,31 @@ function poolState(): PoolState {
   return state.novelReaderPostgres;
 }
 
-function createPool(role: PostgresPoolRole): Pool {
+function roleStatementTimeoutMs(role: PostgresPoolRole): number {
   const isWeb = role === "web";
   const isMigration = role === "migrations";
-  const statementTimeout = readInteger(
+  return readInteger(
     isWeb ? "PG_WEB_STATEMENT_TIMEOUT_MS" : isMigration ? "PG_MIGRATION_STATEMENT_TIMEOUT_MS" : "PG_JOB_STATEMENT_TIMEOUT_MS",
     isWeb ? 3_000 : isMigration ? 300_000 : 30_000,
     250,
     900_000,
   );
+}
+
+/**
+ * node-postgres aborts a query on a client-side timer as well as the server's
+ * statement_timeout, and that timer is not raised by a per-statement `SET`. A statement
+ * that deliberately outlives the pool's default timeout must still finish inside this,
+ * or it fails as a client error instead of a cancellable statement timeout.
+ */
+export function postgresQueryTimeoutMs(role: PostgresPoolRole = "web"): number {
+  return roleStatementTimeoutMs(role) + 1_000;
+}
+
+function createPool(role: PostgresPoolRole): Pool {
+  const isMigration = role === "migrations";
+  const isWeb = role === "web";
+  const statementTimeout = roleStatementTimeoutMs(role);
   const config: PoolConfig = {
     connectionString: databaseUrl(role),
     application_name: `novel-reader-${role}`,
@@ -110,8 +126,13 @@ function observe<Row extends QueryResultRow>(
     });
 }
 
+const executors = new Map<DatabaseRole, SqlExecutor>();
+
+/** Executors are stable per role so per-executor caches can key on identity. */
 export function database(role: DatabaseRole = "web"): SqlExecutor {
-  return {
+  const existing = executors.get(role);
+  if (existing) return existing;
+  const executor: SqlExecutor = {
     query: <Row extends QueryResultRow>(query: SqlQuery) => observe(
       role,
       () => getPostgresPool(role).query<Row>({
@@ -121,6 +142,8 @@ export function database(role: DatabaseRole = "web"): SqlExecutor {
       }),
     ),
   };
+  executors.set(role, executor);
+  return executor;
 }
 
 export type TransactionOptions = {

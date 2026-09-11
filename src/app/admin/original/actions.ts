@@ -11,6 +11,7 @@ import {
   deleteOriginalComments,
   setOriginalArticlePinned,
   setOriginalArticleStatus,
+  setOriginalArticlesStatus,
   setOriginalCommentStatus,
   updateOriginalArticleAsAdmin,
   type OriginalArticleStatus,
@@ -73,6 +74,39 @@ export async function deleteOriginalArticlesBatchAction(formData: FormData) {
   revalidatePath("/original", "layout");
   revalidatePath("/admin/original", "layout");
   noticePath(returnPath(formData), `已删除 ${deleted} 篇文章`);
+}
+
+export async function deleteOriginalArticleAction(formData: FormData) {
+  await requireAdmin();
+  const articleId = Math.floor(Number(formData.get("articleId")));
+  const deleted = Number.isSafeInteger(articleId) && articleId > 0
+    ? await deleteOriginalArticles([articleId])
+    : 0;
+  if (!deleted) noticePath("/admin/original", "文章不存在或未能删除", "warning");
+  revalidatePath("/original", "layout");
+  revalidatePath("/admin/original", "layout");
+  const requested = returnPath(formData);
+  noticePath(
+    requested === "/admin/original" || requested.startsWith("/admin/original?") ? requested : "/admin/original",
+    "文章已删除",
+  );
+}
+
+async function setArticlesStatusBatch(formData: FormData, status: "published" | "hidden") {
+  await requireAdmin();
+  const changed = await setOriginalArticlesStatus(formIds(formData, "articleIds"), status);
+  if (!changed) noticePath(returnPath(formData), status === "hidden" ? "所选文章中没有已发布的文章" : "所选文章中没有已隐藏的文章", "warning");
+  revalidatePath("/original", "layout");
+  revalidatePath("/admin/original", "layout");
+  noticePath(returnPath(formData), status === "hidden" ? `已隐藏 ${changed} 篇文章` : `已恢复发布 ${changed} 篇文章`);
+}
+
+export async function hideOriginalArticlesBatchAction(formData: FormData) {
+  await setArticlesStatusBatch(formData, "hidden");
+}
+
+export async function publishOriginalArticlesBatchAction(formData: FormData) {
+  await setArticlesStatusBatch(formData, "published");
 }
 
 export async function deleteOriginalCommentsBatchAction(formData: FormData) {

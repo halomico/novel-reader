@@ -140,6 +140,48 @@ export async function readPostgresContentAccessControlState(
 
 export function invalidatePostgresContentAccessControlState(): void {
   delete controlState.postgresContentAccessControlState;
+  ruleCacheGeneration += 1;
+}
+
+type RuleCacheEntry = {
+  generation: number;
+  expiresAt: number;
+  rows: Promise<AccessRuleRow[]>;
+};
+
+const RULE_CACHE_TTL_MS = 2_000;
+const ruleCaches = new WeakMap<SqlExecutor, Map<string, RuleCacheEntry>>();
+let ruleCacheGeneration = 0;
+
+/** Enabled rules change only through the admin mutations in this module, which
+ * bump the generation; the TTL bounds staleness across instances. Expiry is
+ * re-checked against the caller's clock on every read. */
+function readActiveAccessRules(executor: SqlExecutor, storedScope: string, now: Date): Promise<AccessRuleRow[]> {
+  let cache = ruleCaches.get(executor);
+  if (!cache) {
+    cache = new Map();
+    ruleCaches.set(executor, cache);
+  }
+  const clock = Date.now();
+  const cached = cache.get(storedScope);
+  if (cached && cached.generation === ruleCacheGeneration && cached.expiresAt > clock) {
+    return cached.rows.then((rows) => rows.filter((rule) => !rule.expires_at || instant(rule.expires_at) > now.getTime()));
+  }
+  const rows = executor.query<AccessRuleRow>({
+    text: `SELECT id, target_type, target_value, match_mode, scope, country_mode, audience, source, reason, expires_at
+      FROM content_access_rules
+      WHERE enabled = TRUE AND (expires_at IS NULL OR expires_at > $1::timestamptz)
+        AND (scope = 'all' OR scope = $2)
+      ORDER BY CASE source WHEN 'manual' THEN 0 ELSE 1 END, id ASC`,
+    values: [now.toISOString(), storedScope],
+  }).then((result) => result.rows);
+  const entry: RuleCacheEntry = { generation: ruleCacheGeneration, expiresAt: clock + RULE_CACHE_TTL_MS, rows };
+  const scopedCache = cache;
+  scopedCache.set(storedScope, entry);
+  rows.catch(() => {
+    if (scopedCache.get(storedScope) === entry) scopedCache.delete(storedScope);
+  });
+  return rows;
 }
 
 const CRAWLER_PATTERN = /bot|crawler|spider|slurp|bingpreview|facebookexternalhit|bytespider|yandex|baiduspider|sogou/iu;
@@ -273,15 +315,8 @@ export async function checkPostgresContentAccess(
     scope,
     authenticated,
   };
-  const rules = await executor.query<AccessRuleRow>({
-    text: `SELECT id, target_type, target_value, match_mode, scope, country_mode, audience, source, reason, expires_at
-      FROM content_access_rules
-      WHERE enabled = TRUE AND (expires_at IS NULL OR expires_at > $1::timestamptz)
-        AND (scope = 'all' OR scope = $2)
-      ORDER BY CASE source WHEN 'manual' THEN 0 ELSE 1 END, id ASC`,
-    values: [now.toISOString(), scope === "site" ? "all" : scope],
-  });
-  const blocked = rules.rows.find((rule) => postgresAccessRuleMatches(rule, context));
+  const rules = await readActiveAccessRules(executor, scope === "site" ? "all" : scope, now);
+  const blocked = rules.find((rule) => postgresAccessRuleMatches(rule, context));
   if (blocked) {
     const expiry = blocked.expires_at ? instant(blocked.expires_at) : 0;
     const retryAfterSeconds = blocked.source === "rate_limit" && expiry > now.getTime()

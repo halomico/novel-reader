@@ -27,7 +27,10 @@ export function ReaderTagLinks({ tags, library = "default" }: { tags: ReaderTag[
       const available = links.clientWidth;
       const items = Array.from(measure.querySelectorAll<HTMLElement>("[data-reader-tag-measure]"));
       const toggle = measure.querySelector<HTMLElement>("[data-reader-toggle-measure]");
-      if (!available || !items.length || !toggle) return;
+      if (!available || !items.length || !toggle) {
+        setLayout({ measured: false, collapsible: false, visibleCount: tags.length });
+        return;
+      }
       const gap = Number.parseFloat(getComputedStyle(links).columnGap) || 0;
       const rows: Array<{ start: number; end: number; used: number }> = [];
       let rowStart = 0;
@@ -60,7 +63,7 @@ export function ReaderTagLinks({ tags, library = "default" }: { tags: ReaderTag[
         visibleCount -= 1;
         used -= removedWidth + (visibleCount > secondRow.start ? gap : 0);
       }
-      setLayout({ measured: true, collapsible: true, visibleCount });
+      setLayout({ measured: true, collapsible: true, visibleCount: Math.max(visibleCount, 1) });
     }
 
     const observer = new ResizeObserver(measureRows);
@@ -99,13 +102,13 @@ export function ReaderTagLinks({ tags, library = "default" }: { tags: ReaderTag[
             aria-expanded={expanded}
             onClick={() => setExpanded((value) => !value)}
           >
-            {expanded ? <ChevronUp size={18} aria-hidden="true" /> : <ChevronDown size={18} aria-hidden="true" />}
+            {expanded ? <ChevronUp size={16} aria-hidden="true" /> : <ChevronDown size={16} aria-hidden="true" />}
           </button>
         ) : null}
       </nav>
       <div className="readerTagMeasure" ref={measureRef} aria-hidden="true">
         {tags.map((tag) => <span className="tagChip contentTagLink" data-reader-tag-measure key={tag.id}>{tag.name}</span>)}
-        <span className="readerTagsInlineToggle" data-reader-toggle-measure><ChevronDown size={18} aria-hidden="true" /></span>
+        <span className="readerTagsInlineToggle" data-reader-toggle-measure><ChevronDown size={16} aria-hidden="true" /></span>
       </div>
     </div>
   );

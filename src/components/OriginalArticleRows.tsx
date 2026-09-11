@@ -73,12 +73,6 @@ export function OriginalArticleRows({
                   <Pin size={12} fill="currentColor" aria-hidden="true" />
                 </span>
               ) : null}
-              {showStatus || showEdit ? (
-                <span className="originalRowControls">
-                  {showStatus && article.status !== "published" ? <b className={`originalStatus is-${article.status}`}>{tr(article.status === "hidden" ? "已隐藏" : "草稿")}</b> : null}
-                  {showEdit ? <Link className="originalRowEdit" prefetch href={`/original/${article.slug}/edit`}>{tr("编辑")}</Link> : null}
-                </span>
-              ) : null}
             </div>
             <div className="originalArticleSubline">
               {showAuthor ? (
@@ -102,13 +96,23 @@ export function OriginalArticleRows({
               ) : null}
             </div>
           </div>
-          {article.tags.length ? (
-            <span className="originalArticleTags" aria-label={tr("文章标签")}>
-              {article.tags.slice(0, 3).map((item) => (
-                <Link className="tagChip contentTagLink originalArticleTag" prefetch={false} href={tagHref(item.slug, query)} key={item.id}>{item.name}</Link>
-              ))}
-              {article.tags.length > 3 ? <span className="originalTagOverflow">+{article.tags.length - 3}</span> : null}
-            </span>
+          {article.tags.length || showStatus || showEdit ? (
+            <div className="originalArticleSide">
+              {article.tags.length ? (
+                <span className="originalArticleTags" aria-label={tr("文章标签")}>
+                  {article.tags.slice(0, 3).map((item) => (
+                    <Link className="tagChip contentTagLink originalArticleTag" prefetch={false} href={tagHref(item.slug, query)} key={item.id}>{item.name}</Link>
+                  ))}
+                  {article.tags.length > 3 ? <span className="originalTagOverflow">+{article.tags.length - 3}</span> : null}
+                </span>
+              ) : null}
+              {showStatus || showEdit ? (
+                <span className="originalRowControls">
+                  {showStatus && article.status !== "published" ? <b className={`originalStatus is-${article.status}`}>{tr(article.status === "hidden" ? "已隐藏" : "草稿")}</b> : null}
+                  {showEdit ? <AppLink className="originalRowEdit" href={`/original/${article.slug}/edit`}>{tr("编辑")}</AppLink> : null}
+                </span>
+              ) : null}
+            </div>
           ) : null}
         </article>
         );

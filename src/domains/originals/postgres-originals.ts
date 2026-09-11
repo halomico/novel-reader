@@ -1021,6 +1021,27 @@ export async function setOriginalArticleStatus(
   return result.rowCount === 1;
 }
 
+/** Batch moderation: hide published articles, or restore hidden ones. Restoring never
+ *  publishes a draft its author has not published. */
+export async function setOriginalArticlesStatus(
+  idsValue: readonly number[],
+  statusValue: "published" | "hidden",
+): Promise<number> {
+  const ids = safeIds(idsValue);
+  if (!ids.length) return 0;
+  const status = statusValue === "published" ? "published" : "hidden";
+  const result = await database().query({
+    text: `UPDATE original_articles SET status = $2,
+      published_at = CASE WHEN $2 = 'published' THEN COALESCE(published_at, clock_timestamp()) ELSE published_at END,
+      is_pinned = CASE WHEN $2 = 'published' THEN is_pinned ELSE FALSE END,
+      pinned_at = CASE WHEN $2 = 'published' THEN pinned_at ELSE NULL END,
+      updated_at = clock_timestamp()
+      WHERE id = ANY($1::bigint[]) AND status = CASE WHEN $2 = 'published' THEN 'hidden' ELSE 'published' END`,
+    values: [ids, status],
+  });
+  return result.rowCount ?? 0;
+}
+
 export async function deleteOriginalArticles(idsValue: readonly number[]): Promise<number> {
   const ids = safeIds(idsValue);
   if (!ids.length) return 0;
@@ -1145,7 +1166,7 @@ export async function updateOriginalArticleAsAdmin(input: {
     .trim()
     .slice(0, 320);
   const tags = normalizeTagNames(input.tags, settings.maxTags);
-  const search = await createPostgresOriginalSearchFields(title, publicBody, paidBody);
+  const search = await createPostgresOriginalSearchFields(title, publicBody);
   await withTransaction(async (tx) => {
     const current = await tx.query<QueryResultRow & { author_id: string | number }>({
       text: "SELECT author_id FROM original_articles WHERE id = $1 FOR UPDATE",

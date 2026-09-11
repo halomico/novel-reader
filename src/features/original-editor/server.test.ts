@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   createOriginalEditorTag,
   deleteOriginalDraftForAuthor,
+  deleteOriginalDraftsForAuthor,
   getOriginalDraftForAuthor,
   OriginalDraftError,
   saveOriginalDraft,
@@ -11,6 +12,15 @@ import {
 test("original editor rejects malformed identities and tags before database access", async () => {
   assert.equal(await getOriginalDraftForAuthor(0, 1), null);
   assert.equal(await deleteOriginalDraftForAuthor(1, 0), false);
+  assert.equal(await deleteOriginalDraftsForAuthor([], 1), 0);
+  await assert.rejects(
+    deleteOriginalDraftsForAuthor([0], 1),
+    (error: unknown) => error instanceof OriginalDraftError && error.code === "invalid",
+  );
+  await assert.rejects(
+    deleteOriginalDraftsForAuthor(Array.from({ length: 101 }, (_, index) => index + 1), 1),
+    (error: unknown) => error instanceof OriginalDraftError && error.code === "invalid",
+  );
   await assert.rejects(
     createOriginalEditorTag({ name: "bad tag", authorId: 1 }),
     (error: unknown) => error instanceof OriginalDraftError && error.code === "invalid",
@@ -51,5 +61,23 @@ test("draft DELETE route permits mutation without content-type and does not retu
   });
   const response = await draftDeleteRoute(req, { params: Promise.resolve({ id: "123" }) });
   assert.notEqual(response.status, 415);
+  assert.equal(response.status, 401);
+});
+
+test("draft batch DELETE route validates authentication before mutation", async () => {
+  const { NextRequest } = await import("next/server");
+  const { DELETE: batchDeleteRoute } = await import("@/app/api/original/drafts/route");
+  const req = new NextRequest("http://127.0.0.1:3000/api/original/drafts", {
+    method: "DELETE",
+    headers: {
+      host: "127.0.0.1:3000",
+      origin: "http://127.0.0.1:3000",
+      "content-type": "application/json",
+      "sec-fetch-site": "same-origin",
+      "x-novel-mutation": "1",
+    },
+    body: JSON.stringify({ ids: [1, 2] }),
+  });
+  const response = await batchDeleteRoute(req);
   assert.equal(response.status, 401);
 });

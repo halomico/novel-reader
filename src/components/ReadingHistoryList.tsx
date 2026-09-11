@@ -9,6 +9,7 @@ import Link from "./LocalizedLink";
 import { ContextNavigationLink } from "./ContextNavigationLink";
 import { LocalDateTime } from "./LocalDateTime";
 import { Pagination } from "./Pagination";
+import { SelectionCheckbox } from "./SelectionCheckbox";
 import { UserAvatar } from "./UserAvatar";
 
 export type ReadingHistoryListItem = {
@@ -170,7 +171,7 @@ export function ReadingHistoryList({
         <div className="readingProgressControls">
           {readingHistoryEnabled && items.length ? (
             <button
-              className={managing ? "activityManageButton isActive" : "activityManageButton"}
+              className={managing ? "selectionAction activityManageButton isActive" : "selectionAction activityManageButton"}
               type="button"
               aria-label={tr(managing ? "完成管理" : "管理最近记录")}
               title={tr(managing ? "完成" : "管理")}
@@ -186,18 +187,21 @@ export function ReadingHistoryList({
           ) : null}
         </div>
         {readingHistoryEnabled && items.length && managing ? (
-          <div className="readingHistoryToolbar isManaging">
-            <label className="activitySelectAll">
-              <input type="checkbox" checked={allSelected} onChange={toggleAll} />
-              <span aria-hidden="true"><Check size={12} /></span>
-              <em>{tr("全选")}</em>
-            </label>
-            <div className="readingHistoryManageActions">
-              <span className="readingHistorySelectedCount" aria-live="polite">
+          <div className="selectionToolbar readingHistoryToolbar isManaging">
+            <SelectionCheckbox
+              className="selectionSelectAll"
+              checked={allSelected}
+              onChange={toggleAll}
+              label={tr("选择当前页全部记录")}
+            >
+              {tr("全选")}
+            </SelectionCheckbox>
+            <div className="selectionToolbarActions readingHistoryManageActions">
+              <span className="selectionStatus readingHistorySelectedCount" aria-live="polite">
                 {selected.size ? [tr("已选"), selected.size].join(" ") : ""}
               </span>
               <button
-                className="activityBatchButton isDanger"
+                className="selectionAction activityBatchButton isDanger"
                 type="button"
                 disabled={!selected.size || pending}
                 onClick={removeSelected}
@@ -207,7 +211,7 @@ export function ReadingHistoryList({
                 <Trash2 size={16} aria-hidden="true" />
               </button>
               {confirmClear ? (
-                <span className="readingHistoryClearConfirm">
+                <span className="selectionConfirm readingHistoryClearConfirm">
                   <span>{tr("清空全部")}？</span>
                   <button className="isDanger" type="button" disabled={pending} onClick={clearAll} aria-label={tr("确认清空")} title={tr("确认清空")}>
                     <Check size={15} aria-hidden="true" />
@@ -218,7 +222,7 @@ export function ReadingHistoryList({
                 </span>
               ) : (
                 <button
-                  className="activityBatchButton"
+                  className="selectionAction activityBatchButton"
                   type="button"
                   disabled={pending}
                   onClick={() => setConfirmClear(true)}
@@ -235,26 +239,23 @@ export function ReadingHistoryList({
       {message ? <p className="readingHistoryNotice" role="status">{message}</p> : null}
       {readingHistoryEnabled && items.length ? (
         <div className="readingHistoryList">
-          {items.map((item, index) => {
+          {items.map((item) => {
             const progress = Math.round(item.progressPercent);
-            const isContinueItem = page === 1 && index === 0 && !item.completed && progress > 0;
             return (
               <article className={selected.has(item.id) ? "readingHistoryItem isSelected" : "readingHistoryItem"} key={item.id}>
                 {managing ? (
-                  <label className="readingHistorySelect">
-                    <input
-                      type="checkbox"
-                      checked={selected.has(item.id)}
-                      onChange={() => toggleSelected(item.id)}
-                      aria-label={`${tr("选择")} ${item.title}`}
-                    />
-                    <span aria-hidden="true"><Check size={13} /></span>
-                  </label>
+                  <SelectionCheckbox
+                    className="selectionItemControl readingHistorySelect"
+                    checked={selected.has(item.id)}
+                    onChange={() => toggleSelected(item.id)}
+                    label={`${tr("选择")} ${item.title}`}
+                  />
                 ) : null}
                 <ContextNavigationLink
                   className={item.author ? "readingHistoryMain hasAuthor" : "readingHistoryMain"}
                   href={item.href}
                   prefetch={false}
+                  scroll={false}
                 >
                   {item.author ? (
                     <UserAvatar
@@ -269,8 +270,6 @@ export function ReadingHistoryList({
                     <small>
                       {item.author ? <span>{item.author.name}</span> : null}
                       {item.author ? <span aria-hidden="true">·</span> : null}
-                      {isContinueItem ? <span className="readingHistoryResumeLabel">{tr("继续阅读")}</span> : null}
-                      {isContinueItem ? <span aria-hidden="true">·</span> : null}
                       {item.completed ? tr("已读完") : progress > 0 ? `${progress}%` : null}
                       {item.completed || progress > 0 ? <span aria-hidden="true">·</span> : null}
                       <LocalDateTime value={item.lastReadAt} />

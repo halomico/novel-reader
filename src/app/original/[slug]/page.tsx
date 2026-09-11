@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, LockKeyhole, MessageCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, CupSoda, LogIn, MessageCircle } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "@/components/LocalizedLink";
@@ -112,7 +112,7 @@ export default async function OriginalDetailPage({ params, searchParams }: Origi
   };
   return (
     <main className="readerShell originalReaderShell" data-reader-theme="app">
-      <SiteHeader currentUser={user} readerMode readerAutoHideOnScroll={false} mobileBackHref="/original" mobileBackLabel={tr("返回原创")} />
+      <SiteHeader currentUser={user} searchScope="originals" readerMode readerAutoHideOnScroll={false} mobileBackHref="/original" mobileBackLabel={tr("返回原创")} />
       <article className="readerPage originalDetail">
         {query.notice ? <DismissibleNotice message={query.notice} tone={query.tone} variant="search" displaySeconds={getNoticeDisplaySeconds()} /> : null}
         <OriginalArticleTracker
@@ -172,20 +172,23 @@ export default async function OriginalDetailPage({ params, searchParams }: Origi
         ) : null}
 
         {!contentAllowed ? (
-          <section className="originalGate" id="original-access-gate" aria-live="polite">
-            <LockKeyhole size={23} aria-hidden="true" />
-            <strong>{!channelConsumable
-              ? tr("登录后查看完整内容")
-              : `${tr("解锁完整内容")} · ${article.unlockSodaPrice} ${tr("苏打")}`}</strong>
-            {!user ? (
-              <Link className="originalPrimaryButton" href={`/login?returnTo=${encodeURIComponent(`/original/${article.slug}`)}`}>{tr("登录")}</Link>
-            ) : channelConsumable && article.accessMode === "paid" && article.unlockSodaPrice > 0 ? (
-              <form action={purchaseOriginalArticleAction}>
-                <input type="hidden" name="articleId" value={article.id} />
-                <input type="hidden" name="slug" value={article.slug} />
-                <button className="originalPrimaryButton" type="submit"><LockKeyhole size={16} aria-hidden="true" />{tr("解锁")}</button>
-              </form>
-            ) : null}
+          <section className="novelAccessGate originalGate" id="original-access-gate" aria-live="polite">
+            <div className="novelAccessGateAction">
+              <strong>{!user || !channelConsumable ? tr("登录后继续阅读") : tr("解锁完整内容")}</strong>
+              {!user ? (
+                <Link className="novelAccessGateButton" href={`/login?returnTo=${encodeURIComponent(`/original/${article.slug}`)}`}>
+                  <LogIn size={17} aria-hidden="true" />{tr("登录")}
+                </Link>
+              ) : channelConsumable && article.accessMode === "paid" && article.unlockSodaPrice > 0 ? (
+                <form action={purchaseOriginalArticleAction}>
+                  <input type="hidden" name="articleId" value={article.id} />
+                  <input type="hidden" name="slug" value={article.slug} />
+                  <button className="novelAccessGateButton" type="submit">
+                    <CupSoda size={17} aria-hidden="true" />{article.unlockSodaPrice} {tr("苏打")}
+                  </button>
+                </form>
+              ) : null}
+            </div>
           </section>
         ) : null}
 

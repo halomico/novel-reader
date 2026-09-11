@@ -9,7 +9,7 @@ export function validateUsername(value: string): string | null {
 }
 
 export function validatePassword(value: string): string | null {
-  return value.length < 10 || value.length > 256 ? "密码长度需要在 10-256 个字符之间" : null;
+  return value.length < 6 || value.length > 256 ? "密码长度需要在 6-256 个字符之间" : null;
 }
 
 export function validateDisplayName(value: string): string | null {

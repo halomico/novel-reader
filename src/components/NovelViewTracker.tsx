@@ -21,30 +21,24 @@ function recordNovelView(novelId: number): void {
 
 export function NovelViewTracker({ novelId, targetId = "reader-content" }: { novelId: number; targetId?: string }) {
   useEffect(() => {
+    if (!document.getElementById(targetId)) return;
     let recorded = false;
-    const target = document.getElementById(targetId);
-    if (!target) return;
-    let visible = false;
     let timer = 0;
     const cancel = () => { if (timer) window.clearTimeout(timer); timer = 0; };
     const schedule = () => {
       cancel();
-      if (!visible || recorded || document.visibilityState !== "visible") return;
+      if (recorded || document.visibilityState !== "visible") return;
       timer = window.setTimeout(() => {
         timer = 0;
-        if (!visible || recorded || document.visibilityState !== "visible") return;
+        if (recorded || document.visibilityState !== "visible") return;
         recorded = true;
         recordNovelView(novelId);
       }, 1_500);
     };
-    const observer = new IntersectionObserver(([entry]) => {
-      visible = Boolean(entry?.isIntersecting && entry.intersectionRatio >= 0.3);
-      if (visible) schedule(); else cancel();
-    }, { threshold: [0, 0.3, 0.5] });
+    schedule();
     const onVisibility = () => document.visibilityState === "visible" ? schedule() : cancel();
-    observer.observe(target);
     document.addEventListener("visibilitychange", onVisibility);
-    return () => { cancel(); observer.disconnect(); document.removeEventListener("visibilitychange", onVisibility); };
+    return () => { cancel(); document.removeEventListener("visibilitychange", onVisibility); };
   }, [novelId, targetId]);
   return null;
 }

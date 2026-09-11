@@ -433,7 +433,7 @@ export function ReaderDisplaySettingsPanel({
       {showPageTurn ? (
         <div className="readerSettingRow isPageTurn">
           <span>翻页方式</span>
-          <div role="group" aria-label="翻页方式">
+          <div className="segmentedControl settingCompactSegments" role="group" aria-label="翻页方式">
             {READER_PAGE_TURN_OPTIONS.map((item) => (
               <button
                 className={preferences.pageTurn === item.value ? "isActive" : ""}

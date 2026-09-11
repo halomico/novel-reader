@@ -57,24 +57,28 @@ test("tag slugs keep Han characters instead of collapsing to the article fallbac
 
 // A button the writer had just switched *off* still looked switched on the moment the
 // pointer rested on it, because hover reused the active rule (with `!important`, so
-// nothing could override it). Hover is an affordance; active and locked are states.
-test("toolbar hover styling is distinct from the active and locked states", () => {
+// nothing could override it). Hover is an affordance; pressed is a state — and a pressed
+// button keeps its accent under the pointer.
+test("toolbar hover styling is distinct from the pressed state", () => {
   const hover = ruleBody(".toolbar button:hover:not(:disabled),\n.toolbar button:focus-visible");
   assert.doesNotMatch(hover, /--composer-accent/);
   assert.doesNotMatch(hover, /!important/);
-  const active = ruleBody(".toolbar button.toolActive");
+  const active = ruleBody(".toolbar button.toolActive,\n.toolbar button.toolActive:hover:not(:disabled)");
   assert.match(active, /color: var\(--composer-accent\)/);
-  assert.match(composerCss, /\.toolbar button\.toolLocked/);
+  assert.doesNotMatch(composerCss, /toolLocked|formatLockToggle/);
 });
 
-// The outline is a column beside the page, shown and hidden by one button. While it is
-// hidden it must take no width at all, or the page sits permanently off-centre.
-test("the outline column collapses when it is closed", () => {
-  // This stylesheet declares `.workspace` more than once, so checking only the first
-  // rule would pass while a later one silently reserved the column again.
-  const tracks = [...composerCss.matchAll(/\.workspace\s*\{[^}]*grid-template-columns:([^;]+);/gu)]
-    .map((match) => match[1].trim());
-  assert.ok(tracks.length > 0, "no .workspace grid rule found");
-  for (const track of tracks) assert.match(track, /minmax\(0, 760px\) 0$/u, `outline column not collapsed: ${track}`);
-  assert.match(composerCss, /\.workspace\[data-outline="open"\][^{]*\{[^}]*grid-template-columns: minmax\(0, 760px\) 244px/);
+// The outline floats beside the sheet. It must never take layout space: opening it used
+// to add a grid column that squeezed the page and pushed the text sideways.
+test("the outline floats instead of reserving a column", () => {
+  assert.match(ruleBody(".outline"), /position:\s*absolute/u);
+  assert.match(ruleBody(".paper"), /margin:\s*0 auto/u);
+  assert.doesNotMatch(composerCss, /grid-template-columns:\s*minmax\(0, 840px\)/u);
+  assert.doesNotMatch(composerCss, /data-outline/u);
+});
+
+// Lexical renders a code block as <code>, an inline element. Left inline, its padding and
+// background overlapped the lines above and below it.
+test("code blocks are laid out as blocks", () => {
+  assert.match(ruleBody(".editorCode"), /display:\s*block/u);
 });

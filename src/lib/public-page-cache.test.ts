@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isPublicPageCacheCandidate, type PublicPageCacheRequest } from "./public-page-cache";
+import { isPublicPageCacheCandidate, isPublicReaderPath, type PublicPageCacheRequest } from "./public-page-cache";
 
 function request(
   pathname: string,
@@ -32,6 +32,8 @@ test("caches only anonymous public catalog documents", () => {
     isPublicPageCacheCandidate(request("/books/12", "from=%2Fnovels%3Fpage%3D2")),
     true,
   );
+  assert.equal(isPublicPageCacheCandidate(request("/original", "page=2")), true);
+  assert.equal(isPublicPageCacheCandidate(request("/original/article-mtv")), true);
 });
 
 test("keeps personalized and behavior-changing pages private", () => {
@@ -48,6 +50,12 @@ test("keeps personalized and behavior-changing pages private", () => {
   );
   assert.equal(isPublicPageCacheCandidate(request("/novels", "", { hasUserSession: true })), false);
   assert.equal(isPublicPageCacheCandidate(request("/novels", "", { hasBrowserLayoutPreference: true })), false);
+  assert.equal(isPublicPageCacheCandidate(request("/original", "q=test")), false);
+  assert.equal(isPublicPageCacheCandidate(request("/original/article-mtv", "resume=1")), false);
+  assert.equal(isPublicPageCacheCandidate(request("/original/article-mtv", "comments=2")), false);
+  for (const reserved of ["/original/new", "/original/mine", "/original/tags", "/original/author/3", "/original/write/9"]) {
+    assert.equal(isPublicPageCacheCandidate(request(reserved)), false, reserved);
+  }
 });
 
 test("does not cache RSC, prefetch, non-document, or mutation requests", () => {
@@ -56,4 +64,19 @@ test("does not cache RSC, prefetch, non-document, or mutation requests", () => {
   assert.equal(isPublicPageCacheCandidate(request("/novels", "", { isRouterPrefetch: true })), false);
   assert.equal(isPublicPageCacheCandidate(request("/novels", "", { accept: "application/json" })), false);
   assert.equal(isPublicPageCacheCandidate(request("/novels", "", { method: "POST" })), false);
+});
+
+test("router fetches without visible flight headers never reach the edge cache", () => {
+  // Next.js removes RSC headers and `_rsc` before middleware; router fetches send */*.
+  assert.equal(isPublicPageCacheCandidate(request("/novels", "", { accept: "*/*" })), false);
+  assert.equal(isPublicPageCacheCandidate(request("/books/12", "", { accept: null })), false);
+});
+
+test("reader paths get the longer edge lifetime", () => {
+  assert.equal(isPublicReaderPath("/books/12"), true);
+  assert.equal(isPublicReaderPath("/books/12/chapters/3"), true);
+  assert.equal(isPublicReaderPath("/original/article-mtv"), true);
+  assert.equal(isPublicReaderPath("/original"), false);
+  assert.equal(isPublicReaderPath("/original/mine"), false);
+  assert.equal(isPublicReaderPath("/novels"), false);
 });

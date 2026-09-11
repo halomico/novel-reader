@@ -118,17 +118,23 @@ export default async function NovelsPage({ searchParams }: NovelsPageProps) {
     }
     notFound();
   }
-  const accessResult = await checkPostgresContentAccess(database("web"), requestHeaders, {
-    scope: "novel",
-    authenticated,
-    admin: user?.role === "admin",
-    rateLimit: false,
-  });
+  const requestedLibrary = params.library || params.sourceLibrary;
+  const originalQuery = (params.q || "").trim();
+  const [accessResult, cookieStore, normalizedQuery, allNovelSources] = await Promise.all([
+    checkPostgresContentAccess(database("web"), requestHeaders, {
+      scope: "novel",
+      authenticated,
+      admin: user?.role === "admin",
+      rateLimit: false,
+    }),
+    !requestedLibrary && user ? cookies() : null,
+    originalQuery ? normalizeSearchText(originalQuery) : "",
+    listPostgresNovelSources(database("web"), { includeEmpty: true }),
+  ]);
   if (!accessResult.allowed) notFound();
 
-  const requestedLibrary = params.library || params.sourceLibrary;
-  const rememberedLibrary = !requestedLibrary && user
-    ? (await cookies()).get(novelLibraryPreferenceCookieName(user.id))?.value
+  const rememberedLibrary = user
+    ? cookieStore?.get(novelLibraryPreferenceCookieName(user.id))?.value
     : undefined;
   const effectiveRequested = requestedLibrary || (
     rememberedLibrary && rememberedLibrary !== "default" && rememberedLibrary !== settings.defaultNovelLibrarySlug
@@ -141,8 +147,6 @@ export default async function NovelsPage({ searchParams }: NovelsPageProps) {
     settings.defaultNovelLibrarySlug,
   );
   const activeSource = libraryScope.kind === "source" ? libraryScope.source : null;
-  const originalQuery = (params.q || "").trim();
-  const normalizedQuery = originalQuery ? await normalizeSearchText(originalQuery) : "";
   const validation = normalizedQuery
     ? parseSimpleAndSearchQuery(normalizedQuery, { mode: "title" })
     : null;
@@ -252,7 +256,7 @@ export default async function NovelsPage({ searchParams }: NovelsPageProps) {
     mtime_ms: book.mtimeMs,
     updated_at: book.updatedAt,
   })));
-  const novelSources = (await listPostgresNovelSources(database("web"), { includeEmpty: true }))
+  const novelSources = allNovelSources
     .filter((source) => source.slug === DEFAULT_NOVEL_LIBRARY_SLUG || source.novelCount > 0);
   const [homeLabel, novelsLabel, randomLabel] = await localizeTexts(["首页", "小说", "随便看看"] as const, locale);
   const baseParams = new URLSearchParams();

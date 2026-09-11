@@ -1,12 +1,11 @@
 import { AppLink as Link } from "@/components/AppLink";
 import { cookies } from "next/headers";
 import { readPostgresSiteSettings } from "@/core/config/site-settings";
-import { database } from "@/core/db/postgres";
-import { readPostgresUserNavigationState } from "@/domains/identity/postgres-navigation";
 import { isHomePortalEntryVisible } from "@/lib/home-portal";
 import { getCurrentUser } from "@/lib/user-auth";
 import type { PostgresUserProfile as UserProfile } from "@/domains/identity/postgres-users";
 import { getRequestLocale, localizeText, localizeTexts } from "@/lib/locale-server";
+import { getUserNavigationState } from "@/lib/user-navigation";
 import { novelLibraryPreferenceCookieName } from "@/lib/novel-library-scope";
 import {
   NOVEL_CATALOG_SEARCH_COOKIE,
@@ -50,6 +49,7 @@ export async function SiteHeader({
   unreadMessages,
   mobileBackHref,
   mobileBackLabel = "返回上一级",
+  searchScope = "novels",
 }: {
   query?: string;
   defaultSearchMode?: "title" | "content" | "current";
@@ -69,6 +69,8 @@ export async function SiteHeader({
   unreadMessages?: number;
   mobileBackHref?: string;
   mobileBackLabel?: string;
+  /** Original pages search articles; everything else searches the novel library. */
+  searchScope?: "novels" | "originals";
 }) {
   const [locale, settings, resolvedUser] = await Promise.all([
     getRequestLocale(),
@@ -93,7 +95,7 @@ export async function SiteHeader({
   const [cookieStore, navigationState] = await Promise.all([
     needsCookieStore ? cookies() : Promise.resolve(null),
     needsNavigationState && user
-      ? readPostgresUserNavigationState(database("web"), user)
+      ? getUserNavigationState(user)
       : Promise.resolve(null),
   ]);
   const rememberedLibrary = library === undefined && user
@@ -126,7 +128,7 @@ export async function SiteHeader({
   const noticeDisplaySeconds = configuredNoticeSeconds(settings.noticeDisplaySeconds);
   const unreadCount = user ? unreadMessages ?? navigationState?.unreadMessages ?? 0 : 0;
   const showMarket = Boolean(user && marketEnabled && navigationState?.marketAccess);
-  const canShowNovelSearch = showSearch && !authMode && (readerMode || showLibraryNav);
+  const canShowNovelSearch = showSearch && !authMode && (searchScope === "originals" ? showOriginalNav : readerMode || showLibraryNav);
   const canShowSearch = canShowNovelSearch;
   const contentSearchEnabled = activeLibrary === "all" || settings.novelSourceSearchModes[activeLibrary] !== "book";
   const resolvedSearchExpanded = novelCatalogSearch
@@ -176,10 +178,11 @@ export async function SiteHeader({
                 contentSearchEnabled={contentSearchEnabled}
                 currentSearchBookId={currentSearchBookId}
                 persistCatalogPreference={novelCatalogSearch}
+                scope={searchScope}
               />
             ) : null}
             <div className="headerActions">
-              {!readerMode ? <ThemeToggle /> : null}
+              <ThemeToggle />
               <HeaderUserMenu
                 user={user ? {
                   id: user.id,

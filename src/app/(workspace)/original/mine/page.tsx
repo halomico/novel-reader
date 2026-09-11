@@ -1,7 +1,7 @@
 import { FileText, LockKeyhole, MessageCircle, PenLine, ShieldBan } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import Link from "@/components/LocalizedLink";
+import { AppLink as Link } from "@/components/AppLink";
 import { DismissibleNotice } from "@/components/DismissibleNotice";
 import { OriginalArticleRows } from "@/components/OriginalArticleRows";
 import { OriginalCommentManageItem } from "@/components/OriginalCommentManageItem";
@@ -17,7 +17,7 @@ import { UserAvatar } from "@/components/UserAvatar";
 import { uiText, withLocalePath } from "@/lib/locale";
 import { deleteOwnOriginalCommentAction, updateOwnOriginalCommentAction } from "@/app/original/actions";
 import { listOriginalDraftsForAuthor } from "@/features/original-editor/server";
-import { OriginalDraftDeleteButton } from "@/components/OriginalDraftDeleteButton";
+import { OriginalDraftManager } from "@/components/OriginalDraftManager";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "文章", robots: { index: false, follow: false } };
@@ -84,7 +84,7 @@ export default async function OriginalMinePage({ searchParams }: OriginalMinePag
           className="originalMineHeader"
           icon={FileText}
           title={tr("文章")}
-          trailing={<Link className="originalPrimaryButton" href="/original/new" prefetch>{tr("发布文章")}</Link>}
+          trailing={<Link className="originalPrimaryButton" href="/original/new">{tr("发布文章")}</Link>}
         />
         <WorkspacePrimaryTabs
           className="originalMineTabs"
@@ -105,15 +105,19 @@ export default async function OriginalMinePage({ searchParams }: OriginalMinePag
           </>
         ) : view === "drafts" ? (
           <>
-            <div className="originalDraftList">
-              {drafts.items.map((draft) => (
-                <div className="originalDraftItem" key={draft.id}><Link href={`/original/write/${draft.id}`} prefetch className="originalDraftRow">
-                  <span><strong>{draft.title || tr("无标题草稿")}</strong><small>{formatRelativeUpdateTime(draft.updatedAt, { justNow: tr("刚刚"), minutesAgo: tr("分钟前"), hoursAgo: tr("小时前"), daysAgo: tr("天前") })}</small></span>
-                  <span className="originalDraftEditAction">{tr("编辑")}</span>
-                </Link><OriginalDraftDeleteButton draftId={draft.id} title={draft.title} locale={locale} /></div>
-              ))}
-              {!drafts.items.length ? <p className="originalEmpty">{tr("暂无草稿")}</p> : null}
-            </div>
+            <OriginalDraftManager
+              locale={locale}
+              initialItems={drafts.items.map((draft) => ({
+                id: draft.id,
+                title: draft.title,
+                updatedLabel: formatRelativeUpdateTime(draft.updatedAt, {
+                  justNow: tr("刚刚"),
+                  minutesAgo: tr("分钟前"),
+                  hoursAgo: tr("小时前"),
+                  daysAgo: tr("天前"),
+                }),
+              }))}
+            />
             <Pagination page={drafts.page} totalPages={drafts.totalPages} query="" basePath="/original/mine" extraParams={{ view: "drafts" }} />
           </>
         ) : view === "comments" ? (

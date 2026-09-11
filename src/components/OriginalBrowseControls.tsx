@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, ArrowUpDown, Search, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, PenLine, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "@/components/LocalizedLink";
@@ -192,6 +192,7 @@ export function OriginalBrowseControls({
         ) : null}
       </div>
       <Link className="originalBrowsePublish" href="/original/new" aria-label={tr("发布文章")} title={tr("发布文章")}>
+        <PenLine size={16} aria-hidden="true" />
         <span>{tr("发布")}</span>
       </Link>
     </div>

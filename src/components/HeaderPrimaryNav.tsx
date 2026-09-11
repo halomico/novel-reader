@@ -17,6 +17,10 @@ function NavigationLabel({ text }: { text: string }) {
   return <span data-pending={pending || undefined} aria-busy={pending}>{text}</span>;
 }
 
+/**
+ * Every section is a dynamic page, so navigation links prefetch on intent
+ * (hover, focus or press) instead of rendering all sections on every view.
+ */
 export function HeaderPrimaryNav({
   mediaKinds,
   showLibrary = true,
@@ -44,24 +48,24 @@ export function HeaderPrimaryNav({
   return (
     <nav className={className} aria-label={ariaLabel}>
       {showLibrary ? (
-        <Link href="/novels" prefetch aria-current={pathname.startsWith("/novels") || pathname.startsWith("/books") ? "page" : undefined} onClick={onNavigate}>
+        <Link href="/novels" aria-current={pathname.startsWith("/novels") || pathname.startsWith("/books") ? "page" : undefined} onClick={onNavigate}>
           <NavigationLabel text={uiText(locale, "小说")} />
         </Link>
       ) : null}
       {showTags ? (
-        <Link href="/tags" prefetch aria-current={pathname.startsWith("/tags") ? "page" : undefined} onClick={onNavigate}>
+        <Link href="/tags" aria-current={pathname.startsWith("/tags") ? "page" : undefined} onClick={onNavigate}>
           <NavigationLabel text={uiText(locale, "标签")} />
         </Link>
       ) : null}
       {showOriginal ? (
-        <Link href="/original" prefetch aria-current={pathname.startsWith("/original") ? "page" : undefined} onClick={onNavigate}>
+        <Link href="/original" aria-current={pathname.startsWith("/original") ? "page" : undefined} onClick={onNavigate}>
           <NavigationLabel text={uiText(locale, "原创")} />
         </Link>
       ) : null}
       {mediaKinds.map((kind) => {
         const active = (pathname === "/media" && activeKind === kind) || (kind === "video" && pathname.startsWith("/media/tags"));
         return (
-          <Link href={`/media?kind=${kind}`} prefetch aria-current={active ? "page" : undefined} key={kind} onClick={onNavigate}>
+          <Link href={`/media?kind=${kind}`} aria-current={active ? "page" : undefined} key={kind} onClick={onNavigate}>
             <NavigationLabel text={uiText(locale, MEDIA_LINKS[kind])} />
           </Link>
         );

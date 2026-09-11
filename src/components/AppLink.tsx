@@ -9,6 +9,7 @@ import {
   type FocusEvent,
   type PointerEvent,
 } from "react";
+import { useLinkNavigationProgress } from "@/components/NavigationProgress";
 import { localeFromPathname, withLocalePath } from "@/lib/locale";
 
 const INTENT_PREFETCH_DELAY_MS = 30;
@@ -46,10 +47,13 @@ export function AppLink({
   onPointerDown,
   onFocus,
   onBlur,
+  onClick,
+  onNavigate,
   ...props
 }: AppLinkProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const progress = useLinkNavigationProgress(onClick, onNavigate);
   const prefetchedHrefRef = useRef<string | null>(null);
   const prefetchedAtRef = useRef(0);
   const prefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -124,6 +128,8 @@ export function AppLink({
       onPointerLeave={handlePointerLeave}
       onFocus={handleFocus}
       onBlur={handleBlur}
+      onClick={progress.onClick}
+      onNavigate={progress.onNavigate}
     />
   );
 }

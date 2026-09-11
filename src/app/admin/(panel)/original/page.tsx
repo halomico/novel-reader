@@ -1,10 +1,15 @@
-import { Eye, FileText, MessageCircle, Pin, Search } from "lucide-react";
+import { Eye, MessageCircle, Pin, Search } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Pagination } from "@/components/Pagination";
+import { AdminOriginalArticleActions } from "@/components/AdminOriginalArticleActions";
 import { AdminOriginalBatchToolbar } from "@/components/AdminOriginalBatchToolbar";
 import { AdminFrame } from "../AdminFrame";
-import { deleteOriginalArticlesBatchAction, setOriginalArticlePinnedAction, setOriginalArticleStatusAction } from "@/app/admin/original/actions";
+import {
+  deleteOriginalArticlesBatchAction,
+  hideOriginalArticlesBatchAction,
+  publishOriginalArticlesBatchAction,
+} from "@/app/admin/original/actions";
 import { getOriginalPublishingSettings, isOriginalChannelEnabled } from "@/lib/config";
 import { listOriginalArticles, type OriginalArticleStatus } from "@/domains/originals/postgres-originals";
 
@@ -31,6 +36,12 @@ function dateLabel(value: string): string {
   return Number.isFinite(date.getTime()) ? date.toLocaleString("zh-CN", { dateStyle: "medium", timeStyle: "short" }) : value;
 }
 
+function statusBadgeClass(status: OriginalArticleStatus): string {
+  if (status === "published") return "adminStatusBadge isLive";
+  if (status === "draft") return "adminStatusBadge isPending";
+  return "adminStatusBadge";
+}
+
 export default async function AdminOriginalPage({ searchParams }: AdminOriginalPageProps) {
   const params = await searchParams;
   const query = String(params.q || "").normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, 80);
@@ -48,12 +59,9 @@ export default async function AdminOriginalPage({ searchParams }: AdminOriginalP
     <AdminFrame active="original" notice={params.notice} tone={params.tone}>
       <article className="adminPanel adminOriginalPanel">
         <div className="adminPanelHeader">
-          <div className="adminOriginalHeading">
-            <FileText size={28} strokeWidth={1.7} aria-hidden="true" />
-            <div>
-              <h2>原创管理</h2>
-              <p>审核发布状态、价格和互动数据；隐藏文章不会删除购买记录。</p>
-            </div>
+          <div>
+            <h2>原创管理</h2>
+            <p>审核发布状态、价格和互动数据；隐藏文章不会删除购买记录。</p>
           </div>
           <span className={channelEnabled ? "adminOriginalChannelState isOpen" : "adminOriginalChannelState"}>
             {channelEnabled ? "频道已开放" : "频道已关闭"}
@@ -71,55 +79,72 @@ export default async function AdminOriginalPage({ searchParams }: AdminOriginalP
         </div>
         <AdminOriginalBatchToolbar
           formId="admin-original-batch"
-
           returnPath={returnPath}
-          action={deleteOriginalArticlesBatchAction}
-          label="删除文章"
-          confirmMessage="确定删除选中的原创文章吗？文章正文、评论、购买记录和阅读记录都会一并删除。"
+          actions={[
+            { label: "隐藏", icon: "hide", action: hideOriginalArticlesBatchAction, confirmMessage: "隐藏选中的文章吗？隐藏后不在原创页面显示，购买记录保留。" },
+            { label: "恢复发布", icon: "publish", action: publishOriginalArticlesBatchAction },
+            { label: "删除文章", icon: "delete", tone: "danger", action: deleteOriginalArticlesBatchAction, confirmMessage: "确定删除选中的原创文章吗？文章正文、评论、购买记录和阅读记录都会一并删除。" },
+          ]}
         />
 
-        <section className="adminOriginalList" aria-label="原创文章列表">
-          {result.items.map((article) => (
-            <article className="adminOriginalRow" key={article.id}>
-              <input className="adminOriginalSelect" type="checkbox" name="articleIds" value={article.id} form="admin-original-batch" data-batch-checkbox="admin-original-batch" aria-label={`选择 ${article.title}`} />
-              <div className="adminOriginalRowMain">
-                <div className="adminOriginalTitleLine">
-                  <Link href={`/admin/original/${article.id}`} className="adminOriginalTitle">{article.title}</Link>
-                  {article.isPinned ? <span className="adminOriginalPinned"><Pin size={12} fill="currentColor" aria-hidden="true" />已置顶</span> : null}
-                </div>
-                <p>{article.excerpt || "暂无摘要"}</p>
-                <div className="adminOriginalMeta">
-                  <span>{article.authorName}</span>
-                  <time dateTime={article.updatedAt}>{dateLabel(article.updatedAt)}</time>
-                  <span><Eye size={13} aria-hidden="true" />{article.viewCount}</span>
-                  <span><MessageCircle size={13} aria-hidden="true" />{article.commentCount}</span>
-                  <span>{accessLabel[article.accessMode]}{article.unlockSodaPrice > 0 ? ` · ${article.unlockSodaPrice} 苏打` : ""}</span>
-                </div>
-              </div>
-              <div className="adminOriginalRowActions">
-                <span className={`adminIndexState is-${article.status}`}>{statusLabel[article.status]}</span>
-                {(article.status === "published" || article.isPinned) ? (
-                  <form action={setOriginalArticlePinnedAction}>
-                    <input type="hidden" name="articleId" value={article.id} />
-                    <input type="hidden" name="returnPath" value={returnPath} />
-                    <button className={article.isPinned ? "isPinned" : ""} type="submit" name="pinned" value={article.isPinned ? "0" : "1"}>
-                      <Pin size={13} fill={article.isPinned ? "currentColor" : "none"} aria-hidden="true" />
-                      {article.isPinned ? "取消置顶" : "置顶"}
-                    </button>
-                  </form>
-                ) : null}
-                <form action={setOriginalArticleStatusAction}>
-                  <input type="hidden" name="articleId" value={article.id} />
-                  <input type="hidden" name="returnPath" value={returnPath} />
-                  {article.status !== "published" ? <button type="submit" name="status" value="published">发布</button> : null}
-                  {article.status !== "hidden" ? <button type="submit" name="status" value="hidden">隐藏</button> : null}
-                  {article.status !== "draft" ? <button type="submit" name="status" value="draft">草稿</button> : null}
-                </form>
-              </div>
-            </article>
-          ))}
-          {!result.items.length ? <p className="adminInlineMessage">没有匹配的文章。</p> : null}
-        </section>
+        <div className="adminTableWrap adminOriginalTableWrap">
+          <table className="adminTable adminOriginalTable">
+            <thead>
+              <tr>
+                <th className="adminOriginalSelectCell" aria-label="选择" />
+                <th>文章</th>
+                <th>作者</th>
+                <th>状态</th>
+                <th>访问</th>
+                <th>数据</th>
+                <th>更新</th>
+                <th><span className="srOnly">操作</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.items.map((article) => (
+                <tr key={article.id}>
+                  <td className="adminOriginalSelectCell">
+                    <input
+                      className="adminCheckbox"
+                      type="checkbox"
+                      name="articleIds"
+                      value={article.id}
+                      form="admin-original-batch"
+                      data-batch-checkbox="admin-original-batch"
+                      aria-label={`选择 ${article.title}`}
+                    />
+                  </td>
+                  <td className="adminOriginalTitleCell">
+                    <Link href={`/admin/original/${article.id}`} className="adminOriginalTitle">{article.title}</Link>
+                    {article.isPinned ? <span className="adminOriginalPinned"><Pin size={12} fill="currentColor" aria-hidden="true" />已置顶</span> : null}
+                    {article.excerpt ? <small>{article.excerpt}</small> : null}
+                  </td>
+                  <td>{article.authorName}</td>
+                  <td><span className={statusBadgeClass(article.status)}>{statusLabel[article.status]}</span></td>
+                  <td>{accessLabel[article.accessMode]}{article.unlockSodaPrice > 0 ? ` · ${article.unlockSodaPrice} 苏打` : ""}</td>
+                  <td className="adminOriginalStatsCell">
+                    <span><Eye size={13} aria-hidden="true" />{article.viewCount}</span>
+                    <span><MessageCircle size={13} aria-hidden="true" />{article.commentCount}</span>
+                  </td>
+                  <td><time dateTime={article.updatedAt}>{dateLabel(article.updatedAt)}</time></td>
+                  <td className="adminOriginalActionsCell">
+                    <AdminOriginalArticleActions
+                      articleId={article.id}
+                      title={article.title}
+                      status={article.status}
+                      isPinned={article.isPinned}
+                      returnPath={returnPath}
+                    />
+                  </td>
+                </tr>
+              ))}
+              {!result.items.length ? (
+                <tr><td colSpan={8}>没有匹配的文章。</td></tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
         <Pagination page={result.page} totalPages={result.totalPages} query={query} basePath="/admin/original" />
       </article>
     </AdminFrame>

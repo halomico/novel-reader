@@ -82,7 +82,8 @@ test("keeps authenticated workspace chrome in one persistent route group", () =>
   }
 
   const navigation = read("src/components/UserWorkspaceRouteState.tsx");
-  assert.match(navigation, /prefetch/);
+  assert.match(navigation, /AppLink/);
+  assert.doesNotMatch(navigation, /\sprefetch\n/);
 });
 
 test("marks messages after navigation instead of during RSC prefetch", () => {
@@ -98,6 +99,7 @@ test("keeps authenticated admin chrome in one persistent route group", () => {
   const rootLayout = read("src/app/admin/layout.tsx");
   const frame = read("src/app/admin/(panel)/AdminFrame.tsx");
   const navigation = read("src/components/AdminNavigation.tsx");
+  const adminStyles = read("src/app/styles/routes/admin.css");
 
   assert.match(layout, /AdminSidebarNavigation/);
   assert.match(layout, /AdminRouteTopbar/);
@@ -115,6 +117,9 @@ test("keeps authenticated admin chrome in one persistent route group", () => {
   assert.match(navigation, /usePathname/);
   assert.match(navigation, /router\.prefetch/);
   assert.match(navigation, /onPointerDown/);
+  assert.doesNotMatch(adminStyles, /\.adminSideNav \.isActive::before/);
+  assert.match(adminStyles, /\.adminSideNav \.isActive\s*\{[^}]*var\(--accent\) 7%/);
+  assert.match(adminStyles, /\.adminShell \.adminUploadForm \.adminNovelUploadMode button\.isActive[\s\S]*var\(--accent\) 7%/);
 
   const framedPages = namedFiles(path.join(appRoot, "admin"), "page.tsx")
     .filter((file) => fs.readFileSync(file, "utf8").includes("<AdminFrame"));
@@ -142,14 +147,15 @@ test("keeps the original composer toolbar pinned while only the document scrolls
 
   assert.match(composer, /<LexicalComposer[\s\S]*<header className=\{styles\.topBar\}>[\s\S]*<ComposerToolbar/);
   assert.match(composer, /className=\{styles\.statusBar\}/);
-  assert.match(styles, /\.shell\s*\{[\s\S]*height:\s*100dvh;[\s\S]*grid-template-rows:\s*auto minmax\(0, 1fr\)/);
-  assert.match(styles, /\.topBar\s*\{[\s\S]*position:\s*sticky;[\s\S]*top:\s*0;/);
+  // A full-height column: bars keep their height, and only the page between them scrolls.
+  assert.match(styles, /\.shell\s*\{[\s\S]*display:\s*flex;[\s\S]*height:\s*100dvh;[\s\S]*overflow:\s*hidden;/);
+  assert.match(styles, /\.topBar\s*\{[^}]*flex:\s*0 0 auto;/);
   assert.match(styles, /\.workspace\s*\{[\s\S]*overflow-y:\s*auto;/);
   assert.match(styles, /min-height:\s*var\(--action-height, 34px\)/);
 
   const mobileStyles = styles.slice(styles.indexOf("@media (max-width: 720px)"));
   assert.doesNotMatch(mobileStyles, /\.toolbar\s*\{[^}]*position:\s*fixed;/);
-  assert.match(mobileStyles, /\.toolbar\s*\{[\s\S]*grid-row: 4[\s\S]*flex-wrap: nowrap/);
+  assert.match(mobileStyles, /\.toolbar\s*\{[^}]*order: 4;/);
 });
 
 test("keeps settings and admin palettes on one dual-swatch picker", () => {
@@ -164,6 +170,10 @@ test("keeps settings and admin palettes on one dual-swatch picker", () => {
   assert.match(picker, /palette\.lightAccent/);
   assert.match(picker, /palette\.darkAccent/);
   assert.match(settings, /<PalettePicker className="settingPalettePicker"/);
+  assert.equal((settings.match(/segmentedControl settingCompactSegments/g) || []).length, 6);
+  assert.doesNotMatch(settings, /settingToggleOnly/);
+  assert.match(common, /\.segmentedControl\.settingCompactSegments button\.isActive\s*\{[^}]*color-mix\(in srgb, var\(--accent\) 9%/);
+  assert.doesNotMatch(account, /settingCompactSegments/);
   assert.match(admin, /<PalettePicker name="defaultPalette"/);
   assert.match(common, /\.paletteSwatches\s*\{[\s\S]*width:\s*30px;[\s\S]*height:\s*18px;/);
   assert.match(common, /\.palettePicker \.selectControl select\s*\{[\s\S]*min-height:\s*var\(--action-height\)/);
@@ -176,12 +186,18 @@ test("keeps filled primary actions on the shared rectangular token", () => {
   const station = read("src/app/styles/routes/station.css");
   const core = read("src/app/styles/core.css");
 
-  assert.match(core, /--action-radius:\s*4px;/);
+  assert.match(core, /--action-radius:\s*3px;/);
+  // Filled controls take the palette fill for the theme with a white label.
+  assert.match(core, /--accent-fill: var\(--palette-light-fill\);\s*--accent-fill-strong: var\(--palette-light-fill-strong\);\s*--accent-foreground: #fff;/);
+  assert.match(core, /--accent-fill: var\(--palette-dark-fill\);\s*--accent-fill-strong: var\(--palette-dark-fill-strong\);\s*--accent-foreground: #fff;/);
   assert.match(core, /--action-font-size:\s*13px;/);
-  assert.match(original, /\.originalPrimaryButton\s*\{[\s\S]*border-radius:\s*var\(--action-radius\)/);
-  assert.match(original, /\.originalPrimaryButton\s*\{[\s\S]*font-size:\s*var\(--action-font-size\)/);
-  assert.match(station, /\.stationReplyForm button\s*\{[\s\S]*border-radius:\s*var\(--action-radius\)/);
-  assert.match(station, /\.stationReplyForm button\s*\{[\s\S]*font-size:\s*var\(--action-font-size\)/);
+  // Filled actions are one component in core.css; page rules only add layout.
+  const component = read("src/app/styles/components.css");
+  assert.match(read("src/app/layout.tsx"), /import "\.\/styles\/core\.css";\s*import "\.\/styles\/components\.css";/);
+  assert.match(component, /\.uiButton,[\s\S]*border-radius:\s*var\(--action-radius\)[\s\S]*font-size:\s*var\(--action-font-size\)/);
+  assert.match(component, /\.originalPrimaryButton/);
+  assert.match(component, /\.stationReplyForm\b[^{]*\) button/);
+  assert.doesNotMatch(original, /\.originalPrimaryButton\s*\{[^}]*background:\s*var\(--accent-fill\)/);
   assert.doesNotMatch(station, /\.stationReplyForm button\s*\{[^}]*border-radius:\s*9px/);
 });
 
@@ -242,17 +258,38 @@ test("navigation keeps the current surface while loading and paged readers avoid
   assert.doesNotMatch(controls, /href=\{(?:previous|next) \? [^}]+ : "#"\}/);
   assert.match(controls, /const previousLabel = "上一篇"/);
   assert.match(controls, /const nextLabel = "下一篇"/);
+  assert.doesNotMatch(controls, /isTheme|日间|夜间/);
+  assert.match(controls, /className="readerToolItem isMore"/);
+  assert.match(read("src/components/SiteHeader.tsx"), /<ThemeToggle \/>/);
+  assert.doesNotMatch(read("src/components/SiteHeader.tsx"), /!readerMode \? <ThemeToggle/);
+  assert.doesNotMatch(read("src/components/OriginalReaderExperienceControls.tsx"), /isTheme|日间|夜间/);
+  assert.match(read("src/components/ReaderDisplayPreferences.tsx"), /segmentedControl settingCompactSegments/);
+  assert.match(read("src/app/admin/(panel)/original/page.tsx"), /AdminOriginalArticleActions/);
+  assert.match(read("src/components/AdminOriginalArticleActions.tsx"), /deleteOriginalArticleAction/);
   const reader = read("src/components/NovelReaderView.tsx");
   const pageTurnController = read("src/components/ReaderPageTurnController.tsx");
   assert.match(reader, /previousContentBytes=\{previousContentBytes\}/);
   assert.match(reader, /nextContentBytes=\{nextContentBytes\}/);
   assert.match(pageTurnController, /shouldPrefetchReaderRoute/);
+  assert.match(pageTurnController, /isReaderResumeNavigation/);
   assert.match(pageTurnController, /requestIdleCallback/);
   assert.match(pageTurnController, /prefetchAdjacent\(true\)/);
   assert.match(pageTurnController, /timeout: 500/);
+  assert.match(read("src/components/ReadingHistoryList.tsx"), /scroll=\{false\}/);
+  assert.match(read("src/components/NovelViewTracker.tsx"), /1_500/);
+  assert.doesNotMatch(read("src/components/NovelViewTracker.tsx"), /IntersectionObserver/);
   assert.match(read("src/app/styles/routes/reader.css"), /data-reader-page-turn="slide"[^\n]*[\s\S]*readerChapterNavigation/);
+  const readerCss = read("src/app/styles/routes/reader.css");
+  assert.match(readerCss, /novelReaderShell > \.readerPage > \.readerTagsBlock/);
+  assert.match(readerCss, /data-reader-tags="hidden"\] \.readerPage\.hasReaderPreferences \.readerTagsBlock/);
+  const novelReader = read("src/components/NovelReaderView.tsx");
+  assert.match(novelReader, /<ReaderTagLinks tags=\{tags\} library=\{library\} \/>/);
+  assert.match(novelReader, /<ReaderTagLinks\s+tags=\{displayTags\}/);
   const navigationProgress = read("src/components/NavigationProgress.tsx");
-  assert.match(navigationProgress, /SHOW_DELAY_MS = 120/);
+  assert.match(navigationProgress, /requestAnimationFrame/);
+  assert.match(navigationProgress, /isNavigationPending/);
+  assert.match(core, /@keyframes navigationProgressSweep/);
+  assert.match(core, /\.navigationProgress \{[^}]*height: 2px;/);
   const common = read("src/app/styles/common.css");
   assert.match(common, /\.readerToolRail[\s\S]*background: var\(--reader-paper\);[\s\S]*backdrop-filter: blur\(16px\)/);
   assert.match(common, /\.readerSidePanel\s*\{[\s\S]*width: min\(420px/);
@@ -268,6 +305,7 @@ test("navigation keeps the current surface while loading and paged readers avoid
   assert.doesNotMatch(originalControls, /originalSearchToggle\$\{expanded/);
   assert.doesNotMatch(originalStyles, /originalSearchToggle\.isActive/);
   assert.match(originalStyles, /\.originalSearchForm\.isExpanded \.originalSearchToggle[\s\S]*background:\s*transparent/);
+  assert.match(originalStyles, /\.pageContextBar\.hasMediaSearch \.pageContextActions \.originalSearchForm\.isExpanded\s*\{[^}]*width:\s*clamp\(118px, 31vw, 124px\);[^}]*flex:\s*0 0 clamp\(118px, 31vw, 124px\)/);
   assert.doesNotMatch(originalStyles, /grid-template-columns:\s*36px minmax\(0, 1fr\) 26px/);
   assert.match(common, /\.catalogMenuTrigger \{\r?\n  width: 30px;\r?\n  height: 30px;\r?\n  border: 0;\r?\n  border-radius: 6px;/);
   assert.match(common, /\.catalogMenuTrigger:hover,\r?\n\.catalogMenuTrigger:focus-visible \{/);
@@ -294,70 +332,79 @@ test("navigation keeps the current surface while loading and paged readers avoid
   assert.match(rootShell, /defaultSiteSettings\(\)/);
   assert.doesNotMatch(originalStyles, /readerSiteHeader\.hasMobileContext > \.brand/);
   assert.match(originalStyles, /readerSiteHeader \.mobileContextHeader\s*\{\s*align-self: center/);
+  assert.doesNotMatch(originalStyles, /readerSiteHeader \.headerTools \{\s*display: none/);
+  assert.match(common, /\.segmentedControl\.settingCompactSegments button \{/);
+  assert.match(common, /\.readerMoreMenu \{/);
   assert.doesNotMatch(read("src/components/OriginalReaderExperienceControls.tsx"), /originalDesktopOutline|目录大纲/);
   assert.doesNotMatch(read("src/components/OriginalReaderExperienceControls.tsx"), /item\.index|index \+ 1/);
   assert.doesNotMatch(read("src/app/styles/routes/reader.css"), /\.readerSidePanel\.is-settings[\s\S]*width: 340px/);
   assert.match(read("src/app/styles/routes/catalog.css"), /\.catalogFilterPopover[\s\S]*min-width: 176px/);
   assert.match(read("src/components/SiteHeader.tsx"), /isStandardHeader/);
   assert.match(read("src/app/styles/core.css"), /--font-brand: "OpenAI Sans"/);
-  assert.match(read("src/app/styles/core.css"), /\.brand:hover,[\s\S]*color-mix\(in srgb, var\(--accent-text/);
+  assert.match(read("src/app/styles/core.css"), /\.brand\s*\{[\s\S]*color:\s*var\(--accent-text/);
+  assert.match(read("src/app/styles/core.css"), /\.brand:hover,\s*\.brand:focus-visible\s*\{[^}]*color:\s*color-mix\(in oklab, var\(--accent-text/);
   assert.doesNotMatch(read("src/app/styles/core.css"), /\.brand:hover,[\s\S]*opacity: 0\.85/);
-  const composer = read("src/features/original-editor/OriginalComposerShell.tsx");
+  // The composer is split by responsibility; its contract is checked across the modules.
+  const composer = [
+    "OriginalComposerShell.tsx",
+    "ComposerToolbar.tsx",
+    "ComposerOutline.tsx",
+    "ComposerDialogs.tsx",
+    "PublishDialog.tsx",
+  ].map((name) => read(`src/features/original-editor/${name}`)).join("\n");
   assert.doesNotMatch(composer, /FloatingSelectionToolbarPlugin/);
   assert.doesNotMatch(composer, /serverTimer/);
   // The writing toolbar is one flat row of exactly the commands long-form fiction
-  // needs. Lists, inline code and sub-heading levels stay supported as Markdown
-  // syntax but do not earn a permanent button; 目录 belongs with 设置 in the top bar.
-  // Lockable formats are declared through `formatButton`, so both spellings count.
-  for (const label of ["撤销", "重做", "清除格式", "加粗", "斜体", "下划线", "删除线", "章节标题", "引用", "链接", "分隔线", "付费分界"]) {
+  // needs, each an icon over its name. Lists, inline code and sub-heading levels stay
+  // supported as Markdown syntax but do not earn a permanent button; 目录 belongs with
+  // 设置 in the top bar. Text formats are declared in TEXT_FORMAT_BUTTONS.
+  for (const label of ["撤销", "重做", "清除格式", "加粗", "斜体", "下划线", "删除线", "章节", "引用", "链接", "分割线", "付费分界"]) {
     assert.ok(
-      composer.includes(`label="${label}"`) || composer.includes(`, "${label}",`),
+      composer.includes(`label="${label}"`) || composer.includes(`label: "${label}"`),
       `toolbar is missing ${label}`,
     );
   }
   const desktopToolbar = composer.slice(composer.indexOf("styles.desktopToolbar"), composer.indexOf("styles.mobileToolbar"));
   assert.doesNotMatch(desktopToolbar, /label="(无序列表|有序列表|行内代码|小节标题|正文|目录)"/);
   assert.doesNotMatch(desktopToolbar, /toolGroup|toolDivider|toolSpacer/);
-  // Icon-only buttons must say what they are; the attribute existed but nothing drew it.
-  assert.match(composer, /data-tooltip=\{hint \? `\$\{label\} · \$\{hint\}` : label\}/);
-  assert.match(
-    read("src/features/original-editor/OriginalComposer.module.css"),
-    /\.toolbar button\[data-tooltip\]::after[\s\S]*content: attr\(data-tooltip\)/,
-  );
+  assert.match(composer, /\{children\}\s*<span>\{label\}<\/span>/);
   assert.match(composer, /styles\.outlineButton[\s\S]*aria-label="目录"/);
   assert.match(composer, /<Eraser size=\{18\}/);
-  // A single click must act at once. Waiting out a double-click timer made every
-  // format land a third of a second late; the pair is read from `event.detail`.
-  assert.doesNotMatch(composer, /clickTimerRef/);
-  assert.match(composer, /event\.detail >= 2/);
-  assert.match(composer, /toolLocked/);
-  // Escape releases a format lock without editing a character of the draft, and the
-  // lock is reachable without a double click on a touch screen.
-  assert.match(composer, /KEY_ESCAPE_COMMAND/);
+  // One click turns a format on and the next turns it off. There is no double-click
+  // lock: it made a quick second click do something different from a slow one.
+  assert.doesNotMatch(composer, /clickTimerRef|event\.detail|toolLocked|lockTextFormat|KEY_ESCAPE_COMMAND|formatLockToggle|MOBILE_LOCKABLE_FORMATS/);
+  assert.doesNotMatch(read("src/features/original-editor/editor-commands.ts"), /LockedFormats/);
   // Word count, outline and the paid-boundary flag are debounced, never deferred again
   // to requestIdleCallback: a writer who does not pause — or a throttled tab — was left
   // looking at numbers and a paid state that belonged to an older draft.
   assert.doesNotMatch(composer, /requestIdleCallback\(/);
   assert.match(composer, /flushEditorMetadata/);
-  assert.match(composer, /MOBILE_LOCKABLE_FORMATS/);
-  assert.match(composer, /formatLockToggle/);
   assert.doesNotMatch(composer, /styles\.primaryButton.*发布/);
   assert.match(composer, /styles\.topPublishButton/);
   assert.match(composer, /styles\.bottomPublishButton/);
-  assert.match(composer, /<Settings2 size=\{17\}[\s\S]*<span>设置<\/span>/);
+  assert.match(composer, /topBarActions[\s\S]*previewButton[\s\S]*outlineButton/);
+  assert.match(composer, /statusActions[\s\S]*wordCount[\s\S]*bottomPublishButton/);
+  assert.match(composer, /<Settings2 size=\{15\}[\s\S]*<span>设置<\/span>/);
   assert.doesNotMatch(composer, /styles\.modeSegmented|styles\.modeSegmentButton/);
   assert.match(composer, /readerShell originalReaderShell[\s\S]*readerPage originalDetail[\s\S]*originalDetailIdentity[\s\S]*readerText originalBody/);
   assert.match(composer, /paidGateHint/);
   assert.match(composer, /在正文插入付费分界/);
   assert.match(composer, /!preview \? <header className=\{styles\.topBar\}/);
   assert.match(composer, /!preview \? <footer className=\{styles\.statusBar\}/);
-  // No timed server autosave and no online-retry listener: saving to the server stays
-  // an explicit action. Unsaved work is instead protected by a local recovery copy and
-  // the unload guard, which replaced the history trap the composer used to install.
-  // That trap pushed a duplicate entry on mount and called history.back() again from
-  // its own popstate handler, so one Back press consumed two entries and left the dead
-  // /original/write/<id> URL behind for the exit replace to skip past.
-  assert.doesNotMatch(composer, /AUTOSAVE_DEBOUNCE_MS|addEventListener\("online"/);
+  // Saving is manual only: the save button and Ctrl+S. Nothing writes in the
+  // background, and leaving with unsaved edits asks whether to keep them.
+  assert.doesNotMatch(composer, /AUTOSAVE|autosaveTimers|scheduleAutosave|addEventListener\("online"/);
+  // The save status is itself the save control; there is no second save button.
+  assert.match(composer, /className=\{styles\.saveStatus\}[\s\S]*onClick=\{\(\) => void manualSave\(\)\}/);
+  assert.doesNotMatch(composer, /styles\.saveButton/);
+  assert.match(composer, /key === "s"/);
+  assert.match(composer, /function UnsavedChangesDialog/);
+  assert.match(composer, /保存为草稿？/);
+  assert.doesNotMatch(composer, /local-draft|恢复本机草稿|ComposerConfirmDialog/);
+  assert.equal(fs.existsSync(path.join(projectRoot, "src/features/original-editor/local-draft.ts")), false);
+  // The unload guard replaced a history trap that pushed a duplicate entry on mount and
+  // called history.back() again from its own popstate handler, so one Back press
+  // consumed two entries.
   assert.doesNotMatch(composer, /originalComposerGuard|"popstate"/);
   assert.match(composer, /addEventListener\("beforeunload"/);
   assert.doesNotMatch(composer, /ImagePlus|ImagePastePlugin|uploadImage|图片已插入|ComposerPromptDialog|pendingImage|图片替代文本/);
@@ -376,13 +423,23 @@ test("navigation keeps the current surface while loading and paged readers avoid
   assert.match(assetRoute, /purchase\.buyer_id = \$2/);
   assert.doesNotMatch(assetRoute, /purchase\.user_id/);
   const composerCss = read("src/features/original-editor/OriginalComposer.module.css");
-  assert.match(composerCss, /\.publishButton[\s\S]*var\(--composer-accent/);
-  assert.match(composerCss, /\.publishDialog\s*\{[\s\S]*grid-template-rows: auto minmax\(0, 1fr\) auto/);
+  assert.match(composerCss, /\.publishButton\s*\{\s*composes: uiButton isPrimary from global;/);
+  assert.match(composerCss, /\.publishDialog\s*\{[\s\S]*grid-template-rows: auto auto auto[\s\S]*align-content: start/);
   assert.match(composerCss, /\.publishDialog\s*\{[\s\S]*max-width: 100vw/);
   assert.match(composerCss, /\.publishDialogBody\s*\{[\s\S]*overflow-y: auto/);
   assert.match(composerCss, /scrollbar-gutter: stable/);
   assert.match(composerCss, /\.publishDialog:not\(\[open\]\)\s*\{\s*display: none/);
-  assert.match(composerCss, /\.publishTypeOptionActive/);
+  assert.match(composerCss, /\.publishTypePicker\s*\{[\s\S]*border-radius:\s*999px/);
+  assert.match(composerCss, /\.publishTypeOptionActive\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--composer-accent\) 9%/);
+  assert.doesNotMatch(composer, /open && hasPaidGate && price === 0/);
+  assert.doesNotMatch(composer, /titleCounter|original-title-limit/);
+  assert.match(composer, /DismissibleNotice message=\{errorMessage\} tone="error"/);
+  assert.match(composerCss, /\.priceControl input\s*\{[\s\S]*color:\s*var\(--text/);
+  assert.match(composerCss, /\.tagPickerButton\s*\{[\s\S]*top:\s*50%/);
+  assert.match(composerCss, /\.dialog\.publishDialog:has\(\.tagDrawerBackdrop\)\s*\{[^}]*height:\s*min\(620px/);
+  assert.match(composerCss, /\.tagPicker\s*\{[^}]*height:\s*min\(520px, calc\(100% - 16px\)\)/);
+  assert.match(composer, /<label htmlFor="publish-soda-price"/);
+  assert.doesNotMatch(composer, /<label className=\{styles\.fieldLabel\}>\s*<span>价格<\/span>/);
   assert.doesNotMatch(composer, /所有读者可直接阅读|读者解锁后阅读/);
   assert.match(composer, /onCreateTag/);
   assert.match(composer, /输入标签，回车添加/);
@@ -395,21 +452,35 @@ test("navigation keeps the current surface while loading and paged readers avoid
   assert.doesNotMatch(composerCss, /\.tagSuggestions\s*\{/);
   assert.match(composerCss, /\.tagSelection :global\(\.tagChip\) \{ cursor: pointer; \}/);
   assert.doesNotMatch(composerCss, /\.tagSelection :global\(\.tagChip\) \{[^}]*padding/);
+  assert.match(read("src/components/TagIntersectionSearchForm.tsx"), /tagChip contentTagLink advancedTagOption/);
   assert.doesNotMatch(composer, /window\.(prompt|confirm)/);
   assert.match(read("src/app/api/original/tags/route.ts"), /export async function GET/);
   assert.match(read("src/features/original-editor/server.ts"), /listOriginalEditorTagsByIds/);
-  // The boundary the writer places and the gate the reader meets are one feature seen
-  // at two moments, so the editing card borrows the reader gate's card shape rather
-  // than being a bare rule across the page.
-  assert.match(composerCss, /\.paidGateCard\s*\{[\s\S]*border-radius: 9px;[\s\S]*justify-items: center/);
+  // The paid boundary is a thin labelled rule in the flow of the text. Like every
+  // non-text block it is selected by one click, so Backspace, Delete and the arrow keys
+  // can act on it instead of the caret having nowhere to go.
+  assert.match(composerCss, /\.paidGateMarker\s*\{[\s\S]*display: flex;/);
   assert.match(composerCss, /\.paidGateRemove\s*\{/);
-  assert.match(composerCss, /\.editorParagraph\s*\{ margin: 0 0 1em;/);
-  assert.match(read("src/app/styles/core.css"), /--original-font-size: 17px;[\s\S]*--original-line-height: 1\.7;/);
-  assert.match(originalStyles, /originalMarkdownParagraph \+ \.originalMarkdownParagraph[\s\S]*1em/);
+  assert.match(composerCss, /\.blockSelected\s*\{/);
+  assert.match(read("src/features/original-editor/nodes/PaidGateNode.tsx"), /useBlockSelection/);
+  assert.match(read("src/features/original-editor/nodes/DividerNode.tsx"), /useBlockSelection/);
+  assert.match(shortcutPlugins, /<BlockNavigationPlugin|registerBlockNavigation/);
+  assert.match(composer, /<BlockNavigationPlugin \/>/);
+  // Manuscript typography: 16px / 1.67 with a 1.4em paragraph gap.
+  assert.match(composerCss, /\.contentEditable\s*\{[^}]*font: 400 16px \/ 1\.67/);
+  assert.match(composerCss, /\.editorParagraph\s*\{ margin: 0 0 1\.4em;/);
+  assert.match(read("src/app/styles/core.css"), /--original-font-size: 16px;[\s\S]*--original-line-height: 1\.6;/);
+  assert.match(originalStyles, /width: min\(690px, calc\(100vw - 40px\)\)/);
+  assert.match(originalStyles, /originalMarkdownParagraph \+ \.originalMarkdownParagraph[\s\S]*1\.4em/);
+  assert.match(originalStyles, /font-size: 1\.2em;/);
+  assert.doesNotMatch(originalStyles, /originalReaderShell \.originalBody \{ font-size: 17px/);
   const minePage = read("src/app/(workspace)/original/mine/page.tsx");
-  assert.match(minePage, /className="originalDraftEditAction">\{tr\("编辑"\)\}/);
+  assert.match(minePage, /<OriginalDraftManager/);
+  assert.match(read("src/components/OriginalDraftManager.tsx"), /!managing \? <span className="originalDraftEditAction">\{tr\("编辑"\)\}/);
   assert.doesNotMatch(minePage, /继续编辑/);
   assert.match(originalStyles, /\.originalDraftEditAction\s*\{/);
+  assert.doesNotMatch(originalStyles, /\.originalDraftItem\.isSelected\s*\{/);
+  assert.doesNotMatch(read("src/app/styles/routes/account.css"), /\.readingHistoryItem\.isSelected\s*\{/);
 });
 
 test("does not restore the historical global cascade or exceed its migration budget", () => {

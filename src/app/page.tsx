@@ -85,9 +85,12 @@ export default async function Home({ searchParams }: HomeProps) {
   const announcementMode = accessModes.announcement;
   const showAnnouncement = isHomePortalEntryVisible(announcementMode, authenticated);
   const canReadAnnouncement = canBrowseHomePortal(announcementMode, authenticated);
-  const announcement = showAnnouncement && canReadAnnouncement
-    ? await getPostgresHomeAnnouncement(database("web"), authenticated)
-    : null;
+  const [announcement, overview] = await Promise.all([
+    showAnnouncement && canReadAnnouncement
+      ? getPostgresHomeAnnouncement(database("web"), authenticated)
+      : null,
+    getPostgresHomeOverview(database("web"), authenticated),
+  ]);
   const showNovels = isHomePortalEntryVisible(accessModes.novels, authenticated);
   const cards = new Map<HomePortalCardKey, PortalCard>();
 
@@ -133,7 +136,6 @@ export default async function Home({ searchParams }: HomeProps) {
     }
   }
   const homePortalOrder = settings.homePortalOrder;
-  const overview = await getPostgresHomeOverview(database("web"), authenticated);
 
   return (
     <main className="appShell homePortalShell">
@@ -148,7 +150,6 @@ export default async function Home({ searchParams }: HomeProps) {
             <Link
               className={`homePortalCard is-${card.kind} hasNoTrailingIcon`}
               href={card.href}
-              prefetch
               key={card.kind}
             >
               <span className="homePortalCardIcon" aria-hidden="true">

@@ -5,6 +5,7 @@ import type { QueryResultRow } from "pg";
 import { closePostgresPools, database } from "@/core/db/postgres";
 import {
   cleanupContentGenerations,
+  cleanupRetiredContentGenerations,
   ContentBuildSupersededError,
 } from "@/domains/reading/postgres-content";
 import {
@@ -136,6 +137,11 @@ async function processKind(
     totals.superseded += batch.superseded;
     totals.errors.push(...batch.errors);
     cursor = candidates.at(-1)!.ownerId;
+    // Free each replaced generation now, so a rebuild reuses that space for the batches
+    // that follow instead of holding a second copy of the library until the run ends.
+    while ((await cleanupRetiredContentGenerations(database("jobs"), 64)).generationsDeleted > 0) {
+      signal.throwIfAborted();
+    }
     process.stdout.write(`${JSON.stringify({
       event: "postgres.content.reindex.progress",
       kind,

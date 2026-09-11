@@ -162,6 +162,10 @@ const LEGACY_SETTING_KEYS = [
   "originalPublishNoticeUrl",
 ] as const;
 
+/** Full-text search lists at most this many hits, newest first. Past it the search
+ *  stops counting, which is what keeps a query over a large library bounded. */
+export const MAX_GLOBAL_SEARCH_RESULTS = 3_000;
+
 const DEFAULT_SETTINGS: SiteSettings = {
   siteName: "",
   siteTitle: "",
@@ -193,7 +197,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   adminAllowedNetworks: [],
   adminTheme: "system",
   catalogPageSize: 0,
-  searchResultsPageSize: 0,
+  searchResultsPageSize: 20,
   adminBookPageSize: 0,
   randomCatalogEnabled: true,
   manualPinnedNovelsEnabled: true,
@@ -204,8 +208,8 @@ const DEFAULT_SETTINGS: SiteSettings = {
   noticeDisplaySeconds: 0,
   audioDefaultPlaybackMode: "next",
   showProgressBars: true,
-  frontendSearchConcurrencyLimit: 0,
-  globalSearchMaxResults: 0,
+  frontendSearchConcurrencyLimit: 8,
+  globalSearchMaxResults: 1_000,
   novelSourceSearchModes: {},
   userLoginEnabled: true,
   userRegistrationEnabled: true,
@@ -257,6 +261,15 @@ function cleanInt(value: unknown, fallback: number, min: number, max: number): n
     return fallback;
   }
   return Math.min(Math.max(Math.floor(numericValue), min), max);
+}
+
+/** Search limits have no meaningful zero: a missing or non-positive stored value
+ *  (an install that never saved these settings) takes the default instead of
+ *  clamping to a page size of one or a result cap of one. */
+function cleanPositiveInt(value: unknown, fallback: number, max: number): number {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue < 1) return fallback;
+  return Math.min(Math.floor(numericValue), max);
 }
 
 function cleanTheme(value: unknown): AdminTheme {
@@ -487,7 +500,7 @@ export function normalizeSiteSettings(value: unknown): SiteSettings {
     adminAllowedNetworks: cleanStringList(parsed.adminAllowedNetworks),
     adminTheme: cleanTheme(parsed.adminTheme),
     catalogPageSize: cleanInt(parsed.catalogPageSize, DEFAULT_SETTINGS.catalogPageSize, 0, 100),
-    searchResultsPageSize: cleanInt(parsed.searchResultsPageSize, DEFAULT_SETTINGS.searchResultsPageSize, 0, 100),
+    searchResultsPageSize: cleanPositiveInt(parsed.searchResultsPageSize, DEFAULT_SETTINGS.searchResultsPageSize, 100),
     adminBookPageSize: cleanInt(parsed.adminBookPageSize, DEFAULT_SETTINGS.adminBookPageSize, 0, 200),
     randomCatalogEnabled: cleanBool(parsed.randomCatalogEnabled, DEFAULT_SETTINGS.randomCatalogEnabled),
     manualPinnedNovelsEnabled: cleanBool(parsed.manualPinnedNovelsEnabled, DEFAULT_SETTINGS.manualPinnedNovelsEnabled),
@@ -508,8 +521,8 @@ export function normalizeSiteSettings(value: unknown): SiteSettings {
     noticeDisplaySeconds: cleanInt(parsed.noticeDisplaySeconds, DEFAULT_SETTINGS.noticeDisplaySeconds, 0, 60),
     audioDefaultPlaybackMode: cleanAudioPlaybackMode(parsed.audioDefaultPlaybackMode),
     showProgressBars: cleanBool(parsed.showProgressBars, DEFAULT_SETTINGS.showProgressBars),
-    frontendSearchConcurrencyLimit: cleanInt(parsed.frontendSearchConcurrencyLimit, DEFAULT_SETTINGS.frontendSearchConcurrencyLimit, 0, 100),
-    globalSearchMaxResults: cleanInt(parsed.globalSearchMaxResults, DEFAULT_SETTINGS.globalSearchMaxResults, 0, 10_000),
+    frontendSearchConcurrencyLimit: cleanPositiveInt(parsed.frontendSearchConcurrencyLimit, DEFAULT_SETTINGS.frontendSearchConcurrencyLimit, 100),
+    globalSearchMaxResults: cleanPositiveInt(parsed.globalSearchMaxResults, DEFAULT_SETTINGS.globalSearchMaxResults, MAX_GLOBAL_SEARCH_RESULTS),
     novelSourceSearchModes: normalizeNovelSourceSearchModes(parsed.novelSourceSearchModes),
     userLoginEnabled: cleanBool(parsed.userLoginEnabled, DEFAULT_SETTINGS.userLoginEnabled),
     userRegistrationEnabled: cleanBool(parsed.userRegistrationEnabled, DEFAULT_SETTINGS.userRegistrationEnabled),

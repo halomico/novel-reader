@@ -14,7 +14,7 @@ import {
   type ClaimedPostgresContentJob,
   type ContentJobLease,
 } from "@/core/jobs/postgres-content-jobs";
-import { cleanupContentGenerations } from "@/domains/reading/postgres-content";
+import { cleanupContentGenerations, cleanupRetiredContentGenerations } from "@/domains/reading/postgres-content";
 import {
   contentIndexJobProgress,
   parsePostgresContentIndexJobPayload,
@@ -123,6 +123,17 @@ async function processCandidateBatch(
   return { indexed, bytes };
 }
 
+/** A rebuild retires one generation per published document. Reclaiming them after each
+ *  batch lets autovacuum hand the space to the next batch, so a full rebuild stays near
+ *  the library's compact size instead of holding two copies until the job ends. */
+async function reclaimRetiredGenerations(signal: AbortSignal): Promise<void> {
+  while (true) {
+    signal.throwIfAborted();
+    const deleted = await cleanupRetiredContentGenerations(database("jobs"), 64);
+    if (deleted.generationsDeleted === 0) return;
+  }
+}
+
 async function executeIndexJob(
   job: ClaimedPostgresContentJob,
   shutdownSignal: AbortSignal,
@@ -165,6 +176,7 @@ async function executeIndexJob(
           : 99;
         cursor = candidates.at(-1)!.ownerId;
         await persistProgress(job.lease, progress, controller);
+        await reclaimRetiredGenerations(controller.signal);
       }
     }
     progress.phase = "cleanup";

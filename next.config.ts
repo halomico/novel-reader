@@ -32,11 +32,30 @@ const nextConfig: NextConfig = {
             : []),
         ],
       },
+      {
+        // Bundled avatar art is versioned with the release but not content-hashed:
+        // browsers keep it a day, the CDN a week, both revalidating in the background.
+        source: "/:dir(default-avatars|avatar-widgets)/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" },
+          { key: "CDN-Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" },
+          { key: "Cloudflare-CDN-Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" },
+        ],
+      },
+      {
+        source: "/favicon.ico",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" },
+        ],
+      },
     ];
   },
   experimental: {
-    // Browser-local RSC reuse; personal pages are never put in a shared cache.
-    staleTimes: { dynamic: 30, static: 60 },
+    // Browser-local RSC reuse only; personal pages are never put in a shared cache.
+    // Visited dynamic pages are reused for a minute and intent-prefetched pages for
+    // three, which keeps back-and-forth browsing instant. Mutations still call
+    // revalidatePath/router.refresh, which purges these entries immediately.
+    staleTimes: { dynamic: 60, static: 180 },
     serverActions: {
       bodySizeLimit: "16mb",
     },

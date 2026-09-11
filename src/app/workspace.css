@@ -150,10 +150,10 @@
 }
 
 .workspaceSegmentedTabs > a.isActive {
-  background: color-mix(in srgb, var(--accent) 13%, var(--surface));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
-  color: var(--accent-text, var(--accent));
-  font-weight: 700;
+  background: color-mix(in srgb, var(--text) 5%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 82%, transparent);
+  color: var(--text);
+  font-weight: 680;
 }
 
 .currencyBalanceGroup {

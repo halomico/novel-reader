@@ -52,7 +52,7 @@ export default async function OriginalTagPage({ params, searchParams }: Original
 
   return (
     <main className="appShell originalShell originalTagDetailShell">
-      <SiteHeader currentUser={user} />
+      <SiteHeader currentUser={user} searchScope="originals" />
       <PageContextBar
         items={[{ label: tr("首页"), href: "/" }, { label: tr("原创"), href: "/original" }, { label: tr("标签"), href: "/original/tags" }, { label: displayTagName }]}
         search={<OriginalBrowseControls q="" tag={tag.slug} sort={sort} order={order} locale={locale} />}

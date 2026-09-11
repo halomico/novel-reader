@@ -50,6 +50,7 @@
 !/deploy/
 /deploy/*
 !/deploy/Caddyfile.media.example
+!/deploy/cloudflare-cache.md
 
 !/scripts/
 /scripts/*

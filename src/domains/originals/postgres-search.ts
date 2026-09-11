@@ -64,7 +64,6 @@ type CandidateRow = QueryResultRow & {
   title: string;
   excerpt: string;
   body_markdown: string;
-  paid_body_markdown: string;
   author_id: string;
   author_name: string;
   author_avatar_path: string | null;
@@ -126,14 +125,19 @@ function validateCursor(cursor: PostgresOriginalSearchCursor | undefined): void 
   }
 }
 
-function accessSql(sql: Builder, viewer: PostgresOriginalSearchViewer): string {
-  if (viewer?.role === "admin") return "TRUE";
-  if (!viewer) return "a.unlock_soda_price = 0";
-  const id = sql.parameter(viewer.id);
-  return `(a.unlock_soda_price = 0 OR a.author_id = ${id} OR EXISTS (
-    SELECT 1 FROM original_purchases access_purchase
-    WHERE access_purchase.article_id = a.id AND access_purchase.buyer_id = ${id}
-  ))`;
+/**
+ * Search matches titles, tags and the public body only — the paid body is never
+ * indexed and never read here — so a paid article is exactly as discoverable as it is
+ * on the public list, and unlocking changes what a reader can open, not what they can
+ * find. Visibility therefore mirrors that list: published articles, minus authors the
+ * viewer has blocked.
+ */
+function visibilitySql(sql: Builder, viewer: PostgresOriginalSearchViewer): string {
+  if (!viewer) return "TRUE";
+  return `NOT EXISTS (
+    SELECT 1 FROM user_original_author_blocks blocked
+    WHERE blocked.user_id = ${sql.parameter(viewer.id)} AND blocked.author_id = a.author_id
+  )`;
 }
 
 async function indexedTermSql(sql: Builder, value: string, prefix: "title" | "content"): Promise<string> {
@@ -188,7 +192,7 @@ export async function buildPostgresOriginalCandidateQuery(
   }
 
   const sql = builder();
-  const filters = ["a.status = 'published'", accessSql(sql, viewer), ...tagsSql(sql, include, exclude)];
+  const filters = ["a.status = 'published'", visibilitySql(sql, viewer), ...tagsSql(sql, include, exclude)];
   if (options.titleQuery) {
     for (const term of options.titleQuery.requiredTerms) filters.push(await indexedTermSql(sql, term.value, "title"));
   }
@@ -204,7 +208,7 @@ export async function buildPostgresOriginalCandidateQuery(
   const offsetSql = offset ? ` OFFSET ${sql.parameter(offset)}::integer` : "";
   return {
     text: `SELECT a.id::text, a.slug, a.title, a.excerpt,
-      ${options.contentQuery ? "a.body_markdown, a.paid_body_markdown" : "''::text AS body_markdown, ''::text AS paid_body_markdown"},
+      ${options.contentQuery ? "a.body_markdown" : "''::text AS body_markdown"},
       a.author_id::text, u.display_name AS author_name, u.avatar_path AS author_avatar_path,
       a.word_count::text, a.unlock_soda_price::text,
       coalesce(a.published_at, a.created_at)::text AS published_at,
@@ -230,10 +234,6 @@ function safeInteger(value: string | number, label: string): number {
   return result;
 }
 
-function searchableSource(row: CandidateRow): string {
-  return `${row.body_markdown}\n${row.paid_body_markdown}`;
-}
-
 function plainSnippet(text: string, query: ParsedSearchQuery | undefined, fallback: string): string {
   const compact = text
     .replace(/!\[[^\]]*\]\([^)]*\)/gu, " ")
@@ -255,7 +255,8 @@ function itemFor(row: CandidateRow, contentQuery: ParsedSearchQuery | undefined)
     slug: row.slug,
     title: row.title,
     excerpt: row.excerpt,
-    snippet: plainSnippet(searchableSource(row), contentQuery, row.excerpt),
+    // Cut from the public body: the paid body is not selected, so it cannot leak here.
+    snippet: plainSnippet(row.body_markdown, contentQuery, row.excerpt),
     authorId: safeInteger(row.author_id, "author id"),
     authorName: row.author_name,
     authorAvatarPath: row.author_avatar_path,
@@ -312,7 +313,7 @@ export async function listPostgresOriginalSearchTags(
       FROM original_tags tag
       JOIN original_article_tags article_tag ON article_tag.tag_id = tag.id
       JOIN original_articles a ON a.id = article_tag.article_id
-      WHERE a.status = 'published' AND ${accessSql(sql, validatedViewer(viewer))}
+      WHERE a.status = 'published' AND ${visibilitySql(sql, validatedViewer(viewer))}
       GROUP BY tag.id, tag.slug, tag.name
       HAVING count(DISTINCT a.id) > 0
       ORDER BY lower(tag.name), tag.id`,

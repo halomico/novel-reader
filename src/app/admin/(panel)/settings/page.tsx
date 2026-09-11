@@ -7,6 +7,7 @@ import { AdminSwitchRow } from "@/components/AdminSwitchRow";
 import { HomeCardOrderField } from "@/components/HomeCardOrderField";
 import { SiteIconFilePicker } from "@/components/SiteIconFilePicker";
 import { readPostgresSiteSettings } from "@/core/config/site-settings";
+import { MAX_GLOBAL_SEARCH_RESULTS } from "@/core/config/site-settings-schema";
 import { database } from "@/core/db/postgres";
 import { countPostgresRecommendationPoolNovels } from "@/domains/activity/postgres-recommendations";
 import { listPostgresNovelSources } from "@/domains/catalog/postgres-catalog";
@@ -561,14 +562,14 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
             <div className="adminFieldGrid">
               <label>
                 <span>前台全文最多显示 / 条</span>
-                <input name="globalSearchMaxResults" type="number" min="1" max="10000" defaultValue={globalSearchMaxResults} />
+                <input name="globalSearchMaxResults" type="number" min="1" max={MAX_GLOBAL_SEARCH_RESULTS} defaultValue={globalSearchMaxResults} />
               </label>
               <label>
                 <span>全文搜索并发上限 / 个</span>
                 <input name="frontendSearchConcurrencyLimit" type="number" min="1" max="100" defaultValue={frontendSearchConcurrencyLimit} />
               </label>
             </div>
-            <p className="adminFieldHint">前台检索使用 PostgreSQL 语句超时与并发配额自动保护；索引构建和取消统一在“搜索索引”页面管理。</p>
+            <p className="adminFieldHint">全文搜索按最近更新排序，最多列出前若干条（上限 {MAX_GLOBAL_SEARCH_RESULTS}），超出部分不再计数，大书库也能保持秒级响应。并发上限按单个应用实例生效，繁忙时短暂排队。索引构建和取消统一在“搜索索引”页面管理。</p>
           </details>
 
           <div className="adminSettingsSaveBar">

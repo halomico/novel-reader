@@ -10,7 +10,20 @@ WORKDIR /app
 COPY package.json package-lock.json tsconfig.json next-env.d.ts next.config.ts ./
 COPY src ./src
 COPY migrations/postgres ./migrations/postgres
-COPY scripts ./scripts
+COPY scripts/build-maintenance.mjs \
+  scripts/audit-runtime-dependencies.mjs \
+  scripts/sanitize-standalone.mjs \
+  ./scripts/
+COPY scripts/scan-books.ts \
+  scripts/reindex-postgres-content.ts \
+  scripts/reindex-postgres-originals.ts \
+  scripts/optimize-media.ts \
+  scripts/media-node.ts \
+  scripts/postgres-content-worker.ts \
+  scripts/db-migrate-postgres.ts \
+  scripts/db-verify-postgres.ts \
+  scripts/init-postgres.ts \
+  ./scripts/
 COPY public/favicon.ico ./public/favicon.ico
 COPY public/default-avatars ./public/default-avatars
 COPY public/avatar-widgets ./public/avatar-widgets

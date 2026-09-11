@@ -278,11 +278,11 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 1px solid color-mix(in srgb, var(--accent) 74%, var(--border));
+  border: 1px solid var(--accent-fill);
   border-radius: var(--action-radius);
   padding: 0 var(--action-inline-padding);
-  background: var(--accent);
-  color: #fffaf2;
+  background: var(--accent-fill);
+  color: var(--accent-foreground);
   cursor: pointer;
   transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
   font-size: var(--action-font-size);
@@ -361,9 +361,9 @@
 .marketPurchaseActions button:focus-visible,
 .marketOrderFile a:hover,
 .marketOrderFile a:focus-visible {
-  border-color: var(--accent-strong, var(--accent));
-  background: var(--accent-strong, var(--accent));
-  color: #fffaf2;
+  border-color: var(--accent-fill-strong);
+  background: var(--accent-fill-strong);
+  color: var(--accent-foreground);
   outline: 0;
 }
 
@@ -846,11 +846,11 @@
 .marketExchangeLine > .marketExchangeSubmit,
 .marketCodeLine button {
   min-height: var(--action-height);
-  border: 1px solid color-mix(in srgb, var(--accent) 74%, var(--border));
+  border: 1px solid var(--accent-fill);
   border-radius: var(--action-radius);
   padding: 0 var(--action-inline-padding);
-  background: var(--accent);
-  color: #fffaf2;
+  background: var(--accent-fill);
+  color: var(--accent-foreground);
   font-size: var(--action-font-size);
   font-weight: var(--action-font-weight);
 }

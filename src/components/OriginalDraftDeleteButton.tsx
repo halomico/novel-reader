@@ -3,7 +3,6 @@
 import { useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { jsonMutationRequest } from "@/core/security/browser-mutation";
-import { deleteLocalOriginalDraft } from "@/features/original-editor/local-draft";
 import { uiText, withLocalePath, type AppLocale } from "@/lib/locale";
 
 export function OriginalDraftDeleteButton({ draftId, title, locale }: { draftId: number; title: string; locale: AppLocale }) {
@@ -21,7 +20,6 @@ export function OriginalDraftDeleteButton({ draftId, title, locale }: { draftId:
       const response = await fetch(`/api/original/drafts/${draftId}`, jsonMutationRequest({ method: "DELETE" }));
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || tr("删除失败，请重试"));
-      await deleteLocalOriginalDraft(draftId);
       dialog.current?.close();
       router.replace(withLocalePath(`/original/mine?view=drafts&notice=${encodeURIComponent(tr("草稿已删除"))}&tone=success`, locale), { scroll: false });
     } catch (reason) {

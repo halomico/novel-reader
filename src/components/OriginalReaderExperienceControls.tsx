@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUp, ChevronLeft, ChevronRight, Ellipsis, Info, List, MessageCircle, Moon, PenLine, Settings2, Sun } from "lucide-react";
+import { ArrowUp, ChevronLeft, ChevronRight, Ellipsis, Info, List, MessageCircle, PenLine, Settings2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import Link from "@/components/LocalizedLink";
 import type { OriginalOutlineItem } from "@/lib/original-outline";
@@ -118,9 +118,6 @@ export function OriginalReaderExperienceControls({
           </button>
         ) : <button className="readerToolItem isDirectory" type="button" disabled><List size={20} aria-hidden="true" /><span>目录</span></button>}
         <button className="readerToolItem isInfo isSecondary" type="button" onClick={() => setPanel("info")}><Info size={20} aria-hidden="true" /><span>详情</span></button>
-        <button className="readerToolItem isTheme isSecondary" type="button" onClick={preferences.toggleTheme}>
-          {preferences.readerIsDark ? <Sun size={20} aria-hidden="true" /> : <Moon size={20} aria-hidden="true" />}<span>{preferences.readerIsDark ? "日间" : "夜间"}</span>
-        </button>
         {canTip ? <span className="readerToolItem readerToolAction isTip isSecondary"><OriginalTipButton articleId={articleId} initialTipped={initialTipped} /></span> : null}
         {authenticated ? <span className="readerToolItem readerToolAction isGrove isSecondary"><GroveButton contentType="original" contentId={articleId} initialPlanted={initialInGrove} showLabel /></span> : null}
         {authenticated ? <span className="readerToolItem readerToolAction isFavorite isSecondary"><ContentFavoriteButton collection="original" contentId={articleId} initialFavorite={initialFavorite} showLabel /></span> : null}
@@ -145,16 +142,15 @@ export function OriginalReaderExperienceControls({
         <button className="readerToolItem isMore" type="button" onClick={() => setPanel("more")}><Ellipsis size={21} aria-hidden="true" /><span>更多</span></button>
       </ReaderToolRail>
       {panel ? (
-        <ReaderSidePanel kind={panel} docked={panel === "directory"} title={panel === "directory" ? "目录" : panel === "info" ? "详情" : panel === "settings" ? "阅读设置" : "更多"} meta={panel === "directory" ? <small>{items.length} 节</small> : null} onClose={closePanel}>
-          {/* The outline stays open while the reader keeps reading, so navigating
-              inside it must not close it. */}
-          {panel === "directory" ? (items.length ? <OutlineLinks items={items} activeId={activeId} /> : <p className="readerPanelEmpty">正文没有标题目录。</p>) : null}
+        <ReaderSidePanel kind={panel} title={panel === "directory" ? "目录" : panel === "info" ? "详情" : panel === "settings" ? "阅读设置" : "更多"} meta={panel === "directory" ? <small>{items.length} 节</small> : null} onClose={closePanel}>
+          {/* Same drawer as the novel reader: choosing a section scrolls to it and
+              hands the page back to the reader. */}
+          {panel === "directory" ? (items.length ? <OutlineLinks items={items} activeId={activeId} onNavigate={closePanel} /> : <p className="readerPanelEmpty">正文没有标题目录。</p>) : null}
           {panel === "info" ? <div className="readerBookInfo"><h2>{title}</h2><dl><div><dt>字数</dt><dd>{wordCount.toLocaleString("zh-CN")} 字</dd></div><div><dt>目录</dt><dd>{items.length} 节</dd></div></dl></div> : null}
           {panel === "settings" ? <ReaderDisplaySettingsPanel preferences={preferences} showPageTurn={false} /> : null}
           {panel === "more" ? <div className="readerMoreMenu" role="menu" aria-label="更多阅读操作">
             {editHref ? <Link className="readerMoreAction" href={editHref} onClick={keepReaderChromeVisible}><PenLine size={20} aria-hidden="true" /><span>编辑</span></Link> : null}
             <button className="readerMoreAction" type="button" onClick={() => setPanel("info")}><Info size={20} aria-hidden="true" /><span>详情</span></button>
-            <button className="readerMoreAction" type="button" onClick={preferences.toggleTheme}>{preferences.readerIsDark ? <Sun size={20} aria-hidden="true" /> : <Moon size={20} aria-hidden="true" />}<span>{preferences.readerIsDark ? "日间" : "夜间"}</span></button>
             <button className="readerMoreAction" type="button" onClick={() => setPanel("settings")}><Settings2 size={20} aria-hidden="true" /><span>设置</span></button>
             {canTip ? <span className="readerMoreAction readerToolAction"><OriginalTipButton articleId={articleId} initialTipped={initialTipped} /></span> : null}
             {authenticated ? <span className="readerMoreAction readerToolAction"><GroveButton contentType="original" contentId={articleId} initialPlanted={initialInGrove} showLabel /></span> : null}

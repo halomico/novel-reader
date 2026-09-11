@@ -7,6 +7,7 @@ import { ThemeScript } from "@/components/ThemeScript";
 import { DEFAULT_LOCALE } from "@/lib/locale";
 import { getRootShellConfiguration } from "@/lib/root-shell";
 import "./styles/core.css";
+import "./styles/components.css";
 
 export async function generateMetadata(): Promise<Metadata> {
   const shell = await getRootShellConfiguration();

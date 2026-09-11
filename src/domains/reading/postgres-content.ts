@@ -420,3 +420,42 @@ export async function cleanupContentGenerations(executor: SqlExecutor, limit = 2
   });
   return { blocksDeleted: blocks.rowCount ?? 0, generationsDeleted: generations.rowCount ?? 0 };
 }
+
+/**
+ * Reclaims generations that publication or a restarted build retired. Unlike the full
+ * sweep above, victims come from the generation manifest (its cleanup index) and blocks
+ * are deleted by primary-key prefix, so the cost follows what is deleted rather than the
+ * size of the library. An indexing job calls it after every batch: a rebuild then frees
+ * each old generation as soon as its replacement is live, and autovacuum hands that
+ * space to the following batches instead of the table holding two copies of the library.
+ */
+export async function cleanupRetiredContentGenerations(
+  executor: SqlExecutor,
+  limit = 64,
+): Promise<{ blocksDeleted: number; generationsDeleted: number }> {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000) throw new Error("Invalid content cleanup budget");
+  const result = await executor.query<QueryResultRow & { blocks: string | number; generations: string | number }>({
+    text: `WITH victims AS (
+        SELECT g.document_id, g.generation FROM novel_content_generations g
+        JOIN novel_documents d ON d.id = g.document_id
+        WHERE g.state IN ('obsolete', 'failed')
+          AND g.generation <> d.active_generation AND g.generation IS DISTINCT FROM d.staging_generation
+        ORDER BY g.updated_at, g.document_id, g.generation
+        LIMIT $1 FOR UPDATE OF g SKIP LOCKED
+      ), deleted_blocks AS (
+        DELETE FROM novel_content_blocks b USING victims v
+        WHERE b.document_id = v.document_id AND b.generation = v.generation
+        RETURNING 1
+      ), deleted_generations AS (
+        DELETE FROM novel_content_generations g USING victims v
+        WHERE g.document_id = v.document_id AND g.generation = v.generation
+        RETURNING 1
+      )
+      SELECT (SELECT count(*) FROM deleted_blocks) AS blocks, (SELECT count(*) FROM deleted_generations) AS generations`,
+    values: [limit],
+  });
+  return {
+    blocksDeleted: Number(result.rows[0]?.blocks ?? 0),
+    generationsDeleted: Number(result.rows[0]?.generations ?? 0),
+  };
+}

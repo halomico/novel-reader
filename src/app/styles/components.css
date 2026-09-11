@@ -1,0 +1,90 @@
+/* Base components shared by every page. Page stylesheets add layout only; they do not
+   redefine these components. Loaded globally, right after core.css. */
+
+/* ---- Base component: button ------------------------------------------------
+   One button for the whole site. New markup uses `uiButton` with `isPrimary`,
+   `isSecondary` or `isDanger`. The page-level names are aliases of the same
+   component, grouped by selector weight so each page's own overrides still apply. */
+.uiButton,
+:is(.authPrimaryButton, .originalPrimaryButton, .originalActionButton, .accountActionButton, .mediaDownloadButton, .adminCompactButton, .adminMediaUploadButton, .adminSettingsSaveButton, .siteEntryNoticeConfirm),
+:is(.userPanel:not(.accountPanel), .pageJumpPanel, .stationReplyForm, .adminCreateUserForm, .adminEditorActions) button,
+:is(.readerReportDialog, .stationNewThreadDialog) footer button {
+  display: inline-flex;
+  min-height: var(--action-height);
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: var(--action-radius);
+  padding: 0 var(--action-inline-padding);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--action-font-size);
+  font-weight: var(--action-font-weight);
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.uiButton.isPrimary,
+:is(.authPrimaryButton, .originalPrimaryButton, .originalActionButton, .accountActionButton, .mediaDownloadButton, .adminCompactButton, .adminMediaUploadButton, .adminSettingsSaveButton, .siteEntryNoticeConfirm),
+:is(.userPanel:not(.accountPanel), .pageJumpPanel, .stationReplyForm, .adminCreateUserForm, .adminEditorActions) button,
+:is(.readerReportDialog, .stationNewThreadDialog) footer button {
+  border-color: var(--accent-fill);
+  background: var(--accent-fill);
+  color: var(--accent-foreground);
+}
+
+.uiButton.isPrimary:hover:not(:disabled),
+.uiButton.isPrimary:focus-visible:not(:disabled),
+.uiButton.isPrimary:active:not(:disabled),
+:is(.authPrimaryButton, .originalPrimaryButton, .originalActionButton, .accountActionButton, .mediaDownloadButton, .adminCompactButton, .adminMediaUploadButton, .adminSettingsSaveButton, .siteEntryNoticeConfirm):hover:not(:disabled),
+:is(.userPanel:not(.accountPanel), .pageJumpPanel, .stationReplyForm, .adminCreateUserForm, .adminEditorActions) button:hover:not(:disabled),
+:is(.readerReportDialog, .stationNewThreadDialog) footer button:hover:not(:disabled),
+:is(.authPrimaryButton, .originalPrimaryButton, .originalActionButton, .accountActionButton, .mediaDownloadButton, .adminCompactButton, .adminMediaUploadButton, .adminSettingsSaveButton, .siteEntryNoticeConfirm):focus-visible:not(:disabled),
+:is(.userPanel:not(.accountPanel), .pageJumpPanel, .stationReplyForm, .adminCreateUserForm, .adminEditorActions) button:focus-visible:not(:disabled),
+:is(.readerReportDialog, .stationNewThreadDialog) footer button:focus-visible:not(:disabled) {
+  border-color: var(--accent-fill-strong);
+  background: var(--accent-fill-strong);
+  color: var(--accent-foreground);
+}
+
+.uiButton.isSecondary {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--text);
+}
+
+.uiButton.isSecondary:hover:not(:disabled),
+.uiButton.isSecondary:focus-visible:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  color: var(--accent-text, var(--accent));
+}
+
+.uiButton.isDanger {
+  border-color: color-mix(in srgb, var(--danger, #cf7657) 48%, var(--border));
+  background: transparent;
+  color: var(--danger, #cf7657);
+}
+
+.uiButton.isDanger:hover:not(:disabled),
+.uiButton.isDanger:focus-visible:not(:disabled) {
+  background: color-mix(in srgb, var(--danger, #cf7657) 8%, transparent);
+}
+
+.uiButton.isCompact {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.uiButton:disabled,
+:is(.authPrimaryButton, .originalPrimaryButton, .originalActionButton, .accountActionButton, .mediaDownloadButton, .adminCompactButton, .adminMediaUploadButton, .adminSettingsSaveButton, .siteEntryNoticeConfirm):disabled,
+:is(.userPanel:not(.accountPanel), .pageJumpPanel, .stationReplyForm, .adminCreateUserForm, .adminEditorActions) button:disabled,
+:is(.readerReportDialog, .stationNewThreadDialog) footer button:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}

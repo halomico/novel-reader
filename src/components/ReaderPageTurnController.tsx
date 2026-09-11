@@ -14,6 +14,7 @@ import {
   READER_PAGE_STATE_REQUEST_EVENT,
   READER_PAGE_TURN_CHANGE_EVENT,
   encodeReaderEntryEdge,
+  isReaderResumeNavigation,
   resolveReaderEntryEdge,
   resolveReaderEntryPage,
   resolveReaderPageMetrics,
@@ -250,12 +251,14 @@ export function ReaderPageTurnController({
         content!.style.removeProperty("--reader-page-column-width");
         emitState();
         root.classList.remove("isReaderPagePending");
-        if (routeChanged && progressRatio === undefined) window.scrollTo({ top: 0, behavior: "auto" });
+        if (routeChanged && progressRatio === undefined && !isReaderResumeNavigation()) {
+          window.scrollTo({ top: 0, behavior: "auto" });
+        }
         if (progressRatio !== undefined) requestAnimationFrame(() => restoreVerticalProgress(progressRatio));
         return;
       }
 
-      window.scrollTo({ top: 0, behavior: "auto" });
+      if (!isReaderResumeNavigation()) window.scrollTo({ top: 0, behavior: "auto" });
       const storedEntryEdge = sessionStorage.getItem(READER_ENTRY_EDGE_SESSION_KEY);
       const entryEdge = resolveReaderEntryEdge(
         storedEntryEdge,
@@ -270,6 +273,11 @@ export function ReaderPageTurnController({
       }
       afterLayout((settled) => {
         metrics = pageMetrics(content!);
+        if (isReaderResumeNavigation() && !entryEdge) {
+          emitState();
+          root.classList.remove("isReaderPagePending");
+          return;
+        }
         const targetIndex = resolveReaderEntryPage({
           entryEdge: entryEdge === "start" || entryEdge === "end" ? entryEdge : null,
           progressRatio: resolvedProgressRatio,

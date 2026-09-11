@@ -96,10 +96,8 @@ function sendEngagement(articleId: number, action: "detail_view" | "read_open"):
 
 function useVisibleEngagement(articleId: number, targetId: string) {
   useEffect(() => {
+    if (!document.getElementById(targetId)) return;
     let sent = false;
-    const target = document.getElementById(targetId);
-    if (!target) return;
-    let intersecting = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     function cancel() {
       if (!timer) return;
@@ -108,28 +106,22 @@ function useVisibleEngagement(articleId: number, targetId: string) {
     }
     function schedule() {
       cancel();
-      if (!intersecting || document.visibilityState !== "visible" || sent) return;
+      if (document.visibilityState !== "visible" || sent) return;
       timer = setTimeout(() => {
         timer = null;
-        if (!intersecting || document.visibilityState !== "visible" || sent) return;
+        if (document.visibilityState !== "visible" || sent) return;
         sent = true;
         sendEngagement(articleId, "detail_view");
       }, ENGAGEMENT_DELAY_MS);
     }
-    const observer = new IntersectionObserver(([entry]) => {
-      intersecting = Boolean(entry?.isIntersecting && entry.intersectionRatio >= 0.3);
-      if (intersecting) schedule();
-      else cancel();
-    }, { threshold: [0, 0.3, 0.5] });
+    schedule();
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") schedule();
       else cancel();
     };
-    observer.observe(target);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       cancel();
-      observer.disconnect();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [articleId, targetId]);
@@ -171,12 +163,29 @@ export function OriginalArticleTracker({
     }
     const local = readPosition(slug);
     const saved = initialRatio > 0 ? { ratio: initialRatio } : local;
+    let restoreTimer = 0;
     if (resume && saved) {
-      const restore = () => window.requestAnimationFrame(() => window.requestAnimationFrame(() => restorePosition(saved)));
-      if (document.fonts?.ready) void document.fonts.ready.then(restore);
-      else restore();
-    }
-    if (resume) {
+      let attempts = 0;
+      const stripResume = () => {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get("resume") !== "1") return;
+        url.searchParams.delete("resume");
+        window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+      };
+      const restore = () => {
+        attempts += 1;
+        restorePosition(saved);
+        if (attempts >= 8) {
+          stripResume();
+          return;
+        }
+        restoreTimer = window.setTimeout(restore, attempts < 3 ? 50 : 120);
+      };
+      restore();
+      void document.fonts?.ready.then(() => {
+        if (attempts < 8) restore();
+      });
+    } else if (resume) {
       const url = new URL(window.location.href);
       url.searchParams.delete("resume");
       window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
@@ -218,6 +227,7 @@ export function OriginalArticleTracker({
     window.addEventListener(READER_LAYOUT_CHANGE_EVENT, scheduleSave);
     window.addEventListener("pagehide", handlePageHide);
     return () => {
+      if (restoreTimer) window.clearTimeout(restoreTimer);
       window.removeEventListener("scroll", scheduleSave);
       window.removeEventListener(READER_LAYOUT_CHANGE_EVENT, scheduleSave);
       window.removeEventListener("pagehide", handlePageHide);

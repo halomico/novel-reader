@@ -42,49 +42,59 @@ export const READER_THEME_OPTIONS = [
 ] as const;
 
 export const COLOR_PALETTES = [
-  { value: "default", label: "GitHub", lightAccent: "#0969da", lightStrong: "#0550ae", darkAccent: "#4493f8", darkStrong: "#58a6ff" },
-  { value: "spacelab", label: "Carbon", lightAccent: "#0f62fe", lightStrong: "#0043ce", darkAccent: "#78a9ff", darkStrong: "#78a9ff" },
-  { value: "nordic", label: "Nightfox", lightAccent: "#2848a9", lightStrong: "#2848a9", darkAccent: "#719cd6", darkStrong: "#719cd6" },
-  { value: "flatly", label: "Everforest", lightAccent: "#8da101", lightStrong: "#5c6a72", darkAccent: "#a7c080", darkStrong: "#a7c080" },
-  { value: "sakura", label: "Catppuccin Pink", lightAccent: "#ea76cb", lightStrong: "#8839ef", darkAccent: "#f5c2e7", darkStrong: "#f5c2e7" },
-  { value: "cerulean", label: "Tailwind Blue", lightAccent: "#1d4ed8", lightStrong: "#1d4ed8", darkAccent: "#60a5fa", darkStrong: "#60a5fa" },
-  { value: "jade", label: "Vitesse", lightAccent: "#1c6b48", lightStrong: "#1c6b48", darkAccent: "#4d9375", darkStrong: "#4d9375" },
-  { value: "minty", label: "Tailwind Teal", lightAccent: "#0f766e", lightStrong: "#0f766e", darkAccent: "#2dd4bf", darkStrong: "#2dd4bf" },
-  { value: "coral", label: "Horizon", lightAccent: "#da103f", lightStrong: "#da103f", darkAccent: "#e95678", darkStrong: "#e95678" },
-  { value: "slate", label: "Primer Gray", lightAccent: "#57606a", lightStrong: "#57606a", darkAccent: "#8b949e", darkStrong: "#c9d1d9" },
-  { value: "lavender", label: "Catppuccin Mauve", lightAccent: "#8839ef", lightStrong: "#8839ef", darkAccent: "#cba6f7", darkStrong: "#cba6f7" },
-  { value: "sandstone", label: "Tailwind Amber", lightAccent: "#b45309", lightStrong: "#b45309", darkAccent: "#fbbf24", darkStrong: "#fbbf24" },
-  { value: "graphite", label: "Open Color Gray", lightAccent: "#343a40", lightStrong: "#343a40", darkAccent: "#adb5bd", darkStrong: "#adb5bd" },
-  { value: "pulse", label: "One Dark", lightAccent: "#a626a4", lightStrong: "#a626a4", darkAccent: "#c678dd", darkStrong: "#c678dd" },
-  { value: "amber", label: "Ayu", lightAccent: "#fa8d3e", lightStrong: "#5c6166", darkAccent: "#ff8f40", darkStrong: "#ff8f40" },
-  { value: "materia", label: "Palenight", lightAccent: "#c792ea", lightStrong: "#676e95", darkAccent: "#c792ea", darkStrong: "#c792ea" },
-  { value: "arctic", label: "Iceberg", lightAccent: "#2d539e", lightStrong: "#2d539e", darkAccent: "#84a0c6", darkStrong: "#84a0c6" },
-  { value: "superhero", label: "Kanagawa", lightAccent: "#4d699b", lightStrong: "#4d699b", darkAccent: "#7e9cd8", darkStrong: "#7e9cd8" },
-  { value: "ink", label: "Poimandres", lightAccent: "#42675a", lightStrong: "#42675a", darkAccent: "#5de4c7", darkStrong: "#5de4c7" },
-  { value: "cyborg", label: "Monokai", lightAccent: "#f92672", lightStrong: "#75715e", darkAccent: "#f92672", darkStrong: "#f92672" },
-  { value: "cinnabar", label: "Dracula", lightAccent: "#cb3a2a", lightStrong: "#cb3a2a", darkAccent: "#ff79c6", darkStrong: "#ff79c6" },
-  { value: "nord", label: "Nord", lightAccent: "#5e81ac", lightStrong: "#4c566a", darkAccent: "#88c0d0", darkStrong: "#88c0d0" },
-  { value: "tokyo", label: "Tokyo Night", lightAccent: "#2959aa", lightStrong: "#2959aa", darkAccent: "#7aa2f7", darkStrong: "#7aa2f7" },
-  { value: "catppuccin", label: "Catppuccin", lightAccent: "#1e66f5", lightStrong: "#1e66f5", darkAccent: "#89b4fa", darkStrong: "#89b4fa" },
-  { value: "gruvbox", label: "Gruvbox", lightAccent: "#af3a03", lightStrong: "#af3a03", darkAccent: "#fe8019", darkStrong: "#fe8019" },
-  { value: "obsidian", label: "Primer Neutral", lightAccent: "#24292f", lightStrong: "#24292f", darkAccent: "#c9d1d9", darkStrong: "#c9d1d9" },
-  { value: "forest", label: "Flexoki", lightAccent: "#66800b", lightStrong: "#536907", darkAccent: "#879a39", darkStrong: "#879a39" },
-  { value: "rose", label: "Rosé Pine", lightAccent: "#b4637a", lightStrong: "#286983", darkAccent: "#eb6f92", darkStrong: "#eb6f92" },
-  { value: "cyberpunk", label: "Synthwave '84", lightAccent: "#f92aad", lightStrong: "#495495", darkAccent: "#ff7edb", darkStrong: "#ff7edb" },
-  { value: "solar-light", label: "Solarized Light", lightAccent: "#b58900", lightStrong: "#586e75", darkAccent: "#b58900", darkStrong: "#b58900" },
-  { value: "solar-dark", label: "Solarized Dark", lightAccent: "#268bd2", lightStrong: "#586e75", darkAccent: "#268bd2", darkStrong: "#268bd2" },
-  { value: "mintglass", label: "Open Color Teal", lightAccent: "#087f5b", lightStrong: "#087f5b", darkAccent: "#20c997", darkStrong: "#20c997" },
+  // Bootswatch 5.3.8: Default plus all 26 official themes. Accents are each
+  // theme's primary token; strong/light-on-dark values use Bootswatch's generated
+  // primary emphasis and dark link-hover tokens so small themed text stays legible.
+  { value: "default", label: "Default", lightAccent: "#0d6efd", lightStrong: "#052c65", darkAccent: "#6ea8fe", darkStrong: "#8bb9fe" },
+  { value: "brite", label: "Brite", lightAccent: "#a2e436", lightStrong: "#415b16", darkAccent: "#c7ef86", darkStrong: "#d2f29e" },
+  { value: "cerulean", label: "Cerulean", lightAccent: "#2fa4e7", lightStrong: "#13425c", darkAccent: "#82c8f1", darkStrong: "#9bd3f4" },
+  { value: "cosmo", label: "Cosmo", lightAccent: "#2780e3", lightStrong: "#10335b", darkAccent: "#7db3ee", darkStrong: "#97c2f1" },
+  { value: "cyborg", label: "Cyborg", lightAccent: "#2a9fd6", lightStrong: "#114056", darkAccent: "#7fc5e6", darkStrong: "#99d1eb" },
+  { value: "darkly", label: "Darkly", lightAccent: "#375a7f", lightStrong: "#162433", darkAccent: "#879cb2", darkStrong: "#9fb0c1" },
+  { value: "flatly", label: "Flatly", lightAccent: "#2c3e50", lightStrong: "#121920", darkAccent: "#808b96", darkStrong: "#99a2ab" },
+  { value: "journal", label: "Journal", lightAccent: "#eb6864", lightStrong: "#5e2a28", darkAccent: "#f3a4a2", darkStrong: "#f5b6b5" },
+  { value: "litera", label: "Litera", lightAccent: "#4582ec", lightStrong: "#1c345e", darkAccent: "#8fb4f4", darkStrong: "#a5c3f6" },
+  { value: "lumen", label: "Lumen", lightAccent: "#158cba", lightStrong: "#08384a", darkAccent: "#73bad6", darkStrong: "#8fc8de" },
+  { value: "lux", label: "Lux", lightAccent: "#1a1a1a", lightStrong: "#0a0a0a", darkAccent: "#767676", darkStrong: "#919191" },
+  { value: "materia", label: "Materia", lightAccent: "#2196f3", lightStrong: "#0d3c61", darkAccent: "#7ac0f8", darkStrong: "#95cdf9" },
+  { value: "minty", label: "Minty", lightAccent: "#78c2ad", lightStrong: "#304e45", darkAccent: "#aedace", darkStrong: "#bee1d8" },
+  { value: "morph", label: "Morph", lightAccent: "#378dfc", lightStrong: "#163865", darkAccent: "#87bbfd", darkStrong: "#9fc9fd" },
+  { value: "pulse", label: "Pulse", lightAccent: "#593196", lightStrong: "#24143c", darkAccent: "#9b83c0", darkStrong: "#af9ccd" },
+  { value: "quartz", label: "Quartz", lightAccent: "#e83283", lightStrong: "#5d1434", darkAccent: "#f184b5", darkStrong: "#f49dc4" },
+  { value: "sandstone", label: "Sandstone", lightAccent: "#325d88", lightStrong: "#142536", darkAccent: "#849eb8", darkStrong: "#9db1c6" },
+  { value: "simplex", label: "Simplex", lightAccent: "#d9230f", lightStrong: "#570e06", darkAccent: "#e87b6f", darkStrong: "#ed958c" },
+  { value: "sketchy", label: "Sketchy", lightAccent: "#333333", lightStrong: "#141414", darkAccent: "#858585", darkStrong: "#9d9d9d" },
+  { value: "slate", label: "Slate", lightAccent: "#3a3f44", lightStrong: "#17191b", darkAccent: "#898c8f", darkStrong: "#a1a3a5" },
+  { value: "solar", label: "Solar", lightAccent: "#b58900", lightStrong: "#483700", darkAccent: "#d3b866", darkStrong: "#dcc685" },
+  { value: "spacelab", label: "Spacelab", lightAccent: "#446e9b", lightStrong: "#1b2c3e", darkAccent: "#8fa8c3", darkStrong: "#a5b9cf" },
+  { value: "superhero", label: "Superhero", lightAccent: "#df6919", lightStrong: "#592a0a", darkAccent: "#eca575", darkStrong: "#f0b791" },
+  { value: "united", label: "United", lightAccent: "#e95420", lightStrong: "#5d220d", darkAccent: "#f29879", darkStrong: "#f5ad94" },
+  { value: "vapor", label: "Vapor", lightAccent: "#6f42c1", lightStrong: "#2c1a4d", darkAccent: "#a98eda", darkStrong: "#baa5e1" },
+  { value: "yeti", label: "Yeti", lightAccent: "#008cba", lightStrong: "#00384a", darkAccent: "#66bad6", darkStrong: "#85c8de" },
+  { value: "zephyr", label: "Zephyr", lightAccent: "#3459e6", lightStrong: "#15245c", darkAccent: "#859bf0", darkStrong: "#9daff3" },
 ] as const;
 
 export type ColorPalette = (typeof COLOR_PALETTES)[number]["value"];
 export type ColorPaletteOption = (typeof COLOR_PALETTES)[number];
 
-const DARK_PALETTE_TEXT_OVERRIDES: Partial<Record<ColorPalette, string>> = {
-  jade: "#80a665",
-  coral: "#26bbd9",
-  cyborg: "#66d9ef",
-  "solar-dark": "#2aa198",
-};
+/** Label colour of every filled control (core.css `--accent-foreground`), in both themes. */
+export const FILLED_LABEL_COLOR = "#ffffff";
+
+export function getColorPaletteFillTokens(palette: ColorPaletteOption): {
+  lightFill: string;
+  lightFillStrong: string;
+  darkFill: string;
+  darkFillStrong: string;
+} {
+  // Keep Bootswatch's primary colours intact. Filled controls use a fixed white
+  // foreground; controls provide their own lightweight hover feedback.
+  return {
+    lightFill: palette.lightAccent,
+    lightFillStrong: palette.lightAccent,
+    darkFill: palette.darkAccent,
+    darkFillStrong: palette.darkAccent,
+  };
+}
 
 /** Keep small-text accents independent from fill accents in every palette. */
 export function getColorPaletteTextTokens(palette: ColorPaletteOption): {
@@ -93,7 +103,7 @@ export function getColorPaletteTextTokens(palette: ColorPaletteOption): {
 } {
   return {
     lightText: palette.lightStrong,
-    darkText: DARK_PALETTE_TEXT_OVERRIDES[palette.value] ?? palette.darkStrong,
+    darkText: palette.darkStrong,
   };
 }
 

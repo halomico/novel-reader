@@ -328,11 +328,22 @@ export async function listOriginalDraftsForAuthor(authorId: number, pageValue: n
 
 export async function deleteOriginalDraftForAuthor(draftId: number, authorId: number): Promise<boolean> {
   if (!Number.isSafeInteger(draftId) || draftId < 1 || !Number.isSafeInteger(authorId) || authorId < 1) return false;
+  return (await deleteOriginalDraftsForAuthor([draftId], authorId)) === 1;
+}
+
+export async function deleteOriginalDraftsForAuthor(draftIds: readonly number[], authorId: number): Promise<number> {
+  if (!Number.isSafeInteger(authorId) || authorId < 1) return 0;
+  if (!Array.isArray(draftIds) || draftIds.length > 100 || draftIds.some((id) => !Number.isSafeInteger(id) || id < 1)) {
+    throw new OriginalDraftError("草稿参数无效", "invalid");
+  }
+  const ids = [...new Set(draftIds)];
+  if (!ids.length) return 0;
   const result = await database().query({
-    text: "DELETE FROM original_article_drafts WHERE id = $1 AND author_id = $2 AND article_id IS NULL",
-    values: [draftId, authorId],
+    text: `DELETE FROM original_article_drafts
+      WHERE id = ANY($1::bigint[]) AND author_id = $2 AND article_id IS NULL`,
+    values: [ids, authorId],
   });
-  return result.rowCount === 1;
+  return nonNegativeInteger(result.rowCount ?? 0, "deleted draft count");
 }
 
 export async function createOrResumeOriginalDraft(input: {
@@ -625,7 +636,7 @@ export async function publishOriginalDraft(input: {
       .replace(/\s+/gu, " ")
       .trim()
       .slice(0, 180);
-    const search = await createPostgresOriginalSearchFields(title, document.publicMarkdown, document.paidMarkdown);
+    const search = await createPostgresOriginalSearchFields(title, document.publicMarkdown);
     let articleId: number;
     if (draft.articleId) {
       const changed = await tx.query({
@@ -682,10 +693,12 @@ export async function publishOriginalDraft(input: {
         SELECT id FROM original_article_revisions WHERE article_id = $1 ORDER BY revision_no DESC LIMIT 20)`,
       values: [articleId],
     });
+    // The published article and its revision are now the canonical copies. A future
+    // edit starts a fresh working draft from the article, so the publish transaction
+    // must not leave a duplicate draft row behind.
     await tx.query({
-      text: `UPDATE original_article_drafts SET article_id = $1, published_at = clock_timestamp(),
-        updated_at = clock_timestamp() WHERE id = $2 AND author_id = $3`,
-      values: [articleId, draft.id, input.author.id],
+      text: "DELETE FROM original_article_drafts WHERE id = $1 AND author_id = $2",
+      values: [draft.id, input.author.id],
     });
     return { articleId, slug, created, revisionNo };
   });

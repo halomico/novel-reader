@@ -60,6 +60,7 @@
   left: 0;
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 7px;
   visibility: hidden;
   pointer-events: none;
@@ -69,24 +70,37 @@
   display: none;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  min-height: 30px;
+  align-self: center;
+  width: 26px;
+  height: 28px;
+  min-height: 28px;
   border: 0;
   border-radius: 6px;
-  padding: 4px;
-  background: color-mix(in srgb, var(--surface-strong) 34%, transparent);
+  padding: 0;
+  background: transparent;
   color: var(--muted);
   cursor: pointer;
+  box-shadow: none;
+  flex: 0 0 26px;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.readerTagsBlock.isExpanded .readerTagsInlineToggle svg {
+  display: block;
+  transform: translateY(1px);
+}
+
+.readerTagsBlock:not(.isExpanded) .readerTagsInlineToggle svg,
+.readerTagMeasure .readerTagsInlineToggle svg {
+  display: block;
+  transform: translateY(2.5px);
 }
 
 .readerTagsInlineToggle:hover,
 .readerTagsInlineToggle:focus-visible {
-  border-color: color-mix(in srgb, var(--tag-color) 44%, var(--border));
-  color: var(--tag-color);
-}
-
-.readerTagsInlineToggle {
-  flex: 0 0 30px;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
 }
 
 :root[data-reader-tags="collapsed"] .readerTagsBlock.hasOverflow:not(.isExpanded) .readerTagOverflowItem {
@@ -216,48 +230,86 @@
 }
 
 .novelAccessGate {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px 20px;
+  justify-content: center;
+  gap: 10px;
   margin-block: 34px;
-  border-block: 1px solid var(--border);
-  padding: 22px 2px;
+  border-block: 1px solid var(--reader-border, var(--border));
+  padding: 24px 16px;
+  text-align: center;
 }
 
-.novelAccessGate strong,
-.novelAccessGate small {
-  display: block;
-  margin: 0;
+.novelAccessGateAction {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
 }
 
 .novelAccessGate strong {
+  display: block;
+  margin: 0;
   font-size: 16px;
   font-weight: 650;
+  color: var(--reader-text, var(--text));
+  line-height: 1.4;
 }
 
-.novelAccessGate small {
-  margin-top: 4px;
-  color: var(--muted);
+.novelAccessGateNotice,
+.novelAccessGate small:not(.novelAccessGateError) {
+  display: block;
+  margin: 0;
+  color: var(--reader-muted, var(--muted));
   font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
 }
 
-.novelAccessGate button {
+.readerSearchHitLocked {
+  margin: 28px 0 0;
+  border-left: 3px solid color-mix(in srgb, currentColor 22%, transparent);
+  padding: 6px 12px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.novelAccessGate form {
   display: inline-flex;
-  min-height: var(--action-height);
+  margin: 0;
+}
+
+.novelAccessGate button,
+.novelAccessGate a.novelAccessGateButton,
+.novelAccessGate .novelAccessGateButton {
+  display: inline-flex;
+  min-height: var(--action-height, 36px);
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
-  border-radius: var(--action-radius);
-  padding: 0 var(--action-inline-padding);
-  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--reader-border, var(--border)));
+  border-radius: var(--action-radius, 8px);
+  padding: 0 var(--action-inline-padding, 16px);
+  background: color-mix(in srgb, var(--accent) 7%, var(--reader-paper, var(--surface)));
   color: var(--accent-text, var(--accent));
   cursor: pointer;
   font: inherit;
-  font-size: var(--action-font-size);
-  font-weight: var(--action-font-weight);
+  font-size: var(--action-font-size, 14px);
+  font-weight: var(--action-font-weight, 600);
   line-height: 1;
+  text-decoration: none;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.novelAccessGate button:hover,
+.novelAccessGate a.novelAccessGateButton:hover,
+.novelAccessGate .novelAccessGateButton:hover {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--reader-border, var(--border)));
+  background: color-mix(in srgb, var(--accent) 14%, var(--reader-paper, var(--surface)));
+  color: var(--accent-text, var(--accent));
 }
 
 .novelAccessGate button:disabled {
@@ -265,9 +317,14 @@
   opacity: 0.65;
 }
 
-.novelAccessGate > small {
-  grid-column: 1 / -1;
+.novelAccessGateError,
+.novelAccessGate > small.novelAccessGateError {
+  display: block;
+  margin: 0;
   color: #b13d49;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
 }
 
 @media (max-width: 820px) {
@@ -285,14 +342,6 @@
   .readerChapterNavigation > a,
 .readerChapterNavigation > span {
     font-size: 12px;
-  }
-
-  .novelAccessGate {
-    grid-template-columns: 1fr;
-  }
-
-  .novelAccessGate button {
-    justify-self: start;
   }
 }
 
@@ -455,7 +504,9 @@
 :root[data-reader-page-turn="instant"] .novelReaderShell .readerText {
     box-sizing: border-box;
     width: 100%;
-    height: max(320px, calc(100dvh - var(--reader-page-block-start) - var(--reader-page-block-end)));
+    height: auto;
+    min-height: 320px;
+    flex: 1 1 auto;
     column-fill: auto;
     column-gap: 0;
     column-width: var(--reader-page-column-width, 100vw);
@@ -472,7 +523,11 @@
 
   :root[data-reader-page-turn="slide"] .novelReaderShell .readerPagedStage,
 :root[data-reader-page-turn="instant"] .novelReaderShell .readerPagedStage {
+    display: flex;
     width: 100%;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
     margin-inline: 0;
     contain: layout;
     overflow: hidden;
@@ -504,9 +559,9 @@
   }
 
   :root[data-reader-page-turn="slide"] .novelReaderShell .readerTitle,
-:root[data-reader-page-turn="slide"] .novelReaderShell .readerTagsBlock,
 :root[data-reader-page-turn="instant"] .novelReaderShell .readerTitle,
-:root[data-reader-page-turn="instant"] .novelReaderShell .readerTagsBlock {
+:root[data-reader-page-turn="slide"] .novelReaderShell > .readerPage > .readerTagsBlock,
+:root[data-reader-page-turn="instant"] .novelReaderShell > .readerPage > .readerTagsBlock {
     display: none;
   }
 
@@ -588,16 +643,19 @@
     line-height: 1.5;
   }
 
-  .readerPagedIntroTags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 2px;
+  .readerPagedIntro .readerTagsBlock {
+    margin: 8px 0 0;
   }
 
-  .readerPagedIntroTags .tagChip {
+  .readerPagedIntro .readerTagLinks {
+    max-height: 64px;
+  }
+
+  .readerPagedIntro .tagChip {
     font-family: var(--font-ui);
     font-size: 11px;
+    min-height: 26px;
+    padding: 2px 8px;
   }
 }
 
@@ -606,13 +664,14 @@
 }
 
 .readerShell .readerTagMeasure {
+  align-items: center;
   gap: 5px 8px;
 }
 
 .readerShell .readerTagsInlineToggle {
   border: 0;
-  border-radius: 0;
-  padding: 4px;
+  border-radius: 6px;
+  padding: 0;
   background: transparent;
   color: var(--reader-muted);
   box-shadow: none;
@@ -621,8 +680,8 @@
 .readerShell .readerTagsInlineToggle:hover,
 .readerShell .readerTagsInlineToggle:focus-visible {
   border-color: transparent;
-  background: color-mix(in srgb, var(--reader-accent) 8%, transparent);
-  color: var(--reader-accent);
+  background: color-mix(in srgb, var(--reader-text) 8%, transparent);
+  color: var(--reader-text);
 }
 
 .readerBookInfo {
@@ -712,9 +771,13 @@
     --reader-page-inline-gutter: clamp(20px, 5.65vw, 24px);
     --reader-page-block-start: max(54px, calc(env(safe-area-inset-top) + 48px));
     --reader-page-block-end: max(64px, calc(env(safe-area-inset-bottom) + 56px));
+    display: flex;
     width: 100%;
     height: 100dvh;
     min-height: 100dvh;
+    flex-direction: column;
+    overflow: hidden;
     padding: var(--reader-page-block-start) 0 var(--reader-page-block-end);
   }
+
 }

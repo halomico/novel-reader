@@ -12,7 +12,6 @@ type ArticleRow = QueryResultRow & {
   id: string;
   title: string;
   body_markdown: string;
-  paid_body_markdown: string;
   updated_at: string;
 };
 
@@ -23,7 +22,7 @@ async function reindexPass(): Promise<{ selected: number; updated: number }> {
   let updated = 0;
   while (true) {
     const result = await reader.query<ArticleRow>({
-      text: `SELECT id::text, title, body_markdown, paid_body_markdown, updated_at::text
+      text: `SELECT id::text, title, body_markdown, updated_at::text
         FROM original_articles
         WHERE normalization_version <> $1 AND id > $2::bigint
         ORDER BY id
@@ -33,7 +32,8 @@ async function reindexPass(): Promise<{ selected: number; updated: number }> {
     if (!result.rows.length) break;
     const prepared = await Promise.all(result.rows.map(async (row) => ({
       row,
-      fields: await createPostgresOriginalSearchFields(row.title, row.body_markdown, row.paid_body_markdown),
+      // Only the public body is searchable; the paid body is never read here.
+      fields: await createPostgresOriginalSearchFields(row.title, row.body_markdown),
     })));
     await withTransaction(async (transaction) => {
       for (const { row, fields } of prepared) {

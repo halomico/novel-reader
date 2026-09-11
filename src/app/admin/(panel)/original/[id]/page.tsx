@@ -8,6 +8,7 @@ import { OriginalMarkdown } from "@/components/OriginalMarkdown";
 import { getOriginalPublishingSettings } from "@/lib/config";
 import { getOriginalArticleById, listOriginalComments, listOriginalTags, type OriginalArticleStatus } from "@/domains/originals/postgres-originals";
 import { AdminFrame } from "../../AdminFrame";
+import { AdminOriginalDeleteButton } from "@/components/AdminOriginalArticleActions";
 import {
   setOriginalArticleStatusAction,
   setOriginalArticlePinnedAction,
@@ -96,9 +97,7 @@ export default async function AdminOriginalDetailPage({ params, searchParams }: 
             formId={`admin-original-comments-${article.id}`}
 
             returnPath={returnPath}
-            action={deleteOriginalCommentsBatchAction}
-            label="删除评论"
-            confirmMessage="确定删除选中的评论吗？此操作不可恢复。"
+            actions={[{ label: "删除评论", icon: "delete", tone: "danger", action: deleteOriginalCommentsBatchAction, confirmMessage: "确定删除选中的评论吗？此操作不可恢复。" }]}
             extraFields={{ articleId: String(article.id) }}
           />
           <div className="adminOriginalCommentList">
@@ -140,6 +139,14 @@ export default async function AdminOriginalDetailPage({ params, searchParams }: 
               {article.status !== "hidden" ? <button type="submit" name="status" value="hidden">隐藏</button> : null}
               {article.status !== "draft" ? <button type="submit" name="status" value="draft">转草稿</button> : null}
             </form>
+            <AdminOriginalDeleteButton
+              articleId={article.id}
+              title={article.title}
+              returnPath={returnPath}
+              className="adminDangerButton"
+            >
+              删除文章
+            </AdminOriginalDeleteButton>
           </div>
         </section>
       </article>

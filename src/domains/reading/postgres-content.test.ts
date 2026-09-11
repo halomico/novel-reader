@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { QueryResult, QueryResultRow } from "pg";
 import type { SqlExecutor, SqlQuery } from "@/core/db/postgres";
-import { ContentNotPublishedError, readPublishedNovelContent } from "./postgres-content";
+import { cleanupRetiredContentGenerations, ContentNotPublishedError, readPublishedNovelContent } from "./postgres-content";
 
 function executorWithRows(rows: QueryResultRow[], captured: SqlQuery[] = []): SqlExecutor {
   return {
@@ -53,6 +53,21 @@ test("paid preview is clipped at the database-bounded UTF-16 cutoff", async () =
   assert.deepEqual(content.blocks, [{ blockNo: 0, charStart: 0, charEnd: 3, originalText: "甲乙丙" }]);
   assert.deepEqual(captured[0].values, [7, null, 0.3]);
   assert.match(captured[0].text, /block\.char_start < ceil/);
+});
+
+test("retired generations are reclaimed through the manifest by key prefix, never by scanning blocks", async () => {
+  const captured: SqlQuery[] = [];
+  const deleted = await cleanupRetiredContentGenerations(executorWithRows([{ blocks: "130", generations: "2" }], captured), 32);
+  assert.deepEqual(deleted, { blocksDeleted: 130, generationsDeleted: 2 });
+  assert.deepEqual(captured[0].values, [32]);
+  const [victims, deletes] = captured[0].text.split("deleted_blocks AS");
+  assert.match(victims, /FROM novel_content_generations g/);
+  assert.doesNotMatch(victims, /novel_content_blocks/, "victims are chosen without reading block rows");
+  assert.match(victims, /g\.state IN \('obsolete', 'failed'\)/);
+  assert.match(victims, /IS DISTINCT FROM d\.staging_generation/, "an in-progress build is never reclaimed");
+  assert.match(victims, /FOR UPDATE OF g SKIP LOCKED/);
+  assert.match(deletes, /b\.document_id = v\.document_id AND b\.generation = v\.generation/);
+  await assert.rejects(cleanupRetiredContentGenerations(executorWithRows([]), 0), /cleanup budget/);
 });
 
 test("published reader content fails closed for invalid owners and incomplete manifests", async () => {

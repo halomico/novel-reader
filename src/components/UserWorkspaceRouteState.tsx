@@ -2,8 +2,9 @@
 
 import { Activity, FileText, MessageCircle, Settings, Sparkles, Store, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useLinkStatus } from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import Link from "@/components/LocalizedLink";
+import { AppLink as Link } from "@/components/AppLink";
 import { PageContextBar } from "@/components/PageContextBar";
 import { stripLocalePath, uiText, type AppLocale } from "@/lib/locale";
 import type { UserWorkspaceKey } from "./UserWorkspace";
@@ -47,6 +48,12 @@ export function UserWorkspaceContext({ locale }: {
   return <PageContextBar items={[{ label: uiText(locale, "首页"), href: "/" }, { label: labels[active] }]} />;
 }
 
+/** Marks its link while the destination is loading; rendered inside the link. */
+function NavigationLabel({ text }: { text: string }) {
+  const { pending } = useLinkStatus();
+  return <span data-pending={pending || undefined}>{text}</span>;
+}
+
 export function UserWorkspaceNavigation({
   locale,
   unreadMessages,
@@ -59,17 +66,11 @@ export function UserWorkspaceNavigation({
   showOriginal: boolean;
 }) {
   const { pathname, searchParams } = useWorkspaceRouteState();
+  // The highlight follows the committed URL only. Click feedback comes from each
+  // link's own pending status, so an interrupted navigation cannot strand it.
   const active = routeKey(pathname, searchParams);
-  const pathKey = `${pathname}?${searchParams.toString()}`;
-  const [prevPathKey, setPrevPathKey] = useState(pathKey);
-  const [pendingActive, setPendingActive] = useState<UserWorkspaceKey | null>(null);
   const [prevUnreadMessages, setPrevUnreadMessages] = useState(unreadMessages);
   const [unreadCount, setUnreadCount] = useState(unreadMessages);
-
-  if (prevPathKey !== pathKey) {
-    setPrevPathKey(pathKey);
-    setPendingActive(null);
-  }
 
   if (prevUnreadMessages !== unreadMessages) {
     setPrevUnreadMessages(unreadMessages);
@@ -82,28 +83,20 @@ export function UserWorkspaceNavigation({
     return () => window.removeEventListener(WORKSPACE_MESSAGES_READ_EVENT, markRead);
   }, []);
 
-  const currentActive = pendingActive ?? active;
-
   return (
     <nav>
       {NAV_ITEMS.filter((item) => (item.key !== "market" || showMarket) && (item.key !== "articles" || showOriginal)).map((item) => {
         const Icon = item.icon;
-        const itemActive = currentActive === item.key;
+        const itemActive = active === item.key;
         return (
           <Link
             className={itemActive ? "isActive" : ""}
             href={item.href}
-            prefetch
             aria-current={itemActive ? "page" : undefined}
             key={item.key}
-            onClick={() => {
-              if (item.key !== active) {
-                setPendingActive(item.key);
-              }
-            }}
           >
             <Icon size={17} aria-hidden="true" />
-            <span>{uiText(locale, item.label)}</span>
+            <NavigationLabel text={uiText(locale, item.label)} />
             {item.key === "messages" && unreadCount > 0 ? (
               <i className="userMenuUnreadDot" aria-label={`${unreadCount} 条未读消息`} />
             ) : null}

@@ -8,6 +8,8 @@ import {
   DEFAULT_READER_WIDTH,
   getReaderThemeSystemTheme,
   getColorPalette,
+  getColorPaletteFillTokens,
+  FILLED_LABEL_COLOR,
   getColorPaletteTextTokens,
   isColorPalette,
   normalizeReaderLineHeight,
@@ -40,26 +42,23 @@ function contrastRatio(foreground: string, background: string): number {
     (Math.min(foregroundLuminance, backgroundLuminance) + 0.05);
 }
 
-test("ships 32 unique local palettes with Default first and Cinnabar and modern additions available", () => {
+test("ships the complete Bootswatch 5 palette set with Default first", () => {
   const values = COLOR_PALETTES.map((palette) => palette.value);
 
-  assert.equal(COLOR_PALETTES.length, 32);
-  assert.equal(new Set(values).size, 32);
+  assert.equal(COLOR_PALETTES.length, 27);
+  assert.equal(new Set(values).size, 27);
   assert.equal(COLOR_PALETTES[0].value, "default");
-  assert.equal(COLOR_PALETTES[0].label, "GitHub");
-  assert.equal(getColorPalette("default").lightAccent, "#0969da");
-  assert.equal(getColorPalette("default").darkAccent, "#4493f8");
-  assert.equal(isColorPalette("journal"), false);
-  assert.equal(isColorPalette("united"), false);
+  assert.equal(COLOR_PALETTES[0].label, "Default");
+  assert.equal(getColorPalette("default").lightAccent, "#0d6efd");
+  assert.equal(getColorPalette("default").darkAccent, "#6ea8fe");
+  assert.equal(isColorPalette("journal"), true);
+  assert.equal(isColorPalette("united"), true);
   assert.equal(isColorPalette("default"), true);
-  assert.equal(getColorPalette("cinnabar").lightAccent, "#cb3a2a");
-  assert.equal(isColorPalette("nord"), true);
-  assert.equal(getColorPalette("nord").lightAccent, "#5e81ac");
-  assert.equal(isColorPalette("tokyo"), true);
-  assert.equal(isColorPalette("catppuccin"), true);
-  assert.equal(isColorPalette("gruvbox"), true);
-  assert.equal(isColorPalette("mintglass"), true);
-  assert.equal(getColorPalette("mintglass").lightAccent, "#087f5b");
+  assert.equal(getColorPalette("brite").lightAccent, "#a2e436");
+  assert.equal(getColorPalette("minty").lightAccent, "#78c2ad");
+  assert.equal(getColorPalette("vapor").darkAccent, "#a98eda");
+  assert.equal(isColorPalette("cinnabar"), false);
+  assert.equal(isColorPalette("catppuccin"), false);
   assert.equal(isColorPalette("unknown"), false);
 });
 
@@ -79,6 +78,17 @@ test("keeps every palette's small-text accent at WCAG AA contrast on theme backg
   }
 });
 
+test("filled controls keep the official palette colour with a white label", () => {
+  assert.equal(FILLED_LABEL_COLOR, "#ffffff");
+  for (const palette of COLOR_PALETTES) {
+    const fills = getColorPaletteFillTokens(palette);
+    assert.equal(fills.lightFill, palette.lightAccent);
+    assert.equal(fills.lightFillStrong, palette.lightAccent);
+    assert.equal(fills.darkFill, palette.darkAccent);
+    assert.equal(fills.darkFillStrong, palette.darkAccent);
+  }
+});
+
 test("resolves a stable default palette for each configured time bucket", () => {
   const intervalMinutes = 60;
   const first = resolveDefaultPalette("default", true, intervalMinutes, 10 * 60 * 60_000);
@@ -89,7 +99,7 @@ test("resolves a stable default palette for each configured time bucket", () => 
 
   assert.equal(first, sameBucket);
   assert.equal(rotating.size > 10, true);
-  assert.equal(resolveDefaultPalette("sakura", false, intervalMinutes, Date.now()), "sakura");
+  assert.equal(resolveDefaultPalette("journal", false, intervalMinutes, Date.now()), "journal");
 });
 
 test("normalizes current and legacy reader tag preferences", () => {

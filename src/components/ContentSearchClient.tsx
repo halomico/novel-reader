@@ -37,7 +37,14 @@ type SearchApiResponse = {
   totalItems?: number | null;
   totalNovels?: number | null;
   totalPages?: number | null;
+  capped?: boolean;
+  partial?: boolean;
+  maxResults?: number;
 };
+
+type ResultLimit = { capped: boolean; partial: boolean; maxResults: number };
+
+const NO_RESULT_LIMIT: ResultLimit = { capped: false, partial: false, maxResults: 0 };
 
 function highlightSnippet(
   snippet: string,
@@ -102,6 +109,7 @@ export function ContentSearchClient({
   const [items, setItems] = useState<PostgresContentSearchItem[]>([]);
   const [totalNovels, setTotalNovels] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [resultLimit, setResultLimit] = useState<ResultLimit>(NO_RESULT_LIMIT);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const reportedAnalyticsRef = useRef("");
@@ -125,9 +133,12 @@ export function ContentSearchClient({
       cache: "no-store",
       signal: controller.signal,
     }).then(async (response) => {
-      const data = await response.json() as SearchApiResponse;
+      // A proxy timeout or crash page is HTML, not the API's JSON error.
+      const data = await response.json().catch(() => null) as SearchApiResponse | null;
       if (controller.signal.aborted || cursorsRef.current.queryKey !== queryKey) return;
-      if (!response.ok || !data.ok || !Array.isArray(data.items)) throw new Error(data.message || tr("搜索失败"));
+      if (!response.ok || !data?.ok || !Array.isArray(data.items)) {
+        throw new Error(data?.message || tr(response.status === 429 ? "搜索人数较多，请稍后再试" : "搜索失败"));
+      }
       if (data.nextCursor !== null && data.nextCursor !== undefined && typeof data.nextCursor !== "string") {
         throw new Error(tr("搜索失败"));
       }
@@ -147,7 +158,15 @@ export function ContentSearchClient({
         }
         setTotalNovels(Number(data.totalNovels));
         setTotalPages(resultPages);
+      } else {
+        // A partial list has no total: offer the next page only while a cursor continues it.
+        setTotalPages(data.nextCursor ? page + 1 : page);
       }
+      setResultLimit({
+        capped: data.capped === true,
+        partial: data.partial === true,
+        maxResults: Number.isSafeInteger(data.maxResults) ? Number(data.maxResults) : 0,
+      });
       setItems(data.items);
       if (searchEventKey && page === 1 && data.totalItems !== null && data.totalItems !== undefined) {
         const signature = `${searchEventKey}:${data.totalItems}:${data.totalNovels}`;
@@ -166,6 +185,7 @@ export function ContentSearchClient({
       setItems([]);
       setTotalNovels(0);
       setTotalPages(1);
+      setResultLimit(NO_RESULT_LIMIT);
       setMessage(error instanceof Error ? error.message : tr("搜索失败"));
     }).finally(() => {
       if (!controller.signal.aborted) setLoading(false);
@@ -198,12 +218,25 @@ export function ContentSearchClient({
 
       {!loading && !message ? (
         <div className="contentSearchSummary">
-          <ResultCount count={totalNovels} />
+          {resultLimit.partial ? (
+            <span className="contentSearchNote">{tr("匹配内容较多，已按更新时间列出部分结果")}</span>
+          ) : (
+            <>
+              <ResultCount count={totalNovels} />
+              {resultLimit.capped ? (
+                <span className="contentSearchNote">
+                  {tr("仅显示最近更新的")} {resultLimit.maxResults.toLocaleString("zh-CN")} {tr("条结果")}
+                </span>
+              ) : null}
+            </>
+          )}
         </div>
       ) : null}
 
       {!loading && !message && items.length === 0 ? (
-        <section className="emptyState"><h2>{emptyMessage || tr("没有符合条件的小说")}</h2></section>
+        <section className="emptyState">
+          <h2>{resultLimit.partial ? tr("匹配范围过大，请换用更具体的关键词") : emptyMessage || tr("没有符合条件的小说")}</h2>
+        </section>
       ) : null}
 
       {items.length ? (

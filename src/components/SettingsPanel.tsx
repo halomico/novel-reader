@@ -13,8 +13,6 @@ import {
   DEFAULT_READER_LINE_HEIGHT,
   DEFAULT_READER_PAGE_TURN,
   getReaderThemeSystemTheme,
-  getColorPalette,
-  getColorPaletteTextTokens,
   isColorPalette,
   isReaderTheme,
   normalizeReaderJustify,
@@ -37,6 +35,7 @@ import {
   type ReaderTagsMode,
 } from "@/lib/ui-preferences";
 import { clearReaderPaperPreference } from "@/lib/reader-theme-client";
+import { applyColorPalette as applyPalette } from "@/lib/palette-client";
 import { PalettePicker } from "./PalettePicker";
 import { ReaderJustifyToggle, ReaderThemePicker } from "./ReaderDisplayPreferences";
 import { ReaderFontSizeStepper, ReaderLineHeightStepper } from "./ReaderTypographyControls";
@@ -73,18 +72,6 @@ function removeLocalSetting(key: string) {
   }
 }
 
-function applyPalette(value: ColorPalette) {
-  const palette = getColorPalette(value);
-  const textTokens = getColorPaletteTextTokens(palette);
-  const root = document.documentElement;
-  root.dataset.palette = value;
-  root.style.setProperty("--palette-light-accent", palette.lightAccent);
-  root.style.setProperty("--palette-light-strong", palette.lightStrong);
-  root.style.setProperty("--palette-dark-accent", palette.darkAccent);
-  root.style.setProperty("--palette-dark-strong", palette.darkStrong);
-  root.style.setProperty("--palette-light-text", textTokens.lightText);
-  root.style.setProperty("--palette-dark-text", textTokens.darkText);
-}
 
 function applySettings(
   theme: ThemeChoice,
@@ -304,7 +291,6 @@ export function SettingsPanel({
             <div className="settingRow">
               <div className="settingRowTitle">
                 <span>{tr("语言")}</span>
-                <strong>{locale === TRADITIONAL_LOCALE ? "繁體" : tr("简体")}</strong>
               </div>
               <div className="segmentedControl settingCompactSegments" role="group" aria-label={tr("语言")}>
                 <button
@@ -329,7 +315,6 @@ export function SettingsPanel({
             <div className="settingRow">
               <div className="settingRowTitle">
                 <span>{tr("明暗")}</span>
-                <strong>{tr(themes.find((item) => item.value === theme)?.label || "")}</strong>
               </div>
               <div className="segmentedControl settingCompactSegments" role="group" aria-label="主题模式">
                 {themes.map((item) => (
@@ -395,7 +380,6 @@ export function SettingsPanel({
             <div className="settingRow">
               <div className="settingRowTitle">
                 <span>{tr("翻页方式")}</span>
-                <strong>{tr(READER_PAGE_TURN_OPTIONS.find((item) => item.value === pageTurn)?.label || "")}</strong>
               </div>
               <div className="segmentedControl settingCompactSegments" role="group" aria-label={tr("翻页方式")}>
                 {READER_PAGE_TURN_OPTIONS.map((item) => (
@@ -462,10 +446,22 @@ export function SettingsPanel({
             {canConfigureReaderHotwords ? (
               <div className="settingRow">
                 <div className="settingRowTitle"><span>{tr("文末热词")}</span></div>
-                <label className="settingToggle settingToggleOnly">
-                  <input aria-label={tr("文末热词")} type="checkbox" checked={showReaderHotwords} onChange={(event) => changeReaderHotwords(event.target.checked)} />
-                  <span className="settingToggleTrack" aria-hidden="true"><span /></span>
-                </label>
+                <div className="segmentedControl settingCompactSegments" role="group" aria-label={tr("文末热词")}>
+                  {([
+                    [true, "显示"],
+                    [false, "关闭"],
+                  ] as const).map(([visible, label]) => (
+                    <button
+                      className={showReaderHotwords === visible ? "isActive" : ""}
+                      type="button"
+                      aria-pressed={showReaderHotwords === visible}
+                      key={String(visible)}
+                      onClick={() => changeReaderHotwords(visible)}
+                    >
+                      {tr(label)}
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : null}
           </div>

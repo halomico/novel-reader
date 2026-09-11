@@ -1,6 +1,8 @@
-/** Bump whenever Unicode processing, OpenCC dictionaries or matching rules change. */
-export const CONTENT_NORMALIZATION_VERSION = 2;
-export const MAX_NORMALIZED_CONTENT_QUERY_CHARS = 50;
+import { MAX_CONTENT_KEYWORD_CHARS } from "@/lib/search-query";
+
+/** Bump whenever Unicode processing, OpenCC dictionaries, matching rules or the indexed
+ *  block layout change. v3: block search context is sized to the longest public keyword. */
+export const CONTENT_NORMALIZATION_VERSION = 3;
 export const CONTENT_BLOCK_CODE_POINTS = 1_200;
 
 export type SearchTextMode = "title" | "content" | "phrase";
@@ -200,17 +202,6 @@ export async function findNormalizedChineseSearchRanges(
   return selected.sort((left, right) => left.start - right.start);
 }
 
-export async function normalizeContentQueryTerm(text: string, mode: "content" | "phrase" = "content"): Promise<ChineseSearchForms> {
-  const forms = await normalizeChineseSearchForms(text, mode);
-  for (const value of [forms.original, forms.hans ?? forms.original]) {
-    const length = Array.from(value).length;
-    if (length === 0 || length > MAX_NORMALIZED_CONTENT_QUERY_CHARS) {
-      throw new Error(`Normalized content query must contain 1–${MAX_NORMALIZED_CONTENT_QUERY_CHARS} characters`);
-    }
-  }
-  return forms;
-}
-
 function lowerBound(positions: TextPosition[], offset: number, field: "start" | "end", inclusive: boolean): number {
   let low = 0;
   let high = positions.length;
@@ -224,12 +215,14 @@ function lowerBound(positions: TextPosition[], offset: number, field: "start" | 
 
 /** Nonoverlapping original bodies retain a normalized boundary context, so
  * punctuation, whitespace, and length-changing Chinese conversion cannot hide
- * a term that crosses adjacent index blocks.
+ * a term that crosses adjacent index blocks. The context is one character short of
+ * the longest public keyword on each side: exactly enough for any keyword to match
+ * whole, without indexing a wider overlap than any query can use.
  */
 export async function* createContentBlocks(text: string, blockCodePoints = CONTENT_BLOCK_CODE_POINTS): AsyncGenerator<ContentBlock> {
   if (!Number.isSafeInteger(blockCodePoints) || blockCodePoints < 1 || blockCodePoints > 4_096) throw new Error("Invalid content block size");
   const forms = await normalizeChineseSearchPositions(text);
-  const contextChars = MAX_NORMALIZED_CONTENT_QUERY_CHARS - 1;
+  const contextChars = MAX_CONTENT_KEYWORD_CHARS - 1;
   let start = 0;
   let end = 0;
   let count = 0;

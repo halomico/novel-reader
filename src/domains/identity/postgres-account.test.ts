@@ -53,3 +53,13 @@ test("PostgreSQL email changes revoke all outstanding verification tokens", asyn
   assert.equal(await updatePostgresUserEmail(4, "new@example.com", async (operation) => operation(executor)), "updated");
   assert.match(captured[1].text, /DELETE FROM email_verification_tokens/u);
 });
+
+test("validatePassword enforces 6-256 character length constraint", async () => {
+  const { validatePassword } = await import("./account-input");
+  assert.equal(validatePassword("12345"), "密码长度需要在 6-256 个字符之间");
+  assert.equal(validatePassword(""), "密码长度需要在 6-256 个字符之间");
+  assert.equal(validatePassword("123456"), null);
+  assert.equal(validatePassword("abcdef"), null);
+  assert.equal(validatePassword("a".repeat(256)), null);
+  assert.equal(validatePassword("a".repeat(257)), "密码长度需要在 6-256 个字符之间");
+});

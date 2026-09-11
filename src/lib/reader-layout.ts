@@ -8,6 +8,11 @@ export const READER_KEEP_CHROME_SESSION_KEY = "novel-reader:keep-chrome";
 export const READER_ENTRY_EDGE_SESSION_KEY = "novel-reader:entry-edge";
 export const READER_ROUTE_PREFETCH_MAX_BYTES = 192 * 1024;
 
+export function isReaderResumeNavigation(search: string = typeof window === "undefined" ? "" : window.location.search): boolean {
+  const query = search.startsWith("?") ? search.slice(1) : search;
+  return new URLSearchParams(query).get("resume") === "1";
+}
+
 type ReaderEntryEdge = "start" | "end";
 
 export function encodeReaderEntryEdge(href: string, edge: ReaderEntryEdge): string {

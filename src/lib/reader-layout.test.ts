@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   encodeReaderEntryEdge,
+  isReaderResumeNavigation,
   normalizeReaderNavigationTitle,
   resolveReaderEntryEdge,
   resolveReaderDragTarget,
@@ -10,6 +11,13 @@ import {
   shouldPrefetchReaderRoute,
   splitReaderParagraphs,
 } from "./reader-layout";
+
+test("resume query marks a continue-reading navigation", () => {
+  assert.equal(isReaderResumeNavigation("resume=1"), true);
+  assert.equal(isReaderResumeNavigation("?resume=1&from=%2Factivity"), true);
+  assert.equal(isReaderResumeNavigation("from=%2Factivity"), false);
+  assert.equal(isReaderResumeNavigation(""), false);
+});
 
 test("reader entry edges can only be consumed by their destination route", () => {
   const stored = encodeReaderEntryEdge("/books/8/chapters/20?from=reader", "end");

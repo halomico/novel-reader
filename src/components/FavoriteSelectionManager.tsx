@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ListChecks } from "lucide-react";
+import { Check, ListChecks, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   createContext,
@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { uiText, type AppLocale } from "@/lib/locale";
+import { SelectionCheckbox } from "./SelectionCheckbox";
 
 type FavoriteKind = "novel" | "original" | "video" | "audio";
 
@@ -112,23 +113,40 @@ export function FavoriteSelectionManager({
 
   return (
     <FavoriteSelectionContext.Provider value={contextValue}>
-      <div className="favoriteManageToolbar readingHistoryToolbar">
+      <div className="selectionToolbar favoriteManageToolbar readingHistoryToolbar">
         {managing ? (
-          <label className="activitySelectAll">
-            <input
-              type="checkbox"
-              checked={allVisibleSelected}
-              disabled={!activeVisibleIds.length}
-              onChange={toggleVisible}
-            />
-            <span aria-hidden="true"><Check size={12} /></span>
-            <em>{tr("全选")}</em>
-          </label>
+          <SelectionCheckbox
+            className="selectionSelectAll"
+            checked={allVisibleSelected}
+            disabled={!activeVisibleIds.length}
+            onChange={toggleVisible}
+            label={tr("选择当前页全部收藏")}
+          >
+            {tr("全选")}
+          </SelectionCheckbox>
         ) : <span aria-hidden="true" />}
-        <div className="readingHistoryManageActions">
-          {message ? <span className="readingHistorySelectedCount" role="status">{message}</span> : null}
+        <div className="selectionToolbarActions readingHistoryManageActions">
+          {message ? <span className="selectionStatus readingHistorySelectedCount" role="status">{message}</span> : null}
+          {managing && selected.size ? (
+            confirming ? (
+              <span className="selectionConfirm readingHistoryClearConfirm">
+                <span>{tr("取消收藏")} {selected.size}？</span>
+                <button className="isDanger" type="button" disabled={pending} onClick={removeSelected} aria-label={tr("确认取消收藏")} title={tr("确认取消收藏")}>
+                  <Check size={15} aria-hidden="true" />
+                </button>
+                <button type="button" disabled={pending} onClick={() => setConfirming(false)} aria-label={tr("取消")} title={tr("取消")}>
+                  <X size={15} aria-hidden="true" />
+                </button>
+              </span>
+            ) : (
+              <button className="selectionAction isDanger" type="button" disabled={pending} onClick={() => setConfirming(true)}>
+                <Trash2 size={15} aria-hidden="true" />
+                <span>{tr("取消收藏")}（{selected.size}）</span>
+              </button>
+            )
+          ) : null}
           <button
-            className={managing ? "activityManageButton isActive" : "activityManageButton"}
+            className={managing ? "selectionAction activityManageButton isActive" : "selectionAction activityManageButton"}
             type="button"
             aria-label={tr(managing ? "完成管理" : "管理收藏")}
             title={tr(managing ? "完成" : "管理")}
@@ -142,40 +160,6 @@ export function FavoriteSelectionManager({
       <div className={managing ? "favoriteCollection isManaging" : "favoriteCollection"}>
         {children}
       </div>
-      {managing ? (
-        <div className="readingHistoryActions favoriteManageActions">
-          {confirming ? (
-            <span className="readingHistoryClearConfirm">
-              <button
-                type="button"
-                disabled={pending}
-                onClick={removeSelected}
-                aria-label={tr("确认取消收藏")}
-                title={tr("确认取消收藏")}
-              >
-                {tr(pending ? "处理中…" : "确认")}
-              </button>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => setConfirming(false)}
-                aria-label={tr("取消")}
-                title={tr("取消")}
-              >
-                {tr("取消")}
-              </button>
-            </span>
-          ) : (
-            <button
-              type="button"
-              disabled={!selected.size || pending}
-              onClick={() => setConfirming(true)}
-            >
-              {tr("取消收藏")}
-            </button>
-          )}
-        </div>
-      ) : null}
     </FavoriteSelectionContext.Provider>
   );
 }
@@ -208,15 +192,12 @@ export function FavoriteSelectableItem({
       }}
     >
       {context.managing ? (
-        <label className="favoriteSelectControl">
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={() => context.toggle(id)}
-            aria-label={`${context.selectLabel} ${label}`}
-          />
-          <span aria-hidden="true"><Check size={12} /></span>
-        </label>
+        <SelectionCheckbox
+          className="selectionItemControl favoriteSelectControl"
+          checked={selected}
+          onChange={() => context.toggle(id)}
+          label={`${context.selectLabel} ${label}`}
+        />
       ) : null}
       {children}
     </div>

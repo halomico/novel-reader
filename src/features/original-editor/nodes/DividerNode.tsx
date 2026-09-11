@@ -5,11 +5,13 @@ import {
   $applyNodeReplacement,
   DecoratorNode,
   type EditorConfig,
-
-
+  type LexicalNode,
+  type NodeKey,
   type SerializedLexicalNode,
   type Spread,
 } from "lexical";
+import { useBlockSelection } from "./block-selection";
+import styles from "../OriginalComposer.module.css";
 
 export type SerializedDividerNode = Spread<
   { type: "original-divider"; version: 1 },
@@ -54,10 +56,29 @@ export class DividerNode extends DecoratorNode<JSX.Element> {
   }
 
   decorate(): JSX.Element {
-    return <hr aria-label="分隔线" contentEditable={false} />;
+    return <Divider nodeKey={this.__key} />;
   }
+}
+
+function Divider({ nodeKey }: { nodeKey: NodeKey }): JSX.Element {
+  const [selected, ref] = useBlockSelection<HTMLDivElement>(nodeKey);
+  return (
+    <div
+      ref={ref}
+      className={`${styles.dividerBlock}${selected ? ` ${styles.blockSelected}` : ""}`}
+      contentEditable={false}
+      role="separator"
+      aria-label="分割线"
+    >
+      <hr />
+    </div>
+  );
 }
 
 export function $createDividerNode(): DividerNode {
   return $applyNodeReplacement(new DividerNode());
+}
+
+export function $isDividerNode(node: LexicalNode | null | undefined): node is DividerNode {
+  return node instanceof DividerNode;
 }

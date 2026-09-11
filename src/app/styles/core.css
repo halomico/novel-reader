@@ -10,12 +10,16 @@
   --theme-text: #191b1f;
   --theme-muted: #646a73;
   --theme-border: #e5e6eb;
-  --palette-light-accent: #0969da;
-  --palette-light-strong: #0550ae;
-  --palette-dark-accent: #4493f8;
-  --palette-dark-strong: #58a6ff;
-  --palette-light-text: #0550ae;
-  --palette-dark-text: #58a6ff;
+  --palette-light-accent: #0d6efd;
+  --palette-light-strong: #052c65;
+  --palette-dark-accent: #6ea8fe;
+  --palette-dark-strong: #8bb9fe;
+  --palette-light-text: #052c65;
+  --palette-dark-text: #8bb9fe;
+  --palette-light-fill: #0d6efd;
+  --palette-light-fill-strong: #0d6efd;
+  --palette-dark-fill: #6ea8fe;
+  --palette-dark-fill-strong: #6ea8fe;
   --bg: var(--theme-bg);
   --bg-soft: var(--theme-bg-soft);
   --surface: var(--theme-surface);
@@ -26,6 +30,9 @@
   --accent: var(--palette-light-accent);
   --accent-strong: var(--palette-light-strong);
   --accent-text: var(--palette-light-text);
+  --accent-fill: var(--palette-light-fill);
+  --accent-fill-strong: var(--palette-light-fill-strong);
+  --accent-foreground: #fff;
   --tag-color: var(--accent-text, var(--accent));
   --font-ui: "PingFang SC", "PingFang TC", -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
   --font-brand: "OpenAI Sans", ui-sans-serif, system-ui, "SF Pro Display", "Segoe UI Variable Display", "Inter", "PingFang SC", "PingFang TC", "Microsoft YaHei UI", sans-serif;
@@ -37,16 +44,16 @@
   --control-sm: 32px;
   --control-md: 38px;
   --action-height: 34px;
-  --action-radius: 4px;
+  --action-radius: 3px;
   --action-inline-padding: 14px;
   --action-font-size: 13px;
-  --action-font-weight: 680;
+  --action-font-weight: 600;
   --shadow: 0 1px 2px rgb(31 45 54 / 7%);
   --shadow-float: 0 14px 36px rgb(22 31 37 / 14%);
   --reader-font-size: 18px;
   --reader-line-height: 1.7;
-  --original-font-size: 17px;
-  --original-line-height: 1.7;
+  --original-font-size: 16px;
+  --original-line-height: 1.6;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -62,6 +69,9 @@
     --accent: var(--palette-dark-accent);
     --accent-strong: var(--palette-dark-strong);
     --accent-text: var(--palette-dark-text);
+    --accent-fill: var(--palette-dark-fill);
+    --accent-fill-strong: var(--palette-dark-fill-strong);
+    --accent-foreground: #fff;
     --tag-color: var(--accent-text, var(--accent));
     --shadow: 0 10px 30px rgb(0 0 0 / 24%);
   }
@@ -79,22 +89,28 @@
   --accent: var(--palette-dark-accent);
   --accent-strong: var(--palette-dark-strong);
   --accent-text: var(--palette-dark-text);
+  --accent-fill: var(--palette-dark-fill);
+  --accent-fill-strong: var(--palette-dark-fill-strong);
+  --accent-foreground: #fff;
   --tag-color: var(--accent-text, var(--accent));
   --shadow: 0 10px 30px rgb(0 0 0 / 24%);
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --theme-bg: #f6f7f8;
+  --theme-bg: #f6f6f6;
   --theme-bg-soft: #fafbfc;
   --theme-surface: #ffffff;
-  --theme-surface-strong: #f1f2f4;
-  --theme-text: #1f2329;
+  --theme-surface-strong: #f0f2f5;
+  --theme-text: #191b1f;
   --theme-muted: #646a73;
   --theme-border: #e5e6eb;
   --accent: var(--palette-light-accent);
   --accent-strong: var(--palette-light-strong);
   --accent-text: var(--palette-light-text);
+  --accent-fill: var(--palette-light-fill);
+  --accent-fill-strong: var(--palette-light-fill-strong);
+  --accent-foreground: #fff;
   --tag-color: var(--accent-text, var(--accent));
   --shadow: 0 10px 28px rgb(31 45 54 / 9%);
 }
@@ -187,6 +203,8 @@ textarea {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
+/* 2px streaming progress: a scaled accent track with a light sweep inside it.
+   Only transform and opacity animate, so it never triggers layout. */
 .navigationProgress {
   position: fixed;
   top: 0;
@@ -194,30 +212,61 @@ textarea {
   z-index: 200;
   width: 100%;
   height: 2px;
+  overflow: hidden;
   opacity: 0;
   pointer-events: none;
-  transform: scaleX(0.08);
-  transform-origin: left;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 45%, transparent), var(--accent) 38%);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  contain: strict;
 }
 
 .navigationProgress::after {
   position: absolute;
-  inset: 0;
-  background: var(--accent);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 42%, transparent);
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 42%;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 72%) 50%, transparent);
+  opacity: 0;
+  transform: translateX(-110%);
   content: "";
 }
 
 .navigationProgress[data-state="loading"] {
   opacity: 1;
-  transform: scaleX(0.82);
-  transition: transform 8s cubic-bezier(0.12, 0.72, 0.18, 1), opacity 100ms ease;
+  transform: scaleX(0.88);
+  /* The short delay hides cached route changes that finish within a frame or two. */
+  transition: opacity 120ms ease 60ms, transform 9s cubic-bezier(0.05, 0.75, 0.15, 1) 60ms;
+}
+
+.navigationProgress[data-state="loading"]::after {
+  opacity: 1;
+  animation: navigationProgressSweep 1.15s cubic-bezier(0.45, 0, 0.25, 1) 60ms infinite;
 }
 
 .navigationProgress[data-state="complete"] {
   opacity: 0;
   transform: scaleX(1);
-  transition: transform 140ms ease, opacity 180ms ease 70ms;
+  transition: transform 150ms ease-out, opacity 220ms ease 110ms;
+}
+
+@keyframes navigationProgressSweep {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(260%); }
+}
+
+.isNavigationPending,
+.isNavigationPending a,
+.isNavigationPending button {
+  cursor: progress;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navigationProgress[data-state="loading"]::after {
+    animation: none;
+    opacity: 0;
+  }
 }
 
 .readerShell {
@@ -246,10 +295,11 @@ textarea {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-decoration: none;
-  margin: -6px -8px;
-  border-radius: 7px;
-  padding: 6px 8px;
-  transition: background-color 150ms ease, color 150ms ease;
+  margin: 0;
+  border-radius: 4px;
+  padding: 2px 0;
+  background: transparent;
+  transition: color 150ms ease, text-shadow 150ms ease;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -265,14 +315,15 @@ textarea {
 
 .brand:hover,
 .brand:focus-visible {
-  color: color-mix(in srgb, var(--accent-text, var(--accent)) 72%, var(--accent));
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: color-mix(in oklab, var(--accent-text, var(--accent)) 78%, #fff);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--accent) 24%, transparent);
+  background: transparent;
   opacity: 1;
 }
 
 .brand:hover .siteBrandIcon,
 .brand:focus-visible .siteBrandIcon {
-  filter: saturate(1.12) brightness(1.06);
+  filter: saturate(1.15) brightness(1.08);
   transform: translateY(-1px);
 }
 
@@ -283,7 +334,7 @@ textarea {
 }
 
 .brand:active {
-  color: var(--accent-strong, var(--accent));
+  color: color-mix(in oklab, var(--accent-text, var(--accent)) 78%, #fff);
 }
 
 .analyticsRealtime {
@@ -645,24 +696,7 @@ mark {
 }
 
 .siteEntryNoticeConfirm {
-  min-height: var(--action-height);
   flex: 0 0 auto;
-  border: 1px solid var(--accent);
-  border-radius: var(--action-radius);
-  padding: 0 var(--action-inline-padding);
-  background: var(--accent);
-  color: #fffaf2;
-  font: inherit;
-  font-size: var(--action-font-size);
-  font-weight: var(--action-font-weight);
-  line-height: 1;
-}
-
-.siteEntryNoticeConfirm:hover:not(:disabled),
-.siteEntryNoticeConfirm:focus-visible:not(:disabled) {
-  border-color: var(--accent-strong, var(--accent));
-  background: var(--accent-strong, var(--accent));
-  color: #fff;
 }
 
 @keyframes siteEntryNoticeFade {

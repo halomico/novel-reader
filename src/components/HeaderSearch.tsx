@@ -34,6 +34,11 @@ const options: Array<{ value: SearchMode; label: string; action: string; placeho
   { value: "current", label: "本文", action: "/search", placeholder: "搜索本文" },
 ];
 
+/** Original pages search articles, not novels: one scope, no mode menu. */
+const originalOptions: typeof options = [
+  { value: "title", label: "原创", action: "/original", placeholder: "搜索原创文章" },
+];
+
 function getReaderSegments(): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>(".readerSegment"));
 }
@@ -85,6 +90,7 @@ export function HeaderSearch({
   contentSearchEnabled = true,
   currentSearchBookId,
   persistCatalogPreference = false,
+  scope = "novels",
 }: {
   query?: string;
   defaultMode?: SearchMode;
@@ -95,6 +101,7 @@ export function HeaderSearch({
   contentSearchEnabled?: boolean;
   currentSearchBookId?: number;
   persistCatalogPreference?: boolean;
+  scope?: "novels" | "originals";
 }) {
   const pathname = usePathname();
   const normalizedPathname = stripLocalePath(pathname);
@@ -117,7 +124,8 @@ export function HeaderSearch({
   const currentSearchRequestRef = useRef(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchInputId = useId();
-  const visibleOptions = options
+  const originalScope = scope === "originals";
+  const visibleOptions = originalScope ? originalOptions : options
     .filter((option) => showCurrentSearch || option.value !== "current")
     .filter((option) => contentSearchEnabled || option.value !== "content")
     .map((option) => option.value === "current" && currentSearchBookId
@@ -430,9 +438,9 @@ export function HeaderSearch({
         }}
         onClick={() => setIsModeMenuOpen(true)}
       />
-      <input name="source" type="hidden" value={searchSource} />
-      {library && library !== "default" ? <input name="library" type="hidden" value={library} /> : null}
-      {originNovelId ? <input name="origin" type="hidden" value={originNovelId} /> : null}
+      {originalScope ? null : <input name="source" type="hidden" value={searchSource} />}
+      {!originalScope && library && library !== "default" ? <input name="library" type="hidden" value={library} /> : null}
+      {!originalScope && originNovelId ? <input name="origin" type="hidden" value={originNovelId} /> : null}
       {keyword.trim() ? (
         <button
           className="searchClearButton"
@@ -495,7 +503,7 @@ export function HeaderSearch({
           </button>
         </div>
       ) : null}
-      {isModeMenuOpen ? (
+      {isModeMenuOpen && visibleOptions.length > 1 ? (
         <div className="segmentedControl searchModeMenu" role="group" aria-label={tr("搜索范围")}>
           {visibleOptions.map((option) => (
             <button

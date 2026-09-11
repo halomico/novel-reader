@@ -1,38 +1,26 @@
+/* The writing surface follows the long-form editors people already know: a quiet page,
+   one sheet, a labelled toolbar above it and a status bar below. Body text is
+   16px / 1.67 with a 1.4em gap between paragraphs. Every action uses the site's shared
+   action tokens (height, radius, type), so the editor reads as part of the product. */
 .shell {
-  --composer-border: color-mix(in srgb, currentColor 13%, transparent);
-  --composer-muted: color-mix(in srgb, currentColor 58%, transparent);
+  --composer-border: color-mix(in srgb, currentColor 11%, transparent);
+  --composer-muted: color-mix(in srgb, currentColor 56%, transparent);
   --composer-surface: var(--surface, #fff);
+  --composer-page: color-mix(in srgb, var(--composer-surface) 95%, currentColor);
   --composer-accent: var(--accent, #1772f6);
-  height: 100dvh;
-  min-height: 100dvh;
-  max-height: 100dvh;
-  background: var(--composer-surface);
-  color: var(--text, #202124);
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  overflow: hidden;
-}
-
-.topBar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
+  --composer-radius: var(--action-radius, 3px);
+  --composer-font: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", "WenQuanYi Micro Hei", sans-serif;
   display: flex;
-  min-width: 0;
-  min-height: 56px;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 20px;
-  background: color-mix(in srgb, var(--composer-surface) 96%, transparent);
-  backdrop-filter: blur(16px);
-  border-bottom: 1px solid var(--composer-border);
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--composer-page);
+  color: var(--text, #121212);
+  font-family: var(--composer-font);
 }
 
-.backButton,
-.topBar button,
-.toolbar button,
-.outline button,
-.dialog button:not(:global(.tagChip)) {
+/* Zero-specificity reset, so every component rule below wins without !important. */
+:where(.backButton, .topBar button, .toolbar button, .outline button, .statusBar button, .dialog button:not([class~="tagChip"])) {
   appearance: none;
   border: 0;
   background: transparent;
@@ -41,372 +29,182 @@
   cursor: pointer;
 }
 
-.backButton {
-  flex: 0 0 auto;
-  min-width: 96px;
-  min-height: var(--action-height, 34px);
+/* ---- Shared actions ------------------------------------------------------------- */
+
+/* The editor's filled and outlined actions are the site's button component. */
+.primaryButton { composes: uiButton isPrimary from global; }
+.publishButton { composes: uiButton isPrimary from global; }
+.tagPickerDoneButton { composes: uiButton isPrimary from global; }
+.secondaryButton { composes: uiButton isSecondary from global; }
+
+/* Unclassed dialog actions read as secondary buttons. */
+:where(.dialogActions, .dialog > footer) button {
   display: inline-flex;
+  min-height: var(--action-height, 34px);
+  box-sizing: border-box;
   align-items: center;
-  gap: 7px;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--composer-border);
+  border-radius: var(--composer-radius);
+  padding: 0 var(--action-inline-padding, 14px);
+  background: transparent;
+  color: var(--text, currentColor);
+  font-size: var(--action-font-size, 13px);
   font-weight: var(--action-font-weight, 680);
+  line-height: 1;
+  white-space: nowrap;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+:where(.dialogActions, .dialog > footer) button:hover:not(:disabled),
+:where(.dialogActions, .dialog > footer) button:focus-visible {
+  border-color: color-mix(in srgb, var(--composer-accent) 50%, var(--composer-border));
+  color: var(--accent-text, var(--composer-accent));
+  outline: 0;
+}
+:where(.dialogActions, .dialog > footer) button:disabled { opacity: .5; cursor: default; }
+
+/* Quiet icon-and-label commands in the top bar and over the preview. */
+.ghostButton {
+  appearance: none;
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  border-radius: var(--composer-radius);
+  padding: 0 8px;
+  background: transparent;
+  color: var(--composer-muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.ghostButton:hover,
+.ghostButton:focus-visible {
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  color: var(--text, currentColor);
+  outline: 0;
+}
+.ghostButton.outlineButtonActive {
+  background: color-mix(in srgb, var(--composer-accent) 7%, transparent);
+  color: var(--accent-text, var(--composer-accent));
 }
 
-.toolbar {
-  display: flex;
-  flex: 1 1 auto;
-  min-width: 0;
+/* ---- Top bar -------------------------------------------------------------------- */
+
+.topBar {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) auto minmax(80px, 1fr);
   align-items: center;
-  gap: 1px;
-  justify-content: flex-start;
-  padding: 0 2px;
+  gap: 8px;
+  min-height: 52px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--composer-border);
+  background: var(--composer-surface);
+}
+
+.backButton {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: var(--composer-radius);
+  color: var(--composer-muted);
+  transition: color 120ms ease;
+}
+.backButton:hover,
+.backButton:focus-visible { color: var(--text, currentColor); outline: 0; }
+.backButton:disabled { opacity: .45; cursor: default; }
+
+.workspaceTitle { grid-column: 2; justify-self: center; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.topBarActions { grid-column: 3; justify-self: end; display: flex; align-items: center; gap: 4px; }
+.topPublishButton { display: none; }
+.bottomPublishButton { display: inline-flex; }
+
+/* ---- Toolbar -------------------------------------------------------------------- */
+
+.toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  border-bottom: 1px solid var(--composer-border);
+  background: var(--composer-surface);
   overflow-x: auto;
   scrollbar-width: none;
 }
-
 .toolbar::-webkit-scrollbar { display: none; }
+.desktopToolbar { display: flex; align-items: center; gap: 2px; min-width: max-content; padding: 4px 16px; }
+.mobileToolbar { display: none; }
 
 .toolbar button {
-  flex: 0 0 var(--control-sm, 32px);
-  width: var(--control-sm, 32px);
-  height: var(--control-sm, 32px);
-  border-radius: var(--action-radius, 4px);
-  display: inline-grid;
-  place-items: center;
-  border: 1px solid transparent;
-}
-
-/* Hover is a neutral affordance, not a state. When hover borrowed the accent styling
-   of `.toolActive`, a button the user had just switched off still looked switched on
-   as soon as the pointer rested on it. */
-.toolbar button:hover:not(:disabled),
-.toolbar button:focus-visible {
-  border-color: color-mix(in srgb, currentColor 15%, transparent);
-  background: color-mix(in srgb, currentColor 8%, transparent);
-  color: inherit;
-}
-
-.toolbar button.toolActive {
-  border-color: color-mix(in srgb, var(--composer-accent) 30%, transparent);
-  background: color-mix(in srgb, var(--composer-accent) 12%, transparent);
-  color: var(--composer-accent);
-}
-
-/* A locked format keeps writing in that style, so it reads as "held down": the same
-   accent as an active button plus a solid underline bar. */
-.toolbar button.toolLocked {
-  position: relative;
-  border-color: color-mix(in srgb, var(--composer-accent) 46%, transparent);
-}
-.toolbar button.toolLocked::after {
-  content: "";
-  position: absolute;
-  inset: auto 5px 3px;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--composer-accent);
-}
-
-.toolbar button:disabled { opacity: .34; cursor: default; }
-
-.topBarActions {
-  display: flex;
-  min-width: 0;
-  flex: 0 0 auto;
+  display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: 5px;
-}
-
-.wordCount {
+  justify-content: center;
+  gap: 4px;
+  min-width: 52px;
+  height: 52px;
+  padding: 0 6px;
+  border-radius: var(--composer-radius);
   color: var(--composer-muted);
   font-size: 12px;
   line-height: 1;
   white-space: nowrap;
+  transition: color .12s ease, background-color .12s ease;
 }
+.toolbar button > svg { flex: 0 0 auto; }
 
-.wordCount { font-variant-numeric: tabular-nums; }
-
-.actionButton {
-  display: inline-flex;
-  min-height: var(--action-height, 34px);
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1px solid transparent !important;
-  border-radius: var(--action-radius, 4px) !important;
-  padding: 0 var(--action-inline-padding, 14px);
-  color: var(--composer-muted);
-  font-size: var(--action-font-size, 13px);
-  font-weight: var(--action-font-weight, 680);
-  white-space: nowrap;
-}
-
-.actionButton:hover,
-.actionButton:focus-visible {
-  border-color: color-mix(in srgb, var(--composer-accent) 30%, transparent) !important;
-  background: color-mix(in srgb, var(--composer-accent) 9%, transparent) !important;
-  color: var(--composer-accent);
-  outline: 0;
-}
-
-.workspace {
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  display: grid;
-  /* The outline column collapses to nothing when hidden, so the page is centred while
-     writing and only makes room when the table of contents is actually shown. */
-  /* Deliberately not transitioned. Animating grid-template-columns while the column's
-     child is being mounted in the same frame leaves Chrome reporting — and using — the
-     start value forever, so the outline opened as a 0-width sliver. */
-  grid-template-columns: minmax(0, 760px) 0;
-  justify-content: center;
-  align-items: start;
-  gap: 0;
-  padding: 44px 32px 110px;
-  scroll-padding-top: 36px;
-}
-
-.paper { min-width: 0; width: 100%; }
-
-.titleInput {
-  display: block;
-  width: 100%;
-  min-height: 1.26em;
-  border: 0;
-  border-bottom: 1px solid var(--composer-border);
-  outline: 0;
-  background: transparent;
-  color: inherit;
-  font: 700 clamp(31px, 3.1vw, 42px) / 1.26 var(--original-reading-font, ui-sans-serif, system-ui, sans-serif);
-  letter-spacing: -.025em;
-  overflow: hidden;
-  padding: 0 0 24px;
-  margin: 0 0 28px;
-  resize: none;
-}
-
-.titleInput::placeholder { color: color-mix(in srgb, currentColor 30%, transparent); }
-
-.editorFrame { position: relative; min-height: 55vh; }
-.contentEditable {
-  position: relative;
-  z-index: 1;
-  min-height: 55vh;
-  outline: 0;
-  white-space: pre-wrap;
-  font: 400 17px / 1.75 var(--original-reading-font, ui-sans-serif, system-ui, sans-serif);
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  caret-color: var(--composer-accent);
-}
-.placeholder {
-  position: absolute;
-  top: 0;
-  left: 0;
-  color: color-mix(in srgb, currentColor 34%, transparent);
-  pointer-events: none;
-  font: 400 17px / 1.75 var(--original-reading-font, ui-sans-serif, system-ui, sans-serif);
-}
-
-.editorParagraph { margin: 0 0 1em; text-indent: 0; letter-spacing: 0.01em; contain: layout; }
-.editorH2 { margin: 1.8em 0 .7em; font-size: 22px; line-height: 1.4; font-weight: 700; }
-.editorH3 { margin: 1.5em 0 .6em; font-size: 19px; line-height: 1.4; font-weight: 650; }
-.editorQuote { margin: 1.35em 0; padding: .35em 0 .35em 1.15em; border-left: 3px solid color-mix(in srgb, var(--composer-accent) 55%, transparent); color: var(--composer-muted); }
-.editorList { margin: .8em 0 1.1em; padding-left: 1.7em; }
-.editorListItem { margin: .35em 0; }
-.editorLink { color: var(--composer-accent); text-decoration: underline; text-underline-offset: 3px; }
-.editorCode { overflow-x: auto; margin: 1.4em 0; padding: 16px 18px; border-radius: 10px; background: color-mix(in srgb, currentColor 6%, transparent); font: 14px / 1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; tab-size: 2; }
-.inlineCode { padding: .15em .35em; border-radius: 5px; background: color-mix(in srgb, currentColor 7%, transparent); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .88em; }
-.bold { font-weight: 700; }
-.italic { font-style: italic; }
-.underline { text-decoration: underline; text-underline-offset: 3px; }
-.strikethrough { text-decoration: line-through; }
-.paidGate,
-.divider,
-.image { display: block; }
-.divider hr { border: 0; border-top: 1px solid var(--composer-border); margin: 2.1em auto; width: min(180px, 42%); }
-
-/* The boundary the writer places and the gate the reader meets are the same feature at
-   two moments, so they share one visual language: the same lock mark, the same bordered
-   card, the same muted centred copy. The editing surface adds the "what happens next"
-   line; the reader adds the unlock action. Neither uses a heavy colour block, because
-   the article has to stay the thing the eye lands on. */
-.paidGateCard {
-  margin: 2.2em 0;
-  border: 1px solid var(--composer-border);
-  border-radius: 9px;
-  padding: 18px;
-  background: color-mix(in srgb, var(--composer-accent) 3%, transparent);
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-  color: var(--composer-muted);
-  text-align: center;
-  user-select: none;
-}
-.paidGateCard > svg { color: var(--composer-accent); }
-.paidGateCard strong { color: inherit; font-size: 14px; font-weight: 650; }
-.paidGateCard small { font-size: 12px; line-height: 1.55; }
-
-.editorImage { margin: 1.65em 0; text-align: center; }
-.editorImage img { display: block; width: auto; max-width: 100%; height: auto; margin: 0 auto; border-radius: 8px; }
-.editorImage figcaption { margin-top: 9px; color: var(--composer-muted); font-size: 13px; line-height: 1.55; }
-
-.outline {
-  position: sticky;
-  top: 10px;
-  max-height: calc(100dvh - 190px);
-  overflow: auto;
-  padding-left: 18px;
-  border-left: 1px solid var(--composer-border);
-  font-size: 13px;
-}
-.outline header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.outline header strong { flex: 0 0 auto; }
-.outlineCount { flex: 1 1 auto; color: var(--composer-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.outline header button { display: grid; width: 28px; height: 28px; place-items: center; flex: 0 0 auto; }
-.outline nav { display: grid; gap: 2px; }
-.outline nav button {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  width: 100%;
-  text-align: left;
-  padding: 7px 8px;
-  border-radius: 7px;
-  color: var(--composer-muted);
-  line-height: 1.45;
-}
-/* Long chapter titles wrap to two lines and then clip, so the column keeps its width. */
-.outline nav button > span {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-}
-.outline nav button:hover { color: inherit; background: color-mix(in srgb, currentColor 5%, transparent); }
-.outline nav button.outlineActive {
-  color: var(--composer-accent);
-  background: color-mix(in srgb, var(--composer-accent) 10%, transparent);
-  font-weight: 600;
-}
-.saveStatusButton { max-width: 190px; }
-.primaryButton,
-.publishButton {
-  min-width: 64px;
-  padding: 0 var(--action-inline-padding, 14px) !important;
-  border-color: var(--composer-accent) !important;
-  background: var(--composer-accent) !important;
-  border-radius: var(--action-radius, 4px) !important;
-  min-height: var(--action-height, 34px);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, white 14%, transparent);
-  color: white !important;
-  font-weight: 700 !important;
-}
-.primaryButton:hover,
-.primaryButton:focus-visible,
-.publishButton:hover,
-.publishButton:focus-visible {
-  background: var(--accent-strong, var(--composer-accent)) !important;
-  color: #fff !important;
-  filter: brightness(1.06);
-}
-.primaryButton:disabled { opacity: .45; cursor: default; }
-.topPublishButton { display: none !important; }
-.bottomPublishButton { display: inline-flex; }
-.actionButton.saveStatusButton {
-  border-color: var(--composer-border) !important;
-  background: color-mix(in srgb, currentColor 4%, transparent);
-}
-.actionButton.saveStatusButton:hover,
-.actionButton.saveStatusButton:focus-visible {
-  background: color-mix(in srgb, var(--composer-accent) 9%, transparent) !important;
-}
-
-.notice {
-  position: fixed;
-  z-index: 80;
-  left: 50%;
-  bottom: 66px;
-  transform: translateX(-50%);
-  max-width: min(90vw, 560px);
-  padding: 10px 14px;
-  border: 1px solid var(--composer-border);
-  border-radius: 9px;
-  background: var(--composer-surface);
-  box-shadow: 0 12px 40px rgb(0 0 0 / .13);
-  font-size: 14px;
-}
-
-.dialog {
-  width: min(92vw, 480px);
-  max-height: min(86dvh, 760px);
-  padding: 0;
-  border: 1px solid var(--composer-border);
-  border-radius: 14px;
-  background: var(--composer-surface);
-  color: inherit;
-  box-shadow: 0 24px 80px rgb(0 0 0 / .22);
-}
-.dialog::backdrop { background: rgb(0 0 0 / .38); backdrop-filter: blur(2px); }
-.dialog > h2,
-.dialog > p { margin-left: 24px; margin-right: 24px; }
-.dialog > h2 { margin-top: 24px; font-size: 20px; }
-.dialog > p { color: var(--composer-muted); line-height: 1.65; }
-.dialogActions,
-.dialog > footer { display: flex; justify-content: flex-end; gap: 10px; padding: 18px 24px 24px; }
-.dialogActions button,
-.dialog > footer button {
-  min-height: var(--action-height, 34px);
-  padding: 0 var(--action-inline-padding, 14px);
-  border-radius: var(--action-radius, 4px);
+/* Hover is a neutral affordance, not a state: a button the writer just switched off
+   must not look switched on while the pointer rests on it. */
+.toolbar button:hover:not(:disabled),
+.toolbar button:focus-visible {
   background: color-mix(in srgb, currentColor 6%, transparent);
-  font-size: var(--action-font-size, 13px);
-  font-weight: var(--action-font-weight, 680);
+  color: var(--text, currentColor);
+  outline: 0;
 }
+
+.toolbar button.toolActive,
+.toolbar button.toolActive:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--composer-accent) 9%, transparent);
+  color: var(--composer-accent);
+}
+
+.toolbar button:disabled { opacity: .38; cursor: default; }
+
+/* ---- Link bar ------------------------------------------------------------------- */
 
 .inlineLinkPopover {
-  position: relative;
-  z-index: 15;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   padding: 8px 16px;
   border-bottom: 1px solid var(--composer-border);
-  background: color-mix(in srgb, var(--composer-surface) 96%, currentColor 4%);
-  box-shadow: 0 4px 12px rgb(0 0 0 / 0.06);
+  background: var(--composer-surface);
 }
-
+.inlineLinkIcon { color: var(--composer-muted); }
 .inlineLinkTextInput,
 .inlineLinkUrlInput {
   height: 32px;
+  box-sizing: border-box;
   border: 1px solid var(--composer-border);
-  border-radius: 6px;
+  border-radius: var(--composer-radius);
   padding: 0 10px;
   background: var(--composer-surface);
   color: inherit;
   font-size: 13px;
   outline: 0;
-  transition: border-color 140ms ease;
 }
-
-.inlineLinkTextInput {
-  width: 130px;
-}
-
-.inlineLinkUrlInput {
-  width: 220px;
-}
-
+.inlineLinkTextInput { width: 140px; }
+.inlineLinkUrlInput { width: 240px; }
 .inlineLinkTextInput:focus,
-.inlineLinkUrlInput:focus {
-  border-color: var(--composer-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--composer-accent) 20%, transparent);
-}
-
+.inlineLinkUrlInput:focus { border-color: var(--composer-accent); }
 .inlineLinkSubmit,
 .inlineLinkClose {
   display: grid;
@@ -414,318 +212,539 @@
   height: 32px;
   place-items: center;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--composer-radius);
   cursor: pointer;
 }
+.inlineLinkSubmit { background: var(--accent-fill, var(--composer-accent)); color: var(--accent-foreground, #fff); }
+.inlineLinkClose { background: transparent; color: var(--composer-muted); }
+.inlineLinkClose:hover { color: var(--text, currentColor); }
 
-.inlineLinkSubmit {
-  background: var(--composer-accent);
-  color: #fff;
+/* ---- Page and sheet ------------------------------------------------------------- */
+
+/* The workspace frame holds the scrolling page and the outline. The outline never takes
+   layout space, so opening it cannot squeeze or shift the sheet. */
+.workspaceFrame {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-.inlineLinkClose {
+.workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 24px 40px;
+  scroll-padding-top: 24px;
+}
+
+.paper {
+  min-width: 0;
+  max-width: 840px;
+  margin: 0 auto;
+  min-height: 72vh;
+  box-sizing: border-box;
+  padding: 36px 40px 8px;
+  border-radius: 2px;
+  background: var(--composer-surface);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 5%);
+}
+
+.titleField {
+  position: relative;
+  margin: 0 0 24px;
+  border-bottom: 1px solid var(--composer-border);
+}
+
+.titleInput {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 0 14px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: 600 32px / 1.4 var(--composer-font);
+  overflow: hidden;
+  resize: none;
+}
+.titleInput::placeholder { color: color-mix(in srgb, currentColor 32%, transparent); }
+
+.markdownInput {
+  display: block;
+  width: 100%;
+  min-height: 58vh;
+  box-sizing: border-box;
+  resize: vertical;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: 400 15px / 1.8 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  tab-size: 2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  caret-color: var(--composer-accent);
+}
+
+/* ---- Manuscript ----------------------------------------------------------------- */
+
+.editorFrame { position: relative; }
+
+/* `pre-wrap` is required: under `normal` the browser stores a trailing space as U+00A0
+   and every Markdown block shortcut ("# ", "- ", "> ", "1. ") silently stops firing.
+   The bottom padding is part of the editable root, so a click anywhere below the last
+   line still lands in the manuscript. */
+.contentEditable {
+  position: relative;
+  z-index: 1;
+  min-height: 50vh;
+  padding-bottom: 96px;
+  outline: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  font: 400 16px / 1.67 var(--composer-font);
+  caret-color: var(--composer-accent);
+}
+.contentEditable > :first-child { margin-top: 0; }
+
+.placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: color-mix(in srgb, currentColor 34%, transparent);
+  pointer-events: none;
+  font: 400 16px / 1.67 var(--composer-font);
+}
+
+/* `contain: layout` keeps typing fast in a 200k-character manuscript. Never
+   `content-visibility: auto`: it defers layout of new blocks and desyncs the caret. */
+.editorParagraph { margin: 0 0 1.4em; contain: layout; }
+.editorH1 { margin: 1.3em 0 .8em; font-size: 22px; line-height: 1.5; font-weight: 600; }
+.editorH2 { margin: 1.2em 0 .7em; font-size: 19px; line-height: 1.5; font-weight: 600; }
+.editorH3 { margin: 1.1em 0 .6em; font-size: 17px; line-height: 1.5; font-weight: 600; }
+.editorQuote { margin: 0 0 1.4em; padding: 0 0 0 1em; border-left: 3px solid color-mix(in srgb, currentColor 18%, transparent); color: var(--composer-muted); }
+.editorList { margin: 0 0 1.4em; padding-left: 1.8em; }
+.editorList .editorList { margin: 0; }
+.editorListItem { margin: 0; }
+.editorLink { color: var(--composer-accent); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--composer-accent) 45%, transparent); }
+/* Lexical renders code blocks as <code>, an inline element: without display:block its
+   padding and background spill over the neighbouring lines. */
+.editorCode {
+  display: block;
+  overflow-x: auto;
+  margin: 0 0 1.4em;
+  padding: 10px 14px;
+  border: 1px solid var(--composer-border);
+  border-radius: var(--composer-radius);
+  background: color-mix(in srgb, currentColor 4%, transparent);
+  font: 13.5px / 1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre;
+  tab-size: 2;
+  contain: layout;
+}
+.inlineCode { padding: .1em .35em; border-radius: var(--composer-radius); background: color-mix(in srgb, currentColor 7%, transparent); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .88em; }
+.bold { font-weight: 600; }
+.italic { font-style: italic; }
+.underline { text-decoration: underline; text-underline-offset: 3px; }
+.strikethrough { text-decoration: line-through; }
+.underlineStrikethrough { text-decoration: underline line-through; text-underline-offset: 3px; }
+
+.editorChecklist { list-style: none; padding-left: 0; }
+.editorListItemChecked,
+.editorListItemUnchecked { position: relative; min-height: 24px; padding-left: 28px; list-style: none; }
+.contentEditable :global(li[role="checkbox"]) { position: relative; min-height: 24px; padding-left: 28px; list-style: none; }
+.contentEditable :global(li[role="checkbox"]::before) { content: ""; position: absolute; left: 2px; top: .38em; width: 15px; height: 15px; box-sizing: border-box; border: 1.5px solid var(--composer-muted); border-radius: 3px; }
+.contentEditable :global(li[role="checkbox"][aria-checked="true"]::before) { border-color: var(--accent-fill, var(--composer-accent)); background: var(--accent-fill, var(--composer-accent)); }
+.contentEditable :global(li[role="checkbox"][aria-checked="true"]::after) { content: ""; position: absolute; left: 6px; top: .52em; width: 7px; height: 4px; border: solid var(--accent-foreground, #fff); border-width: 0 0 1.8px 1.8px; transform: rotate(-45deg); }
+.contentEditable :global(li[role="checkbox"][aria-checked="true"]) { color: var(--composer-muted); text-decoration: line-through; }
+
+.tableScrollableWrapper,
+.contentEditable :global(.Lexical__tableScrollableWrapper) { overflow-x: auto; }
+.contentEditable table { width: 100%; margin: 0 0 1.4em; border-collapse: collapse; font-size: 14px; }
+.contentEditable th,
+.contentEditable td { min-width: 80px; padding: 8px 10px; border: 1px solid var(--composer-border); vertical-align: top; }
+.contentEditable th { background: color-mix(in srgb, currentColor 5%, transparent); font-weight: 600; }
+
+/* ---- Non-text blocks ------------------------------------------------------------ */
+
+.paidGate,
+.divider,
+.image { display: block; margin: 0 0 1.4em; }
+
+/* One click selects the whole block; the ring is how the writer sees that Backspace
+   or Delete will now remove it. */
+.blockSelected { border-radius: var(--composer-radius); box-shadow: 0 0 0 2px color-mix(in srgb, var(--composer-accent) 60%, transparent); }
+
+.dividerBlock { padding: 12px 0; cursor: pointer; }
+.dividerBlock hr { height: 0; margin: 0; border: 0; border-top: 1px solid color-mix(in srgb, currentColor 30%, transparent); }
+
+.paidGateMarker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  color: var(--composer-accent);
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: pointer;
+  user-select: none;
+}
+.paidGateMarker::before,
+.paidGateMarker::after {
+  content: "";
+  flex: 1 1 auto;
+  border-top: 1px dashed color-mix(in srgb, var(--composer-accent) 55%, transparent);
+}
+.paidGateLabel { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; white-space: nowrap; }
+.paidGateRemove {
+  padding: 1px 8px;
+  border: 1px solid var(--composer-border);
+  border-radius: var(--composer-radius);
   background: transparent;
   color: var(--composer-muted);
-}
-
-.inlineLinkClose:hover {
-  background: color-mix(in srgb, currentColor 8%, transparent);
-}
-
-@media (max-width: 1100px) {
-  .outline {
-    position: fixed;
-    z-index: 60;
-    inset: 100px 0 50px auto;
-    width: min(88vw, 320px);
-    max-height: none;
-    padding: 16px;
-    border: 1px solid var(--composer-border);
-    background: var(--composer-surface);
-    box-shadow: -16px 0 50px rgb(0 0 0 / .14);
-    transform: translateX(105%);
-    transition: transform .2s ease;
-  }
-  /* Narrow screens dock the column to the right edge instead of squeezing the
-     prose into a sliver. It is not modal: the text stays visible and editable. */
-  .outline { transform: translateX(0); }
-  .outline header button { display: grid; }
-}
-
-@media (max-width: 720px) {
-  .shell {
-    grid-template-rows: auto minmax(0, 1fr) auto auto;
-    min-height: 100dvh;
-  }
-  .topBar {
-    min-height: calc(54px + env(safe-area-inset-top));
-    gap: 4px;
-    padding: env(safe-area-inset-top) 8px 0;
-  }
-  .backButton { min-width: 36px; min-height: 34px; padding: 0 4px; }
-  .backButton span { display: none; }
-  .toolbar {
-    grid-row: 4;
-    justify-content: flex-start;
-    flex-wrap: nowrap;
-    gap: 2px;
-    padding: 6px 14px calc(6px + env(safe-area-inset-bottom));
-    border-top: 1px solid var(--composer-border);
-    border-bottom: 0;
-  }
-  .toolbar button { flex-basis: var(--control-sm, 32px); width: var(--control-sm, 32px); height: var(--control-sm, 32px); }
-  .topBarActions { gap: 2px; }
-  .wordCount,
-  .topBarActions .actionButton:not(.primaryButton) span { display: none; }
-  .topBarActions .actionButton { min-width: var(--action-height, 34px); padding: 0 8px; }
-  .topBarActions .saveStatusButton { max-width: var(--action-height, 34px); }
-  .topBarActions .primaryButton { min-width: 54px; padding-inline: 11px !important; }
-  .workspace { display: block; padding: 25px 18px calc(40px + env(safe-area-inset-bottom)); }
-  .titleInput { font-size: 28px; line-height: 1.3; padding-bottom: 18px; margin-bottom: 22px; }
-  .contentEditable,
-  .placeholder { font-size: 17px; line-height: 1.82; }
-  .editorH2 { font-size: 22px; }
-  .editorH3 { font-size: 19px; }
-  .outline { inset: calc(54px + env(safe-area-inset-top)) 0 0; width: 100%; border: 0; }
-  .publishDialog { margin: auto 0 0; width: 100vw; height: min(90dvh, 760px); border-radius: 16px 16px 0 0; }
-  .notice { bottom: calc(20px + env(safe-area-inset-bottom)); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .outline { transition: none; }
-  .shell * { scroll-behavior: auto !important; }
-}
-
-/* Current composer contract. The source order follows the visible desktop and
-   mobile flow, so later media rules only change geometry instead of fighting it. */
-.shell { display: flex; flex-direction: column; min-height: 100dvh; height: 100dvh; overflow: hidden; }
-.topBar { order: 0; display: grid; grid-template-columns: minmax(80px, 1fr) auto minmax(250px, 1fr); min-height: 56px; padding: 7px 20px; }
-.backButton { display: grid; width: 34px; min-width: 34px; height: 34px; place-items: center; padding: 0; border-radius: 4px; color: var(--composer-muted); }
-.backButton:hover,.backButton:focus-visible { background: transparent; color: var(--composer-accent); outline: 0; }
-.workspaceTitle { grid-column: 2; justify-self: center; font-size: 15px; font-weight: 720; letter-spacing: .02em; white-space: nowrap; }
-.topBarActions { grid-column: 3; justify-self: end; display: flex; align-items: center; gap: 6px; }
-
-.actionButton,.publishButton,.primaryButton { border-radius: 4px !important; }
-.publishButton,.primaryButton { box-shadow: none; }
-
-.toolbar { order: 1; flex: 0 0 auto; min-height: 44px; justify-content: center; padding: 5px 16px; border-bottom: 1px solid var(--composer-border); overflow: visible; }
-.desktopToolbar { display: flex; align-items: center; gap: 2px; min-width: max-content; }
-.mobileToolbar { display: none; }
-.toolbar button { width: 34px; height: 34px; flex: 0 0 34px; border-radius: 4px; }
-.inlineLinkPopover { order: 2; flex: 0 0 auto; }
-.workspace { order: 3; flex: 1 1 auto; min-height: 0; grid-template-columns: minmax(0, 760px) 0; padding: 42px 32px 72px; }
-.workspace[data-outline="open"] { grid-template-columns: minmax(0, 760px) 244px; gap: 42px; }
-.statusBar { order: 4; display: flex; flex: 0 0 auto; min-height: 42px; align-items: center; gap: 10px; padding: 4px 20px; border-top: 1px solid var(--composer-border); color: var(--composer-muted); }
-.saveStatusButton { display: inline-flex; min-height: 32px; align-items: center; gap: 6px; margin-left: 0; border: 0; border-radius: 4px; padding: 0 4px; background: transparent; color: var(--composer-muted); cursor: pointer; font: inherit; font-size: 12px; }
-.saveStatusButton svg { color: var(--composer-accent); }
-.saveStatusButton:hover,.saveStatusButton:focus-visible { background: color-mix(in srgb, var(--composer-accent) 7%, transparent); color: var(--composer-accent); outline: 0; }
-.wordCount { margin-left: auto; }
-
-.previewButton {
-  border: 0 !important;
-  border-color: transparent !important;
-  background: transparent !important;
-  color: var(--composer-muted) !important;
+  font: inherit;
+  font-size: 12px;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 560;
-  padding: 0 8px !important;
-  gap: 5px !important;
-  transition: color 140ms ease;
 }
-.previewButton svg {
+.paidGateRemove:hover,
+.paidGateRemove:focus-visible { border-color: color-mix(in srgb, var(--composer-accent) 45%, transparent); color: var(--composer-accent); outline: 0; }
+
+.editorImage { margin: 0; text-align: center; cursor: pointer; }
+.editorImage img { display: block; width: auto; max-width: 100%; height: auto; margin: 0 auto; border-radius: var(--composer-radius); }
+.editorImage figcaption { margin-top: 8px; color: var(--composer-muted); font-size: 13px; line-height: 1.55; }
+
+/* ---- Outline -------------------------------------------------------------------- */
+
+.outlineBackdrop {
+  display: contents;
+}
+
+.outlineHeader {
+  display: none;
+}
+
+.outlineCloseButton {
+  display: none;
+}
+
+.outlineBody {
+  display: contents;
+}
+
+/* Just the chapter titles: set near the top of the page margin, highlighted under the
+   pointer, a click jumps. No panel, no counter, no close button — the 目录 button shows
+   and hides it. */
+.outline {
+  position: absolute;
+  z-index: 20;
+  top: clamp(56px, 10vh, 104px);
+  right: 24px;
+  display: grid;
+  width: 200px;
+  max-height: min(calc(100% - 80px), 560px);
+  align-content: start;
+  gap: 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.outline::-webkit-scrollbar { display: none; }
+.outlineBody button,
+.outline button:not(.outlineCloseButton) {
+  display: -webkit-box;
+  width: 100%;
+  padding: 4px 8px;
+  border-radius: var(--composer-radius);
+  overflow: hidden;
   color: var(--composer-muted);
-  transition: color 140ms ease;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+  transition: background-color 120ms ease, color 120ms ease;
 }
-.previewButton:hover,
-.previewButton:focus-visible {
-  border: 0 !important;
-  border-color: transparent !important;
-  background: transparent !important;
-  color: var(--composer-accent) !important;
+.outlineBody button:hover,
+.outlineBody button:focus-visible,
+.outline button:not(.outlineCloseButton):hover,
+.outline button:not(.outlineCloseButton):focus-visible {
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  color: var(--text, currentColor);
   outline: 0;
 }
-.previewButton:hover svg,
-.previewButton:focus-visible svg {
-  color: var(--composer-accent) !important;
+.outlineBody button.outlineActive,
+.outline button.outlineActive { color: var(--accent-text, var(--composer-accent)); }
+.outlineEmpty { margin: 0; padding: 4px 8px; color: var(--composer-muted); font-size: 13px; }
+
+/* Wide screens have room beside the 840px sheet. */
+@media (min-width: 1280px) {
+  .outline {
+    right: auto;
+    left: calc(50% + 444px);
+    width: min(220px, calc(50% - 468px));
+  }
 }
 
+/* ---- Status bar ----------------------------------------------------------------- */
+
+.statusBar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 56px;
+  padding: 0 20px;
+  border-top: 1px solid var(--composer-border);
+  background: var(--composer-surface);
+  color: var(--composer-muted);
+  font-size: 13px;
+}
+.statusMeta { display: flex; min-width: 0; align-items: center; gap: 14px; }
+.wordCount { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* The save status is the save control: one click saves. */
+.statusBar .saveStatus {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 30px;
+  align-items: center;
+  gap: 5px;
+  margin-left: -6px;
+  padding: 0 6px;
+  border-radius: var(--composer-radius);
+  color: var(--composer-muted);
+  font-size: 13px;
+  white-space: nowrap;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.statusBar .saveStatus svg { flex: 0 0 auto; color: var(--accent-text, var(--composer-accent)); }
+.statusBar .saveStatus span { overflow: hidden; text-overflow: ellipsis; }
+.statusBar .saveStatus[data-state="dirty"] { color: var(--text, currentColor); }
+.statusBar .saveStatus:hover:not(:disabled),
+.statusBar .saveStatus:focus-visible {
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  color: var(--accent-text, var(--composer-accent));
+  outline: 0;
+}
+.statusBar .saveStatus:disabled { cursor: default; }
+.statusBar .saveStatus[data-state="error"],
+.statusBar .saveStatus[data-state="conflict"] { color: #c44949; }
+.statusActions { display: flex; align-items: center; gap: 10px; }
+
+/* ---- Preview -------------------------------------------------------------------- */
+
+/* The preview hides the bars, so its two commands float exactly where the top bar's
+   back button and 目录 button sit, with the same styles. */
 .previewExitButton,
 .previewOutlineButton {
   position: fixed;
   z-index: 70;
-  top: 11px;
-  display: inline-flex;
-  min-height: 34px;
-  align-items: center;
-  gap: 6px;
-  border: 0;
-  border-radius: 6px;
+}
+.previewExitButton { top: 9px; left: 20px; }
+.previewOutlineButton { top: 11px; right: 20px; }
+.ghostButton.previewOutlineButton.outlineButtonActive,
+.ghostButton.previewOutlineButton.outlineButtonActive:hover,
+.ghostButton.previewOutlineButton.outlineButtonActive:focus-visible {
+  background: transparent;
+  color: var(--accent-text, var(--composer-accent));
+}
+
+/* ---- Notices and dialogs -------------------------------------------------------- */
+
+.dialog {
+  width: min(92vw, 480px);
+  max-height: min(86dvh, 760px);
   padding: 0;
-  background: transparent !important;
-  color: var(--composer-muted, var(--muted));
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  font-weight: var(--action-font-weight, 680);
-  transition: color 140ms ease;
+  border: 1px solid var(--composer-border);
+  border-radius: 8px;
+  background: var(--composer-surface);
+  color: inherit;
+  box-shadow: 0 24px 80px rgb(0 0 0 / .22);
 }
-.previewExitButton { left: 20px; }
-.previewOutlineButton { right: 20px; }
-.previewExitButton:hover,
-.previewExitButton:focus-visible,
-.previewOutlineButton:hover,
-.previewOutlineButton:focus-visible,
-.previewOutlineButton[aria-expanded="true"] {
-  background: transparent !important;
-  color: var(--composer-accent) !important;
-  outline: 0;
-}
+.dialog::backdrop { background: rgb(0 0 0 / .38); }
+.dialog > h2,
+.dialog > p { margin-left: 24px; margin-right: 24px; }
+.dialog > h2 { margin-top: 24px; font-size: 17px; font-weight: 600; }
+.dialog > p { color: var(--composer-muted); font-size: 14px; line-height: 1.65; }
+.dialogActions,
+.dialog > footer { display: flex; justify-content: flex-end; gap: 8px; padding: 18px 24px 24px; }
+.dialog > header { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--composer-border); }
+.dialog > header h2,
+.dialog > header strong { margin: 0; font-size: 16px; font-weight: 600; }
 
-.markdownInput { display: block; width: 100%; min-height: 58vh; box-sizing: border-box; resize: vertical; border: 0; outline: 0; background: transparent; color: inherit; font: 400 15px / 1.8 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; tab-size: 2; white-space: pre-wrap; overflow-wrap: anywhere; caret-color: var(--composer-accent); }
-.editorH1 { margin: 1.8em 0 .75em; font-size: 30px; line-height: 1.35; font-weight: 760; }
-.editorH2 { font-size: 23px; }
-.editorH3 { margin: 1.4em 0 .65em; font-size: 19px; line-height: 1.45; font-weight: 680; }
-.contentEditable { min-height: 58vh; line-height: 1.82; }
-.placeholder { line-height: 1.82; }
-.editorChecklist { list-style: none; padding-left: 0; }
-.editorListItemChecked,.editorListItemUnchecked { position: relative; min-height: 24px; padding-left: 29px; list-style: none; }
-.editorListItemChecked::before,.editorListItemUnchecked::before { content: ""; position: absolute; left: 2px; top: .33em; width: 15px; height: 15px; box-sizing: border-box; border: 1.5px solid var(--composer-muted); border-radius: 3px; }
-.editorListItemChecked::before { border-color: var(--composer-accent); background: var(--composer-accent); }
-.editorListItemChecked::after { content: ""; position: absolute; left: 6px; top: .47em; width: 7px; height: 4px; border: solid white; border-width: 0 0 1.8px 1.8px; transform: rotate(-45deg); }
-.editorListItemChecked { color: var(--composer-muted); text-decoration: line-through; text-decoration-thickness: 1px; }
-.contentEditable :global(li[role="checkbox"]) { position: relative; min-height: 24px; padding-left: 29px; list-style: none; }
-.contentEditable :global(li[role="checkbox"]::before) { content: ""; position: absolute; left: 2px; top: .33em; width: 15px; height: 15px; box-sizing: border-box; border: 1.5px solid var(--composer-muted); border-radius: 3px; }
-.contentEditable :global(li[role="checkbox"][aria-checked="true"]::before) { border-color: var(--composer-accent); background: var(--composer-accent); }
-.contentEditable :global(li[role="checkbox"][aria-checked="true"]::after) { content: ""; position: absolute; left: 6px; top: .47em; width: 7px; height: 4px; border: solid white; border-width: 0 0 1.8px 1.8px; transform: rotate(-45deg); }
-.contentEditable :global(li[role="checkbox"][aria-checked="true"]) { color: var(--composer-muted); text-decoration: line-through; text-decoration-thickness: 1px; }
-.tableScrollableWrapper { overflow-x: auto; }
-.contentEditable :global(.Lexical__tableScrollableWrapper) { overflow-x: auto; }
-.contentEditable table { width: 100%; margin: 1.4em 0; border-collapse: collapse; font-size: 14px; }
-.contentEditable th,.contentEditable td { min-width: 80px; padding: 8px 10px; border: 1px solid var(--composer-border); vertical-align: top; }
-.contentEditable th { background: color-mix(in srgb, currentColor 5%, transparent); font-weight: 700; }
-
-.dialogHeader,.dialog > header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--composer-border); }
-.dialogHeader h2,.dialog > header h2 { margin: 0; font-size: 18px; }
-.dialogHeader button,.dialog > header button { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 4px; }
-.promptDialog { width: min(420px, calc(100vw - 28px)); }
-.formatDialog { width: min(calc(100vw - 28px), 560px); }
-.formatGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 14px 18px 20px; }
-.formatGrid button { min-height: 68px; display: grid; place-items: center; align-content: center; gap: 5px; border-radius: 4px; background: color-mix(in srgb, currentColor 5%, transparent); color: var(--composer-muted); font-size: 12px; }
-.formatGrid button:hover,.formatGrid button[aria-pressed="true"] { background: color-mix(in srgb, var(--composer-accent) 10%, transparent); color: var(--composer-accent); }
-
-.dialog.publishDialog { display: grid; position: fixed; inset: 0; width: min(440px, calc(100vw - 32px)); max-width: 100vw; height: 480px; max-height: calc(100dvh - 48px); margin: auto; overflow: hidden; box-sizing: border-box; border: 1px solid var(--composer-border); border-radius: 6px; grid-template-rows: auto minmax(0, 1fr) auto; background: var(--composer-surface); box-shadow: 0 18px 60px rgb(0 0 0 / .24); }
-.publishDialog:not([open]) { display: none; }
-.publishDialog > header { position: static; padding: 16px 20px 8px; border-bottom: 0; background: var(--composer-surface); }
-.publishDialog > header h2 { font-size: 17px; font-weight: 680; }
-.publishDialogBody { display: grid; gap: 18px; min-height: 0; padding: 8px 20px; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-gutter: stable; scrollbar-width: none; }
-.publishDialogBody::-webkit-scrollbar { width: 0; height: 0; }
-.publishAccessSection,.tagSection { display: grid; gap: 12px; padding: 0; }
-.publishTypePicker {
-  display: inline-flex;
-  width: fit-content;
-  max-width: 100%;
-  align-self: start;
-  align-items: center;
-  gap: 2px;
-  padding: 2.5px;
-  border: 1px solid color-mix(in srgb, var(--composer-border) 60%, transparent);
-  border-radius: 7px;
-  background: color-mix(in srgb, currentColor 3%, transparent);
-}
-.publishTypeOption {
-  min-width: 56px;
-  min-height: 27px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0 !important;
-  border-radius: 5px !important;
-  padding: 3px 14px;
-  background: transparent !important;
-  color: var(--composer-muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 500;
-  white-space: nowrap;
-  transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
-}
-.publishTypeOption:hover:not(.publishTypeOptionActive) {
-  background: color-mix(in srgb, currentColor 4%, transparent) !important;
-  color: var(--text, currentColor);
-}
-.publishTypeOptionActive {
-  background: var(--composer-surface) !important;
-  color: var(--text, currentColor) !important;
-  font-weight: 600;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 9%), 0 0.5px 1px rgb(0 0 0 / 5%) !important;
-}
-.publishPaidOptions { display: grid; gap: 10px; }
-.fieldLabel { display: flex !important; min-height: 32px !important; align-items: center !important; gap: 12px !important; color: var(--composer-muted); font-size: 13px; font-weight: 550; }
-.priceControl { display: inline-flex; align-items: center; gap: 8px; color: var(--composer-muted); }
-.priceControl input { width: 82px !important; min-height: 32px !important; box-sizing: border-box; border: 1px solid var(--composer-border); border-radius: 5px !important; padding: 0 9px !important; background: var(--composer-surface) !important; color: inherit; font: inherit; font-size: 13px; }
-.priceControl input:focus { border-color: color-mix(in srgb, var(--composer-accent) 55%, var(--composer-border)); outline: 2px solid color-mix(in srgb, var(--composer-accent) 12%, transparent); outline-offset: 0; }
-.priceControl span { font-size: 12px; }
-.validLine { display: flex; align-items: center; gap: 6px; margin: 0; color: #18864b; font-size: 12px; font-weight: 550; }
-.paidGatePrompt { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 26px; }
-.insertPaidGateButton {
-  display: inline-flex;
-  min-height: auto;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 0;
-  padding: 2px 2px;
-  background: transparent !important;
-  color: var(--composer-muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 550;
-  white-space: nowrap;
-  transition: color 140ms ease;
-}
-.insertPaidGateButton:hover,
-.insertPaidGateButton:focus-visible {
-  background: transparent !important;
-  color: var(--composer-accent);
-  text-decoration: none;
-  outline: 0;
-}
-
-.tagSection { border-top: 0; padding-top: 0; }
-.sectionHeading { display: flex; align-items: center; justify-content: space-between; }
-.sectionHeading h3 { margin: 0; font-size: 13px; }
-.sectionHeading > span { color: var(--composer-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.tagComposer { position: relative; display: flex; align-items: center; }
-.tagComposer input { width: 100%; min-height: 38px; box-sizing: border-box; border: 1px solid var(--composer-border); border-radius: 6px; padding: 0 42px 0 11px; background: var(--composer-surface); color: inherit; font: inherit; font-size: 13px; }
-.tagComposer input:focus { border-color: color-mix(in srgb, var(--composer-accent) 55%, var(--composer-border)); outline: 2px solid color-mix(in srgb, var(--composer-accent) 10%, transparent); outline-offset: 0; }
-.tagPickerButton {
-  position: absolute;
-  right: 3px;
-  top: 3px;
+/* Close buttons are a bare icon. A dialog focuses its first control when it opens, so
+   they also suppress the focus ring that otherwise draws a box around the X. */
+.dialog > header button,
+.tagPickerCloseButton {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  min-width: 0;
+  height: 30px;
+  margin-right: -6px;
   place-items: center;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--composer-radius);
   background: transparent;
   color: var(--composer-muted);
   cursor: pointer;
-  transition: background-color 140ms ease, color 140ms ease;
+  transition: color 120ms ease;
+}
+.dialog > header button:hover,
+.dialog > header button:focus-visible,
+.tagPickerCloseButton:hover,
+.tagPickerCloseButton:focus-visible { color: var(--text, currentColor); outline: 0; }
+
+.formatDialog { width: min(calc(100vw - 28px), 560px); }
+.formatGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 14px 18px 20px; }
+.formatGrid button { min-height: 68px; display: grid; place-items: center; align-content: center; gap: 5px; border-radius: var(--composer-radius); background: color-mix(in srgb, currentColor 5%, transparent); color: var(--composer-muted); font-size: 12px; }
+.formatGrid button:hover,
+.formatGrid button[aria-pressed="true"] { background: color-mix(in srgb, var(--composer-accent) 10%, transparent); color: var(--composer-accent); }
+
+/* ---- Publish settings ----------------------------------------------------------- */
+
+.dialog.publishDialog { display: grid; position: fixed; inset: clamp(24px, 15vh, 132px) 0 auto; width: min(420px, calc(100vw - 32px)); max-width: 100vw; height: fit-content; max-height: calc(100dvh - 48px); margin: 0 auto; overflow: hidden; box-sizing: border-box; border: 1px solid var(--composer-border); border-radius: 8px; grid-template-rows: auto auto auto; align-content: start; background: var(--composer-surface); box-shadow: 0 18px 60px rgb(0 0 0 / .24); }
+.publishDialog:not([open]) { display: none; }
+.dialog.publishDialog:has(.tagDrawerBackdrop) { height: min(620px, calc(100dvh - 48px)); }
+.publishDialog > header { position: static; min-height: 48px; padding: 12px 18px 6px; border-bottom: 0; background: var(--composer-surface); }
+.publishDialogBody { display: grid; grid-auto-rows: max-content; align-content: start; gap: 14px; min-height: 0; padding: 4px 18px 8px; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-gutter: stable; scrollbar-width: none; }
+.publishDialogBody::-webkit-scrollbar { width: 0; height: 0; }
+.publishAccessSection,
+.tagSection { display: grid; grid-auto-rows: max-content; align-content: start; gap: 6px; padding: 0; }
+
+/* The same quiet capsule control used by search scope and other secondary choices. */
+.publishTypePicker {
+  display: inline-grid;
+  width: 116px;
+  max-width: 100%;
+  min-height: 30px;
+  box-sizing: border-box;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-self: start;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--composer-border) 78%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--composer-surface) 94%, transparent);
+}
+.publishTypeOption {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0 10px;
+  color: var(--composer-muted);
+  font-size: 12px;
+  font-weight: 560;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.publishTypeOption:hover:not(.publishTypeOptionActive),
+.publishTypeOption:focus-visible:not(.publishTypeOptionActive) {
+  background: color-mix(in srgb, var(--composer-accent) 6%, transparent);
+  color: var(--accent-text, var(--composer-accent));
+  outline: 0;
+}
+.publishTypeOptionActive {
+  background: color-mix(in srgb, var(--composer-accent) 9%, var(--composer-surface));
+  color: var(--accent-text, var(--composer-accent));
+  font-weight: 650;
+}
+
+.publishPaidOptions { display: grid; grid-auto-rows: max-content; gap: 5px; padding-top: 2px; }
+.fieldRow,
+.fieldLabel { display: flex; min-height: 30px; align-items: center; gap: 8px; color: var(--composer-muted); font-size: 12px; font-weight: 500; }
+.fieldRow > label { cursor: pointer; }
+.priceControl { display: inline-flex; align-items: center; gap: 6px; color: var(--composer-muted); }
+.priceControl input {
+  width: 76px;
+  min-height: 30px;
+  box-sizing: border-box;
+  border: 1px solid var(--composer-border);
+  border-radius: var(--composer-radius);
+  padding: 0 9px;
+  background: var(--composer-surface);
+  color: var(--text, currentColor);
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.priceControl input:focus { border-color: color-mix(in srgb, var(--composer-accent) 55%, var(--composer-border)); outline: 0; }
+.priceControl span { font-size: 12px; color: var(--composer-muted); }
+.validLine { display: flex; align-items: center; gap: 6px; margin: 0; color: #18864b; font-size: 12px; font-weight: 500; }
+.paidGatePrompt { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 24px; }
+.paidGateHint { margin: 0; color: var(--composer-muted); font-size: 12px; line-height: 1.45; }
+.insertPaidGateButton {
+  flex: 0 0 auto;
+  padding: 0 2px;
+  color: var(--accent-text, var(--composer-accent));
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.insertPaidGateButton:hover,
+.insertPaidGateButton:focus-visible { text-decoration: underline; text-underline-offset: 3px; outline: 0; }
+
+.sectionHeading { display: flex; align-items: center; justify-content: space-between; }
+.sectionHeading h3 { margin: 0; font-size: 12px; font-weight: 600; }
+.sectionHeading > span { color: var(--composer-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.tagComposer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 34px;
+  min-height: 34px;
+  margin: 0;
+  padding: 0;
+}
+.tagComposer input {
+  width: 100%;
+  height: 100%;
+  min-height: 34px;
+  box-sizing: border-box;
+  margin: 0;
+  border: 1px solid var(--composer-border);
+  border-radius: var(--composer-radius);
+  padding: 0 38px 0 11px;
+  background: var(--composer-surface);
+  color: var(--text, currentColor);
+  font: inherit;
+  font-size: 13px;
+  outline: 0;
+  transition: border-color 120ms ease;
+}
+.tagComposer input:focus { border-color: color-mix(in srgb, var(--composer-accent) 55%, var(--composer-border)); }
+.tagPickerButton {
+  position: absolute;
+  right: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: var(--composer-radius);
+  color: var(--composer-muted);
+  transition: color 120ms ease;
 }
 .tagPickerButton:hover,
 .tagPickerButton:focus-visible,
-.tagPickerButton[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--composer-accent) 9%, transparent);
-  color: var(--composer-accent);
-  outline: 0;
-}
+.tagPickerButton[aria-expanded="true"] { color: var(--accent-text, var(--composer-accent)); outline: 0; }
 
-.tagError { margin: -5px 0 0; color: #c44949; font-size: 12px; line-height: 1.5; }
+.tagError { margin: -2px 0 0; color: #c44949; font-size: 12px; line-height: 1.5; }
 
 .tagDrawerBackdrop {
   position: absolute;
@@ -735,7 +754,6 @@
   flex-direction: column;
   justify-content: flex-end;
   background: rgb(0 0 0 / .35);
-  backdrop-filter: blur(2px);
   animation: tagFadeIn 160ms ease-out;
 }
 
@@ -755,13 +773,14 @@
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   width: 100%;
-  max-height: min(400px, 84%);
+  height: min(520px, calc(100% - 16px));
+  max-height: calc(100% - 16px);
   box-sizing: border-box;
   overflow: hidden;
   margin: 0;
   border: 0;
   border-top: 1px solid var(--composer-border);
-  border-radius: 14px 14px 0 0;
+  border-radius: 8px 8px 0 0;
   background: var(--composer-surface);
   box-shadow: 0 -12px 36px rgb(0 0 0 / .2);
   animation: tagSlideUp 200ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -776,38 +795,9 @@
   border-bottom: 1px solid var(--composer-border);
   padding: 0 16px;
 }
-.tagPickerTitleGroup {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.tagPickerTitleGroup strong {
-  font-size: 14px;
-  font-weight: 680;
-}
-.tagPickerCountBadge {
-  color: var(--composer-muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-.tagPickerCloseButton {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--composer-muted);
-  cursor: pointer;
-  transition: background-color 140ms ease, color 140ms ease;
-}
-.tagPickerCloseButton:hover,
-.tagPickerCloseButton:focus-visible {
-  background: color-mix(in srgb, currentColor 8%, transparent);
-  color: var(--text, currentColor);
-  outline: 0;
-}
+.tagPickerTitleGroup { display: flex; align-items: baseline; gap: 8px; }
+.tagPickerTitleGroup strong { font-size: 14px; font-weight: 600; }
+.tagPickerCountBadge { color: var(--composer-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 
 .tagPickerSearchWrap {
   position: relative;
@@ -815,11 +805,12 @@
   align-items: center;
   padding: 10px 16px;
   border-bottom: 1px solid var(--composer-border);
-  background: color-mix(in srgb, currentColor 2%, transparent);
 }
 .tagPickerSearchIcon {
   position: absolute;
   left: 26px;
+  top: 50%;
+  transform: translateY(-50%);
   color: var(--composer-muted);
   pointer-events: none;
 }
@@ -828,35 +819,32 @@
   min-height: 34px;
   box-sizing: border-box;
   border: 1px solid var(--composer-border);
-  border-radius: 6px;
+  border-radius: var(--composer-radius);
   padding: 0 32px 0 30px;
   background: var(--composer-surface);
   color: inherit;
   font: inherit;
   font-size: 13px;
   outline: 0;
-  transition: border-color 140ms ease, box-shadow 140ms ease;
+  transition: border-color 120ms ease;
 }
-.tagPickerSearchInput:focus {
-  border-color: color-mix(in srgb, var(--composer-accent) 52%, var(--composer-border));
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--composer-accent) 12%, transparent);
-}
+.tagPickerSearchInput:focus { border-color: color-mix(in srgb, var(--composer-accent) 52%, var(--composer-border)); }
 .tagPickerSearchClear {
   position: absolute;
   right: 22px;
+  top: 50%;
+  transform: translateY(-50%);
   display: grid;
   width: 22px;
   height: 22px;
   place-items: center;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--composer-radius);
   background: transparent;
   color: var(--composer-muted);
   cursor: pointer;
 }
-.tagPickerSearchClear:hover {
-  color: var(--text, currentColor);
-}
+.tagPickerSearchClear:hover { color: var(--text, currentColor); }
 
 .tagPickerOptions {
   display: flex;
@@ -877,7 +865,6 @@
   border-color: color-mix(in srgb, var(--composer-accent) 52%, var(--border, var(--composer-border)));
   background: color-mix(in srgb, var(--composer-accent) 10%, var(--surface, var(--composer-surface)));
   color: var(--accent-text, var(--composer-accent));
-  font-weight: 600;
 }
 
 .tagPicker .dialogHint {
@@ -889,7 +876,7 @@
 
 .tagPickerFooter {
   display: flex;
-  min-height: 48px;
+  min-height: 52px;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -901,25 +888,6 @@
   color: var(--composer-muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-}
-.tagPickerDoneButton {
-  display: inline-flex;
-  min-height: 30px;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 5px;
-  padding: 0 14px;
-  background: var(--composer-accent);
-  color: #fffaf2;
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  transition: opacity 140ms ease;
-}
-.tagPickerDoneButton:hover {
-  opacity: .9;
 }
 
 .tagSelection {
@@ -939,146 +907,182 @@
 }
 .tagRemoveIcon {
   color: var(--composer-muted);
-  transition: color 140ms ease;
+  transition: color 120ms ease;
 }
-.tagSelection :global(.tagChip):hover .tagRemoveIcon {
-  color: var(--composer-accent);
-}
-.publishDialog > footer { display: flex; align-items: center; justify-content: flex-end; gap: 10px; position: static; padding: 8px 20px 18px; border-top: 0; background: var(--composer-surface); }
-.publishDialog > footer button { border-radius: 4px; }
-.publishError { margin: 0 18px 12px; color: #c44949; font-size: 13px; }
+.tagSelection :global(.tagChip):hover .tagRemoveIcon { color: var(--composer-accent); }
+.publishDialog > footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; position: static; padding: 10px 18px 16px; border-top: 0; background: var(--composer-surface); }
+/* ---- Narrow screens ------------------------------------------------------------- */
 
-/* Below this width the outline stops being a column and docks over the right edge
-   (see the 1100px block above), so the page must stop reserving space for it. */
-@media (max-width: 1100px) {
-  .workspace,
-  .workspace[data-outline="open"] { grid-template-columns: minmax(0, 760px); gap: 0; }
+/* Without a margin beside the sheet the outline sits over its top-right corner, on the
+   sheet's own colour so the text beneath does not show through. */
+@media (max-width: 1279px) {
+  .outline {
+    top: 12px;
+    right: 16px;
+    width: min(220px, calc(100% - 32px));
+    padding: 4px;
+    background: var(--composer-surface);
+    transform: none;
+  }
 }
 
 @media (max-width: 720px) {
-  .topBar { min-height: calc(54px + env(safe-area-inset-top)); grid-template-columns: 36px 1fr auto; gap: 4px; padding: calc(5px + env(safe-area-inset-top)) 10px 5px; }
-  .workspaceTitle { font-size: 16px; }
-  .topBarActions { gap: 4px; }
-  .topBarActions .settingsButton { width: 32px !important; min-width: 32px !important; height: 32px !important; min-height: 32px !important; padding: 0 !important; }
-  .topBarActions .settingsButton span,
-  .topBarActions .outlineButton span { display: none !important; }
-  .topBarActions .outlineButton { width: 32px !important; min-width: 32px !important; height: 32px !important; min-height: 32px !important; padding: 0 !important; }
-  .publishButton { min-width: 52px; min-height: 32px; padding: 0 10px !important; }
-  .topPublishButton { display: inline-flex !important; }
-  .bottomPublishButton { display: none !important; }
-  .workspace { order: 1; display: block; padding: 24px 18px 28px; }
-  .titleInput { margin-bottom: 22px; padding-bottom: 16px; font-size: 29px; }
-  .contentEditable,.markdownInput { min-height: calc(100dvh - 232px); font-size: 17px; line-height: 1.82; }
-  .inlineLinkPopover { order: 2; flex-wrap: wrap; justify-content: flex-start; padding: 9px 14px; }
-  .inlineLinkTextInput { width: min(38vw, 155px); }
-  .inlineLinkUrlInput { width: min(52vw, 230px); }
-  .statusBar { order: 3; min-height: 40px; padding: 3px 14px; gap: 4px; }
-  .saveStatusButton { min-height: 32px; padding: 0 3px; border-radius: 4px; }
-  .saveStatusButton span { max-width: 92px; overflow: hidden; text-overflow: ellipsis; }
-  .wordCount { display: inline; margin-left: auto; }
-  .previewButton { width: auto; min-width: 48px; padding: 0 8px !important; }
-  .previewButton span { display: inline; }
-  .previewExitButton { top: calc(7px + env(safe-area-inset-top)); left: 10px; min-height: 36px; padding: 0; }
-  .previewOutlineButton { top: calc(7px + env(safe-area-inset-top)); right: 10px; min-height: 36px; padding: 0; }
-  .toolbar { order: 4; min-height: 54px; justify-content: stretch; padding: 6px 16px calc(6px + env(safe-area-inset-bottom)); border-top: 1px solid var(--composer-border); border-bottom: 0; }
+  .shell { background: var(--composer-surface); }
+  .topBar { min-height: calc(50px + env(safe-area-inset-top)); grid-template-columns: 36px 1fr auto; gap: 4px; padding: env(safe-area-inset-top) 10px 0; }
+  .workspaceTitle { display: none; }
+  .topBarActions .ghostButton { width: 34px; min-width: 34px; justify-content: center; padding: 0; }
+  .topBarActions .ghostButton span { display: none; }
+  .topPublishButton { display: inline-flex; min-height: 32px; padding: 0 12px; }
+  .bottomPublishButton { display: none; }
+
+  /* The formatting controls sit at the bottom, under the thumb and above the keyboard. */
+  .inlineLinkPopover { order: 2; flex-wrap: wrap; justify-content: flex-start; padding: 8px 14px; }
+  .inlineLinkTextInput { width: min(38vw, 150px); }
+  .inlineLinkUrlInput { width: min(50vw, 220px); }
+  .workspaceFrame { order: 1; }
+  .workspace { padding: 0; }
+  .paper { min-height: 0; padding: 20px 16px 0; border-radius: 0; box-shadow: none; }
+  .titleField { margin-bottom: 16px; }
+  .titleInput { padding-bottom: 12px; font-size: 24px; }
+  .contentEditable,
+  .markdownInput { min-height: calc(100dvh - 260px); }
+  .contentEditable { padding-bottom: 48px; }
+  .statusBar { order: 3; min-height: 44px; padding: 0 14px; }
+  .statusMeta { gap: 10px; }
+  .toolbar { order: 4; justify-content: stretch; border-top: 1px solid var(--composer-border); border-bottom: 0; }
   .desktopToolbar { display: none; }
-  .mobileToolbar { width: 100%; display: flex; align-items: center; justify-content: space-between; }
-  .toolbar button { width: 42px; height: 42px; flex-basis: 42px; border-radius: 4px; }
-  .notice { bottom: calc(108px + env(safe-area-inset-bottom)); }
-  .dialog.publishDialog { inset: 0; width: calc(100vw - 20px); height: min(480px, calc(100dvh - 20px)); max-height: calc(100dvh - 20px); margin: auto; border: 1px solid var(--composer-border); border-radius: 6px; }
-  .publishDialog > header,.publishDialogBody,.publishDialog > footer { padding-left: 16px; padding-right: 16px; }
+  .mobileToolbar { display: flex; width: 100%; align-items: center; justify-content: space-around; padding: 4px 12px calc(4px + env(safe-area-inset-bottom)); }
+  .mobileToolbar button { min-width: 44px; width: 44px; height: 44px; }
+  .mobileToolbar button span { display: none; }
+  .outlineBackdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    background: rgb(0 0 0 / .4);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    animation: tagFadeIn 160ms ease-out;
+  }
+  .outline {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    z-index: 101;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-height: min(72dvh, 500px);
+    margin: 0;
+    border-radius: 16px 16px 0 0;
+    background: var(--composer-surface);
+    border: 1px solid var(--composer-border);
+    border-bottom: 0;
+    box-shadow: 0 -8px 32px rgb(0 0 0 / .25);
+    overflow: hidden;
+    animation: tagSlideUp 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .outlineHeader {
+    display: flex;
+    flex: 0 0 auto;
+    width: 100%;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 48px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--composer-border);
+  }
+  .outlineHeader strong {
+    flex: 0 0 auto;
+    font-size: 15px;
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--composer-text, var(--text));
+  }
+  .outlineHeader .outlineCloseButton,
+  .outlineCloseButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 32px;
+    width: 32px;
+    min-width: 32px;
+    max-width: 32px;
+    height: 32px;
+    min-height: 32px;
+    max-height: 32px;
+    padding: 0;
+    margin-left: auto;
+    border-radius: 50%;
+    border: 0;
+    background: transparent;
+    color: var(--composer-muted);
+    cursor: pointer;
+    transition: background-color 140ms ease, color 140ms ease;
+  }
+  .outlineHeader .outlineCloseButton:hover,
+  .outlineHeader .outlineCloseButton:focus-visible,
+  .outlineCloseButton:hover,
+  .outlineCloseButton:focus-visible {
+    background: color-mix(in srgb, currentColor 8%, transparent);
+    color: var(--composer-text, var(--text));
+    outline: 0;
+  }
+  .outlineBody {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 12px calc(12px + env(safe-area-inset-bottom));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+  .outlineBody button {
+    display: block;
+    width: 100%;
+    min-height: 42px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.4;
+    text-align: left;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+  }
+  .outlineBody button:hover,
+  .outlineBody button:focus-visible {
+    background: color-mix(in srgb, currentColor 6%, transparent);
+  }
+  .outlineBody .outlineActive {
+    background: color-mix(in srgb, var(--composer-accent) 10%, transparent);
+    color: var(--accent-text, var(--composer-accent));
+    font-weight: 600;
+  }
+  .outlineEmpty {
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--composer-muted);
+    font-size: 13.5px;
+  }
+  .dialog.publishDialog:has(.tagDrawerBackdrop) { height: calc(100dvh - 20px); }
+  .tagPicker { height: min(560px, calc(100% - 10px)); max-height: calc(100% - 10px); }
+  .publishDialog > header,
+  .publishDialogBody,
+  .publishDialog > footer { padding-left: 16px; padding-right: 16px; }
   .publishDialogBody { gap: 16px; }
-  .formatDialog { position: fixed; inset: auto 0 0; width: 100vw; max-width: none; margin: 0; box-sizing: border-box; border-bottom: 0; border-radius: 4px 4px 0 0; }
-  .formatDialog > header button { width: auto; min-width: 52px; height: 34px; flex-basis: auto; padding: 0 12px; }
+  .formatDialog { position: fixed; inset: auto 0 0; width: 100vw; max-width: none; margin: 0; box-sizing: border-box; border-bottom: 0; border-radius: 8px 8px 0 0; }
   .formatGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px 14px calc(18px + env(safe-area-inset-bottom)); }
-  .formatGrid button { width: 100%; min-width: 0; height: 58px; min-height: 58px; flex-basis: auto; display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 0 16px; font-size: 14px; white-space: nowrap; }
+  .formatGrid button { width: 100%; min-width: 0; height: 56px; min-height: 56px; display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 0 16px; font-size: 14px; white-space: nowrap; }
+  .previewExitButton { top: calc(8px + env(safe-area-inset-top)); left: 10px; }
+  .previewOutlineButton { top: calc(10px + env(safe-area-inset-top)); right: 10px; }
 }
 
-.paidGateRemove {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 2px;
-  padding: 3px 9px;
-  border-radius: 999px;
-  border: 1px solid var(--composer-border);
-  background: transparent;
-  color: var(--composer-muted);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-  /* Always present, never loud: hover-only controls are unreachable on a touch
-     screen, and this is the only way to remove the boundary from the page. */
-  opacity: .6;
-  transition: opacity .14s ease, color .14s ease, border-color .14s ease;
-}
-.paidGateCard:hover .paidGateRemove,
-.paidGateRemove:focus-visible { opacity: 1; }
-.paidGateRemove:hover { color: var(--composer-accent); border-color: color-mix(in srgb, var(--composer-accent) 40%, transparent); }
-
-/* Each lockable format tile on a touch screen carries its own lock toggle, so the
-   "keep writing in this style" capability is not gated behind a double click. */
-.formatGrid .formatCell { position: relative; display: block; }
-.formatGrid .formatCell > button:first-child { width: 100%; height: 100%; }
-.formatGrid .formatLockToggle {
-  position: absolute;
-  top: 4px;
-  inset-inline-end: 4px;
-  display: grid;
-  width: 26px;
-  min-height: 26px;
-  height: 26px;
-  padding: 0;
-  place-items: center;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--composer-muted);
-  cursor: pointer;
-}
-.formatGrid .formatLockToggle[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--composer-accent) 40%, transparent);
-  background: color-mix(in srgb, var(--composer-accent) 14%, transparent);
-  color: var(--composer-accent);
-}
-
-/* The toolbar is icon-only, so every button has to say what it is on hover and on
-   keyboard focus. `data-tooltip` was already being set on every button but nothing
-   ever drew it. Rendered from the button itself rather than the native `title`
-   attribute so it appears immediately instead of after the browser's ~1s delay. */
-.toolbar button { position: relative; }
-
-.toolbar button[data-tooltip]::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  top: calc(100% + 7px);
-  left: 50%;
-  z-index: 40;
-  transform: translateX(-50%);
-  padding: 5px 9px;
-  border-radius: 6px;
-  background: var(--text, #202124);
-  color: var(--composer-surface);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.4;
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity .12s ease .35s;
-}
-
-.toolbar button[data-tooltip]:hover::after,
-.toolbar button[data-tooltip]:focus-visible::after { opacity: 1; }
-.toolbar button[data-tooltip]:disabled::after { content: none; }
-
-/* Keep the first and last tooltips inside the viewport instead of clipping them. */
-.toolbar button:first-child[data-tooltip]::after { left: 0; transform: none; }
-.toolbar button:last-child[data-tooltip]::after { left: auto; right: 0; transform: none; }
-
-/* 目录 sits with 设置 and 发布 in the top bar, not in the writing toolbar. */
-.topBarActions .outlineButton.outlineButtonActive {
-  border-color: color-mix(in srgb, var(--composer-accent) 34%, transparent) !important;
-  background: color-mix(in srgb, var(--composer-accent) 12%, transparent) !important;
-  color: var(--composer-accent);
+@media (prefers-reduced-motion: reduce) {
+  .shell * { scroll-behavior: auto !important; transition: none !important; }
 }

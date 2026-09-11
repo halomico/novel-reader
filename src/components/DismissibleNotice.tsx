@@ -51,7 +51,7 @@ export function DismissibleNotice({
   }
 
   return (
-    <p className={`${baseClass} ${toneClass(tone)}`} role="status">
+    <p className={`${baseClass} ${toneClass(tone)}`} role={tone === "error" ? "alert" : "status"}>
       {message}
     </p>
   );

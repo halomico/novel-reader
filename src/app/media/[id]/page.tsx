@@ -5,7 +5,8 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { MediaAudioPlayer, type AudioQueueTrack } from "@/components/MediaAudioPlayer";
-import { Breadcrumbs } from "@/components/Breadcrumbs";
+import { PageContextBar } from "@/components/PageContextBar";
+import type { BreadcrumbItem } from "@/components/Breadcrumbs";
 import { ContentAccessGate } from "@/components/ContentAccessGate";
 import { ContentEntryGatePage } from "@/components/ContentEntryGatePage";
 import Link from "@/components/LocalizedLink";
@@ -156,7 +157,6 @@ export default async function MediaDetailPage({
   const displayDescription = await localizeText(asset.description, locale);
   const displayFolder = await localizeText(asset.folder, locale);
   const displayArtist = asset.artist ? await localizeText(asset.artist, locale) : "";
-  const listFolder = asset.kind === "video" ? "" : asset.folder;
   const folderAudio = asset.kind === "audio" && contentAccessible
     ? await listPostgresMediaFolderAssets(database("web"), "audio", asset.folder, 2_000)
     : [];
@@ -209,6 +209,31 @@ export default async function MediaDetailPage({
     ? await getPostgresVideoPlaybackAccess(database("web"), asset.id, user)
     : null;
   const videoReturnHref = safeVideoReturnHref(detailQuery.from);
+  const breadcrumbItems: BreadcrumbItem[] = [
+    { label: uiText(locale, "首页"), href: "/" },
+  ];
+  if (asset.kind === "audio") {
+    if (displayFolder) {
+      breadcrumbItems.push({ label: uiText(locale, "音频"), href: "/media?kind=audio" });
+      breadcrumbItems.push({ label: displayFolder });
+    } else {
+      breadcrumbItems.push({ label: uiText(locale, "音频") });
+    }
+  } else if (asset.kind === "video") {
+    breadcrumbItems.push({
+      label: uiText(locale, "视频"),
+      href: videoReturnHref || listHref("video", ""),
+    });
+    breadcrumbItems.push({ label: title });
+  } else {
+    if (displayFolder) {
+      breadcrumbItems.push({ label: uiText(locale, "文件"), href: "/media?kind=file" });
+      breadcrumbItems.push({ label: displayFolder, href: listHref("file", asset.folder) });
+    } else {
+      breadcrumbItems.push({ label: uiText(locale, "文件"), href: "/media?kind=file" });
+    }
+    breadcrumbItems.push({ label: title });
+  }
 
   return (
     <>
@@ -219,18 +244,9 @@ export default async function MediaDetailPage({
         mobileBackHref={asset.kind === "video" ? videoReturnHref : undefined}
         mobileBackLabel={asset.kind === "video" ? uiText(locale, "返回视频列表") : undefined}
       />
+      <PageContextBar items={breadcrumbItems} />
       <article className={`mediaDetail is-${asset.kind}`} id="media-detail-primary">
         <MediaViewTracker mediaId={asset.id} />
-        <Breadcrumbs
-          items={[
-            { label: uiText(locale, "首页"), href: "/" },
-            {
-              label: uiText(locale, KIND_LABELS[asset.kind]),
-              href: asset.kind === "audio" ? undefined : listHref(asset.kind, listFolder),
-            },
-            ...(asset.kind === "audio" ? [] : [{ label: title }]),
-          ]}
-        />
 
         {asset.kind === "file" || (asset.kind === "audio" && !contentAccessible) ? (
           <header className="mediaDetailHeader">

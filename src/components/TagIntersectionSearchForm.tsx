@@ -189,7 +189,7 @@ export function TagIntersectionSearchForm({
           <BookOpen size={15} aria-hidden="true" />{tr("小说")}
         </button>
         <button className={scope === "originals" ? "isActive" : ""} type="button" aria-pressed={scope === "originals"} onClick={() => switchScope("originals")} disabled={!originalSearchEnabled || isPending} title={originalSearchEnabled ? undefined : tr("原创文章暂不可用")}>
-          <FileText size={15} aria-hidden="true" />{tr("原创文章")}
+          <FileText size={15} aria-hidden="true" />{tr("原创")}
         </button>
       </div>
       <div className={`advancedTagSearchToolbar${scope === "originals" ? " isOriginalScope" : ""}`}>
@@ -241,7 +241,7 @@ export function TagIntersectionSearchForm({
           {Array.from(included).map((slug) => {
             const tag = tagsBySlug.get(slug);
             return tag ? (
-              <button className="isIncluded" type="button" onClick={() => removeTag(slug)} title={`${locale === "zh-Hant" ? "移除包含標籤" : "移除包含标签"} ${tag.name}`} key={`include-${slug}`}>
+              <button className="tagChip contentTagLink isIncluded" type="button" onClick={() => removeTag(slug)} title={`${locale === "zh-Hant" ? "移除包含標籤" : "移除包含标签"} ${tag.name}`} key={`include-${slug}`}>
                 <Plus size={12} aria-hidden="true" />{tag.name}
               </button>
             ) : null;
@@ -249,7 +249,7 @@ export function TagIntersectionSearchForm({
           {Array.from(excluded).map((slug) => {
             const tag = tagsBySlug.get(slug);
             return tag ? (
-              <button className="isExcluded" type="button" onClick={() => removeTag(slug)} title={`${locale === "zh-Hant" ? "移除排除標籤" : "移除排除标签"} ${tag.name}`} key={`exclude-${slug}`}>
+              <button className="tagChip contentTagLink isExcluded" type="button" onClick={() => removeTag(slug)} title={`${locale === "zh-Hant" ? "移除排除標籤" : "移除排除标签"} ${tag.name}`} key={`exclude-${slug}`}>
                 <Minus size={12} aria-hidden="true" />{tag.name}
               </button>
             ) : null;
@@ -288,7 +288,7 @@ export function TagIntersectionSearchForm({
                     const isExcluded = excluded.has(tag.slug);
                     return (
                       <button
-                        className={`advancedTagOption${isIncluded ? " isSelected" : ""}${isExcluded ? " isExcluded" : ""}`}
+                        className={`tagChip contentTagLink advancedTagOption${isIncluded ? " isSelected" : ""}${isExcluded ? " isExcluded" : ""}`}
                         type="button"
                         onClick={() => toggleTag(tag.slug)}
                         aria-pressed={isIncluded || isExcluded}

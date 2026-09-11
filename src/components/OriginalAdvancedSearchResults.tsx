@@ -39,7 +39,7 @@ export function OriginalAdvancedSearchResults({
               <span><UserRound size={12} aria-hidden="true" />{article.authorName}</span>
               <time dateTime={article.publishedAt}>{formatCompactUpdateDate(parseAppDateTime(article.publishedAt)?.getTime() || Date.now())}</time>
               <span>{formatNovelWordCount(article.wordCount, locale)}</span>
-              {article.tags.slice(0, 3).map((tag) => <span className="originalAdvancedTag" key={tag.id}>{tag.name}</span>)}
+              {article.tags.slice(0, 3).map((tag) => <span className="tagChip originalAdvancedTag" key={tag.id}>{tag.name}</span>)}
             </div>
           </article>
         ))}

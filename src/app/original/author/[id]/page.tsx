@@ -63,7 +63,7 @@ export default async function OriginalAuthorPage({ params, searchParams }: Autho
 
   return (
     <main className="appShell originalShell originalAuthorShell">
-      <SiteHeader currentUser={currentUser} />
+      <SiteHeader currentUser={currentUser} searchScope="originals" />
       <PageContextBar items={[{ label: tr("首页"), href: "/" }, { label: tr("原创"), href: "/original" }, { label: displayName }]} />
       <section className="originalPage">
         <header className="originalAuthorProfile">

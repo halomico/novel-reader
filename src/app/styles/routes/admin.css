@@ -341,6 +341,7 @@
 .adminSettingsForm label {
   display: grid;
   gap: 6px;
+  align-content: start;
   color: var(--muted);
   font-size: 13px;
 }
@@ -370,7 +371,8 @@
 }
 
 .adminSettingsForm .adminSelectControl select {
-  min-height: 34px;
+  height: 38px;
+  min-height: 38px;
   padding-block: 7px;
 }
 
@@ -401,10 +403,11 @@
 }
 
 
-.adminSettingsForm input,
-.adminSettingsForm textarea,
+.adminSettingsForm input:not([type="checkbox"]):not([type="radio"]),
 .adminSettingsForm select {
   width: 100%;
+  height: 38px;
+  box-sizing: border-box;
   border: 1px solid var(--border);
   border-radius: 7px;
   padding: 9px 10px;
@@ -413,10 +416,16 @@
 }
 
 .adminSettingsForm textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 9px 10px;
+  background: var(--bg-soft);
+  color: var(--text);
   resize: vertical;
 }
 
-.adminSettingsForm button:not(.palettePickerRandom),
+.adminSettingsForm button:not(.palettePickerRandom):not(.adminHomeCardOrderRow button):not(.adminHomeCardOrderRow *),
 .adminUploadForm button,
 .adminIconTextButton,
 .adminDangerButton {
@@ -817,6 +826,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+  align-items: start;
 }
 
 .adminPaths {
@@ -982,21 +992,9 @@
 }
 
 .adminSideNav .isActive {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
   color: var(--accent-text, var(--accent));
   font-weight: 650;
-  position: relative;
-}
-
-.adminSideNav .isActive::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 6px;
-  bottom: 6px;
-  width: 3px;
-  border-radius: 2px;
-  background: var(--accent);
 }
 
 .adminSideNav .isDisabled {
@@ -3112,28 +3110,43 @@ a.analyticsSearchTag:focus-visible {
   color: var(--accent-text, var(--accent));
 }
 
-.adminHomeCardOrderRow button {
-  display: inline-grid;
+.adminHomeCardOrderRow button,
+.adminSettingsForm .adminHomeCardOrderRow button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 28px;
   height: 28px;
-  place-items: center;
-  border: 0;
-  border-radius: 5px;
+  min-height: 0;
+  min-width: 0;
   padding: 0;
-  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text) 4%, transparent);
   color: var(--muted);
   cursor: pointer;
+  box-shadow: none;
+  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
 }
 
-.adminHomeCardOrderRow button:hover,
-.adminHomeCardOrderRow button:focus-visible {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  color: var(--accent-text, var(--accent));
+.adminHomeCardOrderRow button:hover:not(:disabled),
+.adminSettingsForm .adminHomeCardOrderRow button:hover:not(:disabled),
+.adminHomeCardOrderRow button:focus-visible,
+.adminSettingsForm .adminHomeCardOrderRow button:focus-visible {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  border-color: color-mix(in srgb, var(--text) 18%, transparent);
+  color: var(--text);
+  outline: 0;
 }
 
-.adminHomeCardOrderRow button:disabled {
-  opacity: 0.28;
+.adminHomeCardOrderRow button:disabled,
+.adminSettingsForm .adminHomeCardOrderRow button:disabled {
+  opacity: 0.22;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
   cursor: default;
+  pointer-events: none;
 }
 
 .adminMediaPanel {
@@ -9361,4 +9374,41 @@ a.analyticsSearchTag:focus-visible {
   border-color: #971d15;
   background: #971d15;
   color: #fff;
+}
+
+/* Keep the upload type switch aligned with the lightweight segmented controls. */
+.adminShell .adminUploadForm .adminNovelUploadMode {
+  border-color: color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 999px;
+  padding: 3px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+}
+
+.adminShell .adminUploadForm .adminNovelUploadMode button,
+.adminShell .adminUploadForm .adminNovelUploadMode button:hover:not(:disabled),
+.adminShell .adminUploadForm .adminNovelUploadMode button:focus-visible {
+  min-height: 26px;
+  border: 0;
+  border-radius: 999px;
+  padding: 3px 10px;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  outline: 0;
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.adminShell .adminUploadForm .adminNovelUploadMode button:not(.isActive):hover:not(:disabled),
+.adminShell .adminUploadForm .adminNovelUploadMode button:not(.isActive):focus-visible {
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+  color: var(--text);
+}
+
+.adminShell .adminUploadForm .adminNovelUploadMode button.isActive,
+.adminShell .adminUploadForm .adminNovelUploadMode button.isActive:hover:not(:disabled),
+.adminShell .adminUploadForm .adminNovelUploadMode button.isActive:focus-visible {
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  color: var(--accent-text, var(--accent));
+  font-weight: 650;
 }

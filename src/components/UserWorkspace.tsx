@@ -1,12 +1,12 @@
 import { Cookie, CupSoda, LogOut, Sparkles } from "lucide-react";
 import { logoutUserAction } from "@/app/account/actions";
 import { database } from "@/core/db/postgres";
-import { getPostgresUserLevelDefinition, hasPostgresUserPermission } from "@/domains/identity/postgres-permissions";
+import { getPostgresUserLevelDefinition } from "@/domains/identity/postgres-permissions";
 import type { PostgresUserProfile as UserProfile } from "@/domains/identity/postgres-users";
 import { uiText } from "@/lib/locale";
 import { getRequestLocale } from "@/lib/locale-server";
-import { countPostgresUserUnreadMessages } from "@/domains/station/postgres-station";
 import { isMarketEnabled, isOriginalChannelEntryVisible } from "@/lib/config";
+import { getUserNavigationState } from "@/lib/user-navigation";
 import { SiteHeader } from "./SiteHeader";
 import { UserAvatar } from "./UserAvatar";
 import { UserWorkspaceContext, UserWorkspaceNavigation } from "./UserWorkspaceRouteState";
@@ -20,10 +20,15 @@ export async function UserWorkspace({
   user: UserProfile;
   children: React.ReactNode;
 }) {
-  const locale = await getRequestLocale();
-  const unreadMessages = await countPostgresUserUnreadMessages(database("web"), user.id);
-  const level = await getPostgresUserLevelDefinition(database("web"), user.trustLevel);
-  const showMarket = isMarketEnabled() && await hasPostgresUserPermission(database("web"), user, "market_access");
+  // The header reuses the same cached navigation projection, so the workspace
+  // chrome costs one unread/market query and one level lookup, in parallel.
+  const [locale, navigation, level] = await Promise.all([
+    getRequestLocale(),
+    getUserNavigationState(user),
+    getPostgresUserLevelDefinition(database("web"), user.trustLevel),
+  ]);
+  const unreadMessages = navigation.unreadMessages;
+  const showMarket = isMarketEnabled() && navigation.marketAccess;
   const showOriginal = isOriginalChannelEntryVisible(true);
 
   return (

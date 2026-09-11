@@ -42,27 +42,7 @@
 }
 
 .authPrimaryButton {
-  display: inline-flex;
   justify-self: start;
-  min-height: var(--action-height);
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1px solid var(--accent);
-  border-radius: var(--action-radius);
-  padding: 0 var(--action-inline-padding);
-  background: var(--accent);
-  color: #fffaf2;
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--action-font-size);
-  font-weight: var(--action-font-weight);
-  line-height: 1;
-}
-
-.authPrimaryButton:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
 }
 
 .authSwitchText,
@@ -235,9 +215,3 @@
   font-size: 13px;
 }
 
-.authPrimaryButton:hover:not(:disabled),
-.authPrimaryButton:focus-visible:not(:disabled) {
-  border-color: var(--accent-strong, var(--accent));
-  background: var(--accent-strong, var(--accent));
-  color: #fff;
-}

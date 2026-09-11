@@ -41,8 +41,24 @@ test("retired publish notices are removed and raised operational limits are pres
   assert.equal(Object.hasOwn(settings, "originalPublishNoticeText"), false);
   assert.equal(Object.hasOwn(settings, "originalPublishNoticeLinkLabel"), false);
   assert.equal(Object.hasOwn(settings, "originalPublishNoticeUrl"), false);
-  assert.equal(settings.globalSearchMaxResults, 10_000);
+  assert.equal(settings.globalSearchMaxResults, 3_000, "the result cap is clamped to the searchable maximum");
   assert.equal(settings.analyticsRealtimeLimit, 100_000);
+});
+
+test("search limits default when unset and never collapse to a limit of one", () => {
+  const defaults = defaultSiteSettings();
+  assert.equal(defaults.searchResultsPageSize, 20);
+  assert.equal(defaults.globalSearchMaxResults, 1_000);
+  assert.equal(defaults.frontendSearchConcurrencyLimit, 8);
+  const zeroed = normalizeSiteSettings({ searchResultsPageSize: 0, globalSearchMaxResults: 0, frontendSearchConcurrencyLimit: -3 });
+  assert.equal(zeroed.searchResultsPageSize, 20);
+  assert.equal(zeroed.globalSearchMaxResults, 1_000);
+  assert.equal(zeroed.frontendSearchConcurrencyLimit, 8);
+  const stored = normalizeSiteSettings({ searchResultsPageSize: 30, globalSearchMaxResults: 500, frontendSearchConcurrencyLimit: 10 });
+  assert.equal(stored.searchResultsPageSize, 30);
+  assert.equal(stored.globalSearchMaxResults, 500);
+  assert.equal(stored.frontendSearchConcurrencyLimit, 10);
+  assert.equal(normalizeSiteSettings({ globalSearchMaxResults: 9_999 }).globalSearchMaxResults, 3_000);
 });
 
 test("defaults reader page turn mode to scroll and normalizes custom values", () => {

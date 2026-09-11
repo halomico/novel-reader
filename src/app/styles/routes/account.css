@@ -82,16 +82,6 @@
   justify-self: end;
 }
 
-.settingCompactSegments {
-  padding: 2px;
-}
-
-.settingCompactSegments button {
-  min-height: 26px;
-  padding: 3px 9px;
-  font-size: 12px;
-}
-
 .accountProfile h1 {
   margin: 0;
   color: var(--text);
@@ -130,27 +120,7 @@
 }
 
 .accountActionButton {
-  display: inline-flex;
-  min-height: var(--action-height);
-  align-items: center;
-  justify-content: center;
   gap: 5px;
-  border: 1px solid color-mix(in srgb, var(--accent) 74%, var(--border));
-  border-radius: var(--action-radius);
-  padding: 0 var(--action-inline-padding);
-  background: var(--accent);
-  color: #fffaf2;
-  cursor: pointer;
-  font-size: var(--action-font-size);
-  font-weight: var(--action-font-weight);
-}
-
-.userPanel .accountActionButton {
-  min-height: var(--action-height);
-  border-radius: var(--action-radius);
-  padding: 0 var(--action-inline-padding);
-  font-size: var(--action-font-size);
-  font-weight: var(--action-font-weight);
 }
 
 .accountActionButton.isPending {
@@ -287,11 +257,11 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--accent-fill);
   border-radius: var(--action-radius);
   padding: 0 var(--action-inline-padding);
-  background: var(--accent);
-  color: #fffaf2;
+  background: var(--accent-fill);
+  color: var(--accent-foreground);
   box-shadow: none;
   cursor: pointer;
   font: inherit;
@@ -303,7 +273,7 @@
 
 .userPanel .accountCheckinButton:hover:not(:disabled),
 .userPanel .accountCheckinButton:focus-visible:not(:disabled) {
-  background: var(--accent-strong, var(--accent));
+  background: var(--accent-fill-strong);
 }
 
 .userPanel .accountCheckinButton:disabled {
@@ -314,25 +284,28 @@
   cursor: default;
 }
 
-.userPanel .accountLeaderboardButton {
+:root .userPanel .accountLeaderboardButton {
   display: grid;
   width: 32px;
   height: 32px;
   flex: 0 0 auto;
   place-items: center;
   border: 0;
-  border-radius: 50%;
+  border-radius: 6px;
   padding: 0;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
+  box-shadow: none;
+  transition: background-color 140ms ease, color 140ms ease;
 }
 
-.userPanel .accountLeaderboardButton:hover,
-.userPanel .accountLeaderboardButton:focus-visible {
+:root .userPanel .accountLeaderboardButton:hover,
+:root .userPanel .accountLeaderboardButton:focus-visible {
   border: 0;
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  color: var(--accent-text, var(--accent));
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+  box-shadow: none;
 }
 
 .accountLeaderboardButton svg {
@@ -408,17 +381,20 @@
   flex: 0 0 auto;
   place-items: center;
   border: 0;
-  border-radius: 5px;
+  border-radius: 6px;
   padding: 0;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
+  box-shadow: none;
+  transition: background-color 140ms ease, color 140ms ease;
 }
 
 .checkinLeaderboardDialog > header > button:hover,
 .checkinLeaderboardDialog > header > button:focus-visible {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-  color: var(--accent-text, var(--accent));
+  border: 0;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
 }
 
 .checkinReward {
@@ -586,8 +562,8 @@
   border: 2px solid var(--surface);
   border-radius: 999px;
   padding: 0 3px;
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--accent-foreground);
   font-size: 9px;
   font-variant-numeric: tabular-nums;
   line-height: 12px;
@@ -698,10 +674,7 @@
 
 .accountFormSection .accountActionButton {
   width: fit-content;
-  min-height: var(--action-height);
   justify-self: start;
-  padding: 0 var(--action-inline-padding);
-  font-size: var(--action-font-size);
 }
 
 .accountEmailBadge {
@@ -728,13 +701,6 @@
   color: var(--muted);
   font-size: 13px;
   line-height: 1.5;
-}
-
-.accountActionButton:hover:not(:disabled),
-.accountActionButton:focus-visible:not(:disabled) {
-  border-color: var(--accent-strong, var(--accent));
-  background: var(--accent-strong, var(--accent));
-  color: #fff;
 }
 
 .accountLevelProgress {
@@ -859,10 +825,6 @@
   transition: background-color 140ms ease;
 }
 
-.readingHistoryItem.isSelected {
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-}
-
 .readingHistoryMain {
   display: grid;
   min-width: 0;
@@ -897,11 +859,6 @@
   color: var(--muted);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
-}
-
-.readingHistoryResumeLabel {
-  color: var(--accent-text, var(--accent));
-  font-weight: 700;
 }
 
 .readingHistoryMain:hover strong,
@@ -968,12 +925,6 @@
 .favoriteSelectableItem > .mediaResourceRow {
   width: 100%;
   height: 100%;
-}
-
-.favoriteSelectableItem.isSelected > .mediaVideoCard,
-.favoriteSelectableItem.isSelected > .mediaResourceRow {
-  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent);
 }
 
 .favoriteAudioList .favoriteSelectControl {
@@ -1826,10 +1777,6 @@ nav.accountGrowthTools > a + a {
     padding: 13px 2px;
   }
 }
-.settingToggleOnly {
-  justify-self: end;
-}
-
 .userWorkspaceContent > .accountPanel {
   padding: 0;
   border: 0;
@@ -1949,8 +1896,8 @@ nav.accountGrowthTools > a + a {
 
 .accountProfile .accountAvatarEditButton:hover,
 .accountProfile .accountAvatarEditButton:focus-visible {
-  background: var(--accent-strong);
-  color: #fffaf2;
+  background: var(--accent-fill-strong);
+  color: var(--accent-foreground);
   outline: 0;
 }
 
@@ -2005,12 +1952,14 @@ nav.accountGrowthTools > a + a {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
+  box-shadow: none;
+  transition: background-color 140ms ease, color 140ms ease;
 }
 
 .accountProfile .avatarEditorDrawer > header > button:hover,
 .accountProfile .avatarEditorDrawer > header > button:focus-visible {
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  color: var(--accent-text, var(--accent));
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
   outline: 0;
 }
 

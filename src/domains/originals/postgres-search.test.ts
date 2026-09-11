@@ -16,29 +16,23 @@ function query(value: string, mode: "title" | "content"): ParsedSearchQuery {
   return result.query;
 }
 
-test("locked paid originals are filtered in SQL before title or body can leave PostgreSQL", async () => {
+test("original search never reads or matches paid bodies and mirrors the public list's visibility", async () => {
   const anonymous = await buildPostgresOriginalCandidateQuery({
     viewer: null,
     contentQuery: query("龍門", "content"),
   });
-  assert.match(anonymous.text, /a\.unlock_soda_price = 0/);
-  assert.doesNotMatch(anonymous.text, /original_purchases access_purchase/);
+  assert.doesNotMatch(anonymous.text, /paid_body_markdown|original_purchases|unlock_soda_price\s*=/u);
+  assert.match(anonymous.text, /a\.body_markdown,/u);
+  assert.match(anonymous.text, /a\.content_search_original LIKE/u);
 
   const member = await buildPostgresOriginalCandidateQuery({
     viewer: { id: 42, role: "user" },
     titleQuery: query("傳說", "title"),
   });
-  assert.match(member.text, /a\.author_id = \$1/);
-  assert.match(member.text, /original_purchases access_purchase/);
+  assert.match(member.text, /user_original_author_blocks blocked/u);
   assert.equal(member.values?.filter((value) => value === 42).length, 1);
-  assert.doesNotMatch(member.text, /傳說/);
-
-  const admin = await buildPostgresOriginalCandidateQuery({
-    viewer: { id: 1, role: "admin" },
-    titleQuery: query("傳說", "title"),
-  });
-  assert.match(admin.text, /AND TRUE AND/);
-  assert.doesNotMatch(admin.text, /original_purchases access_purchase/);
+  assert.doesNotMatch(member.text, /傳說|paid_body_markdown|original_purchases/u);
+  assert.match(member.text, /''::text AS body_markdown/u, "title-only searches do not fetch article bodies");
 });
 
 test("tag filters and cursors are bound, validated and never interpolated", async () => {
@@ -98,14 +92,15 @@ test("original search maps PostgreSQL-filtered rows and returns a stable cursor"
         command: "SELECT", rowCount: 2, oid: 0, fields: [], rows: [
           {
             id: "2", slug: "hit", title: "候选二", excerpt: "简介",
-            body_markdown: "这里确实是修仙龍门故事", paid_body_markdown: "", author_id: "8",
-            author_name: "乙", author_avatar_path: "/avatar", word_count: "30", unlock_soda_price: "0",
+            // A stray paid column must never reach the snippet even if a row carried one.
+            body_markdown: "这里确实是修仙龍门故事", paid_body_markdown: "付费秘密龍门修仙", author_id: "8",
+            author_name: "乙", author_avatar_path: "/avatar", word_count: "30", unlock_soda_price: "5",
             published_at: "2026-09-07 02:00:00+00", updated_at: "2026-09-07 02:00:00+00",
             sort_at: "2026-09-07 02:00:00+00", tags: [{ id: "4", slug: "fantasy", name: "幻想" }],
           },
           {
             id: "1", slug: "later", title: "候选三", excerpt: "",
-            body_markdown: "修仙龍门续篇", paid_body_markdown: "", author_id: "9",
+            body_markdown: "修仙龍门续篇", author_id: "9",
             author_name: "丙", author_avatar_path: null, word_count: "40", unlock_soda_price: "0",
             published_at: "2026-09-07 01:00:00+00", updated_at: "2026-09-07 01:00:00+00",
             sort_at: "2026-09-07 01:00:00+00", tags: [],
@@ -120,11 +115,13 @@ test("original search maps PostgreSQL-filtered rows and returns a stable cursor"
     limit: 1,
   });
   assert.deepEqual(result.items.map((item) => item.slug), ["hit"]);
+  assert.doesNotMatch(result.items[0].snippet, /付费秘密/u, "snippets are cut from the public body only");
+  assert.equal(result.items[0].unlockSodaPrice, 5, "paid originals stay discoverable and keep their price badge");
   assert.deepEqual(result.items[0].tags, [{ id: 4, slug: "fantasy", name: "幻想" }]);
   assert.equal(result.nextCursor?.id, "2");
 });
 
-test("original result counts reuse the entitlement and search predicates without paging", async () => {
+test("original result counts reuse the visibility and search predicates without paging", async () => {
   let captured: SqlQuery | undefined;
   const executor: SqlExecutor = {
     async query<Row extends QueryResultRow>(sql: SqlQuery) {
@@ -139,12 +136,12 @@ test("original result counts reuse the entitlement and search predicates without
     titleQuery: query("文章", "title"),
   });
   assert.equal(total, 27);
-  assert.match(captured?.text || "", /original_purchases access_purchase/u);
+  assert.match(captured?.text || "", /user_original_author_blocks blocked/u);
   assert.doesNotMatch(captured?.text || "", /ORDER BY|LIMIT|OFFSET/u);
   assert.equal(captured?.values?.includes(9), true);
 });
 
-test("original tag counts use the same entitlement predicate as article results", async () => {
+test("original tag counts use the same visibility predicate as article results", async () => {
   let captured: SqlQuery | undefined;
   const executor: SqlExecutor = {
     async query<Row extends QueryResultRow>(sql: SqlQuery) {
@@ -157,6 +154,6 @@ test("original tag counts use the same entitlement predicate as article results"
   };
   const tags = await listPostgresOriginalSearchTags(executor, { id: 9, role: "user" });
   assert.deepEqual(tags, [{ id: 2, slug: "essay", name: "随笔", count: 7 }]);
-  assert.match(captured?.text || "", /original_purchases access_purchase/);
+  assert.match(captured?.text || "", /user_original_author_blocks blocked/u);
   assert.deepEqual(captured?.values, [9]);
 });

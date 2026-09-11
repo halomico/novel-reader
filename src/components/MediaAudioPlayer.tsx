@@ -3,6 +3,7 @@
 import { CircleAlert, Disc3, ListMusic, LoaderCircle, Play, Repeat1, SkipBack, SkipForward, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { MediaAudioFeedbackActions } from "@/components/MediaAudioFeedbackActions";
+import { jsonMutationRequest } from "@/core/security/browser-mutation";
 import { formatMediaDuration } from "@/lib/media-format";
 import type { AudioPlaybackMode } from "@/core/config/site-settings-schema";
 import { DEFAULT_LOCALE, uiText, type AppLocale } from "@/lib/locale";
@@ -204,7 +205,10 @@ export function MediaAudioPlayer({
     autoPlayRef.current = autoPlay;
     pendingAutoPlayTrackIdRef.current = null;
     setActiveTrack(track);
-    void fetch(`${basePathPrefix}/${track.id}/access`, { method: "POST", keepalive: true });
+    void fetch(
+      `${basePathPrefix}/${track.id}/access`,
+      jsonMutationRequest({ method: "POST", keepalive: true }),
+    );
   }
 
   function playWhenReady(audio: HTMLAudioElement, trackId: number) {

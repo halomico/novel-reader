@@ -150,12 +150,27 @@ export function ReadingProgressTracker({
       ? validLocal
       : validServer;
 
+    let restoreTimer = 0;
     if (resume && resumeProgress) {
-      window.requestAnimationFrame(() => {
-        scrollToProgress(resumeProgress, totalSegments);
+      let attempts = 0;
+      const stripResume = () => {
         const url = new URL(window.location.href);
+        if (url.searchParams.get("resume") !== "1") return;
         url.searchParams.delete("resume");
         window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+      };
+      const restore = () => {
+        attempts += 1;
+        scrollToProgress(resumeProgress, totalSegments);
+        if (attempts >= 8) {
+          stripResume();
+          return;
+        }
+        restoreTimer = window.setTimeout(restore, attempts < 3 ? 50 : 120);
+      };
+      restore();
+      void document.fonts?.ready.then(() => {
+        if (attempts < 8) restore();
       });
     }
 
@@ -263,6 +278,7 @@ export function ReadingProgressTracker({
     flushTimerRef.current = window.setInterval(flush, SYNC_INTERVAL_MS);
 
     return () => {
+      if (restoreTimer) window.clearTimeout(restoreTimer);
       if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
       if (flushTimerRef.current !== null) window.clearInterval(flushTimerRef.current);
       measureProgress();

@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 import { isNovelLibraryPublic } from "@/lib/config";
 import {
   isPublicPageCacheCandidate,
+  isPublicReaderPath,
   PRIVATE_DOCUMENT_CACHE_CONTROL,
   PUBLIC_PAGE_CACHE_CONTROL,
   PUBLIC_READER_CACHE_CONTROL,
@@ -125,15 +126,20 @@ function createLocaleResponse(request: NextRequest, locale: AppLocale): NextResp
 function applyDocumentCachePolicy(
   request: NextRequest,
   response: NextResponse,
-  pathname = stripLocalePath(request.nextUrl.pathname),
-  hasNovelAccessControls = true,
+  pathname: string,
+  accessControls: { global: boolean; novel: boolean },
 ): NextResponse {
   const hasUserSession = request.cookies.has(USER_SESSION_COOKIE);
   const usesNovelCatalogSearchPreference = pathname === "/novels" || pathname === "/novels/recent";
   const hasBrowserLayoutPreference =
     usesNovelCatalogSearchPreference && request.cookies.has(NOVEL_CATALOG_SEARCH_COOKIE);
   const isNovelPage = /^\/books\/[1-9]\d*(?:\/chapters\/[1-9]\d*)?$/.test(pathname);
-  const cacheable = isPublicPageCacheCandidate({
+  // IP, country and rate rules are enforced at the origin, so a shared edge copy
+  // would bypass them: active site rules keep every document out of the CDN, and
+  // active novel rules keep the library pages (everything except home) out too.
+  const cacheable = !accessControls.global &&
+    !(accessControls.novel && pathname !== "/") &&
+    isPublicPageCacheCandidate({
     method: request.method,
     pathname,
     searchParams: request.nextUrl.searchParams,
@@ -146,12 +152,11 @@ function applyDocumentCachePolicy(
       request.headers.get("purpose") === "prefetch",
     allowPublicNovelPages:
       isNovelPage &&
-      isNovelLibraryPublic() &&
-      !hasNovelAccessControls,
+      isNovelLibraryPublic(),
   });
 
   if (cacheable) {
-    const cdnCacheControl = isNovelPage
+    const cdnCacheControl = isPublicReaderPath(pathname)
       ? PUBLIC_READER_CACHE_CONTROL
       : PUBLIC_PAGE_CACHE_CONTROL;
     response.headers.set("Cache-Control", PRIVATE_DOCUMENT_CACHE_CONTROL);
@@ -187,18 +192,29 @@ async function handleRequest(request: NextRequest) {
   const accessControls = await readPostgresContentAccessControlState(database("web"));
 
   if (bypassGlobalAccess(normalizedPath) || !accessControls.global) {
-    return applyDocumentCachePolicy(request, localeResponse, normalizedPath, accessControls.novel);
+    return applyDocumentCachePolicy(request, localeResponse, normalizedPath, accessControls);
   }
 
-  const user = await getCurrentUserFromRequest(request);
-  const access = await checkPostgresContentAccess(database("web"), request.headers, {
+  // Guests match a superset of site rules and middleware never consumes rate
+  // limits, so the session is resolved only when a guest would be blocked.
+  let access = await checkPostgresContentAccess(database("web"), request.headers, {
     scope: "site",
-    authenticated: Boolean(user),
-    admin: user?.role === "admin",
+    authenticated: false,
     rateLimit: false,
   });
+  if (!access.allowed && request.cookies.has(USER_SESSION_COOKIE)) {
+    const user = await getCurrentUserFromRequest(request);
+    if (user) {
+      access = await checkPostgresContentAccess(database("web"), request.headers, {
+        scope: "site",
+        authenticated: true,
+        admin: user.role === "admin",
+        rateLimit: false,
+      });
+    }
+  }
   if (access.allowed) {
-    return applyDocumentCachePolicy(request, localeResponse, normalizedPath, accessControls.novel);
+    return applyDocumentCachePolicy(request, localeResponse, normalizedPath, accessControls);
   }
 
   const responseHeaders = new Headers({ "Cache-Control": "no-store" });

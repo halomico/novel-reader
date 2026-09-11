@@ -23,7 +23,9 @@ export type SearchQueryValidation =
   | { ok: false; keyword: string; message: string };
 
 const MIN_CONTENT_SINGLE_KEYWORD_CHARS = 2;
-const MAX_CONTENT_KEYWORD_CHARS = 15;
+/** Longest public full-text keyword. Index blocks carry exactly enough neighbouring
+ *  context for a keyword of this length to match across a block boundary. */
+export const MAX_CONTENT_KEYWORD_CHARS = 15;
 const MAX_LOOSE_KEYWORD_CHARS = 30;
 const MAX_MULTI_QUERY_CHARS = 200;
 const MAX_SIMPLE_AND_TERMS = 12;
