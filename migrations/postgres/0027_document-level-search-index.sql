@@ -68,9 +68,12 @@ $$;
 DROP INDEX IF EXISTS novel_content_blocks_original_idx;
 DROP INDEX IF EXISTS novel_content_blocks_hans_idx;
 ALTER TABLE novel_content_blocks
-  DROP COLUMN search_text_original,
-  DROP COLUMN search_text_hans,
-  DROP COLUMN search_window_start,
-  DROP COLUMN search_window_end;
+  -- The retired search/window fields still have checks from migrations 0001/0003.
+  -- Cascade only removes constraints that depend on these columns; original_text and
+  -- its non-empty/bounded checks remain intact.
+  DROP COLUMN search_text_original CASCADE,
+  DROP COLUMN search_text_hans CASCADE,
+  DROP COLUMN search_window_start CASCADE,
+  DROP COLUMN search_window_end CASCADE;
 
 ANALYZE novel_search_documents;
