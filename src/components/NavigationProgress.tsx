@@ -10,7 +10,6 @@ type LinkNavigateEvent = { preventDefault(): void };
 // transitions finish without a flash while slower ones get feedback at once.
 const FAILSAFE_MS = 12_000;
 const COMPLETE_HOLD_MS = 320;
-const PENDING_CLASS = "isNavigationPending";
 
 function isReaderDestination(pathname: string): boolean {
   return /(?:^|\/)books\/\d+(?:\/|$)/u.test(pathname) ||
@@ -95,7 +94,7 @@ export function NavigationProgress() {
     }
 
     function finish() {
-      root.classList.remove("isReaderPagePending", PENDING_CLASS);
+      root.classList.remove("isReaderPagePending");
       clearTimers();
       setState((current) => {
         if (current === "idle") return current;
@@ -106,7 +105,6 @@ export function NavigationProgress() {
 
     function start(readerNavigation = false) {
       clearTimers();
-      root.classList.add(PENDING_CLASS);
       root.classList.toggle("isReaderPagePending", readerNavigation);
       failsafeTimer = setTimeout(finish, FAILSAFE_MS);
       if (document.visibilityState !== "visible") {
@@ -151,7 +149,7 @@ export function NavigationProgress() {
       window.removeEventListener("pageshow", finish);
       clearTimers();
       finishRef.current = () => undefined;
-      root.classList.remove("isReaderPagePending", PENDING_CLASS);
+      root.classList.remove("isReaderPagePending");
     };
   }, []);
 

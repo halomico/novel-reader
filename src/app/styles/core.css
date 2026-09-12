@@ -256,12 +256,6 @@ textarea {
   to { transform: translateX(260%); }
 }
 
-.isNavigationPending,
-.isNavigationPending a,
-.isNavigationPending button {
-  cursor: progress;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .navigationProgress[data-state="loading"]::after {
     animation: none;

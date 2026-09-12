@@ -331,7 +331,10 @@ test("navigation keeps the current surface while loading and paged readers avoid
   assert.match(novelReader, /<ReaderTagLinks\s+tags=\{displayTags\}/);
   const navigationProgress = read("src/components/NavigationProgress.tsx");
   assert.match(navigationProgress, /requestAnimationFrame/);
-  assert.match(navigationProgress, /isNavigationPending/);
+  // The sweep bar is the only progress feedback. A busy cursor on top of it says the same
+  // thing twice, and on Windows it is the spinner beside the pointer.
+  assert.doesNotMatch(navigationProgress, /isNavigationPending/);
+  assert.doesNotMatch(core, /cursor:\s*progress/);
   assert.match(core, /@keyframes navigationProgressSweep/);
   assert.match(core, /\.navigationProgress \{[^}]*height: 2px;/);
   const common = read("src/app/styles/common.css");
