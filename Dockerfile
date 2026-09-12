@@ -33,7 +33,10 @@ COPY LICENSE ./
 COPY Dockerfile .dockerignore docker-compose.yml ./
 
 FROM source AS verify
-RUN npm audit --omit=dev --audit-level=high
+# The registry audit endpoint is occasionally transient during a Docker build. Keep the
+# gate strict, but retry network failures so a healthy lockfile does not produce a false
+# negative while the standalone quality workflow performs the same audit independently.
+RUN for attempt in 1 2 3; do npm audit --omit=dev --audit-level=high && exit 0; sleep 5; done; exit 1
 RUN npm run check:runtime
 RUN npm test
 
