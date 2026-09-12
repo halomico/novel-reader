@@ -559,13 +559,23 @@
 .readerShell.originalReaderShell,
 .originalReaderShell {
   --reader-paper-width: 690px !important;
-  --reader-bg: var(--bg);
-  --reader-paper: var(--surface);
-  --reader-text: var(--text);
-  --reader-muted: var(--muted);
-  --reader-border: var(--border);
-  --reader-panel: var(--surface);
-  --reader-accent: var(--accent);
+  --reader-bg: #ffffff;
+  --reader-paper: #ffffff;
+  --reader-text: #000000;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .originalReaderShell {
+    --reader-bg: #1a1b20;
+    --reader-paper: #1a1b20;
+    --reader-text: #ffffff;
+  }
+}
+
+:root[data-theme="dark"] .originalReaderShell {
+  --reader-bg: #1a1b20;
+  --reader-paper: #1a1b20;
+  --reader-text: #ffffff;
 }
 
 .originalReaderShell .readerToolRail {
@@ -576,7 +586,7 @@
 }
 
 .originalReaderShell::before {
-  background: var(--bg);
+  background: var(--reader-bg);
 }
 
 .originalReaderShell > .readerPage,
@@ -587,8 +597,8 @@
   min-width: 0;
   box-sizing: border-box;
   border: 0;
-  padding: 44px clamp(32px, 4.5vw, 48px) 64px;
-  background: var(--surface);
+  padding: 44px 16px 64px;
+  background: var(--reader-paper);
   box-shadow: none;
 }
 
@@ -744,11 +754,11 @@
 
 .originalReaderShell .originalBody {
   min-width: 0;
-  color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", "WenQuanYi Micro Hei", sans-serif;
-  font-size: var(--original-font-size, 16px);
+  color: var(--reader-text);
+  font-family: var(--font-reading);
+  font-size: var(--original-font-size, 17px);
   font-weight: 400;
-  line-height: var(--original-line-height, 1.6);
+  line-height: var(--original-line-height, 27px);
   letter-spacing: 0;
   word-break: break-word;
   overflow-wrap: anywhere;
@@ -757,7 +767,7 @@
 }
 
 .originalReaderShell .originalBody .originalMarkdownParagraph {
-  margin: 1.4em 0;
+  margin: 0 0 24px;
   overflow-wrap: anywhere;
   text-align: start;
   text-indent: 0;
@@ -769,8 +779,12 @@
   margin-top: 0 !important;
 }
 
+.originalReaderShell .originalBody .originalMarkdownParagraph:last-child {
+  margin-bottom: 0;
+}
+
 .originalReaderShell .originalBody .originalMarkdownParagraph + .originalMarkdownParagraph {
-  margin-top: max(1.4em, var(--original-source-gap, 1.4em));
+  margin-top: 0;
 }
 .originalInlineImage { display: block; margin-block: 1.4em; text-align: center; }
 .originalInlineImage img { display: block; max-width: 100%; height: auto; margin-inline: auto; border-radius: 8px; }
@@ -1751,12 +1765,12 @@
     width: 100%;
     margin: 0;
     box-sizing: border-box;
-    padding: max(54px, calc(env(safe-area-inset-top) + 48px)) clamp(16px, 4.5vw, 22px) calc(132px + env(safe-area-inset-bottom));
+    padding: max(54px, calc(env(safe-area-inset-top) + 48px)) 16px calc(132px + env(safe-area-inset-bottom));
   }
 
   .originalReaderShell .originalBody {
-    font-size: var(--original-font-size, 16px);
-    line-height: var(--original-line-height, 1.6);
+    font-size: var(--original-font-size, 17px);
+    line-height: var(--original-line-height, 27px);
     letter-spacing: 0;
   }
 

@@ -16,7 +16,6 @@ import Link from "@/components/LocalizedLink";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { localeFromPathname } from "@/lib/locale";
-import { READER_PAGE_REQUEST_EVENT } from "@/lib/reader-layout";
 import { normalizeReaderPageTurn } from "@/lib/ui-preferences";
 import { formatNovelWordCount } from "./CatalogBookGrid";
 import { GroveButton } from "./GroveButton";
@@ -84,16 +83,8 @@ export function ReaderExperienceControls({
     keepReaderChromeVisible();
   }
 
-  function preparePagedNavigation(event: React.MouseEvent<HTMLAnchorElement>, direction: -1 | 1) {
+  function prepareChapterNavigation() {
     keepReaderChrome();
-    if (
-      window.matchMedia(MOBILE_READER_QUERY).matches &&
-      normalizeReaderPageTurn(document.documentElement.dataset.readerPageTurn) !== "scroll"
-    ) {
-      event.preventDefault();
-      window.dispatchEvent(new CustomEvent(READER_PAGE_REQUEST_EVENT, { detail: { direction, keepChrome: true } }));
-      return;
-    }
     scrollReaderToTop();
   }
 
@@ -123,7 +114,7 @@ export function ReaderExperienceControls({
           <List size={20} aria-hidden="true" /><span>目录</span>
         </button>
         {previous ? (
-          <Link className="readerToolItem isMobileChapter isPrevious" href={navigationHref(previous)} prefetch={false} onClick={(event) => preparePagedNavigation(event, -1)} title={`${previousLabel}：${previous.title}`}>
+          <Link className="readerToolItem isMobileChapter isPrevious" href={navigationHref(previous)} prefetch={false} onClick={prepareChapterNavigation} title={`${previousLabel}：${previous.title}`}>
             <ChevronLeft size={20} aria-hidden="true" /><span>{previousLabel}</span>
           </Link>
         ) : (
@@ -132,7 +123,7 @@ export function ReaderExperienceControls({
           </span>
         )}
         {next ? (
-          <Link className="readerToolItem isMobileChapter isNext" href={navigationHref(next)} prefetch={false} onClick={(event) => preparePagedNavigation(event, 1)} title={`${nextLabel}：${next.title}`}>
+          <Link className="readerToolItem isMobileChapter isNext" href={navigationHref(next)} prefetch={false} onClick={prepareChapterNavigation} title={`${nextLabel}：${next.title}`}>
             <ChevronRight size={20} aria-hidden="true" /><span>{nextLabel}</span>
           </Link>
         ) : (
@@ -215,7 +206,7 @@ export function ReaderExperienceControls({
                 ) : (
                   <Link className="readerMoreAction" href={`/login?returnTo=${encodeURIComponent(returnHref || pathname)}`}><Flag size={20} aria-hidden="true" /><span>反馈</span></Link>
                 )}
-                <button className="readerMoreAction" type="button" onClick={() => { closeReaderPanel(); preferences.scrollTop(); }}><ArrowUp size={20} aria-hidden="true" /><span>回顶</span></button>
+                <button className="readerMoreAction" type="button" onClick={() => setPanel("directory")}><List size={20} aria-hidden="true" /><span>目录</span></button>
               </div>
             ) : null}
         </ReaderSidePanel>

@@ -161,10 +161,10 @@ export async function POST(request: NextRequest) {
   const lastPage = Math.max(1, Math.ceil(maxResults / pageSize));
   const pageInput = parsed.value.page === undefined ? 1 : Number(parsed.value.page);
   if (!Number.isSafeInteger(pageInput) || pageInput < 1) {
-    return jsonError("分页参数无效", 400);
+    return jsonError("页码无效", 400);
   }
-  // A bookmarked page can outlive a lower result cap; list the last page instead of failing.
   const requestedPage = Math.min(pageInput, lastPage);
+  const audience = user?.role === "admin" ? "admin" : user ? "member" : "public";
 
   const excludedSourceSlugs = Object.entries(settings.novelSourceSearchModes)
     .filter(([, mode]) => mode === "book")
@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
       includeTagSlugs: filters?.includeTags,
       excludeTagSlugs: filters?.excludeTags,
       titleQuery: titleValidation?.ok ? titleValidation.query : undefined,
-      audience: user?.role === "admin" ? "admin" : user ? "member" : "public",
+      audience,
       maxResults,
       pageSize,
       page: requestedPage,
@@ -223,6 +223,5 @@ export async function POST(request: NextRequest) {
     totalPages: Math.max(1, Math.ceil(page.totalItems / pageSize)),
     capped: page.capped,
     partial: page.partial,
-    maxResults,
   }, { headers: { "Cache-Control": "private, no-store" } });
 }

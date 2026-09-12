@@ -306,10 +306,15 @@ test("navigation keeps the current surface while loading and paged readers avoid
   const controls = read("src/components/ReaderExperienceControls.tsx");
   assert.doesNotMatch(controls, /上一页|下一页/);
   assert.doesNotMatch(controls, /href=\{(?:previous|next) \? [^}]+ : "#"\}/);
+  assert.doesNotMatch(controls, /READER_PAGE_REQUEST_EVENT|preparePagedNavigation|event\.preventDefault\(\)/);
+  assert.match(controls, /function prepareChapterNavigation\(\)/);
+  assert.match(controls, /onClick=\{prepareChapterNavigation\}/);
   assert.match(controls, /const previousLabel = "上一篇"/);
   assert.match(controls, /const nextLabel = "下一篇"/);
   assert.doesNotMatch(controls, /isTheme|日间|夜间/);
   assert.match(controls, /className="readerToolItem isMore"/);
+  assert.match(controls, /readerMoreAction[\s\S]*setPanel\("directory"\)[\s\S]*目录/);
+  assert.doesNotMatch(controls, /readerMoreAction[\s\S]*scrollTop\(\)[\s\S]*回顶/);
   assert.match(read("src/components/SiteHeader.tsx"), /<ThemeToggle \/>/);
   assert.doesNotMatch(read("src/components/SiteHeader.tsx"), /!readerMode \? <ThemeToggle/);
   assert.doesNotMatch(read("src/components/OriginalReaderExperienceControls.tsx"), /isTheme|日间|夜间/);
@@ -345,7 +350,9 @@ test("navigation keeps the current surface while loading and paged readers avoid
   assert.match(core, /@keyframes navigationProgressSweep/);
   assert.match(core, /\.navigationProgress \{[^}]*height: 2px;/);
   const common = read("src/app/styles/common.css");
-  assert.match(common, /\.readerToolRail[\s\S]*background: var\(--reader-paper\);[\s\S]*backdrop-filter: blur\(16px\)/);
+  assert.match(common, /\.novelReaderShell \.readerToolItem\.isDirectory \{[\s\S]*display: none;/);
+  assert.match(common, /\.novelReaderShell \.readerToolItem\.isBackTop \{[\s\S]*order: 3;/);
+  assert.match(common, /\.readerToolRail[\s\S]*background: var\(--reader-paper\);[\s\S]*backdrop-filter: none/);
   assert.match(common, /\.readerSidePanel\s*\{[\s\S]*width: min\(420px/);
   const originalControls = read("src/components/OriginalBrowseControls.tsx");
   const originalStyles = read("src/app/original.css");
@@ -378,10 +385,23 @@ test("navigation keeps the current surface while loading and paged readers avoid
   const contentSearch = read("src/components/ContentSearchClient.tsx");
   assert.match(contentSearch, /<ResultCount count=\{totalNovels\}/);
   assert.match(contentSearch, /<Pagination page=\{page\} totalPages=\{totalPages\}/);
-  // Every search now reports a real total, so results page like the rest of the site
-  // instead of offering only the neighbouring page behind an opaque cursor.
-  assert.doesNotMatch(contentSearch, /nextCursor|cursorsRef/);
-  assert.doesNotMatch(contentSearch, /if \(loading \|\| nextPage/);
+  assert.doesNotMatch(contentSearch, /data\.hasMore|data\.nextCursor|cursorsRef/);
+  assert.match(core, /--reader-bg: #ffffff;/);
+  assert.match(core, /--reader-text: #000000;/);
+  assert.match(core, /--reader-bg: #1a1b20;/);
+  assert.match(core, /--reader-text: #ffffff;/);
+  assert.match(core, /prefers-color-scheme: dark[\s\S]*:root:not\(\[data-theme="light"\]\) \.readerShell[\s\S]*--reader-bg: #1a1b20;/);
+  assert.match(core, /--font-reading: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;/);
+  assert.match(originalStyles, /\.originalReaderShell \.originalBody \{[\s\S]*color: var\(--reader-text\);[\s\S]*font-family: var\(--font-reading\);/);
+  assert.match(read("src/components/ThemeScript.tsx"), /theme-color/);
+  assert.match(readerCss, /column-width: var\(--reader-page-column-width, 100%\)/);
+  assert.match(readerCss, /margin-inline: var\(--reader-page-inline-gutter\)/);
+  assert.doesNotMatch(readerCss, /column-width: var\(--reader-page-column-width, 100vw\)/);
+  assert.match(readerCss, /touch-action: none/);
+  assert.match(readerCss, /--reader-page-block-start: max\(12px, env\(safe-area-inset-top, 0px\)\)/);
+  assert.match(readerCss, /--reader-page-block-end: max\(12px, env\(safe-area-inset-bottom, 0px\)\)/);
+  assert.match(readerCss, /\.readerPagedIntro h1 \{[\s\S]*font-size: clamp\(23px, 2vw, 26px\);[\s\S]*font-weight: 500;/);
+  assert.match(readerCss, /\.readerShell \.readerPagedIntro \.readerTagsBlock \{\s*margin: 20px 0 34px;/);
   const rootShell = read("src/lib/root-shell.ts");
   assert.match(rootShell, /process\.env\.DOCKER_BUILD === "1"/);
   assert.match(rootShell, /defaultSiteSettings\(\)/);
@@ -524,11 +544,13 @@ test("navigation keeps the current surface while loading and paged readers avoid
   // Manuscript typography: 16px / 1.67 with a 1.4em paragraph gap.
   assert.match(composerCss, /\.contentEditable\s*\{[^}]*font: 400 16px \/ 1\.67/);
   assert.match(composerCss, /\.editorParagraph\s*\{ margin: 0 0 1\.4em;/);
-  assert.match(read("src/app/styles/core.css"), /--original-font-size: 16px;[\s\S]*--original-line-height: 1\.6;/);
+  assert.match(read("src/app/styles/core.css"), /--original-font-size: 17px;[\s\S]*--original-line-height: 27px;/);
   assert.match(originalStyles, /width: min\(690px, calc\(100vw - 40px\)\)/);
-  assert.match(originalStyles, /originalMarkdownParagraph \+ \.originalMarkdownParagraph[\s\S]*1\.4em/);
+  assert.match(originalStyles, /originalMarkdownParagraph \{[\s\S]*margin: 0 0 24px;/);
   assert.match(originalStyles, /font-size: 1\.2em;/);
-  assert.doesNotMatch(originalStyles, /originalReaderShell \.originalBody \{ font-size: 17px/);
+  assert.match(originalStyles, /padding: 44px 16px 64px;/);
+  assert.match(originalStyles, /\.originalReaderShell \{[\s\S]*--reader-bg: #ffffff;[\s\S]*--reader-text: #000000;/);
+  assert.match(originalStyles, /data-theme="dark"\] \.originalReaderShell \{[\s\S]*--reader-bg: #1a1b20;[\s\S]*--reader-text: #ffffff;/);
   const minePage = read("src/app/(workspace)/original/mine/page.tsx");
   assert.match(minePage, /<OriginalDraftManager/);
   assert.match(read("src/components/OriginalDraftManager.tsx"), /!managing \? <span className="originalDraftEditAction">\{tr\("编辑"\)\}/);

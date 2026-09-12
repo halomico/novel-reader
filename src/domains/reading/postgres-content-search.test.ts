@@ -4,7 +4,6 @@ import type { QueryResult, QueryResultRow } from "pg";
 import type { SqlExecutor, SqlQuery } from "@/core/db/postgres";
 import { parseSimpleAndSearchQuery, type ParsedSearchQuery } from "@/lib/search-query";
 import {
-  buildContentSearchPageQuery,
   buildContentSearchStreamQuery,
   canAnchorContentSearch,
   planContentSearchTerms,
@@ -38,10 +37,6 @@ function fakeDatabase(fixture: {
   page?: (ids: string[]) => unknown[];
   /** Ordinals of the FETCH statements that run out of time. */
   timeoutOnFetch?: readonly number[];
-  /** The one statement that resolves a whole page of snippets times out. */
-  timeoutOnPageBatch?: boolean;
-  /** This document times out when the page is retried one document at a time. */
-  timeoutOnDocument?: string;
 }) {
   const statements: string[] = [];
   const plans: Array<"walk" | "anchored"> = [];
@@ -68,19 +63,22 @@ function fakeDatabase(fixture: {
         const size = Number(/^FETCH (\d+)/u.exec(text)?.[1]);
         const rows = (fixture.scans[scan] ?? []).slice(position, position + size);
         position += rows.length;
-        return result<Row>(rows);
+        const metadata = new Map((fixture.page?.(rows.map((row) => row.document_id)) ?? [])
+          .map((row) => [String((row as { document_id: unknown }).document_id), row]));
+        return result<Row>(rows.map((row) => ({
+          generation: 1,
+          chapter_id: null,
+          novel_title: `书${row.document_id}`,
+          chapter_title: null,
+          content_version: `sha256:${row.document_id}`,
+          block_no: 0,
+          char_start: 0,
+          blocks: [{ blockNo: 0, charStart: 0, originalText: "" }],
+          ...row,
+          ...(metadata.get(row.document_id) as object | undefined),
+        })));
       }
       if (keyword) return result<Row>([]);
-      if (text.includes("WITH ORDINALITY AS page")) {
-        statements.push("PAGE");
-        // The whole-page statement lists every document; a retry lists exactly one.
-        const ids = (query.values?.[0] as string[]) ?? [];
-        if (fixture.timeoutOnPageBatch && ids.length > 1) throw statementTimeout();
-        if (fixture.timeoutOnDocument !== undefined && ids.length === 1 && ids[0] === fixture.timeoutOnDocument) {
-          throw statementTimeout();
-        }
-        return result<Row>(fixture.page?.(ids) ?? []);
-      }
       throw new Error(`Unexpected SQL: ${text.slice(0, 60)}`);
     },
   };
@@ -90,7 +88,7 @@ function fakeDatabase(fixture: {
 
 function pageRow(id: string, text: string, charStart = 0) {
   return {
-    document_id: id, novel_id: Number(id), chapter_id: null, novel_title: `书${id}`, chapter_title: null,
+    document_id: id, chapter_id: null, novel_title: `书${id}`, chapter_title: null,
     content_version: `sha256:${id}`, block_no: 0, char_start: charStart,
     blocks: [{ blockNo: 0, charStart, originalText: text }],
   };
@@ -137,11 +135,10 @@ test("walks read documents in key order, stop at the limit and push scope into P
   assert.match(sql.text, /d\.id < \$\d+::bigint/u, "the scan resumes below the last listed document");
   assert.match(sql.text, /ORDER BY d\.id DESC\n\s+LIMIT \$\d+::integer$/u);
   assert.doesNotMatch(sql.text, /mtime_ms/u, "nothing is ranked by time any more");
-  // Every other relation is reached through a subquery, so PostgreSQL has no join to
-  // reorder and cannot answer the ordering with a sort over the whole library.
-  assert.doesNotMatch(sql.text.slice(0, sql.text.indexOf("WHERE")), /JOIN/u);
-  assert.match(sql.text, /lower\(s\.slug\) =/u);
-  assert.match(sql.text, /s\.id IS NULL OR lower\(s\.slug\) <> ALL/u);
+  assert.match(sql.text, /JOIN LATERAL \(SELECT v\.block_no, v\.char_start/u,
+    "the match scan also returns the block used to build the excerpt");
+  assert.match(sql.text, /d\.source_id = \(SELECT source_lookup\.id/u);
+  assert.match(sql.text, /d\.source_id <> ALL\(coalesce/u);
   assert.match(sql.text, /title_search_original LIKE/u);
   assert.match(sql.text, /tag\.visibility IN \('public', 'member'\)/u);
   assert.equal((sql.text.match(/SELECT 1 FROM novel_tags tagged/gu) || []).length, 3);
@@ -171,47 +168,43 @@ test("anchored scans drive the limit from ordered index candidates, not from a s
   await assert.rejects(buildContentSearchStreamQuery(terms, { kind: "walk" }, { maxResults: 10 }, 0), /limit/);
 });
 
-test("result pages resolve each document's snippet block in listed order", async () => {
+test("the bounded stream returns catalog metadata and excerpt blocks in one query", async () => {
   const terms = await planContentSearchTerms(contentQuery("龍門"));
-  const sql = buildContentSearchPageQuery(terms, ["9", "3"]);
-  assert.match(sql.text, /unnest\(\$1::bigint\[\]\) WITH ORDINALITY AS page/u);
-  assert.match(sql.text, /strpos\(hit\.search_text_original/u);
-  assert.match(sql.text, /ORDER BY page\.ordinality$/u);
-  assert.deepEqual(sql.values?.[0], ["9", "3"]);
-  assert.throws(() => buildContentSearchPageQuery(terms, ["1; DROP"]), /page documents/);
-  // A single character has no bigram, but containment still locates it perfectly well.
-  const single: ContentSearchTerm[] = [{ kind: "unindexed", forms: [{ text: "他", bigrams: [] }], length: 1 }];
-  assert.doesNotThrow(() => buildContentSearchPageQuery(single, ["4"]));
+  const sql = await buildContentSearchStreamQuery(terms, { kind: "walk" }, { maxResults: 1_000 }, 21);
+  assert.match(sql.text, /catalog\.novel_title, catalog\.chapter_title/u);
+  assert.match(sql.text, /jsonb_agg\(jsonb_build_object\('blockNo'/u);
+  assert.match(sql.text, /source\.block_no BETWEEN greatest\(v\.block_no - 1, 0\)/u);
+  assert.match(sql.text, /LIMIT \$\d+::integer$/u);
 });
 
 test("capped searches report the cap and page from one cached list", async () => {
   const database = fakeDatabase({
-    scans: [[
-      { document_id: "5", novel_id: 1 },
-      // A second chapter of the same novel: documents are listed, novels are counted once.
-      { document_id: "3", novel_id: 1 },
-      { document_id: "2", novel_id: 3 },
-      { document_id: "1", novel_id: 4 },
-    ]],
+    scans: [
+      [{ document_id: "5", novel_id: 1 }],
+      [
+        { document_id: "3", novel_id: 1 },
+        { document_id: "2", novel_id: 3 },
+        { document_id: "1", novel_id: 4 },
+      ],
+    ],
     page: (ids) => ids.map((id) => pageRow(id, `第${id}章 龍门出现在这里`)),
   });
   const first = await searchPostgresContent(database.transaction, contentQuery("龍門"), { maxResults: 3, pageSize: 2 });
   assert.deepEqual(first.items.map((item) => item.documentId), ["5", "3"]);
+  assert.equal(first.page, 1);
   assert.equal(first.totalItems, 3);
   assert.equal(first.totalNovels, 2);
   assert.equal(first.capped, true, "a fourth match exists beyond the cap");
   assert.equal(first.partial, false);
   assert.deepEqual(first.items[0].highlightRanges.map((range) => first.items[0].snippet.slice(range.start, range.end)), ["龍门"]);
-  assert.deepEqual(database.plans, ["walk"], "no measurement runs before the scan");
+  assert.deepEqual(database.plans, ["walk", "walk"], "a one-row walk trial then fills the rest of the list");
 
   const before = database.statements.length;
   const second = await searchPostgresContent(database.transaction, contentQuery("龍門"), { maxResults: 3, pageSize: 2, page: 2 });
   assert.deepEqual(second.items.map((item) => item.documentId), ["2"]);
   assert.equal(second.totalItems, 3);
   assert.equal(second.capped, true);
-  const later = database.statements.slice(before);
-  assert.ok(!later.includes("DECLARE") && !later.includes("FETCH"), "the second page reuses the list");
-  assert.ok(later.includes("PAGE"));
+  assert.equal(database.statements.length, before, "the second page reuses the cached list");
 });
 
 test("in-book searches read the book's documents and never consult the index", async () => {
@@ -223,14 +216,14 @@ test("in-book searches read the book's documents and never consult the index", a
   assert.deepEqual(page.items.map((item) => item.documentId), ["8"]);
   assert.equal(page.totalItems, 1);
   assert.equal(page.capped, false);
-  assert.deepEqual(database.plans, ["walk"]);
-  assert.equal(database.statements.filter((statement) => statement === "FETCH").length, 1);
+  assert.deepEqual(database.plans, ["walk", "walk"]);
+  assert.equal(database.statements.filter((statement) => statement === "FETCH").length, 2);
 });
 
 test("a walk that finds nothing hands the rest of the search to the index", async () => {
   const database = fakeDatabase({
-    // The walk's first batch times out having listed nothing, so there is no rate to
-    // project and the anchored scan takes over.
+    // The one-row trial times out having listed nothing, so there is no rate to project
+    // and the anchored scan takes over.
     timeoutOnFetch: [1],
     scans: [[], [{ document_id: "7", novel_id: 7 }, { document_id: "6", novel_id: 6 }]],
     page: (ids) => ids.map((id) => pageRow(id, "他开始修炼")),
@@ -245,20 +238,17 @@ test("a walk that finds nothing hands the rest of the search to the index", asyn
 test("a productive walk keeps walking instead of paying for the index", async () => {
   const found = Array.from({ length: 256 }, (_, index) => ({ document_id: String(600 - index), novel_id: 600 - index }));
   const database = fakeDatabase({
-    // The first batch lists a full 256 matches, then the second runs out of time: at that
-    // rate the walk finishes well inside the budget, so it simply resumes.
-    timeoutOnFetch: [2],
-    scans: [found, [{ document_id: "10", novel_id: 10 }]],
+    scans: [found, found.slice(1)],
     page: (ids) => ids.map((id) => pageRow(id, "剑气之路")),
   });
   const page = await searchPostgresContent(database.transaction, contentQuery("剑气"), { maxResults: 1_000, pageSize: 3 });
   assert.deepEqual(database.plans, ["walk", "walk"]);
-  assert.equal(page.totalItems, 257);
+  assert.equal(page.totalItems, 256);
   assert.equal(page.partial, false);
   assert.deepEqual(page.items.map((item) => item.documentId), ["600", "599", "598"]);
 });
 
-test("a search that exhausts its budget lists the prefix it found and says so", async () => {
+test("a search that exhausts its budget never invents a continuation without a match", async () => {
   const database = fakeDatabase({
     timeoutOnFetch: [1, 2],
     scans: [[], []],
@@ -271,38 +261,9 @@ test("a search that exhausts its budget lists the prefix it found and says so", 
   assert.equal(page.capped, false);
 });
 
-test("a page of snippets that times out is resolved one document at a time", async () => {
-  const database = fakeDatabase({
-    scans: [[
-      { document_id: "9", novel_id: 9 },
-      { document_id: "8", novel_id: 8 },
-      { document_id: "7", novel_id: 7 },
-    ]],
-    timeoutOnPageBatch: true,
-    page: (ids) => ids.map((id) => pageRow(id, `第${id}章 灯塔在此`)),
-  });
-  const page = await searchPostgresContent(database.transaction, contentQuery("灯塔"), { maxResults: 1_000, pageSize: 20 });
-  assert.deepEqual(page.items.map((item) => item.documentId), ["9", "8", "7"], "listed order survives the retry");
-  assert.equal(page.totalItems, 3);
-  assert.equal(database.statements.filter((statement) => statement === "PAGE").length, 4,
-    "one page statement, then one per document");
-});
-
-test("a document whose snippet times out is skipped instead of failing the page", async () => {
-  const database = fakeDatabase({
-    scans: [[{ document_id: "9", novel_id: 9 }, { document_id: "8", novel_id: 8 }]],
-    timeoutOnPageBatch: true,
-    timeoutOnDocument: "8",
-    page: (ids) => ids.map((id) => pageRow(id, `第${id}章 航线在此`)),
-  });
-  const page = await searchPostgresContent(database.transaction, contentQuery("航线"), { maxResults: 1_000, pageSize: 20 });
-  assert.deepEqual(page.items.map((item) => item.documentId), ["9"]);
-  assert.equal(page.totalItems, 2, "the match itself still counts; only its snippet was unavailable");
-});
-
 test("content search rejects invalid caps and pages", async () => {
   const { transaction } = fakeDatabase({ scans: [[]] });
   await assert.rejects(searchPostgresContent(transaction, contentQuery("龍門"), { maxResults: 0 }), /result cap/);
-  await assert.rejects(searchPostgresContent(transaction, contentQuery("龍門"), { maxResults: 10, page: 0 }), /page/);
   await assert.rejects(searchPostgresContent(transaction, contentQuery("龍門"), { maxResults: 10, pageSize: 0 }), /page size/);
+  await assert.rejects(searchPostgresContent(transaction, contentQuery("龍門"), { maxResults: 10, page: 0 }), /page/);
 });

@@ -36,14 +36,7 @@ type SearchApiResponse = {
   totalItems?: number;
   totalNovels?: number;
   totalPages?: number;
-  capped?: boolean;
-  partial?: boolean;
-  maxResults?: number;
 };
-
-type ResultLimit = { capped: boolean; partial: boolean; listed: number };
-
-const NO_RESULT_LIMIT: ResultLimit = { capped: false, partial: false, listed: 0 };
 
 function highlightSnippet(
   snippet: string,
@@ -67,6 +60,7 @@ function updateHistory(page: number, replace = false) {
   const url = new URL(window.location.href);
   if (page > 1) url.searchParams.set("page", String(page));
   else url.searchParams.delete("page");
+  url.searchParams.delete("cursor");
   window.history[replace ? "replaceState" : "pushState"]({}, "", url.toString());
 }
 
@@ -103,7 +97,6 @@ export function ContentSearchClient({
   const [items, setItems] = useState<PostgresContentSearchItem[]>([]);
   const [totalNovels, setTotalNovels] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [resultLimit, setResultLimit] = useState<ResultLimit>(NO_RESULT_LIMIT);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const reportedAnalyticsRef = useRef("");
@@ -144,11 +137,6 @@ export function ContentSearchClient({
       }
       setTotalNovels(Number(data.totalNovels));
       setTotalPages(resultPages);
-      setResultLimit({
-        capped: data.capped === true,
-        partial: data.partial === true,
-        listed: Number(data.totalItems),
-      });
       setItems(data.items);
       if (searchEventKey && page === 1) {
         const signature = `${searchEventKey}:${data.totalItems}:${data.totalNovels}`;
@@ -167,7 +155,6 @@ export function ContentSearchClient({
       setItems([]);
       setTotalNovels(0);
       setTotalPages(1);
-      setResultLimit(NO_RESULT_LIMIT);
       setMessage(error instanceof Error ? error.message : tr("搜索失败"));
     }).finally(() => {
       if (!controller.signal.aborted) setLoading(false);
@@ -201,11 +188,6 @@ export function ContentSearchClient({
       {!loading && !message ? (
         <div className="contentSearchSummary">
           <ResultCount count={totalNovels} />
-          {resultLimit.capped || resultLimit.partial ? (
-            <span className="contentSearchNote">
-              {tr("匹配内容较多，仅显示前")} {resultLimit.listed.toLocaleString("zh-CN")} {tr("条结果")}
-            </span>
-          ) : null}
         </div>
       ) : null}
 
@@ -221,6 +203,7 @@ export function ContentSearchClient({
             const fromParams = new URLSearchParams(resultReturnParams);
             if (resultReturnPath === "/search") fromParams.set("q", keyword);
             if (page > 1) fromParams.set("page", String(page)); else fromParams.delete("page");
+            fromParams.delete("cursor");
             if (searchSource !== "direct") fromParams.set("source", searchSource);
             if (originNovelId) fromParams.set("origin", String(originNovelId));
             if (searchEventKey) fromParams.set("searchEvent", searchEventKey);

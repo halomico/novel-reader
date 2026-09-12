@@ -121,7 +121,7 @@ export function NovelSourcePicker({
             }}
           >
             {activeSlug === ALL_NOVEL_LIBRARIES_SLUG ? <Check size={14} aria-hidden="true" /> : <i className="catalogMenuItemMarker" aria-hidden="true" />}
-            <span>{tr("全部书库")}</span>
+            <span>{tr("全部")}</span>
             <small>{sources.reduce((total, source) => total + source.novelCount, 0)}</small>
           </Link>
           {sources.map((source) => (

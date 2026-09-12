@@ -123,6 +123,21 @@ export function ThemeScript({
         } else {
           root.removeAttribute("data-theme");
         }
+        if (readerRoute) {
+          var readerPapers = ${JSON.stringify(Object.fromEntries(READER_THEME_OPTIONS.map((item) => [item.value, item.paper])))};
+          var readerColor = validReaderPaper && readerPapers[readerPaper]
+            ? readerPapers[readerPaper]
+            : ((theme === "dark" || (theme !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches)) ? "#1a1b20" : "#ffffff");
+          root.dataset.readerViewport = "true";
+          root.style.setProperty("--reader-viewport-bg", readerColor);
+          var themeColorMeta = document.querySelector('meta[name="theme-color"]');
+          if (!themeColorMeta) {
+            themeColorMeta = document.createElement("meta");
+            themeColorMeta.setAttribute("name", "theme-color");
+            document.head.appendChild(themeColorMeta);
+          }
+          themeColorMeta.setAttribute("content", readerColor);
+        }
         root.dataset.palette = validPalette;
         root.dataset.readerTags = readerTags === "collapsed"
           ? "collapsed"

@@ -46,19 +46,10 @@ function clamp(value: number, minimum: number, maximum: number): number {
 }
 
 function columnGeometry(content: HTMLElement) {
-  const style = getComputedStyle(content);
-  const paddingLeft = Number.parseFloat(style.paddingLeft) || 0;
-  const paddingRight = Number.parseFloat(style.paddingRight) || 0;
-  const borderLeft = Number.parseFloat(style.borderLeftWidth) || 0;
-  const borderRight = Number.parseFloat(style.borderRightWidth) || 0;
-  const pageGap = Number.parseFloat(style.columnGap);
+  const pageGap = Number.parseFloat(getComputedStyle(content).columnGap);
   return {
     pageGap: Number.isFinite(pageGap) ? Math.max(pageGap, 0) : 0,
-    pageWidth: Math.max(
-      content.getBoundingClientRect().width - borderLeft - borderRight - paddingLeft - paddingRight,
-      1,
-    ),
-    paddingInline: paddingLeft + paddingRight,
+    pageWidth: Math.max(content.clientWidth, 1),
   };
 }
 
@@ -66,7 +57,7 @@ function pageMetrics(content: HTMLElement): ReaderPageMetrics {
   const geometry = columnGeometry(content);
   return resolveReaderPageMetrics({
     viewportWidth: geometry.pageWidth,
-    scrollWidth: Math.max(content.scrollWidth - geometry.paddingInline, geometry.pageWidth),
+    scrollWidth: Math.max(content.scrollWidth, geometry.pageWidth),
     scrollLeft: content.scrollLeft,
     pageGap: geometry.pageGap,
   });
@@ -106,7 +97,7 @@ export function ReaderPageTurnController({
     let entryAnchor: "start" | "end" | null = null;
     let navigating = false;
     let suppressClickUntil = 0;
-    let lastSize = { width: content.getBoundingClientRect().width, height: content.clientHeight };
+    let lastSize = { width: content.clientWidth, height: content.clientHeight };
 
     function isPaged(): boolean {
       return mobile.matches && modeRef.current !== "scroll";
@@ -381,7 +372,7 @@ export function ReaderPageTurnController({
     }
 
     const resizeObserver = new ResizeObserver(() => {
-      const renderedWidth = content!.getBoundingClientRect().width;
+      const renderedWidth = content!.clientWidth;
       if (!isPaged() || (renderedWidth === lastSize.width && content!.clientHeight === lastSize.height)) return;
       const progressRatio = pagedRatio();
       lastSize = { width: renderedWidth, height: content!.clientHeight };
