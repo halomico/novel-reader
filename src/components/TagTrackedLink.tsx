@@ -39,7 +39,6 @@ export function TagTrackedLink({
       className={["tagTrackedLink", className].filter(Boolean).join(" ")}
       href={`/tags/${slug}${library && library !== "default" ? `?library=${encodeURIComponent(library)}` : ""}`}
       title={title}
-      prefetch={false}
       onClick={() => recordTagClick(slug)}
       data-tag-search={tagSearchText}
     >

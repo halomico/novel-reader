@@ -253,6 +253,15 @@ test("navigation keeps the current surface while loading and paged readers avoid
   }
   const appLink = read("src/components/AppLink.tsx");
   assert.match(appLink, /prefetch=\{prefetch \?\? \(prefetchPolicy === "default"\)\}/);
+  const primaryNavigation = read("src/components/HeaderPrimaryNav.tsx");
+  assert.equal((primaryNavigation.match(/prefetchPolicy="default"/g) || []).length, 4);
+  const trackedTagLink = read("src/components/TagTrackedLink.tsx");
+  assert.doesNotMatch(trackedTagLink, /prefetch=\{false\}|prefetchPolicy="never"/);
+  const userMenu = read("src/components/HeaderUserMenu.tsx");
+  assert.match(userMenu, /hidden=\{!open\}/);
+  assert.match(userMenu, /loading="eager"/);
+  const nextConfig = read("next.config.ts");
+  assert.match(nextConfig, /source: "\/avatars\/:path\*"[\s\S]*max-age=31536000, immutable/);
   const controls = read("src/components/ReaderExperienceControls.tsx");
   assert.doesNotMatch(controls, /上一页|下一页/);
   assert.doesNotMatch(controls, /href=\{(?:previous|next) \? [^}]+ : "#"\}/);

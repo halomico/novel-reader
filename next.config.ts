@@ -43,6 +43,16 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // Uploaded avatar names contain the user, timestamp and random suffix. A
+        // replacement therefore gets a new URL and the old object is immutable.
+        source: "/avatars/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+          { key: "CDN-Cache-Control", value: "public, max-age=31536000, immutable" },
+          { key: "Cloudflare-CDN-Cache-Control", value: "public, max-age=31536000, immutable" },
+        ],
+      },
+      {
         source: "/favicon.ico",
         headers: [
           { key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" },
