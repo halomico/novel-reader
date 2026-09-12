@@ -5016,9 +5016,6 @@ a.analyticsSearchTag:focus-visible {
   white-space: nowrap;
 }
 
-@media (max-width: 820px) {
-}
-
 .adminWorkspace {
   display: grid;
   min-width: 0;

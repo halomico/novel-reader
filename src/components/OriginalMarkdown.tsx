@@ -22,14 +22,28 @@ type HastNode = {
 const UNDERLINE_OPEN_SENTINEL = "\uE000";
 const UNDERLINE_CLOSE_SENTINEL = "\uE001";
 
+/**
+ * Fences are tracked the way CommonMark defines them: a run of three or more backticks
+ * or tildes opens a block, and only a run of the same character at least as long, with
+ * nothing after it, closes it. Toggling on every fence line instead would put a document
+ * that quotes a fenced block inside a longer fence permanently "inside" one, and every
+ * underline after that point would be dropped as disallowed raw HTML.
+ */
 function encodeUnderlineTags(value: string): string {
-  let inFence = false;
+  let fence: { marker: string; length: number } | null = null;
   return value.split("\n").map((line) => {
-    if (/^\s*(```|~~~)/u.test(line)) {
-      inFence = !inFence;
+    const run = /^ {0,3}(`{3,}|~{3,})(.*)$/u.exec(line);
+    if (run) {
+      const marker = run[1][0];
+      const length = run[1].length;
+      if (!fence) {
+        fence = { marker, length };
+        return line;
+      }
+      if (marker === fence.marker && length >= fence.length && !run[2].trim()) fence = null;
       return line;
     }
-    if (inFence) return line;
+    if (fence) return line;
     return line
       .replace(/[\uE000\uE001]/gu, " ")
       .replace(/<u>/giu, UNDERLINE_OPEN_SENTINEL)

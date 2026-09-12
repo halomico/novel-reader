@@ -3,16 +3,10 @@ import type { QueryResultRow } from "pg";
 import { database, withTransaction, type SqlExecutor } from "@/core/db/postgres";
 import { postgresSiteDateKey } from "@/domains/identity/postgres-user-economy";
 import type { PostgresUserProfile } from "@/domains/identity/postgres-users";
-import { createPostgresOriginalSearchFields } from "./postgres-original-index";
 import { canConsumeOriginalChannel, getOriginalPublishingSettings } from "@/lib/config";
 import {
   countOriginalWords,
-  isValidOriginalTagName,
-  MAX_ORIGINAL_BODY_LENGTH,
   MAX_ORIGINAL_COMMENT_LENGTH,
-  normalizeOriginalTagName,
-  originalTagSlug,
-  ORIGINAL_PAID_MARKER,
 } from "@/lib/original-constants";
 import {
   OriginalInputError,
@@ -1087,129 +1081,3 @@ export async function setOriginalCommentStatus(
   return result.rowCount === 1;
 }
 
-function normalizeTagNames(value: unknown, maximum: number): string[] {
-  const raw = Array.isArray(value) ? value : String(value ?? "").split(/[\n,，、]+/u);
-  const names: string[] = [];
-  const seen = new Set<string>();
-  for (const entry of raw) {
-    const name = normalizeOriginalTagName(entry);
-    if (!name) continue;
-    if (!isValidOriginalTagName(name)) {
-      throw new OriginalInputError("中文标签需为 2–6 个汉字，英文标签需为 2–15 个字母且不能包含空格或符号");
-    }
-    const key = name.toLocaleLowerCase();
-    if (seen.has(key)) continue;
-    if (names.length >= maximum) throw new OriginalInputError(`每篇文章最多添加 ${maximum} 个标签`);
-    names.push(name);
-    seen.add(key);
-  }
-  return names;
-}
-
-async function replaceTagNames(
-  tx: SqlExecutor,
-  articleId: number,
-  authorId: number,
-  names: readonly string[],
-): Promise<void> {
-  await tx.query({ text: "DELETE FROM original_article_tags WHERE article_id = $1", values: [articleId] });
-  for (const name of names) {
-    const slug = originalTagSlug(name);
-    await tx.query({
-      text: "INSERT INTO original_tags (slug, name, created_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
-      values: [slug, name, authorId],
-    });
-    const tag = await tx.query<QueryResultRow & { id: string | number }>({
-      text: "SELECT id FROM original_tags WHERE lower(slug) = lower($1) LIMIT 1",
-      values: [slug],
-    });
-    const tagId = positiveId(tag.rows[0]?.id, "updated original tag id");
-    await tx.query({
-      text: "INSERT INTO original_article_tags (article_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-      values: [articleId, tagId],
-    });
-  }
-}
-
-function splitArticleBody(value: unknown, price: number): { publicBody: string; paidBody: string } {
-  const body = String(value ?? "").normalize("NFKC").replace(/\r\n?/gu, "\n").slice(0, MAX_ORIGINAL_BODY_LENGTH);
-  if (!body.trim()) throw new OriginalInputError("请输入文章内容");
-  if (price === 0) return { publicBody: body.split(ORIGINAL_PAID_MARKER).join(""), paidBody: "" };
-  const first = body.indexOf(ORIGINAL_PAID_MARKER);
-  if (first < 0 || first !== body.lastIndexOf(ORIGINAL_PAID_MARKER)) {
-    throw new OriginalInputError("付费文章需要插入一个付费分界");
-  }
-  const publicBody = body.slice(0, first);
-  const paidBody = body.slice(first + ORIGINAL_PAID_MARKER.length);
-  if (!publicBody.trim() || !paidBody.trim()) throw new OriginalInputError("付费分界前后都需要正文内容");
-  return { publicBody, paidBody };
-}
-
-export async function updateOriginalArticleAsAdmin(input: {
-  articleId: number;
-  title: unknown;
-  bodyMarkdown: unknown;
-  unlockSodaPrice: unknown;
-  tags: unknown;
-}): Promise<OriginalArticle> {
-  if (!Number.isSafeInteger(input.articleId) || input.articleId < 1) throw new OriginalInputError("文章不存在");
-  const title = cleanText(input.title, 120);
-  if (Array.from(title).length < 2) throw new OriginalInputError("标题至少需要 2 个字符");
-  const settings = getOriginalPublishingSettings();
-  const price = Math.min(Math.max(Math.floor(Number(input.unlockSodaPrice) || 0), 0), settings.maxArticlePrice);
-  const { publicBody, paidBody } = splitArticleBody(input.bodyMarkdown, price);
-  const wordCount = countOriginalWords(`${publicBody}${paidBody}`);
-  const excerpt = publicBody
-    .replace(/```[\s\S]*?```/gu, " ")
-    .replace(/[*_`>#\[\]()~-]/gu, " ")
-    .replace(/\s+/gu, " ")
-    .trim()
-    .slice(0, 320);
-  const tags = normalizeTagNames(input.tags, settings.maxTags);
-  const search = await createPostgresOriginalSearchFields(title, publicBody);
-  await withTransaction(async (tx) => {
-    const current = await tx.query<QueryResultRow & { author_id: string | number }>({
-      text: "SELECT author_id FROM original_articles WHERE id = $1 FOR UPDATE",
-      values: [input.articleId],
-    });
-    const row = current.rows[0];
-    if (!row) throw new OriginalInputError("文章不存在");
-    const authorId = positiveId(row.author_id, "updated original author id");
-    await tx.query({
-      text: `UPDATE original_articles SET title = $2, excerpt = $3, body_markdown = $4, paid_body_markdown = $5,
-        word_count = $6, access_mode = $7, unlock_soda_price = $8, title_search_original = $9,
-        title_search_hans = $10, content_search_original = $11, content_search_hans = $12,
-        normalization_version = $13, updated_at = clock_timestamp() WHERE id = $1`,
-      values: [
-        input.articleId, title, excerpt, publicBody, paidBody, wordCount, price > 0 ? "paid" : "free", price,
-        search.titleSearchOriginal, search.titleSearchHans, search.contentSearchOriginal,
-        search.contentSearchHans, search.normalizationVersion,
-      ],
-    });
-    await replaceTagNames(tx, input.articleId, authorId, tags);
-    const revision = await tx.query<QueryResultRow & { revision_no: string | number }>({
-      text: "SELECT COALESCE(MAX(revision_no), 0) + 1 AS revision_no FROM original_article_revisions WHERE article_id = $1",
-      values: [input.articleId],
-    });
-    await tx.query({
-      text: `INSERT INTO original_article_revisions
-        (article_id, revision_no, title, body_markdown, paid_body_markdown, outline_json, editor_state_json, created_at)
-        VALUES ($1, $2, $3, $4, $5, '[]'::jsonb, '', clock_timestamp())`,
-      values: [
-        input.articleId,
-        positiveId(revision.rows[0]?.revision_no, "admin original revision"),
-        title,
-        publicBody,
-        paidBody,
-      ],
-    });
-    await tx.query({
-      text: `DELETE FROM original_article_revisions WHERE article_id = $1 AND id NOT IN
-        (SELECT id FROM original_article_revisions WHERE article_id = $1 ORDER BY revision_no DESC LIMIT 20)`,
-      values: [input.articleId],
-    });
-  });
-  const article = await getOriginalArticleById(input.articleId, { includeUnpublished: true });
-  if (!article) throw new OriginalInputError("文章不存在");
-  return article;
-}

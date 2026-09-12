@@ -2,11 +2,9 @@ import { Eye, MessageCircle, Pin } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { OriginalEditorForm } from "@/components/OriginalEditorForm";
 import { AdminOriginalBatchToolbar } from "@/components/AdminOriginalBatchToolbar";
 import { OriginalMarkdown } from "@/components/OriginalMarkdown";
-import { getOriginalPublishingSettings } from "@/lib/config";
-import { getOriginalArticleById, listOriginalComments, listOriginalTags, type OriginalArticleStatus } from "@/domains/originals/postgres-originals";
+import { getOriginalArticleById, listOriginalComments, type OriginalArticleStatus } from "@/domains/originals/postgres-originals";
 import { AdminFrame } from "../../AdminFrame";
 import { AdminOriginalDeleteButton } from "@/components/AdminOriginalArticleActions";
 import {
@@ -14,7 +12,6 @@ import {
   setOriginalArticlePinnedAction,
   setOriginalCommentStatusAdminAction,
   deleteOriginalCommentsBatchAction,
-  updateOriginalArticleAdminAction,
 } from "@/app/admin/original/actions";
 
 export const dynamic = "force-dynamic";
@@ -47,11 +44,7 @@ export default async function AdminOriginalDetailPage({ params, searchParams }: 
   if (!Number.isSafeInteger(articleId) || articleId <= 0) notFound();
   const article = await getOriginalArticleById(articleId, { includeUnpublished: true });
   if (!article) notFound();
-  const settings = getOriginalPublishingSettings();
-  const [availableTags, comments] = await Promise.all([
-    listOriginalTags(),
-    listOriginalComments(article.id, { includeHidden: true }),
-  ]);
+  const comments = await listOriginalComments(article.id, { includeHidden: true });
   const returnPath = `/admin/original/${article.id}`;
 
   return (
@@ -81,15 +74,10 @@ export default async function AdminOriginalDetailPage({ params, searchParams }: 
           <time dateTime={article.updatedAt}>{dateLabel(article.updatedAt)}</time>
         </section>
 
-        <OriginalEditorForm
-          locale="zh-Hans"
-          action={updateOriginalArticleAdminAction}
-          settings={settings}
-          article={article}
-          mode="admin"
-          hiddenFields={{ articleId: article.id }}
-          availableTags={availableTags}
-        />
+        <section className="adminOriginalEditEntry">
+          <p>正文、价格和标签都在文章编辑器里修改，与作者用的是同一个编辑器；管理员保存不扣除费用，也不会改变文章作者。</p>
+          <Link className="adminPrimaryLink" href={`/original/${article.slug}/edit`}>打开编辑器</Link>
+        </section>
 
         <section className="adminOriginalModeration">
           <header><div><h3><MessageCircle size={17} aria-hidden="true" />评论</h3><p>隐藏只影响前台展示，不删除原始记录。</p></div><span>{comments.length}</span></header>

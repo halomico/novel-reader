@@ -367,6 +367,9 @@ export async function createOrResumeOriginalDraft(input: {
   authorId: number;
   clientKey: string;
   articleSlug?: string;
+  /** Administrators edit any article; the draft is still theirs, and publishing it leaves
+   *  the article's author alone. */
+  asAdmin?: boolean;
 }): Promise<OriginalDraft> {
   const authorId = Number(input.authorId);
   if (!Number.isSafeInteger(authorId) || authorId <= 0) throw new OriginalDraftError("请先登录", "forbidden");
@@ -382,8 +385,9 @@ export async function createOrResumeOriginalDraft(input: {
       id: string | number; title: string; body_markdown: string; paid_body_markdown: string; unlock_soda_price: string | number;
     }>({
       text: `SELECT id, title, body_markdown, paid_body_markdown, unlock_soda_price
-        FROM original_articles WHERE lower(slug) = lower($1) AND author_id = $2 LIMIT 1 FOR KEY SHARE`,
-      values: [input.articleSlug, authorId],
+        FROM original_articles
+        WHERE lower(slug) = lower($1)${input.asAdmin ? "" : " AND author_id = $2"} LIMIT 1 FOR KEY SHARE`,
+      values: input.asAdmin ? [input.articleSlug] : [input.articleSlug, authorId],
     })).rows[0] : undefined;
     if (input.articleSlug && !article) throw new OriginalDraftError("文章不存在或无权编辑", "not_found");
     const articleId = article ? positiveInteger(article.id, "article id") : null;
@@ -513,40 +517,43 @@ async function replaceArticleTags(tx: SqlExecutor, articleId: number, values: re
   }
 }
 
+/** `ownerIds` is the article's author, plus the editor when an administrator is working
+ *  on someone else's article: their own uploads are usable, the author's stay theirs. */
 async function updateAssets(
   tx: SqlExecutor,
-  ownerId: number,
+  ownerIds: readonly number[],
   articleId: number,
   publicValues: readonly number[],
   paidValues: readonly number[],
 ): Promise<void> {
+  const owners = [...new Set(ownerIds)];
   const publicIds = cleanAssetIds(publicValues);
   const paidIds = cleanAssetIds(paidValues);
   const all = [...new Set([...publicIds, ...paidIds])];
   if (all.length) {
     const owned = await tx.query({
-      text: "SELECT id FROM original_assets WHERE owner_id = $1 AND id = ANY($2::bigint[]) FOR UPDATE",
-      values: [ownerId, all],
+      text: "SELECT id FROM original_assets WHERE owner_id = ANY($1::bigint[]) AND id = ANY($2::bigint[]) FOR UPDATE",
+      values: [owners, all],
     });
     if (owned.rowCount !== all.length) throw new OriginalDraftError("文章包含无权使用的图片", "forbidden");
   }
   await tx.query({
     text: `UPDATE original_assets SET article_id = NULL, access_scope = 'draft', updated_at = clock_timestamp()
-      WHERE owner_id = $1 AND article_id = $2 AND NOT (id = ANY($3::bigint[]))`,
-    values: [ownerId, articleId, all],
+      WHERE owner_id = ANY($1::bigint[]) AND article_id = $2 AND NOT (id = ANY($3::bigint[]))`,
+    values: [owners, articleId, all],
   });
   if (publicIds.length) {
     await tx.query({
       text: `UPDATE original_assets SET article_id = $2, access_scope = 'public', updated_at = clock_timestamp()
-        WHERE owner_id = $1 AND id = ANY($3::bigint[])`,
-      values: [ownerId, articleId, publicIds],
+        WHERE owner_id = ANY($1::bigint[]) AND id = ANY($3::bigint[])`,
+      values: [owners, articleId, publicIds],
     });
   }
   if (paidIds.length) {
     await tx.query({
       text: `UPDATE original_assets SET article_id = $2, access_scope = 'paid', updated_at = clock_timestamp()
-        WHERE owner_id = $1 AND id = ANY($3::bigint[])`,
-      values: [ownerId, articleId, paidIds],
+        WHERE owner_id = ANY($1::bigint[]) AND id = ANY($3::bigint[])`,
+      values: [owners, articleId, paidIds],
     });
   }
 }
@@ -598,8 +605,9 @@ export async function publishOriginalDraft(input: {
       throw new OriginalDraftError("免费文章不能包含付费分界", "invalid");
     }
     const settings = getOriginalPublishingSettings();
+    const isAdmin = input.author.role === "admin";
     const wordCount = document.publicWordCount + document.paidWordCount;
-    if (input.author.role !== "admin" && wordCount < settings.articleMinWords) {
+    if (!isAdmin && wordCount < settings.articleMinWords) {
       throw new OriginalDraftError(`正文至少需要 ${settings.articleMinWords} 字才能发布`, "invalid");
     }
     if (document.publicMarkdown.length + document.paidMarkdown.length > settings.articleMaxChars) {
@@ -614,28 +622,38 @@ export async function publishOriginalDraft(input: {
     const sodaBalance = nonNegativeInteger(user.soda_balance, "soda balance");
     const cookieBalance = nonNegativeInteger(user.cookie_balance, "cookie balance");
     const created = !draft.articleId;
-    if (created) {
+    if (created && !isAdmin) {
       const totalValue = sodaBalance + cookieBalance * getCookieToSodaRate();
       if (nonNegativeInteger(user.trust_level, "trust level") < settings.minLevel && totalValue < settings.minSoda) {
         throw new OriginalDraftError(`达到 Lv.${settings.minLevel} 或拥有足够资产后可发布`, "forbidden");
       }
     }
-    await updateBalancesForFee(
-      tx,
-      { id: input.author.id, sodaBalance, cookieBalance },
-      created ? settings.publishFeeSoda : settings.editFeeSoda,
-      contract.mutationId,
-      created ? "original_publish" : "original_edit",
-    );
+    // Moderating someone's article is not authoring, so it costs an administrator nothing.
+    if (!isAdmin) {
+      await updateBalancesForFee(
+        tx,
+        { id: input.author.id, sodaBalance, cookieBalance },
+        created ? settings.publishFeeSoda : settings.editFeeSoda,
+        contract.mutationId,
+        created ? "original_publish" : "original_edit",
+      );
+    }
 
     await tx.query({ text: "SELECT pg_advisory_xact_lock(hashtextextended('original-article-slugs-v1', 0))" });
     let slug = "";
+    // The article keeps its author whoever saves it; only the right to save is at stake,
+    // and an administrator has it for every article.
+    let articleAuthorId = input.author.id;
     if (draft.articleId) {
-      const article = await tx.query<QueryResultRow & { slug: string }>({
-        text: "SELECT slug FROM original_articles WHERE id = $1 AND author_id = $2 FOR UPDATE",
-        values: [draft.articleId, input.author.id],
+      const article = await tx.query<QueryResultRow & { slug: string; author_id: string | number }>({
+        text: "SELECT slug, author_id FROM original_articles WHERE id = $1 FOR UPDATE",
+        values: [draft.articleId],
       });
       if (!article.rows[0]) throw new OriginalDraftError("文章不存在或无权编辑", "not_found");
+      articleAuthorId = positiveInteger(article.rows[0].author_id, "article author id");
+      if (articleAuthorId !== input.author.id && !isAdmin) {
+        throw new OriginalDraftError("文章不存在或无权编辑", "not_found");
+      }
       slug = article.rows[0].slug;
     } else {
       slug = await uniqueSlug(tx, title);
@@ -657,7 +675,7 @@ export async function publishOriginalDraft(input: {
           published_at = COALESCE(published_at, clock_timestamp()), updated_at = clock_timestamp()
           WHERE id = $1 AND author_id = $2`,
         values: [
-          draft.articleId, input.author.id, title, excerpt, document.publicMarkdown, document.paidMarkdown,
+          draft.articleId, articleAuthorId, title, excerpt, document.publicMarkdown, document.paidMarkdown,
           wordCount, price > 0 ? "paid" : "free", price,
           search.titleSearchOriginal, search.titleSearchHans, search.contentSearchOriginal,
           search.contentSearchHans, search.normalizationVersion,
@@ -683,7 +701,7 @@ export async function publishOriginalDraft(input: {
       articleId = positiveInteger(inserted.rows[0]?.id, "article id");
     }
     await replaceArticleTags(tx, articleId, draft.tagIds);
-    await updateAssets(tx, input.author.id, articleId, document.publicAssetIds, document.paidAssetIds);
+    await updateAssets(tx, [articleAuthorId, input.author.id], articleId, document.publicAssetIds, document.paidAssetIds);
     const revision = await tx.query<QueryResultRow & { revision_no: string | number }>({
       text: "SELECT COALESCE(MAX(revision_no), 0) + 1 AS revision_no FROM original_article_revisions WHERE article_id = $1",
       values: [articleId],

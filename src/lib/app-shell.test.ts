@@ -143,6 +143,35 @@ test("reuses the public auth shell for the admin login", () => {
   assert.doesNotMatch(login, /adminLoginShell|adminLoginPanel|adminLoginForm/);
 });
 
+test("the reader tracks code fences by length, not by counting them", () => {
+  const markdown = read("src/components/OriginalMarkdown.tsx");
+  // A document that quotes a three-backtick block inside a four-backtick one has an odd
+  // number of fence lines; a naive toggle left everything after it marked as code, and
+  // every underline from there on was dropped as disallowed raw HTML.
+  assert.match(markdown, /let fence: \{ marker: string; length: number \} \| null = null;/);
+  assert.match(markdown, /length >= fence\.length && !run\[2\]\.trim\(\)/);
+  assert.doesNotMatch(markdown, /inFence = !inFence/);
+  assert.doesNotMatch(markdown, /==\(\[\^=/u, "`==` is no longer an underline marker");
+});
+
+test("administrators edit originals in the same composer everyone else uses", () => {
+  assert.throws(() => read("src/components/OriginalEditorForm.tsx"), /ENOENT/,
+    "the second, Markdown-only editor is gone");
+  const adminArticle = read("src/app/admin/(panel)/original/[id]/page.tsx");
+  assert.match(adminArticle, /href=\{`\/original\/\$\{article\.slug\}\/edit`\}/);
+  assert.doesNotMatch(adminArticle, /OriginalEditorForm|updateOriginalArticleAdminAction/);
+  assert.doesNotMatch(read("src/app/admin/original/actions.ts"), /updateOriginalArticleAsAdmin/);
+
+  // Editing on someone's behalf is not authoring: the article keeps its author, the
+  // administrator pays no fee, and their own uploads are usable alongside the author's.
+  const editor = read("src/features/original-editor/server.ts");
+  assert.match(editor, /let articleAuthorId = input\.author\.id;/);
+  assert.match(editor, /if \(articleAuthorId !== input\.author\.id && !isAdmin\)/);
+  assert.match(editor, /if \(!isAdmin\) \{\s*await updateBalancesForFee\(/);
+  assert.match(editor, /updateAssets\(tx, \[articleAuthorId, input\.author\.id\]/);
+  assert.match(read("src/app/api/original/drafts/route.ts"), /asAdmin: user\.role === "admin"/);
+});
+
 test("keeps the original composer toolbar pinned while only the document scrolls", () => {
   const composer = read("src/features/original-editor/OriginalComposerShell.tsx");
   const styles = read("src/features/original-editor/OriginalComposer.module.css");

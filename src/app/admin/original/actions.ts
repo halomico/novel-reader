@@ -6,14 +6,12 @@ import { notFound, redirect } from "next/navigation";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getAdminSession } from "@/lib/admin-auth";
 import {
-  OriginalInputError,
   deleteOriginalArticles,
   deleteOriginalComments,
   setOriginalArticlePinned,
   setOriginalArticleStatus,
   setOriginalArticlesStatus,
   setOriginalCommentStatus,
-  updateOriginalArticleAsAdmin,
   type OriginalArticleStatus,
 } from "@/domains/originals/postgres-originals";
 
@@ -41,12 +39,6 @@ function noticePath(pathname: string, message: string, tone: "success" | "warnin
 
 function articlePath(articleId: number): string {
   return Number.isSafeInteger(articleId) && articleId > 0 ? `/admin/original/${articleId}` : "/admin/original";
-}
-
-function actionError(error: unknown): string {
-  if (error instanceof OriginalInputError) return error.message;
-  console.error("Original admin action failed", error);
-  return "操作失败，请稍后重试";
 }
 
 export async function setOriginalArticleStatusAction(formData: FormData) {
@@ -132,27 +124,6 @@ export async function setOriginalArticlePinnedAction(formData: FormData) {
   revalidatePath("/admin/original");
   revalidatePath(articlePath(articleId));
   noticePath(returnPath(formData), pinned ? "文章已置顶" : "文章已取消置顶");
-}
-
-export async function updateOriginalArticleAdminAction(formData: FormData) {
-  await requireAdmin();
-  const articleId = Math.floor(Number(formData.get("articleId")));
-  const path = articlePath(articleId);
-  try {
-    await updateOriginalArticleAsAdmin({
-      articleId,
-      title: formData.get("title"),
-      bodyMarkdown: formData.get("bodyMarkdown"),
-      unlockSodaPrice: formData.get("unlockSodaPrice"),
-      tags: formData.get("tags"),
-    });
-  } catch (error) {
-    noticePath(path, actionError(error), "warning");
-  }
-  revalidatePath("/original");
-  revalidatePath("/admin/original");
-  revalidatePath(path);
-  noticePath(path, "文章已保存");
 }
 
 export async function setOriginalCommentStatusAdminAction(formData: FormData) {

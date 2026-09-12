@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
       authorId: user.id,
       clientKey: String(input.clientKey || ""),
       articleSlug: input.articleSlug ? String(input.articleSlug) : undefined,
+      asAdmin: user.role === "admin",
     });
     return NextResponse.json({ draftId: draft.id }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

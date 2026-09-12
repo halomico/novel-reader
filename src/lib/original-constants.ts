@@ -3,7 +3,6 @@ export const MAX_ORIGINAL_BODY_LENGTH = 200_000;
 export const MAX_ORIGINAL_COMMENT_LENGTH = 200;
 
 /** Markdown comment used by the composer to split the public and paid sections. */
-export const ORIGINAL_PAID_MARKER = "<!-- original-paid -->";
 
 /** Count visible characters the same way the novel catalog counts words. */
 export function countOriginalWords(value: string): number {
@@ -60,13 +59,6 @@ export function preserveOriginalMarkdownSpacing(value: string): string {
   }).join("\n");
 }
 
-export function composeOriginalEditorBody(publicBody: string, paidBody: string): string {
-  if (!paidBody) return publicBody;
-  const left = publicBody && !publicBody.endsWith("\n") ? `${publicBody}\n` : publicBody;
-  const right = paidBody && !paidBody.startsWith("\n") ? `\n${paidBody}` : paidBody;
-  return `${left}${ORIGINAL_PAID_MARKER}${right}`;
-}
-
 /**
  * Join the two stored sections back into one document. The paid boundary is not a
  * character in either section, so a block separator has to be supplied here — without
@@ -84,23 +76,3 @@ export function joinOriginalBodies(publicBody: string, paidBody: string): string
   return trailing || leading ? `${left}${right}` : `${left}\n\n${right}`;
 }
 
-/** Insert a Markdown block on its own line while preserving every existing
- * line break around the selection. The cursor lands on the following line. */
-export function insertOriginalEditorBlock(
-  value: string,
-  selectionStart: number,
-  selectionEnd: number,
-  block: string,
-): { value: string; cursor: number } {
-  const start = Math.max(0, Math.min(selectionStart, value.length));
-  let end = Math.max(start, Math.min(selectionEnd, value.length));
-  const before = value.slice(0, start);
-  const after = value.slice(end);
-  const prefix = before && !before.endsWith("\n") ? "\n" : "";
-  if (after.startsWith("\n")) end += 1;
-  const replacement = `${prefix}${block}\n`;
-  return {
-    value: `${value.slice(0, start)}${replacement}${value.slice(end)}`,
-    cursor: start + replacement.length,
-  };
-}
