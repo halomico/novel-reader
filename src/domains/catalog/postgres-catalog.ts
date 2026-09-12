@@ -426,27 +426,27 @@ export async function listPostgresRandomCatalog(
     : options.sourceId === null ? "unassigned" : "source";
   values.push(limit);
   const limitParameter = `$${values.length}`;
-  const boundsFilter = filters.length ? ` WHERE ${filters.join(" AND ")}` : "";
   const additional = filters.length ? ` AND ${filters.join(" AND ")}` : "";
   const result = await executor.query<RawNovel>({
-    name: `catalog-random-pivot-v3-${sourceShape}-${access}`,
-    text: `WITH bounds AS MATERIALIZED (
-        SELECT COALESCE(MIN(n.id), 1)::bigint AS minimum_id,
-               COALESCE(MAX(n.id), 1)::bigint AS maximum_id
-        FROM novels n${boundsFilter}
-      ), pivot AS MATERIALIZED (
-        SELECT minimum_id + MOD($1::bigint, GREATEST(maximum_id - minimum_id + 1, 1)) AS id
-        FROM bounds
+    name: `catalog-random-v4-${sourceShape}-${access}`,
+    // The pivot walks the per-row random key, never the identity column: ids are sparse
+    // and unevenly clustered, so a pivot in id space samples the gaps between books
+    // rather than the books themselves. Every row owns one point in [0,1), so this draw
+    // is uniform over rows whatever the id distribution looks like. The second branch is
+    // the wraparound for a pivot that lands near 1, and the two together read a few
+    // hundred indexed rows instead of scanning 1,600.
+    text: `WITH pivot AS MATERIALIZED (
+        SELECT $1::double precision / 4294967296.0 AS key
       ), candidates AS MATERIALIZED (
         (SELECT ${NOVEL_COLUMNS}, 0 AS random_bucket
          FROM novels n CROSS JOIN pivot
-         WHERE n.id >= pivot.id${additional}
-         ORDER BY n.id ASC LIMIT LEAST(${limitParameter}::integer * 8, 800))
+         WHERE n.random_key >= pivot.key${additional}
+         ORDER BY n.random_key ASC LIMIT LEAST(${limitParameter}::integer * 8, 200))
         UNION ALL
         (SELECT ${NOVEL_COLUMNS}, 1 AS random_bucket
          FROM novels n CROSS JOIN pivot
-         WHERE n.id < pivot.id${additional}
-         ORDER BY n.id DESC LIMIT LEAST(${limitParameter}::integer * 8, 800))
+         WHERE n.random_key < pivot.key${additional}
+         ORDER BY n.random_key ASC LIMIT LEAST(${limitParameter}::integer * 8, 200))
       )
       SELECT id, title, description, source_id, storage_mode, chapter_count,
              access_mode, soda_price, preview_chapter_count, published_content_version,

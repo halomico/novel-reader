@@ -101,22 +101,27 @@ test("catalog counts use a distinct prepared statement for every SQL shape", asy
   assert.match(captured[2].text, /source_id IS NULL/);
 });
 
-test("random catalog samples inside the filtered ID range and names each SQL shape", async () => {
+test("random catalog samples uniformly over rows and names each SQL shape", async () => {
   const captured: SqlQuery[] = [];
   const executor = executorWithRows([], captured);
   await listPostgresRandomCatalog(executor, "first", { sourceId: 4, access: "free", limit: 8 });
   await listPostgresRandomCatalog(executor, "second", { sourceId: null, access: "soda", limit: 8 });
 
   assert.deepEqual(captured.map((query) => query.name), [
-    "catalog-random-pivot-v3-source-free",
-    "catalog-random-pivot-v3-unassigned-soda",
+    "catalog-random-v4-source-free",
+    "catalog-random-v4-unassigned-soda",
   ]);
-  assert.match(captured[0].text, /COALESCE\(MIN\(n\.id\), 1\)/);
-  assert.match(captured[0].text, /minimum_id \+ MOD\(/);
-  assert.match(captured[0].text, /LEAST\(\$3::integer \* 8, 800\)/);
+  // Sampling the id column is the bug this replaced: sparse, unevenly clustered ids made
+  // the draw proportional to the gaps between books instead of to the books.
+  assert.doesNotMatch(captured[0].text, /MIN\(n\.id\)|MAX\(n\.id\)/);
+  assert.match(captured[0].text, /n\.random_key >= pivot\.key/);
+  assert.match(captured[0].text, /n\.random_key < pivot\.key/, "the wraparound branch keeps a high pivot from starving");
+  assert.match(captured[0].text, /LEAST\(\$3::integer \* 8, 200\)/);
   assert.match(captured[0].text, /ORDER BY hashtextextended\(id::text, \$1::bigint\)/);
-  assert.match(captured[0].text, /FROM novels n WHERE n\.source_id = \$2 AND \(n\.access_mode <> 'soda' OR n\.soda_price <= 0\)/);
-  assert.match(captured[1].text, /FROM novels n WHERE n\.source_id IS NULL AND n\.access_mode = 'soda' AND n\.soda_price > 0/);
+  // The filters ride along on both candidate branches now that there is no bounds scan.
+  assert.match(captured[0].text, /n\.random_key >= pivot\.key AND n\.source_id = \$2 AND \(n\.access_mode <> 'soda' OR n\.soda_price <= 0\)/);
+  assert.match(captured[0].text, /n\.random_key < pivot\.key AND n\.source_id = \$2 AND \(n\.access_mode <> 'soda' OR n\.soda_price <= 0\)/);
+  assert.match(captured[1].text, /n\.random_key >= pivot\.key AND n\.source_id IS NULL AND n\.access_mode = 'soda' AND n\.soda_price > 0/);
   assert.equal(new Set(captured.map((query) => query.name)).size, captured.length);
 });
 
