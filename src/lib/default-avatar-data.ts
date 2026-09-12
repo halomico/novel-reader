@@ -26,25 +26,18 @@ export function isGeneratedAvatarPath(value: unknown): boolean {
     && GENERATED_AVATAR_SEED.test(normalized.slice(GENERATED_AVATAR_PREFIX.length));
 }
 
-/** Resolve current and legacy default-avatar markers to the new generator. */
+/** The seed an account's avatar is drawn from: its own marker, or one derived from the
+ *  account id for someone who has never chosen. */
 export function generatedAvatarSeed(userId: number, avatarPath?: string | null): string {
   const current = avatarPath?.trim().toLocaleLowerCase() || "";
-  if (isGeneratedAvatarPath(current)) {
-    return current.slice(GENERATED_AVATAR_PREFIX.length);
-  }
-  const legacyMarker = /^default-avatar:(\d{1,2})$/.exec(current);
-  if (legacyMarker) return legacyMarker[1];
-  const legacyFile = /^\/default-avatars\/(\d{2})\.svg$/.exec(current);
-  if (legacyFile) return String(Math.max(Number(legacyFile[1]) - 1, 0));
-  return defaultAvatarSeedForUser(userId);
+  return isGeneratedAvatarPath(current)
+    ? current.slice(GENERATED_AVATAR_PREFIX.length)
+    : defaultAvatarSeedForUser(userId);
 }
 
 export function isGeneratedDefaultAvatar(avatarPath: string | null | undefined): boolean {
   const value = avatarPath?.trim() || "";
-  return !value
-    || isGeneratedAvatarPath(value)
-    || /^default-avatar:\d{1,2}$/.test(value)
-    || /^\/default-avatars\/\d{2}\.svg$/.test(value);
+  return !value || isGeneratedAvatarPath(value);
 }
 
 export function generatedAvatarUrl(userId: number, avatarPath?: string | null): string {

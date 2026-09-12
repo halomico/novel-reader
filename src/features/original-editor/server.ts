@@ -20,7 +20,7 @@ import {
 } from "@/lib/config";
 import { isValidOriginalTagName, normalizeOriginalTagName, originalTagSlug } from "@/lib/original-constants";
 import {
-  legacyMarkdownForImport,
+  markdownForImport,
   serializeOriginalEditorState,
   type OriginalOutlineItem,
 } from "./serialization";
@@ -32,7 +32,9 @@ export type OriginalDraft = {
   clientKey: string;
   title: string;
   editorStateJson: string;
-  legacyMarkdown: string;
+  /** The published article's markdown, offered to the editor only until the draft has an
+   *  editor state of its own. Empty for a draft that has been saved, or a new article. */
+  importedMarkdown: string;
   tagIds: number[];
   unlockSodaPrice: number;
   revision: number;
@@ -72,8 +74,10 @@ type DraftRow = QueryResultRow & {
   client_key: string;
   title: string;
   editor_state_json: string;
-  legacy_public_markdown: string;
-  legacy_paid_markdown: string;
+  /** Joined from the article this draft edits, so the editor can start from what was
+   *  published without the draft carrying a copy that goes stale. */
+  body_markdown: string | null;
+  paid_body_markdown: string | null;
   tags_json: unknown;
   unlock_soda_price: string | number;
   revision: string | number;
@@ -156,6 +160,20 @@ function draftTagIds(value: unknown): number[] {
   }
 }
 
+/** Every draft read, with the edited article's markdown alongside it. `FOR UPDATE OF d`
+ *  because PostgreSQL will not lock the nullable side of an outer join. */
+const DRAFT_SELECT = `SELECT d.id, d.article_id, d.author_id, d.client_key, d.title, d.editor_state_json,
+      a.body_markdown, a.paid_body_markdown, d.tags_json, d.unlock_soda_price,
+      d.revision, d.content_hash, d.autosaved_at, d.updated_at
+    FROM original_article_drafts d
+    LEFT JOIN original_articles a ON a.id = d.article_id`;
+
+/** Columns a write returns; it works on the draft alone, and a draft that has just been
+ *  written has an editor state, which is what the editor loads in preference anyway. */
+const DRAFT_RETURNING = `id, article_id, author_id, client_key, title, editor_state_json,
+      NULL::text AS body_markdown, NULL::text AS paid_body_markdown, tags_json, unlock_soda_price,
+      revision, content_hash, autosaved_at, updated_at`;
+
 function toDraft(row: DraftRow): OriginalDraft {
   return {
     id: positiveInteger(row.id, "draft id"),
@@ -164,7 +182,9 @@ function toDraft(row: DraftRow): OriginalDraft {
     clientKey: row.client_key,
     title: row.title,
     editorStateJson: row.editor_state_json,
-    legacyMarkdown: legacyMarkdownForImport(row.legacy_public_markdown, row.legacy_paid_markdown),
+    importedMarkdown: row.editor_state_json
+      ? ""
+      : markdownForImport(row.body_markdown || "", row.paid_body_markdown || ""),
     tagIds: draftTagIds(row.tags_json),
     unlockSodaPrice: nonNegativeInteger(row.unlock_soda_price, "unlock price"),
     revision: positiveInteger(row.revision, "draft revision"),
@@ -181,10 +201,7 @@ async function selectDraft(
   lock = false,
 ): Promise<OriginalDraft | null> {
   const result = await executor.query<DraftRow>({
-    text: `SELECT id, article_id, author_id, client_key, title, editor_state_json,
-      legacy_public_markdown, legacy_paid_markdown, tags_json, unlock_soda_price,
-      revision, content_hash, autosaved_at, updated_at
-      FROM original_article_drafts WHERE id = $1 AND author_id = $2${lock ? " FOR UPDATE" : ""}`,
+    text: `${DRAFT_SELECT} WHERE d.id = $1 AND d.author_id = $2${lock ? " FOR UPDATE OF d" : ""}`,
     values: [draftId, authorId],
   });
   return result.rows[0] ? toDraft(result.rows[0]) : null;
@@ -357,10 +374,7 @@ export async function createOrResumeOriginalDraft(input: {
   if (!/^[A-Za-z0-9_-]{16,100}$/u.test(clientKey)) throw new OriginalDraftError("草稿标识无效", "invalid");
   return withTransaction(async (tx) => {
     const current = await tx.query<DraftRow>({
-      text: `SELECT id, article_id, author_id, client_key, title, editor_state_json,
-        legacy_public_markdown, legacy_paid_markdown, tags_json, unlock_soda_price,
-        revision, content_hash, autosaved_at, updated_at
-        FROM original_article_drafts WHERE author_id = $1 AND client_key = $2 FOR UPDATE`,
+      text: `${DRAFT_SELECT} WHERE d.author_id = $1 AND d.client_key = $2 FOR UPDATE OF d`,
       values: [authorId, clientKey],
     });
     if (current.rows[0]) return toDraft(current.rows[0]);
@@ -383,25 +397,23 @@ export async function createOrResumeOriginalDraft(input: {
     const contentHash = hashDraft(title, "", tagIds, price);
     const inserted = await tx.query<DraftRow>({
       text: `INSERT INTO original_article_drafts (
-          article_id, author_id, client_key, title, legacy_public_markdown, legacy_paid_markdown,
+          article_id, author_id, client_key, title,
           tags_json, unlock_soda_price, revision, content_hash, autosaved_at, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, 1, $9,
+        VALUES ($1, $2, $3, $4, $5::jsonb, $6, 1, $7,
           clock_timestamp(), clock_timestamp(), clock_timestamp())
         ON CONFLICT (author_id, client_key) DO NOTHING
-        RETURNING id, article_id, author_id, client_key, title, editor_state_json,
-          legacy_public_markdown, legacy_paid_markdown, tags_json, unlock_soda_price,
-          revision, content_hash, autosaved_at, updated_at`,
-      values: [
-        articleId, authorId, clientKey, title, article?.body_markdown || "",
-        article?.paid_body_markdown || "", JSON.stringify(tagIds), price, contentHash,
-      ],
+        RETURNING ${DRAFT_RETURNING}`,
+      values: [articleId, authorId, clientKey, title, JSON.stringify(tagIds), price, contentHash],
     });
-    if (inserted.rows[0]) return toDraft(inserted.rows[0]);
+    if (inserted.rows[0]) {
+      return toDraft({
+        ...inserted.rows[0],
+        body_markdown: article?.body_markdown ?? null,
+        paid_body_markdown: article?.paid_body_markdown ?? null,
+      });
+    }
     const existing = await tx.query<DraftRow>({
-      text: `SELECT id, article_id, author_id, client_key, title, editor_state_json,
-        legacy_public_markdown, legacy_paid_markdown, tags_json, unlock_soda_price,
-        revision, content_hash, autosaved_at, updated_at
-        FROM original_article_drafts WHERE author_id = $1 AND client_key = $2`,
+      text: `${DRAFT_SELECT} WHERE d.author_id = $1 AND d.client_key = $2`,
       values: [authorId, clientKey],
     });
     if (!existing.rows[0]) throw new Error("Draft conflict did not return the existing row");
@@ -428,9 +440,7 @@ export async function saveOriginalDraft(input: SaveDraftInput): Promise<SaveDraf
       unlock_soda_price = $7, revision = revision + 1, content_hash = $8,
       autosaved_at = clock_timestamp(), updated_at = clock_timestamp()
       WHERE id = $1 AND author_id = $2 AND revision = $3
-      RETURNING id, article_id, author_id, client_key, title, editor_state_json,
-        legacy_public_markdown, legacy_paid_markdown, tags_json, unlock_soda_price,
-        revision, content_hash, autosaved_at, updated_at`,
+      RETURNING ${DRAFT_RETURNING}`,
     values: [input.draftId, input.authorId, input.revision, title, input.editorStateJson, JSON.stringify(tagIds), price, contentHash],
   });
   if (changed.rows[0]) return { ok: true, draft: toDraft(changed.rows[0]) };

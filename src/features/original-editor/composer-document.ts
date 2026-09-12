@@ -27,7 +27,7 @@ export type OriginalComposerDraft = {
   articleId: number | null;
   title: string;
   editorStateJson: string;
-  legacyMarkdown: string;
+  importedMarkdown: string;
   tagIds: number[];
   unlockSodaPrice: number;
   revision: number;
@@ -90,7 +90,7 @@ export function saveStatusText(state: SaveState, savedAt: number): string {
 export function initialEditorState(draft: OriginalComposerDraft) {
   if (draft.editorStateJson) return draft.editorStateJson;
   return () => {
-    const source = draft.legacyMarkdown || "";
+    const source = draft.importedMarkdown || "";
     if (!source.trim()) {
       $getRoot().append($createParagraphNode());
       return;

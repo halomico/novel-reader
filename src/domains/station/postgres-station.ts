@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 import type { QueryResultRow } from "pg";
 import { database, withTransaction, type SqlExecutor } from "@/core/db/postgres";
-import { readRuntimeSiteSettings } from "@/core/config/runtime-site-settings";
 import { queuePostgresTelegramText } from "@/domains/notifications/postgres-telegram-outbox";
 import { getTelegramConfig } from "@/lib/telegram-config";
 import { STATION_MESSAGE_MAX_LENGTH, stationMessageLength } from "@/lib/station-protocol";
@@ -202,51 +201,6 @@ function visibleAnnouncementWhere(authenticated: boolean, displayMode: "list" | 
     AND published_at IS NOT NULL AND published_at <= clock_timestamp()
     AND (expires_at IS NULL OR expires_at > clock_timestamp())
     ${authenticated ? "" : "AND audience = 'public'"}`;
-}
-
-const LEGACY_ENTRY_NOTICE_MIGRATION_KEY = "announcements.entry-drawer-legacy-v2";
-let legacyNoticeMigration: Promise<void> | undefined;
-
-export function migrateLegacyPostgresEntryNotice(): Promise<void> {
-  if (process.env.NEXT_PHASE === "phase-production-build") return Promise.resolve();
-  if (legacyNoticeMigration) return legacyNoticeMigration;
-  legacyNoticeMigration = withTransaction(async (tx) => {
-    await tx.query({
-      text: "SELECT pg_advisory_xact_lock(hashtext($1)::bigint)",
-      values: [LEGACY_ENTRY_NOTICE_MIGRATION_KEY],
-    });
-    const existing = await tx.query({
-      text: "SELECT 1 FROM app_metadata WHERE key = $1",
-      values: [LEGACY_ENTRY_NOTICE_MIGRATION_KEY],
-    });
-    if (existing.rowCount) return;
-    const settings = readRuntimeSiteSettings();
-    if (settings.siteEntryNoticeEnabled && settings.siteEntryNoticeMarkdown.trim()) {
-      await tx.query({
-        text: `INSERT INTO announcements
-          (title, body, audience, importance, display_mode, entry_version, status, published_at)
-          SELECT $1, $2, 'public', 'important', 'drawer', $3, 'published', clock_timestamp()
-          WHERE NOT EXISTS (
-            SELECT 1 FROM announcements
-            WHERE display_mode IN ('drawer', 'both') AND title = $1 AND body = $2
-          )`,
-        values: [
-          settings.siteEntryNoticeTitle,
-          settings.siteEntryNoticeMarkdown,
-          settings.siteEntryNoticeVersion || createEntryVersion(),
-        ],
-      });
-    }
-    await tx.query({
-      text: `INSERT INTO app_metadata (key, value) VALUES ($1, '1')
-        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = clock_timestamp()`,
-      values: [LEGACY_ENTRY_NOTICE_MIGRATION_KEY],
-    });
-  }, { role: "jobs" }).catch((error: unknown) => {
-    legacyNoticeMigration = undefined;
-    throw error;
-  });
-  return legacyNoticeMigration;
 }
 
 async function getFirstAnnouncement(executor: SqlExecutor, where: string, values: readonly unknown[] = []): Promise<Announcement | null> {

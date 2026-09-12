@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { QueryResultRow } from "pg";
-import { database, withTransaction, type SqlExecutor } from "@/core/db/postgres";
+import { database, withTransaction } from "@/core/db/postgres";
 import { getMediaDir, isMediaLibraryDiscoverEnabled } from "@/lib/config";
 import { deleteMediaCustomCover } from "@/lib/media-cover";
 import { readRemoteMediaManifest } from "@/lib/media-node-client";
@@ -15,12 +15,10 @@ import { isIgnoredMediaStorageEntry } from "@/lib/media-scan-filter";
 import { removePlaybackHlsVersions, resolvePlaybackHlsFile } from "@/lib/video-hls";
 import { type MediaKind } from "./media-model";
 import {
-  availableLocalMediaStoredName,
   ensureLocalMediaDirectories,
   mediaFilePath,
   normalizeMediaFile,
 } from "./media-storage-model";
-import { indexedPostgresMediaStoredNames } from "./postgres-media-admin";
 
 export type PostgresMediaSyncResult = { added: number; updated: number; removed: number };
 
@@ -140,41 +138,6 @@ async function scanPostgresMediaStorage(refreshRemote: boolean): Promise<Scanned
   return { files, folders, completedNodeIds };
 }
 
-async function normalizeLegacyLocalPaths(executor: SqlExecutor): Promise<void> {
-  if (isRemoteMediaStorage()) return;
-  const result = await executor.query<SyncMediaRow>({
-    text: "SELECT * FROM media_assets WHERE stored_name NOT LIKE kind || '/%'",
-  });
-  for (const row of result.rows) {
-    const sourcePath = mediaFilePath(row.stored_name);
-    const sourceExists = fs.existsSync(sourcePath);
-    const indexed = await indexedPostgresMediaStoredNames(executor, row.kind, "", path.basename(row.stored_name));
-    indexed.delete(row.stored_name);
-    const canonicalStoredName = `${row.kind}/${path.basename(row.stored_name)}`;
-    const canonicalPath = mediaFilePath(canonicalStoredName);
-    const nextStoredName = !sourceExists && fs.existsSync(canonicalPath)
-      ? canonicalStoredName
-      : availableLocalMediaStoredName(row.kind, "", path.basename(row.stored_name), indexed, row.stored_name);
-    const targetPath = mediaFilePath(nextStoredName);
-    if (!sourceExists && !fs.existsSync(targetPath)) continue;
-    if (sourceExists) {
-      await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
-      await fs.promises.rename(sourcePath, targetPath);
-    }
-    try {
-      const updated = await executor.query({
-        text: `UPDATE media_assets SET stored_name = $2, file_name = $3, updated_at = clock_timestamp()
-          WHERE id = $1 AND stored_name = $4`,
-        values: [safeInteger(row.id, "media id"), nextStoredName, path.basename(nextStoredName), row.stored_name],
-      });
-      if (updated.rowCount !== 1) throw new Error("Legacy media path changed concurrently");
-    } catch (error) {
-      if (sourceExists) await fs.promises.rename(targetPath, sourcePath).catch(() => undefined);
-      throw error;
-    }
-  }
-}
-
 function removeLocalDerivedFiles(id: number, kind: MediaKind): void {
   const directory = path.join(getMediaDir(), ".thumbnails");
   if (fs.existsSync(directory)) {
@@ -202,7 +165,6 @@ async function reconcilePostgresMediaLibrary(refreshRemote: boolean): Promise<Po
   const startedAt = Date.now();
   if (!isMediaLibraryDiscoverEnabled()) return { added: 0, updated: 0, removed: 0 };
   const executor = database("jobs");
-  await normalizeLegacyLocalPaths(executor);
   const scannedLibrary = await scanPostgresMediaStorage(refreshRemote);
   const scanned = scannedLibrary.files;
   const queried = await executor.query<SyncMediaRow>({ text: "SELECT * FROM media_assets" });

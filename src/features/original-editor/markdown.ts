@@ -100,7 +100,6 @@ function underlineTransformer(importRegExp: RegExp, regExp: RegExp, trigger: str
 }
 
 const UNDERLINE = underlineTransformer(/<u>([^<>\n]+)<\/u>/u, /<u>([^<>\n]+)<\/u>$/u, ">", true);
-const LEGACY_UNDERLINE = underlineTransformer(/==([^=\n]+)==/u, /==([^=\n]+)==$/u, "=", false);
 
 /** Import/export GitHub-style tables so source, visual mode and reader preview share one document. */
 const GFM_TABLE: Transformer = {
@@ -211,7 +210,6 @@ export const ORIGINAL_MARKDOWN_TRANSFORMERS: Transformer[] = [
     },
   },
   UNDERLINE,
-  LEGACY_UNDERLINE,
   CHECK_LIST,
   ...TRANSFORMERS.filter((transformer) => (
     transformer !== HEADING && transformer !== HIGHLIGHT && transformer !== UNORDERED_LIST

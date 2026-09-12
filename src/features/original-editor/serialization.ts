@@ -294,7 +294,7 @@ export function serializeOriginalEditorState(value: string): SerializedOriginalD
   };
 }
 
-export function legacyMarkdownForImport(publicMarkdown: string, paidMarkdown: string): string {
+export function markdownForImport(publicMarkdown: string, paidMarkdown: string): string {
   return paidMarkdown.trim()
     ? `${normalizeText(publicMarkdown).trim()}\n\n${PAID_GATE_TOKEN}\n\n${normalizeText(paidMarkdown).trim()}`
     : normalizeText(publicMarkdown).trim();

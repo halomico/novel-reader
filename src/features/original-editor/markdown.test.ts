@@ -89,15 +89,18 @@ test("keeps local Markdown images as visual image nodes", () => {
 // CommonMark has no underline: `_x_` is emphasis and `__x__` is strong, and `==x==`
 // means highlight where it is defined at all. The document therefore stores `<u>`,
 // while `==x==` is still read so drafts written before this keep their underlines.
-test("underline round-trips as <u> and still imports the legacy == marker", () => {
-  for (const source of ["这是 <u>重点</u> 文本", "这是 ==重点== 文本"]) {
-    const result = importAndExport(source);
-    const paragraph = result.json.root.children[0] as unknown as { children?: Array<{ text?: string; format?: number }> };
-    const underlined = paragraph.children?.find((child) => child.text === "重点");
-    assert.equal(underlined?.format, 8, `underline format missing for ${source}`);
-    assert.match(result.output, /<u>重点<\/u>/u);
-    assert.doesNotMatch(result.output, /==/u);
-  }
+test("underline round-trips as <u>, and == is left as the text it is", () => {
+  const result = importAndExport("这是 <u>重点</u> 文本");
+  const paragraph = result.json.root.children[0] as unknown as { children?: Array<{ text?: string; format?: number }> };
+  assert.equal(paragraph.children?.find((child) => child.text === "重点")?.format, 8);
+  assert.match(result.output, /<u>重点<\/u>/u);
+
+  // `==` was this project's underline marker before <u>; migration 0025 converted the
+  // documents that used it, so the sequence is ordinary text again.
+  const plain = importAndExport("这是 ==重点== 文本");
+  const plainParagraph = plain.json.root.children[0] as unknown as { children?: Array<{ text?: string; format?: number }> };
+  assert.equal(plainParagraph.children?.find((child) => child.text === "重点")?.format, undefined);
+  assert.match(plain.output, /==重点==/u);
 });
 
 test("underline never claims the emphasis markers CommonMark already defines", () => {

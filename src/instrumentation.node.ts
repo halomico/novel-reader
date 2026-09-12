@@ -1,5 +1,4 @@
 import { initializeRuntimeSiteSettings } from "./core/config/runtime-site-settings";
-import { migrateLegacyPostgresEntryNotice } from "./domains/station/postgres-station";
 import { initializePostgresMediaLibraryMaintenance } from "./domains/media/postgres-media-preparation";
 import { initializeTelegramIntegration } from "./lib/telegram";
 import { initializePostgresAnalyticsMaintenance } from "./domains/analytics/postgres-retention";
@@ -34,7 +33,6 @@ export async function registerNodeInstrumentation() {
   if (process.env.NEXT_PHASE === "phase-production-build") return;
   await assertPostgresStartupReady();
   await initializeRuntimeSiteSettings();
-  await migrateLegacyPostgresEntryNotice();
   initializePostgresAnalyticsMaintenance();
   await initializePostgresMediaLibraryMaintenance();
   await initializeTelegramIntegration();

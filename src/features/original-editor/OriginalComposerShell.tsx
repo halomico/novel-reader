@@ -167,7 +167,7 @@ export function OriginalComposerShell({
   // A new draft that was empty when opened and never saved since is removed, not kept
   // as an empty entry in 草稿, when the writer leaves without saving.
   const [openedEmpty] = useState(() => initialDraft.articleId === null && !initialDraft.title.trim()
-    && textCount(initialDraft.editorStateJson) === 0 && !initialDraft.legacyMarkdown.trim()
+    && textCount(initialDraft.editorStateJson) === 0 && !initialDraft.importedMarkdown.trim()
     && initialDraft.tagIds.length === 0 && initialDraft.unlockSodaPrice === 0);
   const [savedOnce, setSavedOnce] = useState(false);
   // The preview simulates the published page, including unlocking the paid part — for free.
@@ -578,8 +578,8 @@ export function OriginalComposerShell({
     serializedEditorStateRef.current = null;
     applyEditorMetadata(normalizedState);
     captureLatestEditorSnapshot();
-    if (!initialDraft.editorStateJson && initialDraft.legacyMarkdown.trim()) markDirty();
-  }, [applyEditorMetadata, captureLatestEditorSnapshot, initialDraft.editorStateJson, initialDraft.legacyMarkdown, markDirty]);
+    if (!initialDraft.editorStateJson && initialDraft.importedMarkdown.trim()) markDirty();
+  }, [applyEditorMetadata, captureLatestEditorSnapshot, initialDraft.editorStateJson, initialDraft.importedMarkdown, markDirty]);
 
   const handleEditorMount = useCallback((editor: LexicalEditor) => {
     editorRef.current = editor;

@@ -41,7 +41,7 @@ function decodeSentinels(value: string): string {
   return value.replace(/\uE000/gu, "<u>").replace(/\uE001/gu, "</u>");
 }
 
-const MARK_PATTERN = new RegExp(`${UNDERLINE_OPEN_SENTINEL}([^${UNDERLINE_OPEN_SENTINEL}${UNDERLINE_CLOSE_SENTINEL}\n]+)${UNDERLINE_CLOSE_SENTINEL}|==([^=\n]+)==`, "gu");
+const MARK_PATTERN = new RegExp(`${UNDERLINE_OPEN_SENTINEL}([^${UNDERLINE_OPEN_SENTINEL}${UNDERLINE_CLOSE_SENTINEL}\n]+)${UNDERLINE_CLOSE_SENTINEL}`, "gu");
 
 function markText(value: string): HastNode[] {
   const nodes: HastNode[] = [];
@@ -53,7 +53,7 @@ function markText(value: string): HastNode[] {
       type: "element",
       tagName: "u",
       properties: {},
-      children: [{ type: "text", value: decodeSentinels(match[1] ?? match[2] ?? "") }],
+      children: [{ type: "text", value: decodeSentinels(match[1] ?? "") }],
     });
     lastIndex = index + match[0].length;
   }
