@@ -424,7 +424,7 @@ test("real PostgreSQL 18 + pg_bigm integration", { timeout: 180_000 }, async (t)
     assert.deepEqual(contentMatches.items.map((item) => item.novelId), [novelId!]);
     assert.deepEqual({ total: contentMatches.totalItems, estimated: contentMatches.estimated }, { total: 1, estimated: true },
       "a four-character keyword is verified, so its total is reported as an upper bound");
-    const exactMatches = await searchPostgresContent(readOnlyContentSearchTransaction, parsedContentQuery("终章"), {});
+    const exactMatches = await searchPostgresContent(readOnlyContentSearchTransaction, parsedContentQuery("甲甲"), {});
     assert.deepEqual({ total: exactMatches.totalItems, estimated: exactMatches.estimated }, { total: 1, estimated: false },
       "a two-character keyword is one bigram, answered exactly with recheck off");
     const searchRow = await pool.query<{ generation: number; block_starts: number[]; search_text: string }>(
