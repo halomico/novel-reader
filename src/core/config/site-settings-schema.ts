@@ -135,35 +135,6 @@ export type SiteSettings = {
   contentRateLimitRules: IpRateLimitRule[];
 };
 
-const LEGACY_SETTING_KEYS = [
-  "settingsPreviewText",
-  "adminIndexPageSize",
-  "frontendAutoIndexEnabled",
-  "contentIndexMaxSegments",
-  "contentIndexSoftLimitBytes",
-  "contentIndexHardLimitBytes",
-  "manualIndexMaxSegmentsEnabled",
-  "manualIndexMaxSegments",
-  "noticeStayVisibleAfterBlur",
-  "adminOperationRateLimitEnabled",
-  "adminOperationRateLimitPerMinute",
-  "adminOperationRateLimitBanEnabled",
-  "searchRateLimitPerMinute",
-  "searchShortQueryRateLimitPerMinute",
-  "searchRateLimitRules",
-  "userSearchRateLimitPerMinute",
-  "adminAllowedIps",
-  "adminBlockedIps",
-  "adminLoginRateLimitBanEnabled",
-  "contentBlockHeadlessBrowsers",
-  "videoThumbnailMode",
-  "videoThumbnailCarouselFrames",
-  "videoThumbnailCarouselIntervalSeconds",
-  "originalPublishNoticeText",
-  "originalPublishNoticeLinkLabel",
-  "originalPublishNoticeUrl",
-] as const;
-
 /** Full-text search lists at most this many hits, newest first. Past it the search
  *  stops counting, which is what keeps a query over a large library bounded. */
 export const MAX_GLOBAL_SEARCH_RESULTS = 3_000;
@@ -421,25 +392,14 @@ function cleanLoginRecords(value: unknown): AdminLoginRecord[] {
     .slice(0, 30);
 }
 
-export function removeLegacySettings(value: Record<string, unknown>): { settings: Partial<SiteSettings>; changed: boolean } {
-  const settings = { ...value };
-  let changed = false;
-  for (const key of LEGACY_SETTING_KEYS) {
-    if (Object.hasOwn(settings, key)) {
-      delete settings[key];
-      changed = true;
-    }
-  }
-  return { settings: settings as Partial<SiteSettings>, changed };
-}
-
 export function normalizeSiteSettings(value: unknown): SiteSettings {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Site settings must be a JSON object");
   }
   const raw = value as Record<string, unknown>;
-  const cleaned = removeLegacySettings(raw);
-  const parsed = cleaned.settings;
+  // Every field below is read by name, so keys this build no longer knows are simply
+  // never looked at; they need no separate stripping pass.
+  const parsed = raw as Partial<SiteSettings>;
   const homePortalAccessModes = normalizeHomePortalAccessModes(
     parsed.homePortalAccessModes,
     legacyHomePortalAccessModes(parsed as Record<string, unknown>),

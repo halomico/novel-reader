@@ -16,10 +16,7 @@ import {
   READER_THEME_OPTIONS,
   READER_WIDTH_STORAGE_KEY,
   READER_WIDTHS,
-  LEGACY_UI_STORAGE_KEYS,
   READER_TAGS_STORAGE_KEY,
-  UI_PREFERENCES_MIGRATION_KEY,
-  UI_PREFERENCES_MIGRATION_VERSION,
   DEFAULT_READER_LINE_HEIGHT,
   getReaderThemeSystemTheme,
   type ColorPalette,
@@ -147,11 +144,6 @@ export function ThemeScript({
           root.style.setProperty("--reader-preferred-paper-width", readerWidth + "px");
         }
         Object.keys(palette).forEach(function(property) { root.style.setProperty(property, palette[property]); });
-        if (localStorage.getItem(${JSON.stringify(UI_PREFERENCES_MIGRATION_KEY)}) !== ${JSON.stringify(UI_PREFERENCES_MIGRATION_VERSION)}) {
-          ${JSON.stringify(LEGACY_UI_STORAGE_KEYS)}.forEach(function(key) { localStorage.removeItem(key); });
-          document.cookie = "novel-page-size=; Path=/; Max-Age=0; SameSite=Lax";
-          localStorage.setItem(${JSON.stringify(UI_PREFERENCES_MIGRATION_KEY)}, ${JSON.stringify(UI_PREFERENCES_MIGRATION_VERSION)});
-        }
         root.removeAttribute("data-ui-mode");
         root.removeAttribute("data-top-menu");
       } catch (error) {}

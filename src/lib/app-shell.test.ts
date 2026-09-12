@@ -131,7 +131,9 @@ test("removes the retired configurable settings preview", () => {
   assert.doesNotMatch(read("src/components/SettingsPanel.tsx"), /previewText|previewReader/);
   assert.doesNotMatch(read("src/app/admin/(panel)/settings/page.tsx"), /settingsPreviewText/);
   assert.doesNotMatch(read("src/app/styles/routes/account.css"), /previewReader/);
-  assert.match(read("src/core/config/site-settings-schema.ts"), /LEGACY_SETTING_KEYS[\s\S]*"settingsPreviewText"/);
+  // The retired keys no longer need a stripping pass: every field is read by name, so a
+  // key this build does not know is simply never looked at.
+  assert.doesNotMatch(read("src/core/config/site-settings-schema.ts"), /LEGACY_SETTING_KEYS|removeLegacySettings/);
 });
 
 test("reuses the public auth shell for the admin login", () => {

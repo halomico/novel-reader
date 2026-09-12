@@ -68,7 +68,7 @@ function removeLocalSetting(key: string) {
   try {
     localStorage.removeItem(key);
   } catch {
-    // Legacy cleanup is optional when storage is unavailable.
+    // Clearing a preference is best effort; the visual state still applies.
   }
 }
 
