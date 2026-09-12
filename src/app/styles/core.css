@@ -67,6 +67,9 @@
   /* Added to the first and last row's own padding, so a list's top and bottom breathe
      about as much as its sides. */
   --card-padding-block: 12px;
+  /* The top bar is one light sheet with a hairline rule on every page. */
+  --header-bg: color-mix(in srgb, var(--surface) 90%, transparent);
+  --header-border: color-mix(in srgb, var(--border) 80%, transparent);
   --reader-font-size: 18px;
   --reader-line-height: 1.7;
   --original-font-size: 17px;
