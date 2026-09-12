@@ -61,9 +61,12 @@
   --card-bg: var(--surface);
   --card-border: color-mix(in srgb, var(--border) 80%, transparent);
   --card-divider: color-mix(in srgb, var(--border) 72%, transparent);
-  --card-radius: 8px;
-  --card-shadow: 0 1px 2px rgb(0 0 0 / 3%);
+  --card-radius: 10px;
+  --card-shadow: 0 1px 3px rgb(0 0 0 / 4%);
   --card-padding: 20px;
+  /* Added to the first and last row's own padding, so a list's top and bottom breathe
+     about as much as its sides. */
+  --card-padding-block: 12px;
   --reader-font-size: 18px;
   --reader-line-height: 1.7;
   --original-font-size: 17px;
@@ -153,6 +156,7 @@
     --card-radius: 0;
     --card-shadow: none;
     --card-padding: 0px;
+    --card-padding-block: 0px;
   }
 }
 

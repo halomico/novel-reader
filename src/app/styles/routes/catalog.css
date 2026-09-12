@@ -85,7 +85,7 @@
   display: grid;
   gap: 12px;
   margin-bottom: 16px;
-  padding: 14px var(--card-padding) 16px;
+  padding: 20px var(--card-padding) 22px;
   border: 1px solid var(--card-border);
   border-radius: var(--card-radius);
   background: var(--card-bg);
@@ -620,7 +620,7 @@
 
 /* The public tag library is one card of tag groups; its edge closes the last group. */
 .tagLibrary > .tagGroupStack {
-  padding: 4px var(--card-padding);
+  padding: var(--card-padding-block) var(--card-padding);
   border: 1px solid var(--card-border);
   border-radius: var(--card-radius);
   background: var(--card-bg);

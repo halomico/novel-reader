@@ -583,7 +583,7 @@
 .mediaRelatedVideos {
   display: grid;
   gap: 12px;
-  padding: 16px var(--card-padding) 18px;
+  padding: 20px var(--card-padding) 22px;
   border: 1px solid var(--card-border);
   border-radius: var(--card-radius);
   background: var(--card-bg);

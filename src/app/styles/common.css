@@ -627,7 +627,7 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   column-gap: 30px;
   row-gap: 0;
-  padding: 4px var(--card-padding);
+  padding: var(--card-padding-block) var(--card-padding);
   border: 1px solid var(--card-border);
   border-radius: var(--card-radius);
   background: var(--card-bg);
@@ -1329,7 +1329,7 @@ button.pageNumber {
 
 /* Full-text results, on the search page and inside a book, are one card. */
 .contentSearchResults {
-  padding: 0 var(--card-padding);
+  padding: var(--card-padding-block) var(--card-padding);
   border: 1px solid var(--card-border);
   border-radius: var(--card-radius);
   background: var(--card-bg);
@@ -1631,25 +1631,21 @@ button.pageNumber {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 14px;
-  padding: 0 var(--card-padding);
+  padding: var(--card-padding-block) var(--card-padding);
   border: 1px solid var(--card-border);
   border-radius: var(--card-radius);
   background: var(--card-bg);
   box-shadow: var(--card-shadow);
 }
 
-/* Inside the card the channel tabs need headroom, the resource list needs no outer
-   rules, and the video grid needs room below its last row. */
-.mediaLibrary > .mediaVideoChannels {
-  padding-top: 4px;
-}
-
+/* Inside the card the resource list needs no outer rules, and the video grid needs a
+   little room below its captions. */
 .mediaLibrary .mediaResourceList {
   border-block: 0;
 }
 
 .mediaLibrary .mediaAssetGrid {
-  padding-bottom: 18px;
+  padding-bottom: 6px;
 }
 
 .breadcrumbs + .mediaLibrary {
@@ -4965,7 +4961,7 @@ button.pageNumber {
 
 /* Tag directories (media and original) are one card: a title row over the tag cloud. */
 .mediaTagDirectory {
-  padding: 0 var(--card-padding) var(--card-padding);
+  padding: var(--card-padding-block) var(--card-padding) var(--card-padding);
   border: 1px solid var(--card-border);
   border-radius: var(--card-radius);
   background: var(--card-bg);
