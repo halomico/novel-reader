@@ -157,9 +157,13 @@
   background: transparent;
 }
 
-.bookSearchPage .searchResultCard:hover,
 .bookSearchPage .searchResultCard:focus-visible {
   background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+
+.bookSearchPage .searchResultCard:hover:not(:focus-visible) {
+  border-bottom-color: var(--border);
+  background: transparent;
 }
 
 .bookSearchPage .searchResultBody {

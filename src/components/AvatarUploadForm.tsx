@@ -186,7 +186,7 @@ export function AvatarUploadForm({
           <strong>{displayName}</strong>
           <small>@{username} · Lv.{trustLevel} · {levelName}</small>
         </div>
-        <button className="accountActionButton accountAvatarEditButton" type="button" onClick={() => setOpen(true)}>
+        <button className="uiButton isPrimary accountAvatarEditButton" type="button" onClick={() => setOpen(true)}>
           {uiText(locale, "编辑头像")}
         </button>
       </div>

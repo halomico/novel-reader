@@ -214,6 +214,7 @@ test("keeps settings and admin palettes on one dual-swatch picker", () => {
 
 test("keeps filled primary actions on the shared rectangular token", () => {
   const original = read("src/app/original.css");
+  const account = read("src/app/styles/routes/account.css");
   const station = read("src/app/styles/routes/station.css");
   const core = read("src/app/styles/core.css");
 
@@ -228,7 +229,13 @@ test("keeps filled primary actions on the shared rectangular token", () => {
   assert.match(component, /\.uiButton,[\s\S]*border-radius:\s*var\(--action-radius\)[\s\S]*font-size:\s*var\(--action-font-size\)/);
   assert.match(component, /\.originalPrimaryButton/);
   assert.match(component, /\.stationReplyForm\b[^{]*\) button/);
+  assert.match(read("src/components/AvatarUploadForm.tsx"), /className="uiButton isPrimary accountAvatarEditButton"/);
+  assert.match(read("src/app/(workspace)/account/page.tsx"), /className="uiButton isPrimary accountCheckinButton"/);
+  assert.match(read("src/components/OriginalBrowseControls.tsx"), /className="uiButton isPrimary originalBrowsePublish"/);
   assert.doesNotMatch(original, /\.originalPrimaryButton\s*\{[^}]*background:\s*var\(--accent-fill\)/);
+  assert.doesNotMatch(original, /\.originalBrowsePublish:(?:hover|focus-visible)/);
+  assert.doesNotMatch(account, /\.accountAvatarEditButton:(?:hover|focus-visible)/);
+  assert.doesNotMatch(account, /\.accountCheckinButton:(?:hover|focus-visible)/);
   assert.doesNotMatch(station, /\.stationReplyForm button\s*\{[^}]*border-radius:\s*9px/);
 });
 

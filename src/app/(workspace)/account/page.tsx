@@ -229,7 +229,7 @@ export default async function AccountPage({ searchParams }: AccountPageProps) {
                 locale={locale}
               />
               <button
-                className="accountCheckinButton"
+                className="uiButton isPrimary accountCheckinButton"
                 type="submit"
                 disabled={checkin.checkedIn}
                 aria-label={tr(checkin.checkedIn ? "今日已签到" : "试试手气")}

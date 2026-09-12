@@ -25,7 +25,7 @@
   line-height: 1;
   text-decoration: none;
   white-space: nowrap;
-  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
 }
 
 .uiButton.isPrimary,
@@ -38,17 +38,34 @@
 }
 
 .uiButton.isPrimary:hover:not(:disabled),
-.uiButton.isPrimary:focus-visible:not(:disabled),
-.uiButton.isPrimary:active:not(:disabled),
 :is(.authPrimaryButton, .originalPrimaryButton, .originalActionButton, .accountActionButton, .mediaDownloadButton, .adminCompactButton, .adminMediaUploadButton, .adminSettingsSaveButton, .siteEntryNoticeConfirm):hover:not(:disabled),
 :is(.userPanel:not(.accountPanel), .pageJumpPanel, .stationReplyForm, .adminCreateUserForm, .adminEditorActions) button:hover:not(:disabled),
-:is(.readerReportDialog, .stationNewThreadDialog) footer button:hover:not(:disabled),
+:is(.readerReportDialog, .stationNewThreadDialog) footer button:hover:not(:disabled) {
+  border-color: var(--action-primary-hover);
+  background: var(--action-primary-hover);
+  color: var(--accent-foreground);
+  box-shadow: var(--action-primary-shadow);
+}
+
+.uiButton.isPrimary:focus-visible:not(:disabled),
 :is(.authPrimaryButton, .originalPrimaryButton, .originalActionButton, .accountActionButton, .mediaDownloadButton, .adminCompactButton, .adminMediaUploadButton, .adminSettingsSaveButton, .siteEntryNoticeConfirm):focus-visible:not(:disabled),
 :is(.userPanel:not(.accountPanel), .pageJumpPanel, .stationReplyForm, .adminCreateUserForm, .adminEditorActions) button:focus-visible:not(:disabled),
 :is(.readerReportDialog, .stationNewThreadDialog) footer button:focus-visible:not(:disabled) {
-  border-color: var(--accent-fill-strong);
-  background: var(--accent-fill-strong);
+  border-color: var(--action-primary-hover);
+  outline: none;
+  background: var(--action-primary-hover);
   color: var(--accent-foreground);
+  box-shadow: var(--action-primary-focus-ring);
+}
+
+.uiButton.isPrimary:active:not(:disabled),
+:is(.authPrimaryButton, .originalPrimaryButton, .originalActionButton, .accountActionButton, .mediaDownloadButton, .adminCompactButton, .adminMediaUploadButton, .adminSettingsSaveButton, .siteEntryNoticeConfirm):active:not(:disabled),
+:is(.userPanel:not(.accountPanel), .pageJumpPanel, .stationReplyForm, .adminCreateUserForm, .adminEditorActions) button:active:not(:disabled),
+:is(.readerReportDialog, .stationNewThreadDialog) footer button:active:not(:disabled) {
+  border-color: var(--action-primary-active);
+  background: var(--action-primary-active);
+  color: var(--accent-foreground);
+  box-shadow: none;
 }
 
 .uiButton.isSecondary {
@@ -87,4 +104,5 @@
 :is(.readerReportDialog, .stationNewThreadDialog) footer button:disabled {
   cursor: not-allowed;
   opacity: .5;
+  box-shadow: none;
 }

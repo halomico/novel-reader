@@ -695,9 +695,13 @@
   background: transparent;
 }
 
-.contentSearchResults .searchResultCard:hover,
 .contentSearchResults .searchResultCard:focus-visible {
   background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+
+.contentSearchResults .searchResultCard:hover:not(:focus-visible) {
+  border-bottom-color: var(--border);
+  background: transparent;
 }
 
 .contentSearchResults .searchResultBody {

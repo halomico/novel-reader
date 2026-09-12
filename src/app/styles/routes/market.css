@@ -284,7 +284,7 @@
   background: var(--accent-fill);
   color: var(--accent-foreground);
   cursor: pointer;
-  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
   font-size: var(--action-font-size);
   font-weight: var(--action-font-weight);
 }
@@ -353,18 +353,39 @@
   text-align: left;
 }
 
-.marketExchangeLine > button:hover,
-.marketExchangeLine > button:focus-visible,
-.marketCodeLine button:hover,
-.marketCodeLine button:focus-visible,
-.marketPurchaseActions button:hover,
-.marketPurchaseActions button:focus-visible,
+.marketExchangeLine > button:hover:not(:disabled),
+.marketCodeLine button:hover:not(:disabled),
+.marketPurchaseActions button:hover:not(:disabled),
 .marketOrderFile a:hover,
-.marketOrderFile a:focus-visible {
-  border-color: var(--accent-fill-strong);
-  background: var(--accent-fill-strong);
+.marketOrderSecret button:hover:not(:disabled) {
+  border-color: var(--action-primary-hover);
+  background: var(--action-primary-hover);
   color: var(--accent-foreground);
+  box-shadow: var(--action-primary-shadow);
   outline: 0;
+}
+
+.marketExchangeLine > button:focus-visible:not(:disabled),
+.marketCodeLine button:focus-visible:not(:disabled),
+.marketPurchaseActions button:focus-visible:not(:disabled),
+.marketOrderFile a:focus-visible,
+.marketOrderSecret button:focus-visible:not(:disabled) {
+  border-color: var(--action-primary-hover);
+  background: var(--action-primary-hover);
+  color: var(--accent-foreground);
+  box-shadow: var(--action-primary-focus-ring);
+  outline: 0;
+}
+
+.marketExchangeLine > button:active:not(:disabled),
+.marketCodeLine button:active:not(:disabled),
+.marketPurchaseActions button:active:not(:disabled),
+.marketOrderFile a:active,
+.marketOrderSecret button:active:not(:disabled) {
+  border-color: var(--action-primary-active);
+  background: var(--action-primary-active);
+  color: var(--accent-foreground);
+  box-shadow: none;
 }
 
 .marketProductCopy strong {
@@ -821,6 +842,7 @@
 .marketExchangeLine > .marketExchangeSubmit {
   width: 100%;
   min-width: 0;
+  min-height: 40px;
   justify-self: stretch;
 }
 
@@ -841,47 +863,6 @@
   min-height: var(--action-height);
   border-radius: var(--action-radius);
   padding: 5px 9px;
-}
-
-.marketExchangeLine > .marketExchangeSubmit,
-.marketCodeLine button {
-  min-height: var(--action-height);
-  border: 1px solid color-mix(in srgb, var(--accent-fill) 82%, #000);
-  border-radius: var(--action-radius);
-  padding: 0 var(--action-inline-padding);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--accent-fill) 88%, #fff) 0%,
-    var(--accent-fill) 58%,
-    color-mix(in srgb, var(--accent-fill) 88%, #000) 100%
-  );
-  color: var(--accent-foreground);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 24%),
-    0 2px 5px rgb(16 24 32 / 16%);
-  font-size: var(--action-font-size);
-  font-weight: var(--action-font-weight);
-  transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
-}
-
-.marketExchangeLine > .marketExchangeSubmit:hover,
-.marketExchangeLine > .marketExchangeSubmit:focus-visible,
-.marketCodeLine button:hover,
-.marketCodeLine button:focus-visible {
-  filter: brightness(1.035);
-  transform: translateY(-1px);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 28%),
-    0 4px 9px rgb(16 24 32 / 18%);
-}
-
-.marketExchangeLine > .marketExchangeSubmit:active,
-.marketCodeLine button:active {
-  filter: brightness(.98);
-  transform: translateY(0);
-  box-shadow:
-    inset 0 1px 2px rgb(0 0 0 / 13%),
-    0 1px 2px rgb(16 24 32 / 12%);
 }
 
 .marketOrdersSection {

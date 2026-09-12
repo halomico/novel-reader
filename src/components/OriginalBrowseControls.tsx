@@ -191,7 +191,7 @@ export function OriginalBrowseControls({
           </div>
         ) : null}
       </div>
-      <Link className="originalBrowsePublish" href="/original/new" aria-label={tr("发布文章")} title={tr("发布文章")}>
+      <Link className="uiButton isPrimary originalBrowsePublish" href="/original/new" aria-label={tr("发布文章")} title={tr("发布文章")}>
         <PenLine size={16} aria-hidden="true" />
         <span>{tr("发布")}</span>
       </Link>
