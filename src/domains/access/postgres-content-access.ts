@@ -143,45 +143,75 @@ export function invalidatePostgresContentAccessControlState(): void {
   ruleCacheGeneration += 1;
 }
 
-type RuleCacheEntry = {
+type ConfigurationCacheEntry = {
   generation: number;
   expiresAt: number;
-  rows: Promise<AccessRuleRow[]>;
+  rows: Promise<unknown[]>;
 };
 
 const RULE_CACHE_TTL_MS = 2_000;
-const ruleCaches = new WeakMap<SqlExecutor, Map<string, RuleCacheEntry>>();
+const configurationCaches = new WeakMap<SqlExecutor, Map<string, ConfigurationCacheEntry>>();
 let ruleCacheGeneration = 0;
 
-/** Enabled rules change only through the admin mutations in this module, which
- * bump the generation; the TTL bounds staleness across instances. Expiry is
- * re-checked against the caller's clock on every read. */
-function readActiveAccessRules(executor: SqlExecutor, storedScope: string, now: Date): Promise<AccessRuleRow[]> {
-  let cache = ruleCaches.get(executor);
+/** Access configuration changes only through the admin mutations in this module, which
+ * bump the generation; the TTL bounds staleness across instances. Every content request
+ * reads both lists, so caching them is what keeps the guard off the request's critical
+ * path — without it a book page pays two round trips before it can render. */
+function readAccessConfiguration<Row>(
+  executor: SqlExecutor,
+  key: string,
+  load: () => Promise<Row[]>,
+): Promise<Row[]> {
+  let cache = configurationCaches.get(executor);
   if (!cache) {
     cache = new Map();
-    ruleCaches.set(executor, cache);
+    configurationCaches.set(executor, cache);
   }
-  const clock = Date.now();
-  const cached = cache.get(storedScope);
-  if (cached && cached.generation === ruleCacheGeneration && cached.expiresAt > clock) {
-    return cached.rows.then((rows) => rows.filter((rule) => !rule.expires_at || instant(rule.expires_at) > now.getTime()));
-  }
-  const rows = executor.query<AccessRuleRow>({
-    text: `SELECT id, target_type, target_value, match_mode, scope, country_mode, audience, source, reason, expires_at
-      FROM content_access_rules
-      WHERE enabled = TRUE AND (expires_at IS NULL OR expires_at > $1::timestamptz)
-        AND (scope = 'all' OR scope = $2)
-      ORDER BY CASE source WHEN 'manual' THEN 0 ELSE 1 END, id ASC`,
-    values: [now.toISOString(), storedScope],
-  }).then((result) => result.rows);
-  const entry: RuleCacheEntry = { generation: ruleCacheGeneration, expiresAt: clock + RULE_CACHE_TTL_MS, rows };
   const scopedCache = cache;
-  scopedCache.set(storedScope, entry);
+  const clock = Date.now();
+  const cached = scopedCache.get(key);
+  if (cached && cached.generation === ruleCacheGeneration && cached.expiresAt > clock) {
+    return cached.rows as Promise<Row[]>;
+  }
+  const rows = load();
+  const entry: ConfigurationCacheEntry = {
+    generation: ruleCacheGeneration,
+    expiresAt: clock + RULE_CACHE_TTL_MS,
+    rows: rows as Promise<unknown[]>,
+  };
+  scopedCache.set(key, entry);
   rows.catch(() => {
-    if (scopedCache.get(storedScope) === entry) scopedCache.delete(storedScope);
+    if (scopedCache.get(key) === entry) scopedCache.delete(key);
   });
   return rows;
+}
+
+/** Expiry is re-checked against the caller's clock, so a cached rule that lapsed within
+ *  the TTL stops matching immediately rather than at the next refresh. */
+async function readActiveAccessRules(executor: SqlExecutor, storedScope: string, now: Date): Promise<AccessRuleRow[]> {
+  const rows = await readAccessConfiguration(executor, `rules:${storedScope}`, async () => (
+    await executor.query<AccessRuleRow>({
+      text: `SELECT id, target_type, target_value, match_mode, scope, country_mode, audience, source, reason, expires_at
+        FROM content_access_rules
+        WHERE enabled = TRUE AND (expires_at IS NULL OR expires_at > $1::timestamptz)
+          AND (scope = 'all' OR scope = $2)
+        ORDER BY CASE source WHEN 'manual' THEN 0 ELSE 1 END, id ASC`,
+      values: [now.toISOString(), storedScope],
+    })
+  ).rows);
+  return rows.filter((rule) => !rule.expires_at || instant(rule.expires_at) > now.getTime());
+}
+
+function readActiveAccessPolicies(executor: SqlExecutor, storedScope: string): Promise<AccessPolicyRow[]> {
+  return readAccessConfiguration(executor, `policies:${storedScope}`, async () => (
+    await executor.query<AccessPolicyRow>({
+      text: `SELECT id, name, scope, country_mode, audience, window_seconds, max_requests, block_seconds
+        FROM content_access_policies
+        WHERE enabled = TRUE AND (scope = 'all' OR scope = $1)
+        ORDER BY id ASC`,
+      values: [storedScope],
+    })
+  ).rows);
 }
 
 const CRAWLER_PATTERN = /bot|crawler|spider|slurp|bingpreview|facebookexternalhit|bytespider|yandex|baiduspider|sogou/iu;
@@ -330,17 +360,16 @@ export async function checkPostgresContentAccess(
     };
   }
   if (options.rateLimit === false || !address.trusted || !isIP(address.ip)) return { allowed: true };
-  const policies = await executor.query<AccessPolicyRow>({
-    text: `SELECT id, name, scope, country_mode, audience, window_seconds, max_requests, block_seconds
-      FROM content_access_policies
-      WHERE enabled = TRUE AND (scope = 'all' OR scope = $1)
-      ORDER BY id ASC`,
-    values: [scope === "site" ? "all" : scope],
-  });
+  const policies = await readActiveAccessPolicies(executor, scope === "site" ? "all" : scope);
+  const applicable = policies.filter((policy) => scopeMatches(policy.scope, scope)
+    && audienceMatches(policy.audience, authenticated)
+    && countryMatches(policy.country_mode, address.country));
+  // Nothing to meter is the common case on a site that has configured no policy, and it
+  // must cost nothing: the list above is cached, so this path touches no bucket at all.
+  if (!applicable.length) return { allowed: true };
   const identitySecret = process.env.RATE_LIMIT_IDENTITY_SECRET || process.env.TRUST_PROXY_SECRET || "";
   const identityHash = crypto.createHash("sha256").update(`${identitySecret}\0${address.ip}`).digest("hex");
-  for (const policy of policies.rows) {
-    if (!scopeMatches(policy.scope, scope) || !audienceMatches(policy.audience, authenticated) || !countryMatches(policy.country_mode, address.country)) continue;
+  for (const policy of applicable) {
     const rate = await consumeRateLimit(executor, policy, identityHash, now);
     if (!rate.allowed) return { allowed: false, status: 429, message: `访问过于频繁，请 ${rate.retryAfterSeconds} 秒后再试`, retryAfterSeconds: rate.retryAfterSeconds };
   }

@@ -132,3 +132,36 @@ test("distributed PostgreSQL rate limits use one atomic upsert and return Retry-
   assert.match(String(queries[2].values?.[1]), /^[0-9a-f]{64}$/u);
   assert.equal(String(queries[2].values?.[1]).includes("203.0.113.9"), false);
 });
+
+test("a content check with no policy configured reads cached lists and meters nothing", async (t) => {
+  const previousMode = process.env.TRUST_PROXY_MODE;
+  const previousSecret = process.env.TRUST_PROXY_SECRET;
+  process.env.TRUST_PROXY_MODE = "signed";
+  process.env.TRUST_PROXY_SECRET = "s".repeat(32);
+  t.after(() => {
+    if (previousMode === undefined) delete process.env.TRUST_PROXY_MODE; else process.env.TRUST_PROXY_MODE = previousMode;
+    if (previousSecret === undefined) delete process.env.TRUST_PROXY_SECRET; else process.env.TRUST_PROXY_SECRET = previousSecret;
+  });
+  const queries: SqlQuery[] = [];
+  const executor: SqlExecutor = {
+    async query<Row extends QueryResultRow>(sql: SqlQuery) {
+      queries.push(sql);
+      return { command: "SELECT", rowCount: 0, oid: 0, fields: [], rows: [] } as unknown as QueryResult<Row>;
+    },
+  };
+  const headers = new Headers({
+    "x-novel-proxy-secret": "s".repeat(32),
+    "x-novel-client-ip": "203.0.113.9",
+    "user-agent": "Mozilla/5.0",
+  });
+  const now = new Date("2026-09-07T00:00:00.000Z");
+  assert.deepEqual(await checkPostgresContentAccess(executor, headers, { scope: "novel", now }), { allowed: true });
+  assert.deepEqual(queries.map((query) => /content_access_(rules|policies)/u.exec(query.text)?.[1]), ["rules", "policies"]);
+
+  // Every book page and chapter page runs this guard, so the lists it needs are read once
+  // per executor and reused: a second visit inside the TTL must add no round trip, and an
+  // unconfigured site must never touch a rate bucket.
+  assert.deepEqual(await checkPostgresContentAccess(executor, headers, { scope: "novel", now }), { allowed: true });
+  assert.equal(queries.length, 2);
+  assert.ok(queries.every((query) => !query.text.includes("content_access_rate_buckets")));
+});

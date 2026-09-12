@@ -9,7 +9,6 @@ import {
 } from "./home-portal";
 import {
   type AudioPlaybackMode,
-  type IpRateLimitRule,
   type ReaderAdjacentNovelSort,
   type RelatedVideoMode,
   type UserRegistrationMode,
@@ -256,42 +255,6 @@ export function getVideoThumbnailSettings(): {
 export function getRelatedVideoSettings(): { count: number; mode: RelatedVideoMode } {
   const settings = readSiteSettings();
   return { count: settings.relatedVideoCount, mode: settings.relatedVideoMode };
-}
-
-export function getContentRateLimitPerMinute(): number {
-  return readSettingInt(readSiteSettings().contentRateLimitPerMinute, "CONTENT_RATE_LIMIT_PER_MINUTE", 60, 1, 600);
-}
-
-export function getContentRateLimitWindowSeconds(): number {
-  return readSettingInt(readSiteSettings().contentRateLimitWindowSeconds, "CONTENT_RATE_LIMIT_WINDOW_SECONDS", 60, 10, 3600);
-}
-
-export function getContentRateLimitRules(): IpRateLimitRule[] {
-  const settings = readSiteSettings();
-  if (settings.contentRateLimitRules.length > 0) {
-    return settings.contentRateLimitRules;
-  }
-  const hasLegacyLimit =
-    settings.contentRateLimitPerMinute > 0 ||
-    settings.contentRateLimitWindowSeconds > 0 ||
-    Boolean(process.env.CONTENT_RATE_LIMIT_PER_MINUTE?.trim()) ||
-    Boolean(process.env.CONTENT_RATE_LIMIT_WINDOW_SECONDS?.trim());
-  if (!hasLegacyLimit) {
-    return [];
-  }
-
-  return [
-    {
-      id: "content-general",
-      enabled: true,
-      scope: "all",
-      queryType: "all",
-      windowSeconds: getContentRateLimitWindowSeconds(),
-      maxRequests: getContentRateLimitPerMinute(),
-      banMode: "none",
-      banSeconds: 3_600,
-    },
-  ];
 }
 
 export function isAdminEnabled(): boolean {

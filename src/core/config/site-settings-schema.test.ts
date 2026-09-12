@@ -1,23 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { defaultSiteSettings, normalizeIpRateLimitRules, normalizeSiteSettings } from "./site-settings-schema";
-
-test("maximum-length duplicate rate-limit IDs resolve to distinct bounded IDs", () => {
-  const base = "a".repeat(48);
-  const rules = normalizeIpRateLimitRules(Array.from({ length: 20 }, () => ({ id: base })));
-  assert.equal(rules.length, 20);
-  assert.equal(new Set(rules.map((rule) => rule.id)).size, 20);
-  assert.ok(rules.every((rule) => rule.id.length <= 48));
-  assert.equal(rules[1].id, `${"a".repeat(46)}-2`);
-  assert.equal(rules[19].id, `${"a".repeat(45)}-20`);
-});
-
-test("rate-limit ID collisions preserve a suffix even after truncation and sanitization", () => {
-  const rules = normalizeIpRateLimitRules([
-    { id: "same" }, { id: "same-2" }, { id: "same" }, { id: "same!" },
-  ]);
-  assert.deepEqual(rules.map((rule) => rule.id), ["same", "same-2", "same-3", "same-4"]);
-});
+import { defaultSiteSettings, normalizeSiteSettings } from "./site-settings-schema";
 
 test("pure site settings create isolated defaults and reject a malformed root", () => {
   const first = defaultSiteSettings();

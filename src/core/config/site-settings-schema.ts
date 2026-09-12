@@ -31,17 +31,6 @@ export type UserRegistrationMode = "closed" | "invite" | "open";
 export type NovelSourceSearchMode = "full" | "book";
 export type ReaderAdjacentNovelSort = "updated" | "name";
 
-export type IpRateLimitRule = {
-  id: string;
-  enabled: boolean;
-  scope: "all" | "guest" | "user";
-  queryType: "all" | "short";
-  windowSeconds: number;
-  maxRequests: number;
-  banMode: "none" | "temporary" | "permanent";
-  banSeconds: number;
-};
-
 export type AdminLoginRecord = {
   username: string;
   ip: string;
@@ -130,9 +119,6 @@ export type SiteSettings = {
   videoThumbnailSinglePercent: number;
   relatedVideoCount: number;
   relatedVideoMode: RelatedVideoMode;
-  contentRateLimitPerMinute: number;
-  contentRateLimitWindowSeconds: number;
-  contentRateLimitRules: IpRateLimitRule[];
 };
 
 /** Full-text search lists at most this many hits, newest first. Past it the search
@@ -220,9 +206,6 @@ const DEFAULT_SETTINGS: SiteSettings = {
   videoThumbnailSinglePercent: 33,
   relatedVideoCount: 5,
   relatedVideoMode: "next",
-  contentRateLimitPerMinute: 0,
-  contentRateLimitWindowSeconds: 0,
-  contentRateLimitRules: [],
 };
 
 function cleanText(value: unknown): string {
@@ -333,44 +316,6 @@ function cleanStringList(value: unknown, limit = 100): string[] {
       .map((item) => item.trim())
       .filter(Boolean),
   )).slice(0, limit);
-}
-
-export function normalizeIpRateLimitRules(value: unknown): IpRateLimitRule[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  const usedIds = new Set<string>();
-  const rules: IpRateLimitRule[] = [];
-  for (const [index, rawRule] of value.slice(0, 20).entries()) {
-    if (!rawRule || typeof rawRule !== "object") {
-      continue;
-    }
-
-    const item = rawRule as Partial<IpRateLimitRule>;
-    const baseId = cleanText(item.id).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 48) || `rule-${index + 1}`;
-    let id = baseId;
-    let suffix = 2;
-    while (usedIds.has(id)) {
-      const ending = `-${suffix}`;
-      id = `${baseId.slice(0, 48 - ending.length)}${ending}`;
-      suffix += 1;
-    }
-    usedIds.add(id);
-
-    rules.push({
-      id,
-      enabled: cleanBool(item.enabled, true),
-      scope: item.scope === "guest" || item.scope === "user" ? item.scope : "all",
-      queryType: item.queryType === "short" ? "short" : "all",
-      windowSeconds: cleanInt(item.windowSeconds, 60, 1, 86_400),
-      maxRequests: cleanInt(item.maxRequests, 30, 1, 100_000),
-      banMode: item.banMode === "temporary" || item.banMode === "permanent" ? item.banMode : "none",
-      banSeconds: cleanInt(item.banSeconds, 3_600, 60, 31_536_000),
-    });
-  }
-
-  return rules;
 }
 
 function cleanLoginRecords(value: unknown): AdminLoginRecord[] {
@@ -543,9 +488,6 @@ export function normalizeSiteSettings(value: unknown): SiteSettings {
     videoThumbnailSinglePercent: cleanInt(parsed.videoThumbnailSinglePercent, DEFAULT_SETTINGS.videoThumbnailSinglePercent, 1, 99),
     relatedVideoCount: cleanInt(parsed.relatedVideoCount, DEFAULT_SETTINGS.relatedVideoCount, 0, 20),
     relatedVideoMode: cleanRelatedVideoMode(parsed.relatedVideoMode),
-    contentRateLimitPerMinute: cleanInt(parsed.contentRateLimitPerMinute, DEFAULT_SETTINGS.contentRateLimitPerMinute, 0, 600),
-    contentRateLimitWindowSeconds: cleanInt(parsed.contentRateLimitWindowSeconds, DEFAULT_SETTINGS.contentRateLimitWindowSeconds, 0, 3600),
-    contentRateLimitRules: normalizeIpRateLimitRules(parsed.contentRateLimitRules),
   };
 }
 
