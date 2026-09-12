@@ -55,7 +55,6 @@ export function ReaderExperienceControls({
   authenticated,
   initialInGrove,
   initialFavorite,
-  canReport,
 }: {
   bookId: number;
   title: string;
@@ -73,7 +72,6 @@ export function ReaderExperienceControls({
   authenticated: boolean;
   initialInGrove: boolean;
   initialFavorite: boolean;
-  canReport: boolean;
 }) {
   const pathname = usePathname();
   const locale = localeFromPathname(pathname);
@@ -148,10 +146,10 @@ export function ReaderExperienceControls({
             <Bookmark size={20} aria-hidden="true" /><span>收藏</span>
           </Link>
         )}
-        {canReport ? (
+        {authenticated ? (
           <span className="readerToolItem readerToolAction isReport isSecondary"><ReportNovelButton novelId={bookId} title={title} variant="responsive" /></span>
         ) : (
-          <Link className="readerToolItem readerToolAction isReport isSecondary" href={`/login?returnTo=${encodeURIComponent(returnHref || pathname)}`} title="登录后反馈问题">
+          <Link className="readerToolItem readerToolAction isReport isSecondary" href={`/login?returnTo=${encodeURIComponent(pathname)}`} title="登录后反馈问题">
             <Flag size={20} aria-hidden="true" /><span>反馈</span>
           </Link>
         )}
@@ -201,10 +199,10 @@ export function ReaderExperienceControls({
                 ) : (
                   <Link className="readerMoreAction" href={`/login?returnTo=${encodeURIComponent(returnHref || pathname)}`}><Bookmark size={20} aria-hidden="true" /><span>收藏</span></Link>
                 )}
-                {canReport ? (
+                {authenticated ? (
                   <span className="readerMoreAction readerToolAction"><ReportNovelButton novelId={bookId} title={title} variant="responsive" /></span>
                 ) : (
-                  <Link className="readerMoreAction" href={`/login?returnTo=${encodeURIComponent(returnHref || pathname)}`}><Flag size={20} aria-hidden="true" /><span>反馈</span></Link>
+                  <Link className="readerMoreAction" href={`/login?returnTo=${encodeURIComponent(pathname)}`}><Flag size={20} aria-hidden="true" /><span>反馈</span></Link>
                 )}
                 <button className="readerMoreAction" type="button" onClick={() => setPanel("directory")}><List size={20} aria-hidden="true" /><span>目录</span></button>
               </div>

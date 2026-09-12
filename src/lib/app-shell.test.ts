@@ -315,6 +315,11 @@ test("navigation keeps the current surface while loading and paged readers avoid
   assert.match(controls, /className="readerToolItem isMore"/);
   assert.match(controls, /readerMoreAction[\s\S]*setPanel\("directory"\)[\s\S]*目录/);
   assert.doesNotMatch(controls, /readerMoreAction[\s\S]*scrollTop\(\)[\s\S]*回顶/);
+  assert.equal((controls.match(/<ReportNovelButton /g) || []).length, 2);
+  assert.match(controls, /authenticated \? \([\s\S]*<ReportNovelButton[\s\S]*登录后反馈问题/);
+  assert.equal((controls.match(/encodeURIComponent\(pathname\)/g) || []).length, 2);
+  const headerSearch = read("src/components/HeaderSearch.tsx");
+  assert.match(headerSearch, /async function searchCurrentBook[\s\S]*setVisibility\("open"\);[\s\S]*searchInputRef\.current\?\.blur\(\);/);
   assert.match(read("src/components/SiteHeader.tsx"), /<ThemeToggle \/>/);
   assert.doesNotMatch(read("src/components/SiteHeader.tsx"), /!readerMode \? <ThemeToggle/);
   assert.doesNotMatch(read("src/components/OriginalReaderExperienceControls.tsx"), /isTheme|日间|夜间/);

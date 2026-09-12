@@ -319,6 +319,12 @@ export function HeaderSearch({
       return;
     }
 
+    // Keep the inline finder available while the reader moves between matches, but
+    // release the input focus so a coarse-pointer device can dismiss its keyboard.
+    setVisibility("open");
+    setIsModeMenuOpen(false);
+    searchInputRef.current?.blur();
+
     const requestId = ++currentSearchRequestRef.current;
     setIsCurrentSearching(true);
     const nextMatches = await findCurrentMatches(segments, nextKeyword, () => currentSearchRequestRef.current === requestId);
@@ -328,7 +334,6 @@ export function HeaderSearch({
     setIsCurrentSearching(false);
     currentMatchesRef.current = nextMatches;
     setCurrentMatchCount(nextMatches.length);
-    setIsModeMenuOpen(false);
     void fetch("/api/search/analytics", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Novel-Mutation": "1" },

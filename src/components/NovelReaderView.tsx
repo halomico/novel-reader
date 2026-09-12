@@ -28,7 +28,6 @@ import {
   listPostgresNovelHotwords,
 } from "@/domains/reading/postgres-reader-catalog";
 import type { PostgresNovelReadAccess } from "@/domains/reading/postgres-novel-access";
-import { hasPostgresUserPermission } from "@/domains/identity/postgres-permissions";
 import {
   areGuestHotwordLinksEnabled,
   areHotwordLinksEnabled,
@@ -346,7 +345,7 @@ export async function NovelReaderView({
   const showHotwords = readAccess.allowed && !preview && areHotwordLinksEnabled() && (authenticated || areGuestHotwordLinksEnabled());
   const tagAudience = user?.role === "admin" ? "admin" : user ? "member" : "public";
   const executor = database("web");
-  const [tagsByNovel, hiddenTagIds, hotwords, source, sourceChapters, adjacentNovels, initialProgress, interaction, canReport, pinned] = await Promise.all([
+  const [tagsByNovel, hiddenTagIds, hotwords, source, sourceChapters, adjacentNovels, initialProgress, interaction, pinned] = await Promise.all([
     showTags
       ? listPostgresTagsForNovels(executor, [book.id], { audience: tagAudience })
       : Promise.resolve(new Map<number, PostgresPublicTag[]>()),
@@ -357,7 +356,6 @@ export async function NovelReaderView({
     chapter ? Promise.resolve(null) : getPostgresAdjacentReaderNovels(executor, book, getReaderAdjacentNovelSort()),
     user ? getPostgresReadingProgress(executor, user.id, book.id) : Promise.resolve(null),
     user ? getPostgresNovelInteractionState(executor, user.id, book.id) : Promise.resolve(null),
-    user?.role === "user" ? hasPostgresUserPermission(executor, user, "content_report") : Promise.resolve(false),
     user?.role === "admin" ? isPostgresNovelPinned(executor, book.id) : Promise.resolve(false),
   ]);
   const tags = (tagsByNovel.get(book.id) || []).filter((tag) => !hiddenTagIds.has(tag.id));
@@ -471,7 +469,6 @@ export async function NovelReaderView({
         authenticated={authenticated}
         initialInGrove={Boolean(interaction?.planted)}
         initialFavorite={Boolean(interaction?.favorite)}
-        canReport={canReport}
       />
       <article className="readerPage hasReaderPreferences" id="reader-content">
         {readAccess.allowed ? <NovelViewTracker novelId={book.id} /> : null}
