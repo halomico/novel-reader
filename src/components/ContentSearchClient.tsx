@@ -8,6 +8,7 @@ import { SearchTrackedLink } from "@/components/SearchTrackedLink";
 import type { PostgresContentSearchItem } from "@/domains/reading/postgres-content-search";
 import { localeFromPathname, uiText } from "@/lib/locale";
 import { findSearchTermRanges, type SearchTermPattern } from "@/lib/search-query";
+import { createTimedCache } from "@/lib/timed-cache";
 
 type ContentSearchClientProps = {
   keyword: string;
@@ -28,6 +29,18 @@ type ContentSearchClientProps = {
   scrollTargetId?: string;
   emptyMessage?: string;
 };
+
+type CachedResults = {
+  items: PostgresContentSearchItem[];
+  totalNovels: number;
+  totalPages: number;
+  estimated: boolean;
+};
+
+// Results stay for a minute per tab, as long as the router keeps a visited page, so going
+// back to a search (or paging back and forth) renders at once and keeps the scroll
+// position instead of re-running the query behind a loading message.
+const resultCache = createTimedCache<CachedResults>({ ttlMs: 60_000, maxEntries: 32 });
 
 type SearchApiResponse = {
   ok: boolean;
@@ -95,15 +108,28 @@ export function ContentSearchClient({
     activeQueryRef.current = queryKey;
   }
 
-  const [items, setItems] = useState<PostgresContentSearchItem[]>([]);
-  const [totalNovels, setTotalNovels] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
-  const [estimated, setEstimated] = useState(false);
+  const resultKey = (resultPage: number) => JSON.stringify([locale, keyword, library, novelId ?? null, resultPage, requestFiltersKey]);
+  const [initialResults] = useState(() => resultCache.get(resultKey(Math.max(1, initialPage))));
+  const [items, setItems] = useState<PostgresContentSearchItem[]>(initialResults?.items ?? []);
+  const [totalNovels, setTotalNovels] = useState(initialResults?.totalNovels ?? 0);
+  const [totalPages, setTotalPages] = useState(initialResults?.totalPages ?? 1);
+  const [estimated, setEstimated] = useState(initialResults?.estimated ?? false);
   const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialResults);
   const reportedAnalyticsRef = useRef("");
 
   useEffect(() => {
+    const requestKey = resultKey(page);
+    const cached = resultCache.get(requestKey);
+    if (cached) {
+      setItems(cached.items);
+      setTotalNovels(cached.totalNovels);
+      setTotalPages(cached.totalPages);
+      setEstimated(cached.estimated);
+      setMessage("");
+      setLoading(false);
+      return;
+    }
     const controller = new AbortController();
     setLoading(true);
     setMessage("");
@@ -141,6 +167,12 @@ export function ContentSearchClient({
       setTotalPages(resultPages);
       setEstimated(data.estimated === true);
       setItems(data.items);
+      resultCache.set(requestKey, {
+        items: data.items,
+        totalNovels: Number(data.totalNovels),
+        totalPages: resultPages,
+        estimated: data.estimated === true,
+      });
       if (searchEventKey && page === 1) {
         const signature = `${searchEventKey}:${data.totalItems}:${data.totalNovels}`;
         if (reportedAnalyticsRef.current !== signature) {
@@ -164,7 +196,7 @@ export function ContentSearchClient({
       if (!controller.signal.aborted) setLoading(false);
     });
     return () => controller.abort();
-  }, [keyword, library, novelId, page, requestFiltersKey, searchEventKey]);
+  }, [keyword, library, locale, novelId, page, requestFiltersKey, searchEventKey]);
 
   useEffect(() => {
     function restorePage() {
@@ -189,7 +221,7 @@ export function ContentSearchClient({
         {message ? <p className="searchMessage" role="alert">{message}</p> : null}
       </section>
 
-      {!loading && !message ? (
+      {!message && (!loading || items.length > 0) ? (
         <div className="contentSearchSummary">
           <ResultCount count={totalNovels} prefix={estimated ? tr("约") : undefined} />
         </div>
