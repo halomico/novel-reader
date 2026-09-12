@@ -64,7 +64,7 @@ test("search limits default when unset and never collapse to a limit of one", ()
 test("defaults reader page turn mode to scroll and normalizes custom values", () => {
   assert.equal(defaultSiteSettings().readerDefaultPageTurn, "scroll");
   assert.equal(normalizeSiteSettings({}).readerDefaultPageTurn, "scroll");
-  assert.equal(normalizeSiteSettings({ readerDefaultPageTurn: "slide" }).readerDefaultPageTurn, "slide");
+  assert.equal(normalizeSiteSettings({ readerDefaultPageTurn: "slide" }).readerDefaultPageTurn, "instant");
   assert.equal(normalizeSiteSettings({ readerDefaultPageTurn: "instant" }).readerDefaultPageTurn, "instant");
   assert.equal(normalizeSiteSettings({ readerDefaultPageTurn: "invalid" }).readerDefaultPageTurn, "scroll");
 });

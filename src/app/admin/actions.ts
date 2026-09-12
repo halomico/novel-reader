@@ -948,6 +948,7 @@ export async function saveAdminSettingsAction(formData: FormData) {
     originalFreeCommentsPerLevel: intField(formData, "originalFreeCommentsPerLevel", previous.originalFreeCommentsPerLevel, 0, 100),
     originalCommentCostSoda: intField(formData, "originalCommentCostSoda", previous.originalCommentCostSoda, 0, 10_000),
     originalArticleMinWords: intField(formData, "originalArticleMinWords", previous.originalArticleMinWords, 1, 200_000),
+    originalArticleMaxChars: intField(formData, "originalArticleMaxChars", previous.originalArticleMaxChars, 1_000, 200_000),
     originalCommentMinChars: intField(formData, "originalCommentMinChars", previous.originalCommentMinChars, 1, 200),
     originalMaxTags: intField(formData, "originalMaxTags", previous.originalMaxTags, 1, 20),
     originalPageSize: intField(formData, "originalPageSize", previous.originalPageSize, 5, 100),
@@ -1668,9 +1669,6 @@ export async function saveUserLevelsAction(formData: FormData) {
     level,
     name: String(formData.get(`levelName:${level}`) || "").trim(),
     sodaRequired: level < 2 ? 0 : Math.max(Math.floor(Number(formData.get(`sodaRequired:${level}`)) || 0), 1),
-    videoConcurrencyLimit: level === 0
-      ? 0
-      : Math.min(Math.max(Math.floor(Number(formData.get(`videoConcurrencyLimit:${level}`)) || 0), 0), 20),
     dailyVideoDownloadLimit: level === 0
       ? 0
       : Math.min(Math.max(Math.floor(Number(formData.get(`dailyVideoDownloadLimit:${level}`)) || 0), 0), 1_000),
@@ -1688,7 +1686,6 @@ export async function saveUserLevelsAction(formData: FormData) {
       level: level.level,
       name: level.name,
       sodaRequired: level.sodaRequired,
-      videoConcurrencyLimit: level.videoConcurrencyLimit,
       dailyVideoDownloadLimit: level.dailyVideoDownloadLimit,
       permissions: level.permissions,
     })) {

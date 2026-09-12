@@ -130,8 +130,9 @@ test("keeps reader width and page-turn preferences within the supported lightwei
   assert.equal(normalizeReaderWidth("auto"), "auto");
   assert.equal(normalizeReaderWidth("1000"), 1000);
   assert.equal(normalizeReaderWidth("777"), 800);
-  assert.deepEqual(READER_PAGE_TURN_OPTIONS.map((option) => option.value), ["scroll", "slide", "instant"]);
-  assert.equal(normalizeReaderPageTurn("slide"), "slide");
+  assert.deepEqual(READER_PAGE_TURN_OPTIONS.map((option) => option.value), ["scroll", "instant"]);
+  // The retired translate mode keeps its readers on a paged layout.
+  assert.equal(normalizeReaderPageTurn("slide"), "instant");
   assert.equal(normalizeReaderPageTurn("instant"), "instant");
   assert.equal(normalizeReaderPageTurn("unknown"), "scroll");
 });

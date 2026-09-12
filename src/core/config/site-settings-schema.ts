@@ -8,6 +8,7 @@ import {
   type HomePortalAccessModes,
   type HomePortalCardKey,
 } from "@/lib/home-portal";
+import { MAX_ORIGINAL_BODY_LENGTH } from "@/lib/original-constants";
 import {
   isColorPalette,
   normalizeReaderLineHeight,
@@ -109,6 +110,7 @@ export type SiteSettings = {
   originalFreeCommentsPerLevel: number;
   originalCommentCostSoda: number;
   originalArticleMinWords: number;
+  originalArticleMaxChars: number;
   originalCommentMinChars: number;
   originalMaxTags: number;
   originalPageSize: number;
@@ -227,6 +229,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   originalFreeCommentsPerLevel: 3,
   originalCommentCostSoda: 1,
   originalArticleMinWords: 2_000,
+  originalArticleMaxChars: 200_000,
   originalCommentMinChars: 4,
   originalMaxTags: 8,
   originalPageSize: 20,
@@ -554,6 +557,8 @@ export function normalizeSiteSettings(value: unknown): SiteSettings {
     originalFreeCommentsPerLevel: cleanInt(parsed.originalFreeCommentsPerLevel, DEFAULT_SETTINGS.originalFreeCommentsPerLevel, 0, 100),
     originalCommentCostSoda: cleanInt(parsed.originalCommentCostSoda, DEFAULT_SETTINGS.originalCommentCostSoda, 0, 10_000),
     originalArticleMinWords: cleanInt(parsed.originalArticleMinWords, DEFAULT_SETTINGS.originalArticleMinWords, 1, 200_000),
+    // The serializer's own ceiling stays the hard stop; this is the operator's dial below it.
+    originalArticleMaxChars: cleanInt(parsed.originalArticleMaxChars, DEFAULT_SETTINGS.originalArticleMaxChars, 1_000, MAX_ORIGINAL_BODY_LENGTH),
     originalCommentMinChars: cleanInt(parsed.originalCommentMinChars, DEFAULT_SETTINGS.originalCommentMinChars, 1, 200),
     originalMaxTags: cleanInt(parsed.originalMaxTags, DEFAULT_SETTINGS.originalMaxTags, 1, 20),
     originalPageSize: cleanInt(parsed.originalPageSize, DEFAULT_SETTINGS.originalPageSize, 5, 100),

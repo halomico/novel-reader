@@ -28,7 +28,6 @@ import {
   insertOriginalEditorBlock,
   isValidOriginalTagName,
   joinOriginalBodies,
-  MAX_ORIGINAL_BODY_LENGTH,
   normalizeOriginalTagName,
   ORIGINAL_PAID_MARKER,
 } from "@/lib/original-constants";
@@ -44,6 +43,7 @@ type OriginalEditorSettings = {
   publishFeeSoda: number;
   editFeeSoda: number;
   articleMinWords: number;
+  articleMaxChars: number;
   maxTags: number;
 };
 
@@ -437,7 +437,7 @@ export function OriginalEditorForm({
               if (editorError) setEditorError("");
             }}
             onKeyDown={handleEditorShortcut}
-            maxLength={MAX_ORIGINAL_BODY_LENGTH}
+            maxLength={settings.articleMaxChars}
             required
             placeholder={tr(markdownEnabled ? "在这里写下你的文章，使用上方工具辅助排版。" : "在这里写下你的文章。")}
             aria-label={tr("正文")}
@@ -463,7 +463,7 @@ export function OriginalEditorForm({
           {priceValue > 0 && !paidReady ? <b>{tr(markerCount === 0 ? "请插入付费分界" : markerCount > 1 ? "只能插入一个付费分界" : "分界前后都需要内容")}</b> : null}
           {editorError ? <b role="alert">{editorError}</b> : null}
         </div>
-        <output className="originalBodyCount" aria-live="polite">{visibleWordCount.toLocaleString(locale === "zh-Hant" ? "zh-TW" : "zh-CN")} {tr("字")} · {body.length.toLocaleString(locale === "zh-Hant" ? "zh-TW" : "zh-CN")} / {MAX_ORIGINAL_BODY_LENGTH.toLocaleString(locale === "zh-Hant" ? "zh-TW" : "zh-CN")}</output>
+        <output className="originalBodyCount" aria-live="polite">{visibleWordCount.toLocaleString(locale === "zh-Hant" ? "zh-TW" : "zh-CN")} {tr("字")} · {body.length.toLocaleString(locale === "zh-Hant" ? "zh-TW" : "zh-CN")} / {settings.articleMaxChars.toLocaleString(locale === "zh-Hant" ? "zh-TW" : "zh-CN")}</output>
         <button className="originalActionButton" type="submit" disabled={!paidReady || !articleReady}>{tr(mode === "create" ? "发布文章" : "保存文章")}</button>
       </footer>
     </form>

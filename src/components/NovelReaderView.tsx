@@ -18,6 +18,7 @@ import {
   type PostgresPublicTag,
 } from "@/domains/catalog/postgres-catalog";
 import { ContentNotPublishedError, readPublishedNovelContent } from "@/domains/reading/postgres-content";
+import { readNovelContentFromSource } from "@/domains/reading/postgres-content-fallback";
 import { getPostgresReadingProgress, type PostgresReadingProgress } from "@/domains/reading/postgres-reading-progress";
 import { getPostgresNovelInteractionState } from "@/domains/reading/postgres-reader-interactions";
 import {
@@ -245,12 +246,22 @@ async function ReaderContent({
     });
   } catch (error) {
     if (!(error instanceof ContentNotPublishedError)) throw error;
-    return (
-      <section className="emptyState readerUnavailable" role="status">
-        <h2>正文正在准备中</h2>
-        <p>这篇内容尚未完成发布，请稍后再试。</p>
-      </section>
-    );
+    // Indexing a large library takes hours. Until this book's turn comes, serve it
+    // straight from the catalogued source file; search is what is missing, not the text.
+    try {
+      published = await readNovelContentFromSource(database("web"), {
+        novelId: book.id,
+        chapterId: chapter?.id,
+        previewRatio: preview && !chapter ? 0.3 : 1,
+      });
+    } catch {
+      return (
+        <section className="emptyState readerUnavailable" role="status">
+          <h2>正文正在准备中</h2>
+          <p>这篇内容尚未完成发布，请稍后再试。</p>
+        </section>
+      );
+    }
   }
   const sourceSegments: NovelSegment[] = published.blocks.map((block) => ({
     segmentIndex: block.blockNo,

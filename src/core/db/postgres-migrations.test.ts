@@ -102,6 +102,33 @@ test("PostgreSQL compatibility requires the pinned writable runtime and exact sc
   }), { compatible: true, issues: [] });
 });
 
+test("PostgreSQL compatibility accepts a schema migrated by a newer release", () => {
+  // A rolling upgrade runs the new release's migrations while old replicas still serve.
+  // Those replicas must stay healthy: every migration they know about is applied.
+  assert.deepEqual(assessPostgresSchemaCompatibility({
+    currentVersion: 21,
+    expectedVersion: 19,
+    pendingVersions: [],
+    extensionVersion: "1.2",
+    serverVersionNum: 180006,
+    readOnly: false,
+    inRecovery: false,
+  }), { compatible: true, issues: [] });
+
+  assert.deepEqual(
+    assessPostgresSchemaCompatibility({
+      currentVersion: 18,
+      expectedVersion: 19,
+      pendingVersions: [19],
+      extensionVersion: "1.2",
+      serverVersionNum: 180006,
+      readOnly: false,
+      inRecovery: false,
+    }).issues.map((issue) => issue.code),
+    ["schema-version", "pending-migrations"],
+  );
+});
+
 test("PostgreSQL compatibility rejects substitute search extensions", () => {
   const result = assessPostgresSchemaCompatibility({
     currentVersion: 1,

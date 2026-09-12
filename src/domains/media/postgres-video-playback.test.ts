@@ -22,16 +22,18 @@ function queued(responses: Array<{ rows?: QueryResultRow[]; rowCount?: number }>
 test("PostgreSQL playback lease creation serializes viewer and node quotas", async () => {
   const captured: SqlQuery[] = [];
   const executor = queued([
-    {}, {}, {}, { rows: [{ found: true }] }, { rows: [] }, { rows: [{ active: "0" }] }, { rowCount: 1 },
+    {}, {}, {}, { rows: [{ found: true }] }, { rows: [] }, { rowCount: 1 },
   ], captured);
   const result = await createPostgresVideoPlaybackLease({
-    viewerKey: "user:5", userId: 5, clientId: "client_1234567890", mediaId: 8, limit: 2,
+    viewerKey: "user:5", userId: 5, clientId: "client_1234567890", mediaId: 8,
     now: new Date("2026-09-08T00:00:00.000Z"),
   }, async (operation) => operation(executor));
   assert.equal(result.ok, true);
   assert.match(captured[0].text, /pg_advisory_xact_lock/u);
   assert.match(captured[1].text, /video-node/u);
   assert.match(captured.at(-1)!.text, /ON CONFLICT \(viewer_key, client_id\) DO UPDATE/u);
+  // Per-viewer concurrency was retired with the user-level field that configured it.
+  assert.equal(captured.some((query) => /COUNT\(\*\)::bigint AS active/u.test(query.text)), false);
 });
 
 test("PostgreSQL playback token checks fail closed before querying malformed input", async () => {

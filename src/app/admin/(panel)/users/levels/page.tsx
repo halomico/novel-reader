@@ -61,19 +61,6 @@ export default async function AdminUserLevelsPage({ searchParams }: AdminUserLev
                   />
                   <small>累计苏打</small>
                 </label>
-                <label className="adminUserLevelThreshold isVideo">
-                  <span className="srOnly">视频并发</span>
-                  <input
-                    name={`videoConcurrencyLimit:${level.level}`}
-                    type="number"
-                    min="0"
-                    max="20"
-                    defaultValue={level.videoConcurrencyLimit}
-                    disabled={level.level === 0}
-                    aria-label={`Lv.${level.level} 视频并发`}
-                  />
-                  <small>视频并发</small>
-                </label>
                 <label className="adminUserLevelThreshold isDownload">
                   <span className="srOnly">每日下载次数</span>
                   <input

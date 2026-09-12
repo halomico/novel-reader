@@ -2507,14 +2507,34 @@
 .originalDraftDeleteDialog h2 { margin: 0 0 12px; font-size: 17px; }
 .originalDraftDeleteDialog p { font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; color: var(--muted); }
 .originalDraftDeleteDialog footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
-.originalDraftDeleteDialog button { min-width: 64px; min-height: var(--action-height); padding: 0 var(--action-inline-padding); border: 0; border-radius: var(--action-radius); cursor: pointer; font-size: var(--action-font-size); font-weight: var(--action-font-weight); }
-.originalDraftDeleteDialog footer button:last-child { background: #b42318; color: white; }
-.originalDraftDeleteDialog footer button:last-child:hover:not(:disabled),
-.originalDraftDeleteDialog footer button:last-child:focus-visible { background: #971d15; }
+/* The same action geometry every other control on the site uses, so a dialog button is
+   not a second, heavier button style. Danger takes its colour from the palette rather
+   than a hard-coded red that ignores the theme. */
+.originalDialogButton {
+  display: inline-flex;
+  min-height: var(--action-height);
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--action-radius);
+  padding: 0 var(--action-inline-padding);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--action-font-size);
+  font-weight: var(--action-font-weight);
+  line-height: 1;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+.originalDialogButton:hover:not(:disabled),
+.originalDialogButton:focus-visible { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--accent-text, var(--accent)); }
+.originalDialogButton.isDanger { border-color: var(--danger-fill, #b42318); background: var(--danger-fill, #b42318); color: #fff; }
+.originalDialogButton.isDanger:hover:not(:disabled),
+.originalDialogButton.isDanger:focus-visible { border-color: var(--danger-fill-strong, #971d15); background: var(--danger-fill-strong, #971d15); color: #fff; }
 .originalDraftDeleteDialog .originalDraftDeleteTitle { color: var(--text); padding: 12px 14px; border-radius: 8px; background: color-mix(in srgb, var(--text) 4%, transparent); }
-.originalDraftDeleteDialog footer button { background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text); }
-.originalDraftDeleteDialog footer button:first-child:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--accent-text, var(--accent)); }
-.originalDraftDeleteDialog button:disabled { opacity: .55; cursor: wait; }
+.originalDialogButton:disabled { opacity: .55; cursor: wait; }
 .originalDraftDeleteDialog :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .originalDraftDeleteDialog [role="alert"] { color: light-dark(#b42318, #ffb4ab); }
 @media (max-width: 720px) {
@@ -2527,7 +2547,9 @@
   .originalDraftEditAction { padding-inline: 8px; }
   .originalDraftDeleteDialog { width: 100%; max-width: 100%; margin: auto 0 0; padding: 22px 20px calc(20px + env(safe-area-inset-bottom)); border-radius: 20px 20px 0 0; border-bottom: 0; }
   .originalDraftDeleteDialog::before { content: ""; display: block; width: 32px; height: 4px; margin: -10px auto 20px; border-radius: 4px; background: var(--border); }
-  .originalDraftDeleteDialog footer { display: grid; grid-template-columns: 1fr 1fr; }
+  /* Two half-screen slabs read as a form, not a confirmation. Keep the actions their
+     own size and anchored to the trailing edge, exactly as on a wide screen. */
+  .originalDraftDeleteDialog footer { justify-content: flex-end; }
 }
 .originalBody > :is(h1, h2):first-child { margin-top: 0; }
 

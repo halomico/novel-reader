@@ -10,6 +10,7 @@ import {
   READER_LINE_HEIGHTS,
   READER_JUSTIFY_STORAGE_KEY,
   READER_PAGE_TURN_OPTIONS,
+  RETIRED_READER_PAGE_TURN,
   READER_PAGE_TURN_STORAGE_KEY,
   READER_PAPER_STORAGE_KEY,
   READER_THEME_OPTIONS,
@@ -102,6 +103,9 @@ export function ThemeScript({
                 return Math.abs(item - readerLineHeight) < Math.abs(nearest - readerLineHeight) ? item : nearest;
               })
             : ${defaultLineHeight};
+        }
+        if (readerPageTurn === ${JSON.stringify(RETIRED_READER_PAGE_TURN)}) {
+          readerPageTurn = "instant";
         }
         if (readerPageTurnOptions.indexOf(readerPageTurn) === -1) {
           readerPageTurn = ${JSON.stringify(defaultPageTurn)};

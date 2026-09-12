@@ -18,15 +18,15 @@ export async function initializePostgresApplication(transaction = withTransactio
     });
     const levels = await tx.query({
       text: `INSERT INTO user_levels
-        (level, name, soda_required, daily_video_download_limit, video_concurrency_limit, permissions)
+        (level, name, soda_required, daily_video_download_limit, permissions)
         VALUES
-          (0, '访客', 0, 0, 0, '[]'::jsonb),
-          (1, '初见', 0, 3, 1, '["video_download"]'::jsonb),
-          (2, '熟客', 50, 5, 2, '["advanced_search","market_access","video_download"]'::jsonb),
-          (3, '常驻', 200, 8, 2, '["advanced_search","market_access","video_download"]'::jsonb),
-          (4, '活跃', 500, 12, 2, '["advanced_search","market_access","video_download"]'::jsonb),
-          (5, '资深', 1200, 20, 3, '["advanced_search","market_access","video_download"]'::jsonb),
-          (6, '核心', 2500, 30, 3, '["advanced_search","market_access","video_download"]'::jsonb)
+          (0, '访客', 0, 0, '[]'::jsonb),
+          (1, '初见', 0, 3, '["video_download"]'::jsonb),
+          (2, '熟客', 50, 5, '["advanced_search","market_access","video_download"]'::jsonb),
+          (3, '常驻', 200, 8, '["advanced_search","market_access","video_download"]'::jsonb),
+          (4, '活跃', 500, 12, '["advanced_search","market_access","video_download"]'::jsonb),
+          (5, '资深', 1200, 20, '["advanced_search","market_access","video_download"]'::jsonb),
+          (6, '核心', 2500, 30, '["advanced_search","market_access","video_download"]'::jsonb)
         ON CONFLICT (level) DO NOTHING`,
     });
     const sourceCheck = await tx.query({

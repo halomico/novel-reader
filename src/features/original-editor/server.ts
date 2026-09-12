@@ -18,7 +18,7 @@ import {
   getOriginalPublishingSettings,
   isBidirectionalCurrencyExchangeEnabled,
 } from "@/lib/config";
-import { isValidOriginalTagName, normalizeOriginalTagName, originalTagSlug, MAX_ORIGINAL_BODY_LENGTH } from "@/lib/original-constants";
+import { isValidOriginalTagName, normalizeOriginalTagName, originalTagSlug } from "@/lib/original-constants";
 import {
   legacyMarkdownForImport,
   serializeOriginalEditorState,
@@ -592,8 +592,8 @@ export async function publishOriginalDraft(input: {
     if (input.author.role !== "admin" && wordCount < settings.articleMinWords) {
       throw new OriginalDraftError(`正文至少需要 ${settings.articleMinWords} 字才能发布`, "invalid");
     }
-    if (document.publicMarkdown.length + document.paidMarkdown.length > MAX_ORIGINAL_BODY_LENGTH) {
-      throw new OriginalDraftError(`正文不能超过 ${MAX_ORIGINAL_BODY_LENGTH.toLocaleString()} 字符`, "invalid");
+    if (document.publicMarkdown.length + document.paidMarkdown.length > settings.articleMaxChars) {
+      throw new OriginalDraftError(`正文不能超过 ${settings.articleMaxChars.toLocaleString()} 字符`, "invalid");
     }
     const users = await tx.query<PublishingUserRow>({
       text: "SELECT id, status, trust_level, soda_balance, cookie_balance FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE",

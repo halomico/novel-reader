@@ -6061,13 +6061,9 @@ a.analyticsSearchTag:focus-visible {
   font-size: 11px;
 }
 
-.adminUserLevelRow > .adminUserLevelThreshold:nth-of-type(2) {
-  grid-column: 3;
-}
-
-.adminUserLevelRow > .adminUserLevelThreshold:nth-of-type(3) {
-  grid-column: 4;
-}
+/* Placement is by role (.isSoda / .isDownload), never by position: a positional rule
+   outranks the named ones and silently misplaces every field when one is added or
+   removed — which is exactly what retiring the concurrency field would have done. */
 
 @media (max-width: 1040px) {
   .adminMarketCodeTool > form {
@@ -6095,14 +6091,6 @@ a.analyticsSearchTag:focus-visible {
     gap: 20px;
   }
 
-  .adminUserLevelRow > .adminUserLevelThreshold:nth-of-type(2),
-.adminUserLevelRow > .adminUserLevelThreshold:nth-of-type(3) {
-    grid-column: 3;
-  }
-
-  .adminUserLevelRow > .adminUserLevelThreshold:nth-of-type(3) {
-    grid-row: 2;
-  }
 }
 
 @media (max-width: 520px) {
@@ -6190,9 +6178,7 @@ a.analyticsSearchTag:focus-visible {
     width: min(100%, 240px);
   }
 
-  .adminUserLevelName,
-.adminUserLevelRow > .adminUserLevelThreshold:nth-of-type(2),
-.adminUserLevelRow > .adminUserLevelThreshold:nth-of-type(3) {
+  .adminUserLevelName {
     grid-column: 2;
     grid-row: auto;
   }
@@ -7931,40 +7917,32 @@ a.analyticsSearchTag:focus-visible {
   }
 }
 .adminUserLevelRow {
-  grid-template-columns: 52px minmax(120px, 180px) minmax(110px, 145px) minmax(100px, 135px) minmax(0, 1fr);
+  grid-template-columns: 52px minmax(120px, 180px) minmax(110px, 145px) minmax(100px, 135px);
 }
 
 .adminUserLevelThreshold.isSoda {
   grid-column: 3;
 }
 
-.adminUserLevelThreshold.isVideo {
+.adminUserLevelThreshold.isDownload {
   grid-column: 4;
 }
 
-.adminUserLevelThreshold.isDownload {
-  grid-column: 5;
-}
-
 .adminUserLevelPermissions {
-  grid-column: 6;
+  grid-column: 5;
 }
 
 @media (max-width: 1180px) {
   .adminUserLevelRow {
-    grid-template-columns: 48px minmax(130px, 1fr) minmax(105px, 135px) minmax(95px, 125px) minmax(105px, 135px);
+    grid-template-columns: 48px minmax(130px, 1fr) minmax(105px, 135px) minmax(95px, 125px);
   }
 
   .adminUserLevelThreshold.isSoda {
     grid-column: 3;
   }
 
-  .adminUserLevelThreshold.isVideo {
-    grid-column: 4;
-  }
-
   .adminUserLevelThreshold.isDownload {
-    grid-column: 5;
+    grid-column: 4;
   }
 
   .adminUserLevelPermissions {
@@ -7983,17 +7961,12 @@ a.analyticsSearchTag:focus-visible {
   }
 
   .adminUserLevelThreshold.isSoda,
-.adminUserLevelThreshold.isVideo,
 .adminUserLevelThreshold.isDownload {
     grid-column: 3;
   }
 
-  .adminUserLevelThreshold.isVideo {
-    grid-row: 2;
-  }
-
   .adminUserLevelThreshold.isDownload {
-    grid-row: 3;
+    grid-row: 2;
   }
 
   .adminUserLevelPermissions {
@@ -8008,7 +7981,6 @@ a.analyticsSearchTag:focus-visible {
 
   .adminUserLevelName,
 .adminUserLevelThreshold.isSoda,
-.adminUserLevelThreshold.isVideo,
 .adminUserLevelThreshold.isDownload {
     grid-column: 2;
     grid-row: auto;

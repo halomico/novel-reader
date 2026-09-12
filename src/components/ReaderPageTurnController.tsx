@@ -101,10 +101,7 @@ export function ReaderPageTurnController({
     let drag: DragState | null = null;
     let layoutFrame = 0;
     let settleFrame = 0;
-    let animationFrame = 0;
     let scrollFrame = 0;
-    let routeFrame = 0;
-    let enteringFrame = 0;
     let entryAnchorTimer = 0;
     let entryAnchor: "start" | "end" | null = null;
     let navigating = false;
@@ -147,45 +144,19 @@ export function ReaderPageTurnController({
       });
     }
 
-    function cancelAnimation() {
-      if (animationFrame) cancelAnimationFrame(animationFrame);
-      animationFrame = 0;
-    }
-
     function setLeft(left: number) {
       const maximum = Math.max(content!.scrollWidth - content!.clientWidth, 0);
       content!.scrollLeft = clamp(left, 0, maximum);
     }
 
-    function settleTo(index: number, animated: boolean) {
+    /** Paging lands on the target column in the same frame the gesture resolves.
+     *  There is no tween to schedule, cancel or interrupt. */
+    function settleTo(index: number) {
       metrics = pageMetrics(content!);
       const targetIndex = clamp(index, 0, metrics.count - 1);
-      const targetLeft = targetIndex * metrics.stride;
-      cancelAnimation();
-      if (!animated || matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        setLeft(targetLeft);
-        metrics = { ...metrics, index: targetIndex };
-        emitState();
-        return;
-      }
-
-      const startLeft = content!.scrollLeft;
-      const distance = targetLeft - startLeft;
-      const startedAt = performance.now();
-      const animate = (now: number) => {
-        const progress = clamp((now - startedAt) / 150, 0, 1);
-        const eased = 1 - Math.pow(1 - progress, 3);
-        setLeft(startLeft + distance * eased);
-        if (progress < 1) {
-          animationFrame = requestAnimationFrame(animate);
-          return;
-        }
-        animationFrame = 0;
-        setLeft(targetLeft);
-        metrics = { ...pageMetrics(content!), index: targetIndex };
-        emitState();
-      };
-      animationFrame = requestAnimationFrame(animate);
+      setLeft(targetIndex * metrics.stride);
+      metrics = { ...metrics, index: targetIndex };
+      emitState();
     }
 
     function navigate(href: string | null | undefined, direction: -1 | 1, keepChrome: boolean): boolean {
@@ -201,22 +172,8 @@ export function ReaderPageTurnController({
         READER_ENTRY_EDGE_SESSION_KEY,
         encodeReaderEntryEdge(destination, direction < 0 ? "end" : "start"),
       );
-      const push = () => {
-        beginReaderNavigationProgress();
-        router.push(destination, { scroll: false });
-      };
-      if (modeRef.current === "slide" && shell && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        shell.classList.add(direction < 0 ? "isReaderRouteLeavingPrevious" : "isReaderRouteLeavingNext");
-        // Let the browser paint the outgoing offset, then start the route
-        // request immediately. Waiting for the CSS transition here makes a
-        // boundary turn feel stuck while the next document is fetched.
-        routeFrame = requestAnimationFrame(() => {
-          routeFrame = 0;
-          push();
-        });
-      } else {
-        push();
-      }
+      beginReaderNavigationProgress();
+      router.push(destination, { scroll: false });
       return true;
     }
 
@@ -226,7 +183,7 @@ export function ReaderPageTurnController({
       const nextIndex = metrics.index + direction;
       if (nextIndex < 0 && navigate(previousHref, -1, keepChrome)) return;
       if (nextIndex >= metrics.count && navigate(nextHref, 1, keepChrome)) return;
-      settleTo(nextIndex, modeRef.current === "slide");
+      settleTo(nextIndex);
     }
 
     function pagedRatio(): number {
@@ -267,10 +224,6 @@ export function ReaderPageTurnController({
       if (storedEntryEdge && !entryEdge) sessionStorage.removeItem(READER_ENTRY_EDGE_SESSION_KEY);
       if (entryEdge) entryAnchor = entryEdge;
       const resolvedProgressRatio = progressRatio ?? currentPagedRatio;
-      const animateEntry = entryEdge && modeRef.current === "slide" && shell && !matchMedia("(prefers-reduced-motion: reduce)").matches;
-      if (animateEntry) {
-        shell.classList.add(entryEdge === "end" ? "isReaderRouteEnteringPrevious" : "isReaderRouteEnteringNext");
-      }
       afterLayout((settled) => {
         metrics = pageMetrics(content!);
         if (isReaderResumeNavigation() && !entryEdge) {
@@ -311,16 +264,6 @@ export function ReaderPageTurnController({
             entryAnchor = null;
             sessionStorage.removeItem(READER_ENTRY_EDGE_SESSION_KEY);
           }, 120);
-          if (animateEntry && shell) {
-            // Establish the off-screen starting position before removing the
-            // class; otherwise the browser batches both style changes and
-            // skips the transition entirely.
-            void shell.offsetWidth;
-            enteringFrame = requestAnimationFrame(() => {
-              enteringFrame = 0;
-              shell.classList.remove("isReaderRouteEnteringPrevious", "isReaderRouteEnteringNext");
-            });
-          }
           root.classList.remove("isReaderPagePending");
         }
       });
@@ -344,12 +287,12 @@ export function ReaderPageTurnController({
           emitState();
           return;
         }
-        settleTo(Math.round(progressRatio * Math.max(metrics.count - 1, 0)), false);
+        settleTo(Math.round(progressRatio * Math.max(metrics.count - 1, 0)));
       });
     }
 
     function handleScroll() {
-      if (!isPaged() || drag || animationFrame || scrollFrame) return;
+      if (!isPaged() || drag || scrollFrame) return;
       scrollFrame = requestAnimationFrame(() => {
         scrollFrame = 0;
         emitState();
@@ -362,7 +305,6 @@ export function ReaderPageTurnController({
       entryAnchor = null;
       if (entryAnchorTimer) window.clearTimeout(entryAnchorTimer);
       entryAnchorTimer = 0;
-      cancelAnimation();
       metrics = pageMetrics(content!);
       if (metrics.index <= 1 || metrics.index >= metrics.count - 2) prefetchAdjacent(true);
       drag = {
@@ -382,8 +324,9 @@ export function ReaderPageTurnController({
       const distance = drag.startX - event.clientX;
       if (Math.abs(distance) >= 4) drag.moved = true;
       if (!drag.moved) return;
+      // The drag is a gesture, not a scrub: the columns hold still and the page
+      // resolves once on release.
       event.preventDefault();
-      if (modeRef.current === "slide") setLeft(drag.startLeft + distance);
     }
 
     function finishDrag(event: PointerEvent, cancelled = false) {
@@ -407,7 +350,7 @@ export function ReaderPageTurnController({
           });
       if (target < 0 && navigate(previousHref, -1, false)) return;
       if (target >= metrics.count && navigate(nextHref, 1, false)) return;
-      settleTo(target, modeRef.current === "slide" && target !== currentDrag.startIndex);
+      settleTo(target);
     }
 
     function handlePagedTap(event: MouseEvent) {
@@ -484,10 +427,7 @@ export function ReaderPageTurnController({
       if (layoutFrame) cancelAnimationFrame(layoutFrame);
       if (settleFrame) cancelAnimationFrame(settleFrame);
       if (scrollFrame) cancelAnimationFrame(scrollFrame);
-      if (routeFrame) cancelAnimationFrame(routeFrame);
-      if (enteringFrame) cancelAnimationFrame(enteringFrame);
       if (entryAnchorTimer) window.clearTimeout(entryAnchorTimer);
-      cancelAnimation();
       resizeObserver.disconnect();
       content.removeEventListener("scroll", handleScroll);
       content.removeEventListener("pointerdown", handlePointerDown);
@@ -503,7 +443,6 @@ export function ReaderPageTurnController({
       content.style.removeProperty("--reader-page-column-width");
       content.classList.remove("isReaderPageDragging");
       shell?.classList.remove("isReaderPageEnd");
-      shell?.classList.remove("isReaderRouteLeavingPrevious", "isReaderRouteLeavingNext", "isReaderRouteEnteringPrevious", "isReaderRouteEnteringNext");
       if (idleTask.kind === "idle") win.cancelIdleCallback?.(idleTask.handle);
       else window.clearTimeout(idleTask.handle);
     };

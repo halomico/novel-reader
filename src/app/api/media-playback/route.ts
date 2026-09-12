@@ -6,7 +6,6 @@ import { hasPublishedMediaHls, isMediaKindConsumable } from "@/domains/media/med
 import {
   createPostgresVideoPlaybackLease,
   estimatePostgresVideoBitrateKbps,
-  getPostgresVideoConcurrencyLimit,
   refreshPostgresVideoPlaybackLease,
   releasePostgresVideoPlaybackLease,
 } from "@/domains/media/postgres-video-playback";
@@ -76,24 +75,21 @@ export async function POST(request: NextRequest) {
     userId: user?.id || null,
     clientId: input.clientId,
     mediaId: asset.id,
-    limit: await getPostgresVideoConcurrencyLimit(database("web"), user),
     storageNodeId: capacity.storageNodeId,
     reservedKbps: estimatePostgresVideoBitrateKbps(asset),
     nodeMaxStreams: capacity.maxVideoStreams,
     nodeBandwidthKbps: capacity.bandwidthKbps,
   });
   if (!result.ok) {
-    const message = result.reason === "limit_reached"
-      ? `同时播放的视频已达到上限（${result.limit}）`
-      : result.reason === "not_allowed"
-        ? "当前等级暂不能播放视频"
-        : result.reason === "node_busy"
-          ? "当前播放人数较多，请稍后重试"
-          : "视频不存在";
+    const message = result.reason === "not_allowed"
+      ? "当前等级暂不能播放视频"
+      : result.reason === "node_busy"
+        ? "当前播放人数较多，请稍后重试"
+        : "视频不存在";
     return NextResponse.json(
       { ok: false, message },
       {
-        status: result.reason === "limit_reached" ? 409 : result.reason === "node_busy" ? 503 : 403,
+        status: result.reason === "node_busy" ? 503 : 403,
         headers: result.reason === "node_busy" ? { "Retry-After": "15" } : undefined,
       },
     );

@@ -28,9 +28,11 @@ export const DEFAULT_READER_WIDTH = 800;
 export const READER_WIDTHS = ["auto", 640, 800, 900, 1000, 1280] as const;
 export const READER_PAGE_TURN_OPTIONS = [
   { value: "scroll", label: "滚动" },
-  { value: "slide", label: "平移" },
   { value: "instant", label: "无动画" },
 ] as const;
+/** Retired in favour of the two modes above. Readers who chose it keep paging —
+ *  just without the translate animation — instead of being dropped back to scrolling. */
+export const RETIRED_READER_PAGE_TURN = "slide";
 export const DEFAULT_READER_PAGE_TURN: ReaderPageTurn = "scroll";
 export const READER_THEME_OPTIONS = [
   { value: "gray", label: "灰白", swatch: "#f5f5f5", paper: "#f5f5f5", outer: "#ebebeb" },
@@ -148,6 +150,7 @@ export function normalizeReaderPageTurn(
   value: string | null | undefined,
   fallback: ReaderPageTurn = DEFAULT_READER_PAGE_TURN,
 ): ReaderPageTurn {
+  if (value === RETIRED_READER_PAGE_TURN) return "instant";
   return READER_PAGE_TURN_OPTIONS.some((option) => option.value === value)
     ? value as ReaderPageTurn
     : fallback;

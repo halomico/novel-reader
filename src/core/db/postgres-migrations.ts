@@ -72,10 +72,14 @@ function runtimeCompatibilityIssues(status: PostgresRuntimeStatus): PostgresComp
 
 export function assessPostgresSchemaCompatibility(status: PostgresSchemaStatus): PostgresSchemaCompatibility {
   const issues = runtimeCompatibilityIssues(status);
-  if (status.currentVersion !== status.expectedVersion) {
+  // Migrations are additive and never dropped, so a schema newer than this build is
+  // still one this build can read: it is what a rolling upgrade looks like while the
+  // new release is only on some replicas. Only a schema that is *behind* what this
+  // build requires is unsafe, and pending migrations are reported separately below.
+  if (status.currentVersion < status.expectedVersion) {
     issues.push({
       code: "schema-version",
-      message: `PostgreSQL schema ${status.currentVersion} does not match expected ${status.expectedVersion}`,
+      message: `PostgreSQL schema ${status.currentVersion} is older than the required ${status.expectedVersion}`,
     });
   }
   if (status.pendingVersions.length) {

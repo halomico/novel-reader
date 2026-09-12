@@ -278,7 +278,8 @@ test("navigation keeps the current surface while loading and paged readers avoid
   assert.match(read("src/components/ReadingHistoryList.tsx"), /scroll=\{false\}/);
   assert.match(read("src/components/NovelViewTracker.tsx"), /1_500/);
   assert.doesNotMatch(read("src/components/NovelViewTracker.tsx"), /IntersectionObserver/);
-  assert.match(read("src/app/styles/routes/reader.css"), /data-reader-page-turn="slide"[^\n]*[\s\S]*readerChapterNavigation/);
+  assert.match(read("src/app/styles/routes/reader.css"), /data-reader-page-turn="instant"[^\n]*[\s\S]*readerChapterNavigation/);
+  assert.doesNotMatch(read("src/app/styles/routes/reader.css"), /page-turn="slide"/, "the translate mode is retired");
   const readerCss = read("src/app/styles/routes/reader.css");
   assert.match(readerCss, /novelReaderShell > \.readerPage > \.readerTagsBlock/);
   assert.match(readerCss, /data-reader-tags="hidden"\] \.readerPage\.hasReaderPreferences \.readerTagsBlock/);

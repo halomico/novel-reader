@@ -37,7 +37,10 @@ export function OriginalDraftDeleteButton({ draftId, title, locale }: { draftId:
       <p className="originalDraftDeleteTitle">{title || tr("无标题草稿")}</p>
       <p id={descriptionId}>{tr("删除后无法恢复，已发布文章不会受到影响。")}</p>
       {error ? <p role="alert">{error}</p> : null}
-      <footer><button type="button" autoFocus disabled={pending} onClick={() => dialog.current?.close()}>{tr("取消")}</button><button type="button" disabled={pending} aria-busy={pending} onClick={() => void remove()}>{tr(pending ? "删除中…" : "删除")}</button></footer>
+      <footer>
+        <button className="originalDialogButton" type="button" autoFocus disabled={pending} onClick={() => dialog.current?.close()}>{tr("取消")}</button>
+        <button className="originalDialogButton isDanger" type="button" disabled={pending} aria-busy={pending} onClick={() => void remove()}>{tr(pending ? "删除中…" : "删除")}</button>
+      </footer>
     </dialog>
   </>;
 }

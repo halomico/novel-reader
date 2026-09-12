@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 import type { QueryResultRow } from "pg";
 import { withTransaction, type SqlExecutor } from "@/core/db/postgres";
-import { getPostgresUserLevelDefinition } from "@/domains/identity/postgres-permissions";
 
 export const POSTGRES_PLAYBACK_LEASE_MS = 90_000;
 
@@ -12,7 +11,7 @@ export type PostgresVideoPlaybackLease = Readonly<{
 }>;
 export type PostgresVideoPlaybackLeaseResult =
   | Readonly<{ ok: true; lease: PostgresVideoPlaybackLease }>
-  | Readonly<{ ok: false; reason: "not_allowed" | "limit_reached" | "node_busy" | "not_found"; limit?: number }>;
+  | Readonly<{ ok: false; reason: "not_allowed" | "node_busy" | "not_found" }>;
 
 type TransactionRunner = <T>(operation: (transaction: SqlExecutor) => Promise<T>) => Promise<T>;
 
@@ -46,20 +45,6 @@ function count(value: string | number, label: string): number {
   return parsed;
 }
 
-export function getPostgresGuestVideoConcurrencyLimit(env: NodeJS.ProcessEnv = process.env): number {
-  const value = Number(env.GUEST_VIDEO_CONCURRENCY_LIMIT || 1);
-  return Number.isFinite(value) ? Math.min(Math.max(Math.floor(value), 0), 20) : 1;
-}
-
-export async function getPostgresVideoConcurrencyLimit(
-  executor: SqlExecutor,
-  user: { role: "user" | "admin"; trustLevel: number } | null,
-): Promise<number> {
-  if (!user) return getPostgresGuestVideoConcurrencyLimit();
-  if (user.role === "admin") return 20;
-  return (await getPostgresUserLevelDefinition(executor, user.trustLevel)).videoConcurrencyLimit;
-}
-
 export function estimatePostgresVideoBitrateKbps(input: { sizeBytes: number; durationSeconds: number | null }): number {
   const duration = Number(input.durationSeconds || 0);
   const calculated = duration > 0 ? (Math.max(input.sizeBytes, 0) * 8) / duration / 1_000 : 0;
@@ -72,7 +57,6 @@ export async function createPostgresVideoPlaybackLease(
     userId?: number | null;
     clientId: string;
     mediaId: number;
-    limit: number;
     storageNodeId?: string | null;
     reservedKbps?: number;
     nodeMaxStreams?: number;
@@ -83,8 +67,7 @@ export async function createPostgresVideoPlaybackLease(
 ): Promise<PostgresVideoPlaybackLeaseResult> {
   const viewerKey = cleanViewerKey(input.viewerKey);
   const clientId = cleanClientId(input.clientId);
-  const limit = Math.min(Math.max(Math.floor(input.limit), 0), 20);
-  if (!viewerKey || !clientId || limit < 1) return { ok: false, reason: "not_allowed", limit };
+  if (!viewerKey || !clientId) return { ok: false, reason: "not_allowed" };
   const mediaId = positiveId(input.mediaId, "media id");
   const userId = input.userId == null ? null : positiveId(input.userId, "user id");
   const storageNodeId = cleanNodeId(input.storageNodeId);
@@ -126,15 +109,8 @@ export async function createPostgresVideoPlaybackLease(
       values: [viewerKey, clientId],
     });
     const existingId = existing.rows[0]?.id ?? "";
-    const active = await tx.query<QueryResultRow & { active: string | number }>({
-      text: `SELECT COUNT(*)::bigint AS active FROM video_playback_sessions
-        WHERE viewer_key = $1 AND id <> $2 AND expires_at > $3
-          AND last_seen_at > $3 - ($4::integer * interval '1 millisecond')`,
-      values: [viewerKey, existingId, now, POSTGRES_PLAYBACK_LEASE_MS],
-    });
-    if (count(active.rows[0]?.active ?? 0, "active playback leases") >= limit) {
-      return { ok: false, reason: "limit_reached", limit };
-    }
+    // Per-viewer concurrency is no longer part of the user-level model. What still has
+    // to hold is the storage node's real instantaneous capacity, checked below.
     if (nodeMaxStreams > 0 || nodeBandwidthKbps > 0) {
       const usage = await tx.query<QueryResultRow & { streams: string | number; kbps: string | number }>({
         text: `SELECT COUNT(*)::bigint AS streams, COALESCE(SUM(reserved_kbps), 0)::bigint AS kbps

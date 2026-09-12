@@ -45,15 +45,29 @@ import {
   sameSelectionState,
   type OriginalTextFormat,
 } from "./editor-commands";
-import { insertPaidGateIntoEditor } from "./composer-document";
+import {
+  editorSelectionBookmark,
+  insertPaidGateIntoEditor,
+  restoreEditorSelection,
+  type SelectionBookmark,
+} from "./composer-document";
 import { $createDividerNode } from "./nodes/DividerNode";
 import type { SourceTool } from "./source-editing";
 import styles from "./OriginalComposer.module.css";
 
 /**
+ * Swallow the press that would move focus out of the manuscript. This has to be
+ * `pointerdown`: on a touch screen `mousedown` is synthesised only *after* `touchend`,
+ * by which time the caret and the on-screen keyboard are already gone.
+ */
+function keepEditorFocus(event: React.PointerEvent<HTMLButtonElement>) {
+  event.preventDefault();
+}
+
+/**
  * One toolbar button: an icon over its name, the way a writing tool labels its commands.
  * A click acts at once and a second click undoes it — there is no double-click mode.
- * Mouse-down is swallowed so the editor keeps its caret and selection.
+ * The press is swallowed so the editor keeps its caret and selection.
  */
 function ToolbarButton({
   label,
@@ -77,9 +91,30 @@ function ToolbarButton({
       title={shortcut ? `${label}（${shortcut}）` : label}
       className={pressed ? styles.toolActive : undefined}
       disabled={disabled}
-      onMouseDown={(event) => event.preventDefault()}
+      onPointerDown={keepEditorFocus}
       onClick={onClick}
     >
+      {children}
+      <span>{label}</span>
+    </button>
+  );
+}
+
+/** A command in the mobile sheet. Same focus rule as the toolbar: the sheet must
+ *  never be the reason a selection disappears. */
+function SheetButton({
+  label,
+  pressed,
+  onClick,
+  children,
+}: {
+  label: string;
+  pressed?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button type="button" aria-pressed={pressed} onPointerDown={keepEditorFocus} onClick={onClick}>
       {children}
       <span>{label}</span>
     </button>
@@ -116,6 +151,7 @@ export function ComposerToolbar({
   const [selectionState, setSelectionState] = useState(EMPTY_SELECTION_STATE);
   const [mobilePanel, setMobilePanel] = useState<"format" | "insert" | null>(null);
   const mobileDialogRef = useRef<HTMLDialogElement>(null);
+  const sheetSelectionRef = useRef<SelectionBookmark | null>(null);
 
   useEffect(() => {
     const dialog = mobileDialogRef.current;
@@ -137,8 +173,18 @@ export function ComposerToolbar({
     );
   }, [editor]);
 
+  /** `showModal` moves focus into the sheet, which collapses the manuscript's caret.
+   *  Bookmark the range on the way in so a command chosen from the sheet still acts on
+   *  the text the writer had selected. */
+  function openMobilePanel(panel: "format" | "insert") {
+    sheetSelectionRef.current = sourceMode ? null : editorSelectionBookmark(editor);
+    setMobilePanel(panel);
+  }
+
   function applyMobileTool(action: () => void) {
     mobileDialogRef.current?.close();
+    const bookmark = sheetSelectionRef.current;
+    if (!sourceMode && bookmark) editor.update(() => { restoreEditorSelection(bookmark); });
     action();
     if (!sourceMode) editor.focus();
   }
@@ -202,8 +248,8 @@ export function ComposerToolbar({
         <ToolbarButton label="付费分界" onClick={insertPaidGate}><LockKeyhole size={18} /></ToolbarButton>
       </div>
       <div className={styles.mobileToolbar}>
-        <ToolbarButton label="文字格式" pressed={mobilePanel === "format"} onClick={() => setMobilePanel("format")}><Type size={22} /></ToolbarButton>
-        <ToolbarButton label={sourceMode ? "渲染" : "插入"} pressed={sourceMode || mobilePanel === "insert"} onClick={() => sourceMode ? onSourceToggle() : setMobilePanel("insert")}>{sourceMode ? <Code2 size={22} /> : <Plus size={22} />}</ToolbarButton>
+        <ToolbarButton label="文字格式" pressed={mobilePanel === "format"} onClick={() => openMobilePanel("format")}><Type size={22} /></ToolbarButton>
+        <ToolbarButton label={sourceMode ? "渲染" : "插入"} pressed={sourceMode || mobilePanel === "insert"} onClick={() => sourceMode ? onSourceToggle() : openMobilePanel("insert")}>{sourceMode ? <Code2 size={22} /> : <Plus size={22} />}</ToolbarButton>
         <ToolbarButton label="撤销" disabled={sourceMode ? !sourceUndo : !canUndo} onClick={undo}><Undo2 size={22} /></ToolbarButton>
         <ToolbarButton label="重做" disabled={sourceMode ? !sourceRedo : !canRedo} onClick={redo}><Redo2 size={22} /></ToolbarButton>
       </div>
@@ -214,17 +260,17 @@ export function ComposerToolbar({
         <div className={styles.formatGrid}>
           {mobilePanel === "format" ? <>
             {TEXT_FORMAT_BUTTONS.map(({ format, label, Icon }) => (
-              <button type="button" key={format} aria-pressed={formats[format]} onClick={() => applyMobileTool(() => toggleTextFormat(format))}><Icon size={21} /><span>{label}</span></button>
+              <SheetButton key={format} label={label} pressed={formats[format]} onClick={() => applyMobileTool(() => toggleTextFormat(format))}><Icon size={21} /></SheetButton>
             ))}
-            <button type="button" onClick={() => applyMobileTool(clearFormatting)}><Eraser size={21} /><span>清除格式</span></button>
+            <SheetButton label="清除格式" onClick={() => applyMobileTool(clearFormatting)}><Eraser size={21} /></SheetButton>
           </> : <>
-            <button type="button" aria-pressed={block === "heading"} onClick={() => applyMobileTool(() => toggleBlock("heading"))}><Heading1 size={21} /><span>章节</span></button>
-            <button type="button" onClick={() => applyMobileTool(() => run("paragraph", () => editor.update(() => { $setParagraphBlocks(); })))}><Pilcrow size={21} /><span>正文</span></button>
-            <button type="button" aria-pressed={block === "quote"} onClick={() => applyMobileTool(() => toggleBlock("quote"))}><Quote size={21} /><span>引用</span></button>
-            <button type="button" onClick={() => { mobileDialogRef.current?.close(); onLinkRequest(); }}><Link2 size={21} /><span>链接</span></button>
-            <button type="button" onClick={() => applyMobileTool(insertDivider)}><Minus size={21} /><span>分割线</span></button>
-            <button type="button" onClick={() => applyMobileTool(insertPaidGate)}><LockKeyhole size={21} /><span>付费分界</span></button>
-            <button type="button" onClick={() => { mobileDialogRef.current?.close(); onSourceToggle(); }}><Code2 size={21} /><span>源码</span></button>
+            <SheetButton label="章节" pressed={block === "heading"} onClick={() => applyMobileTool(() => toggleBlock("heading"))}><Heading1 size={21} /></SheetButton>
+            <SheetButton label="正文" onClick={() => applyMobileTool(() => run("paragraph", () => editor.update(() => { $setParagraphBlocks(); })))}><Pilcrow size={21} /></SheetButton>
+            <SheetButton label="引用" pressed={block === "quote"} onClick={() => applyMobileTool(() => toggleBlock("quote"))}><Quote size={21} /></SheetButton>
+            <SheetButton label="链接" onClick={() => { mobileDialogRef.current?.close(); onLinkRequest(); }}><Link2 size={21} /></SheetButton>
+            <SheetButton label="分割线" onClick={() => applyMobileTool(insertDivider)}><Minus size={21} /></SheetButton>
+            <SheetButton label="付费分界" onClick={() => applyMobileTool(insertPaidGate)}><LockKeyhole size={21} /></SheetButton>
+            <SheetButton label="源码" onClick={() => { mobileDialogRef.current?.close(); onSourceToggle(); }}><Code2 size={21} /></SheetButton>
           </>}
         </div>
     </dialog>

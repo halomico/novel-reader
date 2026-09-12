@@ -146,6 +146,7 @@ export function getOriginalPublishingSettings(): {
   freeCommentsPerLevel: number;
   commentCostSoda: number;
   articleMinWords: number;
+  articleMaxChars: number;
   commentMinChars: number;
   maxTags: number;
   pageSize: number;
@@ -160,6 +161,7 @@ export function getOriginalPublishingSettings(): {
     freeCommentsPerLevel: settings.originalFreeCommentsPerLevel,
     commentCostSoda: settings.originalCommentCostSoda,
     articleMinWords: settings.originalArticleMinWords,
+    articleMaxChars: settings.originalArticleMaxChars,
     commentMinChars: settings.originalCommentMinChars,
     maxTags: settings.originalMaxTags,
     pageSize: settings.originalPageSize,

@@ -157,6 +157,16 @@
   white-space: nowrap;
   transition: color .12s ease, background-color .12s ease;
 }
+
+/* A format command is a tap, never a text selection or a zoom gesture: `manipulation`
+   also drops the 300ms click delay that made these buttons feel unresponsive. */
+.toolbar button,
+.formatGrid button {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
 .toolbar button > svg { flex: 0 0 auto; }
 
 /* Hover is a neutral affordance, not a state: a button the writer just switched off

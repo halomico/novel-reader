@@ -436,6 +436,11 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                   <small>默认 2000 字，仅校验新发布和用户编辑，不改写已有文章。</small>
                 </label>
                 <label>
+                  <span>文章最多字符</span>
+                  <input name="originalArticleMaxChars" type="number" min="1000" max="200000" defaultValue={settings.originalArticleMaxChars} />
+                  <small>默认 200000 字符，含 Markdown 标记；仅校验新发布和用户编辑，不改写已有文章。</small>
+                </label>
+                <label>
                   <span>回复最少字数</span>
                   <input name="originalCommentMinChars" type="number" min="1" max="200" defaultValue={settings.originalCommentMinChars} />
                 </label>

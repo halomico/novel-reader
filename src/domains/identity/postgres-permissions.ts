@@ -21,7 +21,6 @@ export type PostgresUserLevelDefinition = Readonly<{
   level: number;
   name: string;
   sodaRequired: number;
-  videoConcurrencyLimit: number;
   dailyVideoDownloadLimit: number;
   permissions: PostgresUserPermission[];
   updatedAt: string;
@@ -32,7 +31,6 @@ type LevelRow = QueryResultRow & {
   level: number;
   name: string;
   soda_required: string | number;
-  video_concurrency_limit: number;
   daily_video_download_limit: number;
   permissions: unknown;
   updated_at: Date | string;
@@ -71,7 +69,6 @@ function level(row: LevelRow): PostgresUserLevelDefinition {
     level: validTrustLevel(row.level),
     name: row.name,
     sodaRequired: count(row.soda_required, "user-level soda requirement"),
-    videoConcurrencyLimit: Math.min(count(row.video_concurrency_limit, "video concurrency limit"), 20),
     dailyVideoDownloadLimit: Math.min(count(row.daily_video_download_limit, "daily video download limit"), 1_000),
     permissions: permissions(row.permissions),
     updatedAt: timestamp(row.updated_at),
@@ -81,7 +78,7 @@ function level(row: LevelRow): PostgresUserLevelDefinition {
 export async function listPostgresUserLevelDefinitions(executor: SqlExecutor): Promise<PostgresUserLevelDefinition[]> {
   const result = await executor.query<LevelRow>({
     name: "identity-list-user-levels-v1",
-    text: `SELECT level, name, soda_required, video_concurrency_limit,
+    text: `SELECT level, name, soda_required,
       daily_video_download_limit, permissions, updated_at
       FROM user_levels ORDER BY level ASC`,
   });
@@ -92,7 +89,7 @@ export async function getPostgresUserLevelDefinition(executor: SqlExecutor, leve
   const normalized = validTrustLevel(Math.min(Math.max(Math.floor(Number(levelValue) || 0), 0), 6));
   const result = await executor.query<LevelRow>({
     name: "identity-get-user-level-v1",
-    text: `SELECT level, name, soda_required, video_concurrency_limit,
+    text: `SELECT level, name, soda_required,
       daily_video_download_limit, permissions, updated_at FROM user_levels WHERE level = $1`,
     values: [normalized],
   });
@@ -100,7 +97,6 @@ export async function getPostgresUserLevelDefinition(executor: SqlExecutor, leve
     level: normalized,
     name: `等级 ${normalized}`,
     sodaRequired: 0,
-    videoConcurrencyLimit: normalized === 0 ? 0 : 1,
     dailyVideoDownloadLimit: normalized === 0 ? 0 : 3,
     permissions: [],
     updatedAt: "",
@@ -111,7 +107,6 @@ export async function savePostgresUserLevelDefinition(executor: SqlExecutor, inp
   level: number;
   name: string;
   sodaRequired: number;
-  videoConcurrencyLimit?: number;
   dailyVideoDownloadLimit?: number;
   permissions: readonly string[];
 }): Promise<boolean> {
@@ -120,14 +115,12 @@ export async function savePostgresUserLevelDefinition(executor: SqlExecutor, inp
   if (!name) return false;
   const selected = [...new Set(input.permissions.filter((item): item is PostgresUserPermission => CONFIGURABLE_PERMISSIONS.has(item as PostgresUserPermission)))];
   const sodaRequired = normalizedLevel < 2 ? 0 : Math.min(Math.max(Math.floor(Number(input.sodaRequired) || 0), 1), 2_000_000_000);
-  const concurrency = normalizedLevel === 0 ? 0 : input.videoConcurrencyLimit == null ? null : Math.min(Math.max(Math.floor(Number(input.videoConcurrencyLimit) || 0), 0), 20);
   const downloads = normalizedLevel === 0 ? 0 : input.dailyVideoDownloadLimit == null ? null : Math.min(Math.max(Math.floor(Number(input.dailyVideoDownloadLimit) || 0), 0), 1_000);
   const result = await executor.query({
     text: `UPDATE user_levels SET name = $2, soda_required = $3,
-      video_concurrency_limit = COALESCE($4::integer, video_concurrency_limit),
-      daily_video_download_limit = COALESCE($5::integer, daily_video_download_limit),
-      permissions = $6::jsonb, updated_at = clock_timestamp() WHERE level = $1`,
-    values: [normalizedLevel, name, sodaRequired, concurrency, downloads, JSON.stringify(selected)],
+      daily_video_download_limit = COALESCE($4::integer, daily_video_download_limit),
+      permissions = $5::jsonb, updated_at = clock_timestamp() WHERE level = $1`,
+    values: [normalizedLevel, name, sodaRequired, downloads, JSON.stringify(selected)],
   });
   return (result.rowCount ?? 0) > 0;
 }
