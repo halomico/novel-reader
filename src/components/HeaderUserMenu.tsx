@@ -97,75 +97,75 @@ export function HeaderUserMenu({
         hidden={!open}
         inert={!open ? true : undefined}
       >
-          {user ? (
-            <>
-              <AppLink className="userMenuIdentity" href="/account" onClick={closeMenu}>
-                <UserAvatar
-                  className="userMenuAvatar"
-                  userId={user.id}
-                  displayName={user.displayName}
-                  avatarPath={user.avatarPath}
-                  loading="eager"
-                />
-                <span className="userMenuIdentityCopy">
-                  <strong>{user.displayName}</strong>
-                  <small>Lv.{user.trustLevel}</small>
-                </span>
+        {user ? (
+          <>
+            <AppLink className="userMenuIdentity" href="/account" onClick={closeMenu}>
+              <UserAvatar
+                className="userMenuAvatar"
+                userId={user.id}
+                displayName={user.displayName}
+                avatarPath={user.avatarPath}
+                loading="eager"
+              />
+              <span className="userMenuIdentityCopy">
+                <strong>{user.displayName}</strong>
+                <small>Lv.{user.trustLevel}</small>
+              </span>
+            </AppLink>
+            <AppLink href="/account?view=growth" onClick={closeMenu}>
+              <Sparkles size={16} aria-hidden="true" />
+              {tr("成长")}
+            </AppLink>
+            <AppLink href="/activity" onClick={closeMenu}>
+              <Activity size={16} aria-hidden="true" />
+              {tr("动态")}
+            </AppLink>
+            {showMarket ? (
+              <AppLink href="/market" onClick={closeMenu}>
+                <Store size={16} aria-hidden="true" />
+                {tr("集市")}
               </AppLink>
-              <AppLink href="/account?view=growth" onClick={closeMenu}>
-                <Sparkles size={16} aria-hidden="true" />
-                {tr("成长")}
+            ) : null}
+            {showOriginal ? (
+              <AppLink href="/original/mine" onClick={closeMenu}>
+                <FileText size={16} aria-hidden="true" />
+                {tr("文章")}
               </AppLink>
-              <AppLink href="/activity" onClick={closeMenu}>
-                <Activity size={16} aria-hidden="true" />
-                {tr("动态")}
+            ) : null}
+            <Link href="/messages" onClick={closeMenu}>
+              <MessageCircle size={16} aria-hidden="true" />
+              {tr("消息")}
+              {unreadMessages > 0 ? <span className="userMenuUnreadDot" aria-label={`${unreadMessages} 条未读消息`} /> : null}
+            </Link>
+          </>
+        ) : (
+          <>
+            {loginEnabled ? (
+              <AppLink href="/login" onClick={closeMenu}>
+                <KeyRound size={16} aria-hidden="true" />
+                {tr("登录")}
               </AppLink>
-              {showMarket ? (
-                <AppLink href="/market" onClick={closeMenu}>
-                  <Store size={16} aria-hidden="true" />
-                  {tr("集市")}
-                </AppLink>
-              ) : null}
-              {showOriginal ? (
-                <AppLink href="/original/mine" onClick={closeMenu}>
-                  <FileText size={16} aria-hidden="true" />
-                  {tr("文章")}
-                </AppLink>
-              ) : null}
-              <Link href="/messages" onClick={closeMenu}>
-                <MessageCircle size={16} aria-hidden="true" />
-                {tr("消息")}
-                {unreadMessages > 0 ? <span className="userMenuUnreadDot" aria-label={`${unreadMessages} 条未读消息`} /> : null}
-              </Link>
-            </>
-          ) : (
-            <>
-              {loginEnabled ? (
-                <AppLink href="/login" onClick={closeMenu}>
-                  <KeyRound size={16} aria-hidden="true" />
-                  {tr("登录")}
-                </AppLink>
-              ) : null}
-              {registrationEnabled ? (
-                <AppLink href="/register" onClick={closeMenu}>
-                  <UserPlus size={16} aria-hidden="true" />
-                  {tr("注册")}
-                </AppLink>
-              ) : null}
-            </>
-          )}
-          <AppLink href="/settings" onClick={closeMenu}>
-            <Settings size={16} aria-hidden="true" />
-            {tr("设置")}
-          </AppLink>
-          {user ? (
-            <form action={logoutUserAction}>
-              <button type="submit">
-                <LogOut size={16} aria-hidden="true" />
-                {tr("退出")}
-              </button>
-            </form>
-          ) : null}
+            ) : null}
+            {registrationEnabled ? (
+              <AppLink href="/register" onClick={closeMenu}>
+                <UserPlus size={16} aria-hidden="true" />
+                {tr("注册")}
+              </AppLink>
+            ) : null}
+          </>
+        )}
+        <AppLink href="/settings" onClick={closeMenu}>
+          <Settings size={16} aria-hidden="true" />
+          {tr("设置")}
+        </AppLink>
+        {user ? (
+          <form action={logoutUserAction}>
+            <button type="submit">
+              <LogOut size={16} aria-hidden="true" />
+              {tr("退出")}
+            </button>
+          </form>
+        ) : null}
       </div>
     </div>
   );

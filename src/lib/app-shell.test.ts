@@ -262,6 +262,9 @@ test("navigation keeps the current surface while loading and paged readers avoid
   const userMenu = read("src/components/HeaderUserMenu.tsx");
   assert.match(userMenu, /hidden=\{!open\}/);
   assert.match(userMenu, /loading="eager"/);
+  // The panel is laid out with `display: grid`, which outranks the user-agent rule for
+  // [hidden]: without this the mounted-while-closed panel is permanently on screen.
+  assert.match(read("src/app/styles/common.css"), /\.userMenuPanel\[hidden\]\s*\{\s*display: none;/);
   const nextConfig = read("next.config.ts");
   assert.match(nextConfig, /source: "\/avatars\/:path\*"[\s\S]*max-age=31536000, immutable/);
   const controls = read("src/components/ReaderExperienceControls.tsx");

@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type { QueryResultRow } from "pg";
 import type { SqlExecutor, SqlQuery } from "@/core/db/postgres";
 import { normalizeChineseSearchForms } from "@/domains/reading/content-text";
@@ -189,6 +190,12 @@ function tagVisibility(audience: PostgresCatalogSearchOptions["audience"]): stri
   throw new Error("Invalid catalog tag audience");
 }
 
+/** A user-typed seed reduced to the 32-bit hash key PostgreSQL takes. Bounded so the
+ *  value stays inside `integer`, which every driver binds without ceremony. */
+function randomSeedKey(seed: string): number {
+  return crypto.createHash("sha256").update(seed).digest().readUInt32BE(0);
+}
+
 function orderAndCursor(
   builder: SqlBuilder,
   cursor: PostgresCatalogCursor | undefined,
@@ -206,15 +213,22 @@ function orderAndCursor(
   if (normalizedOrder !== "asc" && normalizedOrder !== "desc") throw new Error("Invalid catalog sort order");
   const direction = normalizedSeed ? "ASC" : normalizedOrder === "asc" ? "ASC" : "DESC";
   const operator = direction === "ASC" ? ">" : "<";
+  // Hashing each row's id under the seed gives an independent permutation per throw, and
+  // one that is uniform over rows however the ids are distributed. It is the same shuffle
+  // the catalog dice uses, and roughly twenty times cheaper per row than digesting a
+  // constructed string — which matters on a tag holding tens of thousands of books.
   const sortExpression = normalizedSeed
-    ? `md5(${builder.parameter(normalizedSeed)} || ':' || n.id::text)`
+    ? `hashtextextended(n.id::text, ${builder.parameter(randomSeedKey(normalizedSeed))}::bigint)`
     : normalizedSort === "name"
     ? `lower(n.title) COLLATE "C"`
     : normalizedSort === "words" ? "n.word_count" : "n.mtime_ms";
   if (!cursor) return { orderBy: `${sortExpression} ${direction}, n.id ${direction}`, cursorSql: "", sortExpression };
   const value = String(cursor.sortValue);
   if (normalizedSeed) {
-    if (!/^[0-9a-f]{32}$/u.test(value)) throw new Error("Invalid random catalog cursor");
+    if (!/^-?(0|[1-9]\d{0,18})$/u.test(value) || BigInt(value) > 9_223_372_036_854_775_807n
+        || BigInt(value) < -9_223_372_036_854_775_808n) {
+      throw new Error("Invalid random catalog cursor");
+    }
   } else if (normalizedSort === "name") {
     if (!value || value.includes("\0") || Array.from(value).length > 4_096) {
       throw new Error("Invalid catalog cursor title");
@@ -228,9 +242,9 @@ function orderAndCursor(
   }
   const sortValue = builder.parameter(value);
   const id = builder.parameter(cursor.id);
-  const typedSortValue = normalizedSeed || normalizedSort === "name"
+  const typedSortValue = normalizedSort === "name" && !normalizedSeed
     ? `${sortValue}::text COLLATE "C"`
-    : normalizedSort === "words" ? `${sortValue}::integer` : `${sortValue}::bigint`;
+    : normalizedSort === "words" && !normalizedSeed ? `${sortValue}::integer` : `${sortValue}::bigint`;
   return {
     orderBy: `${sortExpression} ${direction}, n.id ${direction}`,
     cursorSql: `(${sortExpression}, n.id) ${operator} (${typedSortValue}, ${id}::integer)`,

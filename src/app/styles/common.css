@@ -411,6 +411,13 @@
   box-shadow: var(--shadow-float);
 }
 
+/* The panel stays mounted while closed so its avatar is already fetched when the menu
+   opens. `display: grid` above outranks the user-agent rule for [hidden], so the closed
+   state has to be spelled out here or the menu never goes away. */
+.userMenuPanel[hidden] {
+  display: none;
+}
+
 .userMenuPanel.hasIdentity {
   width: min(148px, calc(100vw - 24px));
   max-width: min(148px, calc(100vw - 24px));

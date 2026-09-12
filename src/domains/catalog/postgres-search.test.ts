@@ -139,20 +139,27 @@ test("tag browsing random order is stable, bound, and keyset-paginated", async (
   const query = await buildPostgresAdvancedCatalogSearchQuery(undefined, {
     includeTagSlugs: ["xuan-huan"],
     randomSeed: "surprise-1",
-    cursor: { sortValue: "0123456789abcdef0123456789abcdef", id: 8 },
+    cursor: { sortValue: "-4611686018427387904", id: 8 },
   });
-  assert.match(query.text, /md5\(\$\d+ \|\| ':' \|\| n\.id::text\)/);
-  assert.match(query.text, /> \(\$\d+::text COLLATE "C", \$\d+::integer\)/);
+  // One hash per row, not a digest of a string built per row: the same shuffle the
+  // catalog dice uses, and uniform over rows however the ids are distributed.
+  assert.match(query.text, /hashtextextended\(n\.id::text, \$\d+::bigint\)/);
+  assert.doesNotMatch(query.text, /md5\(/);
+  assert.match(query.text, /> \(\$\d+::bigint, \$\d+::integer\)/);
   assert.doesNotMatch(query.text, /OFFSET|surprise-1/);
-  assert.ok(query.values?.includes("surprise-1"));
-  await assert.rejects(
-    buildPostgresAdvancedCatalogSearchQuery(undefined, {
-      includeTagSlugs: ["xuan-huan"],
-      randomSeed: "surprise-1",
-      cursor: { sortValue: "not-a-hash", id: 8 },
-    }),
-    /random catalog cursor/,
-  );
+  // The seed reaches PostgreSQL as its bounded hash key, never as user text.
+  assert.ok(!query.values?.includes("surprise-1"));
+  assert.ok(query.values?.some((value) => typeof value === "number" && value >= 0 && value <= 4_294_967_295));
+  for (const sortValue of ["not-a-hash", "9223372036854775808", "1.5"]) {
+    await assert.rejects(
+      buildPostgresAdvancedCatalogSearchQuery(undefined, {
+        includeTagSlugs: ["xuan-huan"],
+        randomSeed: "surprise-1",
+        cursor: { sortValue, id: 8 },
+      }),
+      /random catalog cursor/,
+    );
+  }
 });
 
 test("advanced tag picker applies recursive user hides and source counts in one query", async () => {
