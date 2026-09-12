@@ -2914,10 +2914,6 @@ button.pageNumber {
   pointer-events: none;
 }
 
-.favoriteManageActions {
-  min-height: 31px;
-}
-
 @media (max-width: 820px) {
   .headerActions > .userMenu .userMenuButton svg {
     transform: translateX(1px);
@@ -4943,45 +4939,6 @@ button.pageNumber {
   height: auto;
 }
 
-.favoriteManageActions {
-  display: flex;
-  min-height: 38px;
-  align-items: center;
-  justify-content: flex-end;
-  margin-top: 10px;
-}
-
-.favoriteManageActions > button,
-.favoriteManageActions .readingHistoryClearConfirm > button:first-of-type {
-  min-height: var(--action-height);
-  border: 1px solid var(--accent-fill);
-  border-radius: var(--action-radius);
-  padding: 0 var(--action-inline-padding);
-  background: var(--accent-fill);
-  color: var(--accent-foreground);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--action-font-size);
-  font-weight: var(--action-font-weight);
-  transition: background-color 140ms ease, border-color 140ms ease;
-}
-
-.favoriteManageActions > button:hover:not(:disabled),
-.favoriteManageActions .readingHistoryClearConfirm > button:first-of-type:hover:not(:disabled) {
-  background: var(--accent-fill-strong);
-}
-
-.favoriteManageActions .readingHistoryClearConfirm {
-  gap: 6px;
-  padding: 0;
-  background: transparent;
-}
-
-.favoriteManageActions .readingHistoryClearConfirm > button {
-  width: auto;
-  min-width: 56px;
-  padding: 0 12px;
-}
 .readerNovelLink { align-items: center; min-height: 0; }
 .readerNovelTitle { min-width: 0; }
 .readerNovelTitle strong {

@@ -247,7 +247,6 @@
   opacity: 0.65;
 }
 
-.originalGateNotice,
 .originalGate small:not(.novelAccessGateError) {
   display: block;
   margin: 0;
@@ -1329,8 +1328,7 @@
 }
 
 .adminOriginalSummary,
-.adminOriginalArticleSummary,
-.adminOriginalMeta {
+.adminOriginalArticleSummary {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1347,8 +1345,7 @@
 }
 
 .adminOriginalArticleSummary > span:not(.adminIndexState),
-.adminOriginalArticleSummary > time,
-.adminOriginalMeta span {
+.adminOriginalArticleSummary > time {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -1520,10 +1517,6 @@
   font-size: 11px;
   font-weight: 650;
   white-space: nowrap;
-}
-
-.adminOriginalMeta {
-  gap: 6px 12px;
 }
 
 .adminOriginalRowActions,

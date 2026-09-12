@@ -303,15 +303,6 @@ textarea {
   -webkit-tap-highlight-color: transparent;
 }
 
-.brand .siteBrandIcon {
-  width: 22px;
-  height: 22px;
-  margin-right: 8px;
-  border-radius: 4px;
-  object-fit: contain;
-  vertical-align: middle;
-  transition: filter 150ms ease, transform 150ms ease;
-}
 
 .brand:hover,
 .brand:focus-visible {
@@ -319,12 +310,6 @@ textarea {
   text-shadow: 0 0 12px color-mix(in srgb, var(--accent) 24%, transparent);
   background: transparent;
   opacity: 1;
-}
-
-.brand:hover .siteBrandIcon,
-.brand:focus-visible .siteBrandIcon {
-  filter: saturate(1.15) brightness(1.08);
-  transform: translateY(-1px);
 }
 
 .brand:focus-visible {
