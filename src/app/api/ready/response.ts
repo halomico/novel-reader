@@ -12,6 +12,7 @@ import {
   getRuntimeMetrics,
   type ServerTimingMetric,
 } from "@/core/observability/runtime";
+import { getLoadSheddingMetrics } from "@/core/runtime/load-shedding";
 import { validateTrustedProxyConfiguration } from "@/core/security/client-ip";
 import { getLibraryDir, getMediaDir } from "@/lib/config";
 
@@ -99,6 +100,7 @@ export async function createReadinessResponse(
       postgresCompatibility,
       postgresMetrics: getDatabaseMetrics(),
       runtime: getRuntimeMetrics(),
+      loadShedding: getLoadSheddingMetrics(),
       errors,
     },
     { status, headers },

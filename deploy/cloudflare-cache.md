@@ -10,7 +10,7 @@ shared cache.
 | Response | Browser `Cache-Control` | Edge `Cloudflare-CDN-Cache-Control` |
 | --- | --- | --- |
 | `/_next/static/*` | `public, max-age=31536000, immutable` (Next.js) | — (browser header applies) |
-| Guest HTML documents (`Accept: text/html`): `/`, `/novels`, `/original`, `/tags`, `/tags/{slug}` (only `?page=` allowed) | `private, max-age=0, must-revalidate` | `public, max-age=60, stale-while-revalidate=300, stale-if-error=86400` |
+| Guest HTML documents (`Accept: text/html`): `/`, `/tags`, `/original/tags`, `/announcements`, `/announcements/{id}` (no query); `/novels`, `/novels/recent`, `/original`, `/original/tags/{slug}`, `/original/author/{id}`, `/tags/{slug}` (only `?page=`) | `private, max-age=0, must-revalidate` | `public, max-age=60, stale-while-revalidate=300, stale-if-error=86400` |
 | Guest reader HTML: `/books/{id}`, `/books/{id}/chapters/{id}` while the library is public; `/original/{slug}` without a query | `private, max-age=0, must-revalidate` | `public, max-age=300, stale-while-revalidate=300, stale-if-error=86400` |
 | HTML while site-wide access rules are enabled; everything except `/` while novel rules or rate policies are enabled | Next.js default (no store) | not set — IP/country/rate rules run at the origin |
 | Documents with a session or layout-preference cookie | Next.js default (no store) | `no-store` |
@@ -54,6 +54,30 @@ and country only when the request reaches the origin. If that first-visit redire
 must also apply to edge hits, add
 `any(http.request.accepted_languages[*] in {"zh-TW" "zh-HK" "zh-MO" "zh-Hant"})`
 to the bypass rule.
+
+## When the origin is saturated
+
+Middleware refuses new work while one instance is saturated, instead of letting
+requests queue until they fail with 500. It watches two signals: event-loop delay
+(rendering has used up the CPU) and requests waiting for a PostgreSQL connection.
+
+| Level | Trigger (defaults) | Refused |
+| --- | --- | --- |
+| busy | event loop ≥ 100 ms, or ≥ `PG_WEB_POOL_SIZE` queries waiting | view and search analytics beacons |
+| overloaded | event loop ≥ 250 ms, or ≥ 4 × `PG_WEB_POOL_SIZE` waiting | everything except `/admin`, health and readiness checks |
+
+- A document the edge may cache is refused with `503` and `Retry-After`, so Cloudflare
+  answers with its stale copy (`stale-if-error`) and guests keep reading.
+- Everything else gets `429` and `Retry-After`: a JSON body for `/api/*`, and a short
+  page that retries on its own for documents.
+- Refusals carry `no-store` for browsers and the edge. A level holds for 3 seconds once
+  raised. The level and refusal counts are in the private `/api/ready` response
+  (`loadShedding`); thresholds are in `.env.example` (`LOAD_SHED_*`).
+
+In-site navigations and prefetches are never edge-cached (see the table), so each one
+reaches the origin. Links therefore prefetch only on intent, within a per-tab budget
+(one prefetch per URL a minute, at most four speculative ones per ten seconds, none on
+touch), and a tab stops prefetching for a minute after it sees a 429 or 503.
 
 ## Freshness and purging
 

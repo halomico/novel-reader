@@ -16,6 +16,10 @@ export type PublicPageCacheRequest = {
 
 const NOVEL_READER_PATH = /^\/books\/[1-9]\d*(?:\/chapters\/[1-9]\d*)?$/;
 const ORIGINAL_ARTICLE_PATH = /^\/original\/(?!(?:new|mine|tags)$)[^/]+$/;
+/** Listings whose only parameter is the page number. */
+const PAGED_LISTING_PATH = /^\/(?:novels(?:\/recent)?|original|tags\/[^/]+|original\/tags\/[^/]+|original\/author\/[1-9]\d*)$/;
+/** Listings that take no parameters. */
+const FIXED_LISTING_PATH = /^\/(?:tags|original\/tags|announcements(?:\/[1-9]\d*)?)$/;
 
 /** Published reading pages change rarely and get the longer edge lifetime. */
 export function isPublicReaderPath(pathname: string): boolean {
@@ -44,7 +48,7 @@ function isCacheablePublicPath(
   if (pathname === "/") {
     return searchParams.size === 0;
   }
-  if (pathname === "/novels" || pathname === "/original" || /^\/tags\/[^/]+$/.test(pathname)) {
+  if (PAGED_LISTING_PATH.test(pathname)) {
     return hasOnlyPositivePage(searchParams);
   }
   if (ORIGINAL_ARTICLE_PATH.test(pathname)) {
@@ -54,7 +58,8 @@ function isCacheablePublicPath(
   if (allowPublicNovelPages && NOVEL_READER_PATH.test(pathname)) {
     return hasSafeReaderReturnPath(searchParams);
   }
-  return pathname === "/tags" && searchParams.size === 0;
+  // Media listings are not here: their per-kind access rules run at the origin.
+  return FIXED_LISTING_PATH.test(pathname) && searchParams.size === 0;
 }
 
 export function isPublicPageCacheCandidate(request: PublicPageCacheRequest): boolean {

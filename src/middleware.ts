@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { getTrustedRequestCountry } from "@/core/security/client-ip";
-import { database } from "@/core/db/postgres";
+import { database, getPostgresPool } from "@/core/db/postgres";
 import {
   checkPostgresContentAccess,
   readPostgresContentAccessControlState,
@@ -32,6 +32,14 @@ import { NOVEL_CATALOG_SEARCH_COOKIE } from "@/lib/ui-preferences";
 import { isPublicUmamiPathname, UMAMI_ROUTE_SCOPE_HEADER } from "@/lib/seo";
 import { validateSameOriginMutation } from "@/core/security/origin";
 import { contentSecurityPolicy } from "@/core/security/content-security-policy";
+import {
+  classifyRequest,
+  currentPressure,
+  loadSheddingEnabled,
+  recordShed,
+  shedReply,
+  shouldShed,
+} from "@/core/runtime/load-shedding";
 
 function bypassGlobalAccess(pathname: string): boolean {
   return (
@@ -240,8 +248,50 @@ async function handleRequest(request: NextRequest) {
   return response;
 }
 
+/**
+ * Refuses a request before any work while this instance is saturated; see
+ * `@/core/runtime/load-shedding`. Neither browsers nor the edge store a refusal.
+ */
+function loadShedResponse(request: NextRequest): NextResponse | null {
+  if (!loadSheddingEnabled()) return null;
+  const pathname = stripLocalePath(request.nextUrl.pathname);
+  const priority = classifyRequest(request.method, pathname);
+  if (priority === "exempt") return null;
+  const pressure = currentPressure(getPostgresPool("web"));
+  if (!shouldShed(pressure, priority)) return null;
+  recordShed(pressure);
+  const accept = request.headers.get("accept");
+  const reply = shedReply({
+    pathname,
+    accept,
+    pressure,
+    edgeCacheable: isPublicPageCacheCandidate({
+      method: request.method,
+      pathname,
+      searchParams: request.nextUrl.searchParams,
+      accept,
+      hasUserSession: request.cookies.has(USER_SESSION_COOKIE),
+      hasBrowserLayoutPreference:
+        (pathname === "/novels" || pathname === "/novels/recent") && request.cookies.has(NOVEL_CATALOG_SEARCH_COOKIE),
+      isRscRequest: false,
+      isRouterPrefetch: false,
+      allowPublicNovelPages: isNovelLibraryPublic(),
+    }),
+  });
+  return new NextResponse(reply.body, {
+    status: reply.status,
+    headers: {
+      "Content-Type": reply.contentType,
+      "Retry-After": String(reply.retryAfterSeconds),
+      "Cache-Control": "no-store",
+      "CDN-Cache-Control": "no-store",
+      "Cloudflare-CDN-Cache-Control": "no-store",
+    },
+  });
+}
+
 export async function middleware(request: NextRequest) {
-  const response = await handleRequest(request);
+  const response = loadShedResponse(request) ?? await handleRequest(request);
   response.headers.set("Content-Security-Policy", contentSecurityPolicy());
   return response;
 }

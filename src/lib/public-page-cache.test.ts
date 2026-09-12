@@ -34,6 +34,12 @@ test("caches only anonymous public catalog documents", () => {
   );
   assert.equal(isPublicPageCacheCandidate(request("/original", "page=2")), true);
   assert.equal(isPublicPageCacheCandidate(request("/original/article-mtv")), true);
+  assert.equal(isPublicPageCacheCandidate(request("/novels/recent", "page=2")), true);
+  assert.equal(isPublicPageCacheCandidate(request("/original/tags")), true);
+  assert.equal(isPublicPageCacheCandidate(request("/original/tags/fantasy", "page=2")), true);
+  assert.equal(isPublicPageCacheCandidate(request("/original/author/3", "page=2")), true);
+  assert.equal(isPublicPageCacheCandidate(request("/announcements")), true);
+  assert.equal(isPublicPageCacheCandidate(request("/announcements/10")), true);
 });
 
 test("keeps personalized and behavior-changing pages private", () => {
@@ -53,7 +59,12 @@ test("keeps personalized and behavior-changing pages private", () => {
   assert.equal(isPublicPageCacheCandidate(request("/original", "q=test")), false);
   assert.equal(isPublicPageCacheCandidate(request("/original/article-mtv", "resume=1")), false);
   assert.equal(isPublicPageCacheCandidate(request("/original/article-mtv", "comments=2")), false);
-  for (const reserved of ["/original/new", "/original/mine", "/original/tags", "/original/author/3", "/original/write/9"]) {
+  assert.equal(isPublicPageCacheCandidate(request("/original/tags", "q=abc")), false);
+  assert.equal(isPublicPageCacheCandidate(request("/original/tags/fantasy", "sort=hot")), false);
+  assert.equal(isPublicPageCacheCandidate(request("/original/author/abc")), false);
+  assert.equal(isPublicPageCacheCandidate(request("/announcements", "page=2")), false);
+  assert.equal(isPublicPageCacheCandidate(request("/media", "kind=video")), false, "media access rules run per kind");
+  for (const reserved of ["/original/new", "/original/mine", "/original/write/9"]) {
     assert.equal(isPublicPageCacheCandidate(request(reserved)), false, reserved);
   }
 });
