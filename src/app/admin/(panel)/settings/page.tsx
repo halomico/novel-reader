@@ -574,7 +574,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 <input name="frontendSearchConcurrencyLimit" type="number" min="1" max="100" defaultValue={frontendSearchConcurrencyLimit} />
               </label>
             </div>
-            <p className="adminFieldHint">全文搜索按最近更新排序，最多列出前若干条（上限 {MAX_GLOBAL_SEARCH_RESULTS}），超出部分不再计数，大书库也能保持秒级响应。并发上限按单个应用实例生效，繁忙时短暂排队。索引构建和取消统一在“搜索索引”页面管理。</p>
+            <p className="adminFieldHint">全文搜索按索引顺序（最近建好索引的在前）逐条取用，取满这里的条数就停（上限 {MAX_GLOBAL_SEARCH_RESULTS}），所以这个值直接决定一次搜索的耗时：几百条通常在几十毫秒内返回，调到上千条会明显变慢。结果会缓存数分钟，翻页不再重新查库。并发上限按单个应用实例生效，繁忙时短暂排队。索引构建和取消统一在“搜索索引”页面管理。</p>
           </details>
 
           <div className="adminSettingsSaveBar">

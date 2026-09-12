@@ -20,7 +20,7 @@ export const metadata: Metadata = { title: "本书搜索", robots: NO_INDEX_ROBO
 
 type BookSearchPageProps = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ q?: string; page?: string; cursor?: string; trail?: string }>;
+  searchParams: Promise<{ q?: string; page?: string }>;
 };
 
 export default async function BookSearchPage({ params, searchParams }: BookSearchPageProps) {

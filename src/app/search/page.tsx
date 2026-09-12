@@ -44,8 +44,6 @@ type SearchPageProps = {
     searchEvent?: string;
     library?: string;
     sourceLibrary?: string;
-    cursor?: string;
-    trail?: string;
   }>;
 };
 

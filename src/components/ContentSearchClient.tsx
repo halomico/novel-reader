@@ -33,18 +33,17 @@ type SearchApiResponse = {
   ok: boolean;
   message?: string;
   items?: PostgresContentSearchItem[];
-  nextCursor?: string | null;
-  totalItems?: number | null;
-  totalNovels?: number | null;
-  totalPages?: number | null;
+  totalItems?: number;
+  totalNovels?: number;
+  totalPages?: number;
   capped?: boolean;
   partial?: boolean;
   maxResults?: number;
 };
 
-type ResultLimit = { capped: boolean; partial: boolean; maxResults: number };
+type ResultLimit = { capped: boolean; partial: boolean; listed: number };
 
-const NO_RESULT_LIMIT: ResultLimit = { capped: false, partial: false, maxResults: 0 };
+const NO_RESULT_LIMIT: ResultLimit = { capped: false, partial: false, listed: 0 };
 
 function highlightSnippet(
   snippet: string,
@@ -66,8 +65,6 @@ function highlightSnippet(
 
 function updateHistory(page: number, replace = false) {
   const url = new URL(window.location.href);
-  url.searchParams.delete("cursor");
-  url.searchParams.delete("trail");
   if (page > 1) url.searchParams.set("page", String(page));
   else url.searchParams.delete("page");
   window.history[replace ? "replaceState" : "pushState"]({}, "", url.toString());
@@ -93,17 +90,14 @@ export function ContentSearchClient({
   const tr = (text: string) => uiText(locale, text);
   const requestFiltersKey = useMemo(() => JSON.stringify(requestFilters || null), [requestFilters]);
   const queryKey = `${keyword}::${library}::${novelId ?? ""}::${requestFiltersKey}`;
-  const cursorsRef = useRef<{ queryKey: string; values: Map<number, string | null> }>({
-    queryKey,
-    values: new Map([[1, null]]),
-  });
+  const activeQueryRef = useRef(queryKey);
   const [prevQueryKey, setPrevQueryKey] = useState(queryKey);
   const [page, setPage] = useState(() => Math.max(1, initialPage));
 
   if (prevQueryKey !== queryKey) {
     setPrevQueryKey(queryKey);
     setPage(Math.max(1, initialPage));
-    cursorsRef.current = { queryKey, values: new Map([[1, null]]) };
+    activeQueryRef.current = queryKey;
   }
 
   const [items, setItems] = useState<PostgresContentSearchItem[]>([]);
@@ -116,8 +110,6 @@ export function ContentSearchClient({
 
   useEffect(() => {
     const controller = new AbortController();
-    const knownCursor = cursorsRef.current.values.get(page);
-    const useCursor = page > 1 && typeof knownCursor === "string";
     setLoading(true);
     setMessage("");
     void fetch("/api/search/content", {
@@ -127,7 +119,7 @@ export function ContentSearchClient({
         q: keyword,
         library,
         novelId,
-        ...(useCursor ? { cursor: knownCursor } : { page }),
+        page,
         ...(requestFiltersKey === "null" ? {} : { filters: JSON.parse(requestFiltersKey) }),
       }),
       cache: "no-store",
@@ -135,40 +127,30 @@ export function ContentSearchClient({
     }).then(async (response) => {
       // A proxy timeout or crash page is HTML, not the API's JSON error.
       const data = await response.json().catch(() => null) as SearchApiResponse | null;
-      if (controller.signal.aborted || cursorsRef.current.queryKey !== queryKey) return;
+      if (controller.signal.aborted || activeQueryRef.current !== queryKey) return;
       if (!response.ok || !data?.ok || !Array.isArray(data.items)) {
         throw new Error(data?.message || tr(response.status === 429 ? "搜索人数较多，请稍后再试" : "搜索失败"));
       }
-      if (data.nextCursor !== null && data.nextCursor !== undefined && typeof data.nextCursor !== "string") {
+      if (!Number.isSafeInteger(data.totalItems) || Number(data.totalItems) < 0 ||
+          !Number.isSafeInteger(data.totalNovels) || Number(data.totalNovels) < 0 ||
+          !Number.isSafeInteger(data.totalPages) || Number(data.totalPages) < 1) {
         throw new Error(tr("搜索失败"));
       }
-      if (data.nextCursor) cursorsRef.current.values.set(page + 1, data.nextCursor);
-      else cursorsRef.current.values.delete(page + 1);
-      if (data.totalItems !== null && data.totalItems !== undefined) {
-        if (!Number.isSafeInteger(data.totalItems) || Number(data.totalItems) < 0 ||
-            !Number.isSafeInteger(data.totalNovels) || Number(data.totalNovels) < 0 ||
-            !Number.isSafeInteger(data.totalPages) || Number(data.totalPages) < 1) {
-          throw new Error(tr("搜索失败"));
-        }
-        const resultPages = Number(data.totalPages);
-        if (page > resultPages) {
-          updateHistory(resultPages, true);
-          setPage(resultPages);
-          return;
-        }
-        setTotalNovels(Number(data.totalNovels));
-        setTotalPages(resultPages);
-      } else {
-        // A partial list has no total: offer the next page only while a cursor continues it.
-        setTotalPages(data.nextCursor ? page + 1 : page);
+      const resultPages = Number(data.totalPages);
+      if (page > resultPages) {
+        updateHistory(resultPages, true);
+        setPage(resultPages);
+        return;
       }
+      setTotalNovels(Number(data.totalNovels));
+      setTotalPages(resultPages);
       setResultLimit({
         capped: data.capped === true,
         partial: data.partial === true,
-        maxResults: Number.isSafeInteger(data.maxResults) ? Number(data.maxResults) : 0,
+        listed: Number(data.totalItems),
       });
       setItems(data.items);
-      if (searchEventKey && page === 1 && data.totalItems !== null && data.totalItems !== undefined) {
+      if (searchEventKey && page === 1) {
         const signature = `${searchEventKey}:${data.totalItems}:${data.totalNovels}`;
         if (reportedAnalyticsRef.current !== signature) {
           reportedAnalyticsRef.current = signature;
@@ -218,24 +200,18 @@ export function ContentSearchClient({
 
       {!loading && !message ? (
         <div className="contentSearchSummary">
-          {resultLimit.partial ? (
-            <span className="contentSearchNote">{tr("匹配内容较多，已按更新时间列出部分结果")}</span>
-          ) : (
-            <>
-              <ResultCount count={totalNovels} />
-              {resultLimit.capped ? (
-                <span className="contentSearchNote">
-                  {tr("仅显示最近更新的")} {resultLimit.maxResults.toLocaleString("zh-CN")} {tr("条结果")}
-                </span>
-              ) : null}
-            </>
-          )}
+          <ResultCount count={totalNovels} />
+          {resultLimit.capped || resultLimit.partial ? (
+            <span className="contentSearchNote">
+              {tr("匹配内容较多，仅显示前")} {resultLimit.listed.toLocaleString("zh-CN")} {tr("条结果")}
+            </span>
+          ) : null}
         </div>
       ) : null}
 
       {!loading && !message && items.length === 0 ? (
         <section className="emptyState">
-          <h2>{resultLimit.partial ? tr("匹配范围过大，请换用更具体的关键词") : emptyMessage || tr("没有符合条件的小说")}</h2>
+          <h2>{emptyMessage || tr("没有符合条件的小说")}</h2>
         </section>
       ) : null}
 
@@ -245,8 +221,6 @@ export function ContentSearchClient({
             const fromParams = new URLSearchParams(resultReturnParams);
             if (resultReturnPath === "/search") fromParams.set("q", keyword);
             if (page > 1) fromParams.set("page", String(page)); else fromParams.delete("page");
-            fromParams.delete("cursor");
-            fromParams.delete("trail");
             if (searchSource !== "direct") fromParams.set("source", searchSource);
             if (originNovelId) fromParams.set("origin", String(originNovelId));
             if (searchEventKey) fromParams.set("searchEvent", searchEventKey);

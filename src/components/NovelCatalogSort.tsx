@@ -65,7 +65,6 @@ export function NovelCatalogSort({
     params.delete("page");
     params.delete("random");
     params.delete("cursor");
-    params.delete("trail");
     return `${pathname}${params.size ? `?${params.toString()}` : ""}`;
   }
 

@@ -102,3 +102,4 @@
 **/*.log
 **/*.tmp
 **/*.tsbuildinfo
+.probe/

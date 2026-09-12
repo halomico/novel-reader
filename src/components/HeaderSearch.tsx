@@ -354,6 +354,11 @@ export function HeaderSearch({
       void searchCurrentBook(event);
       return;
     }
+    // The results are what the reader wants to look at now, so hand the page back to
+    // them: keep the keyword in the box, but drop the caret, the on-screen keyboard and
+    // the mode menu that were only there to compose the query.
+    setIsModeMenuOpen(false);
+    searchInputRef.current?.blur();
     beginNavigationProgress();
   }
 

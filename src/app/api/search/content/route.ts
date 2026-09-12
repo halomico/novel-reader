@@ -1,7 +1,5 @@
-import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { readPostgresSiteSettings } from "@/core/config/site-settings";
-import { MAX_GLOBAL_SEARCH_RESULTS } from "@/core/config/site-settings-schema";
 import { database } from "@/core/db/postgres";
 import { validateSameOriginMutation } from "@/core/security/origin";
 import { readJsonBody } from "@/core/security/request-body";
@@ -12,7 +10,6 @@ import { getPostgresNovelReadAccess } from "@/domains/reading/postgres-novel-acc
 import {
   readOnlyContentSearchTransaction,
   searchPostgresContent,
-  type PostgresContentSearchCursor,
   type PostgresContentSearchPage,
 } from "@/domains/reading/postgres-content-search";
 import {
@@ -30,7 +27,6 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const MAX_BODY_BYTES = 16 * 1024;
-const MAX_CURSOR_BYTES = 512;
 /** How long a search waits for a free slot before the client is asked to retry. */
 const SEARCH_QUEUE_WAIT_MS = 2_000;
 
@@ -45,17 +41,7 @@ type SearchBody = {
   library?: unknown;
   novelId?: unknown;
   page?: unknown;
-  cursor?: unknown;
   filters?: unknown;
-};
-
-type CursorPayload = {
-  v: 2;
-  m: string;
-  d: string;
-  /** Results already listed, so a cursor walk cannot page past the result cap. */
-  n: number;
-  s: string;
 };
 
 function jsonError(message: string, status: number) {
@@ -95,40 +81,6 @@ function cleanFilters(value: unknown): SearchFilters | null {
     excludeTags: excludeTags.filter((slug) => !includeTags.includes(slug)),
     titleQuery: String(source.titleQuery || "").normalize("NFKC").replace(/\s+/gu, " ").trim().slice(0, 80),
   };
-}
-
-function searchScope(keyword: string, library: string, novelId: number | undefined, filters: SearchFilters | null): string {
-  return crypto.createHash("sha256")
-    .update(JSON.stringify({ keyword, library, novelId, filters }))
-    .digest("base64url")
-    .slice(0, 24);
-}
-
-function decodeCursor(value: unknown, scope: string): PostgresContentSearchCursor | undefined {
-  if (value === undefined || value === null || value === "") return undefined;
-  if (typeof value !== "string" || value.length > MAX_CURSOR_BYTES || !/^[A-Za-z0-9_-]+$/u.test(value)) throw new Error("invalid_cursor");
-  try {
-    const parsed: unknown = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid_cursor");
-    const cursor = parsed as Partial<CursorPayload>;
-    if (cursor.v !== 2 || cursor.s !== scope || typeof cursor.m !== "string" || typeof cursor.d !== "string" ||
-        !Number.isSafeInteger(cursor.n) || Number(cursor.n) < 0 || Number(cursor.n) > MAX_GLOBAL_SEARCH_RESULTS) {
-      throw new Error("invalid_cursor");
-    }
-    if (!/^(?:0|[1-9]\d{0,18})$/u.test(cursor.m) || !/^[1-9]\d{0,18}$/u.test(cursor.d) ||
-        BigInt(cursor.m) > 9_223_372_036_854_775_807n || BigInt(cursor.d) > 9_223_372_036_854_775_807n) {
-      throw new Error("invalid_cursor");
-    }
-    return { mtimeMs: cursor.m, documentId: cursor.d, shown: Number(cursor.n) };
-  } catch {
-    throw new Error("invalid_cursor");
-  }
-}
-
-function encodeCursor(cursor: PostgresContentSearchCursor | null, scope: string): string | null {
-  if (!cursor) return null;
-  const payload: CursorPayload = { v: 2, m: cursor.mtimeMs, d: cursor.documentId, n: cursor.shown, s: scope };
-  return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
 }
 
 export async function POST(request: NextRequest) {
@@ -213,18 +165,10 @@ export async function POST(request: NextRequest) {
   }
   // A bookmarked page can outlive a lower result cap; list the last page instead of failing.
   const requestedPage = Math.min(pageInput, lastPage);
-  const scope = searchScope(validation.keyword, library, novelId, filters);
-  let cursor: PostgresContentSearchCursor | undefined;
-  try {
-    cursor = decodeCursor(parsed.value.cursor, scope);
-  } catch {
-    return jsonError("搜索游标无效或已过期", 400);
-  }
 
   const excludedSourceSlugs = Object.entries(settings.novelSourceSearchModes)
     .filter(([, mode]) => mode === "book")
     .map(([slug]) => slug);
-  const usingCursor = parsed.value.page === undefined && cursor !== undefined;
   const slot = await acquireSearchSlot(settings.frontendSearchConcurrencyLimit, SEARCH_QUEUE_WAIT_MS);
   if (!slot) {
     const response = jsonError("搜索人数较多，请稍后再试", 429);
@@ -244,8 +188,7 @@ export async function POST(request: NextRequest) {
       audience: user?.role === "admin" ? "admin" : user ? "member" : "public",
       maxResults,
       pageSize,
-      page: usingCursor ? undefined : requestedPage,
-      cursor: usingCursor ? cursor : undefined,
+      page: requestedPage,
     });
   } catch (error) {
     console.error(JSON.stringify({
@@ -275,10 +218,9 @@ export async function POST(request: NextRequest) {
     ok: true,
     items,
     page: page.page,
-    nextCursor: encodeCursor(page.nextCursor, scope),
     totalItems: page.totalItems,
     totalNovels: page.totalNovels,
-    totalPages: page.totalItems === null ? null : Math.max(1, Math.ceil(page.totalItems / pageSize)),
+    totalPages: Math.max(1, Math.ceil(page.totalItems / pageSize)),
     capped: page.capped,
     partial: page.partial,
     maxResults,

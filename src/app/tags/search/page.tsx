@@ -61,8 +61,6 @@ type AdvancedTagSearchPageProps = {
     library?: string;
     sourceLibrary?: string;
     scope?: string;
-    cursor?: string;
-    trail?: string;
   }>;
 };
 

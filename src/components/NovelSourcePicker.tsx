@@ -72,7 +72,6 @@ export function NovelSourcePicker({
     params.delete("page");
     params.delete("random");
     params.delete("cursor");
-    params.delete("trail");
     return `${pathname}${params.size ? `?${params.toString()}` : ""}`;
   }
 
@@ -92,7 +91,6 @@ export function NovelSourcePicker({
     params.delete("page");
     params.delete("random");
     params.delete("cursor");
-    params.delete("trail");
     return `${pathname}${params.size ? `?${params.toString()}` : ""}`;
   }
 

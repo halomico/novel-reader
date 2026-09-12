@@ -327,8 +327,9 @@ test("navigation keeps the current surface while loading and paged readers avoid
   const contentSearch = read("src/components/ContentSearchClient.tsx");
   assert.match(contentSearch, /<ResultCount count=\{totalNovels\}/);
   assert.match(contentSearch, /<Pagination page=\{page\} totalPages=\{totalPages\}/);
-  assert.match(contentSearch, /nextCursor/);
-  assert.match(contentSearch, /cursorsRef/);
+  // Every search now reports a real total, so results page like the rest of the site
+  // instead of offering only the neighbouring page behind an opaque cursor.
+  assert.doesNotMatch(contentSearch, /nextCursor|cursorsRef/);
   assert.doesNotMatch(contentSearch, /if \(loading \|\| nextPage/);
   const rootShell = read("src/lib/root-shell.ts");
   assert.match(rootShell, /process\.env\.DOCKER_BUILD === "1"/);
