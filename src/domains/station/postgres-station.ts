@@ -690,30 +690,6 @@ export function markAllPostgresUserMessagesRead(
   });
 }
 
-export async function countPostgresUserUnreadMessages(executor: SqlExecutor, userIdValue: number): Promise<number> {
-  const userId = integer(userIdValue, "station user id");
-  const result = await executor.query<QueryResultRow & { unread_count: string | number }>({
-    name: "station-count-user-unread-v1",
-    text: `SELECT (
-        SELECT COUNT(*) FROM announcements announcement
-        WHERE ${visibleAnnouncementWhere(true)}
-          AND NOT EXISTS (
-            SELECT 1 FROM announcement_reads read
-            WHERE read.announcement_id = announcement.id AND read.user_id = $1
-          )
-      ) + (
-        SELECT COUNT(*) FROM station_threads thread
-        WHERE thread.user_id = $1 AND EXISTS (
-          SELECT 1 FROM station_messages message
-          WHERE message.thread_id = thread.id AND message.author_role = 'admin'
-            AND message.id > thread.user_last_read_message_id
-        )
-      ) AS unread_count`,
-    values: [userId],
-  });
-  return integer(result.rows[0]?.unread_count ?? 0, "user unread count", true);
-}
-
 export async function countPostgresAdminUnreadMessages(executor: SqlExecutor = database("web")): Promise<number> {
   const result = await executor.query<QueryResultRow & { unread_count: string | number }>({
     name: "station-count-admin-unread-v1",

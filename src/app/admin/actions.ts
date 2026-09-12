@@ -49,7 +49,6 @@ import {
   MediaFolderError,
   MediaTagError,
   renamePostgresMediaFolder,
-  setPostgresVideoCategoryForAssets,
   setPostgresVideoTagsForAssets,
   updatePostgresMediaAsset,
   updatePostgresVideoCategory,
@@ -423,30 +422,6 @@ export async function createNovelSourceAction(formData: FormData) {
   revalidatePath("/admin/books/sources");
   revalidatePath("/novels");
   adminNotice("小说来源已创建", "success", "/admin/books/sources");
-}
-
-export async function setDefaultNovelSourceAction(formData: FormData) {
-  await requireAdminRequest();
-  try {
-    const sourceId = Number(formData.get("sourceId") || 0);
-    const source = await getPostgresAdminNovelSource(database(), sourceId);
-    if (!source) throw new Error("小说来源不存在");
-    const snapshot = await readFreshPostgresSiteSettingsSnapshot();
-    const written = await writePostgresSiteSettings({
-      ...snapshot.value,
-      defaultNovelLibrarySlug: source.slug,
-    }, snapshot.version);
-    if (!written.ok) throw new Error("设置已被其他管理员更新，请刷新后重试");
-    installRuntimeSiteSettings(written.snapshot.value, written.snapshot.version);
-  } catch (error) {
-    adminNotice(error instanceof Error ? error.message : "设置默认来源失败", "warning", "/admin/books/sources");
-  }
-  revalidatePath("/admin/books");
-  revalidatePath("/admin/books/sources");
-  revalidatePath("/admin/settings");
-  revalidatePath("/novels");
-  revalidatePath("/search");
-  adminNotice("已切换默认书库", "success", "/admin/books/sources");
 }
 
 export async function saveNovelSourceAction(formData: FormData) {
@@ -1235,32 +1210,6 @@ export async function deleteAdminVideoCategoryAction(
     deleted ? "视频分类已删除，原视频已归入未分类" : "视频分类不存在",
     deleted ? "success" : "warning",
     { categories: await listPostgresVideoCategories(database(), { includeHidden: true }) },
-  );
-}
-
-export async function assignAdminVideoCategoryAction(
-  formData: FormData,
-): Promise<MutationResult<{ assets: MediaAsset[] }>> {
-  await requireAdminRequest();
-  const ids = formData
-    .getAll("mediaIds")
-    .map(Number)
-    .filter((id) => Number.isInteger(id) && id > 0);
-  if (!ids.length) {
-    return mutationResult(false, "请选择要归类的视频", "warning");
-  }
-  let updated = 0;
-  try {
-    updated = await setPostgresVideoCategoryForAssets(database(), ids, formData.get("categoryId"));
-  } catch (error) {
-    return mutationResult(false, mediaOperationMessage(error), "warning");
-  }
-  revalidatePath("/media");
-  return mutationResult(
-    updated > 0,
-    updated ? `已归类 ${updated} 个视频` : "所选视频不存在",
-    updated ? "success" : "warning",
-    { assets: await listPostgresMediaAssetsByIds(database(), ids) },
   );
 }
 

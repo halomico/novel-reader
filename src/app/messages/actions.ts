@@ -38,30 +38,6 @@ export async function createStationThreadAction(formData: FormData) {
   redirect(`/messages?tab=station&thread=${threadId}`);
 }
 
-export async function replyStationThreadAction(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) {
-    redirect("/login");
-  }
-  const threadId = Number(formData.get("threadId"));
-  if (!await hasPostgresUserPermission(database("web"), user, "station_message")) {
-    messageNotice("当前等级暂不能回复站务消息", "warning", threadId);
-  }
-  let replied: boolean;
-  try {
-    replied = await addPostgresStationReply({
-      threadId,
-      body: formData.get("body"),
-      authorRole: "user",
-      userId: user.id,
-    });
-  } catch (error) {
-    messageNotice(error instanceof StationInputError ? error.message : "回复发送失败", "warning", threadId);
-  }
-  revalidatePath("/messages");
-  messageNotice(replied ? "回复已发送" : "该留言已关闭", replied ? "success" : "warning", threadId);
-}
-
 export async function replyStationThreadInlineAction(
   threadIdValue: number,
   bodyValue: string,

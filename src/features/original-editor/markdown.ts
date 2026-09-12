@@ -219,6 +219,3 @@ export const ORIGINAL_MARKDOWN_TRANSFORMERS: Transformer[] = [
   UNORDERED_LIST,
 ];
 
-/** The canonical underline markers, shared with the source editor and the renderer. */
-export const UNDERLINE_OPEN = "<u>";
-export const UNDERLINE_CLOSE = "</u>";
