@@ -92,6 +92,10 @@ export function normalizePostgresTagSlug(value: string): string {
     .replace(/-+$/gu, "");
 }
 
+// SQLite imports retain legacy slugs with underscores. Keep accepting those
+// links while new and edited tags continue to use the normalized hyphen form.
+const POSTGRES_TAG_SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$/u;
+
 function normalizedAliases(value: string | readonly string[] | undefined, tagName: string): string[] {
   const source = Array.isArray(value) ? value : String(value || "").split(/[\n,，、]+/u);
   const canonical = tagName.toLocaleLowerCase();
@@ -267,7 +271,7 @@ export async function getPostgresCatalogTagBySlug(
   options: { audience?: PublicTagAudience } = {},
 ): Promise<PostgresCatalogTag | null> {
   const slug = String(slugValue).normalize("NFKC").trim().toLocaleLowerCase("en-US");
-  if (!slug || slug.length > 64 || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u.test(slug)) return null;
+  if (!slug || slug.length > 64 || !POSTGRES_TAG_SLUG_PATTERN.test(slug)) return null;
   const visibility = audiencePredicate(options.audience ?? "public");
   const result = await executor.query<TagRow>({
     text: `SELECT tag.id, tag.parent_id, tag.name, tag.slug, tag.description,

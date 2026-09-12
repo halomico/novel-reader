@@ -17,7 +17,6 @@ import { ReaderHeaderBehavior } from "./ReaderHeaderBehavior";
 import { HeaderUserMenu } from "./HeaderUserMenu";
 import { MobileContextBackLink } from "./MobileContextBackLink";
 import { ThemeToggle } from "./ThemeToggle";
-import { getSiteIconHref } from "@/lib/site-icon";
 
 function enabledByEnvironment(name: string): boolean {
   const value = process.env[name]?.trim().toLocaleLowerCase("en-US");
@@ -83,7 +82,6 @@ export async function SiteHeader({
     locale,
   );
   const brandHref = settings.brandLinkTarget === "home" ? "/" : "/novels";
-  const siteIconHref = getSiteIconHref(settings);
   const user = resolvedUser;
   const marketEnabled = settings.marketEnabled && enabledByEnvironment("MARKET_ENABLED");
   const needsNavigationState = Boolean(
@@ -158,9 +156,6 @@ export async function SiteHeader({
           </div>
         ) : null}
         <Link className="brand" href={brandHref} aria-label={brandHref === "/novels" ? novelsLabel : homeLabel}>
-          {siteIconHref ? (
-            <img className="siteBrandIcon" src={siteIconHref} alt="" width={22} height={22} />
-          ) : null}
           <span>{siteName}</span>
         </Link>
         {readerMode ? <ReaderHeaderBehavior hideOnScroll={readerAutoHideOnScroll} /> : null}

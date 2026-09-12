@@ -48,6 +48,9 @@ test("tag detail lookup is visibility-aware and parameterized", async () => {
   assert.equal(found?.slug, "tag-3");
   assert.deepEqual(captured[0].values, ["tag-3"]);
   assert.match(captured[0].text, /tag\.visibility = 'public'/);
+  const legacy = { ...tag(5, 1, 2), slug: "boss_employee" };
+  const foundLegacy = await getPostgresCatalogTagBySlug(executorWithRows([legacy]), "BOSS_EMPLOYEE", { audience: "public" });
+  assert.equal(foundLegacy?.slug, "boss_employee");
   assert.equal(await getPostgresCatalogTagBySlug(executorWithRows([]), "../bad"), null);
 });
 

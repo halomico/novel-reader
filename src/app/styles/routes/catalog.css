@@ -16,6 +16,7 @@
 
 .catalogShell > .pagination {
   margin-top: auto;
+  padding-top: 28px;
 }
 
 .catalogRandomButton {

@@ -622,12 +622,14 @@
 }
 
 .bookGrid {
+  --book-divider: color-mix(in srgb, var(--border) 72%, transparent);
   display: grid;
   min-width: 0;
   max-width: 100%;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   column-gap: 30px;
   row-gap: 0;
+  border-top: 1px solid var(--book-divider);
 }
 
 .bookCard {
@@ -638,7 +640,7 @@
   align-items: center;
   padding: 9px 7px;
   border: 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--book-divider);
   border-radius: 0;
   background: transparent;
   box-shadow: none;
@@ -2477,10 +2479,6 @@ button.pageNumber {
 .siteHeader.isAuthHeader .headerTools {
   grid-column: 2;
   width: auto;
-}
-
-.siteHeader.isAuthHeader .brand {
-  font-size: 21px;
 }
 
 .userMenuUnreadDot {
@@ -4814,14 +4812,6 @@ button.pageNumber {
   color: var(--accent-text, var(--accent));
 }
 
-.bookGrid {
-  border-top: 0;
-}
-
-.bookGrid > .bookCard:nth-child(-n + 3) {
-  border-top: 1px solid var(--border);
-}
-
 .readingHistoryToolbar {
   min-height: 34px;
   margin-top: 0;
@@ -4871,16 +4861,6 @@ button.pageNumber {
   color: var(--reader-text, var(--text)) !important;
 }
 
-@media (min-width: 821px) and (max-width: 1060px) {
-  .bookGrid > .bookCard:nth-child(-n + 3) {
-    border-top: 0;
-  }
-
-  .bookGrid > .bookCard:nth-child(-n + 2) {
-    border-top: 1px solid var(--border);
-  }
-}
-
 @media (max-width: 820px) {
 
   .readerNovelNavigation {
@@ -4889,15 +4869,6 @@ button.pageNumber {
   }
 }
 
-@media (max-width: 600px) {
-  .bookGrid > .bookCard:nth-child(-n + 3) {
-    border-top: 0;
-  }
-
-  .bookGrid > .bookCard:first-child {
-    border-top: 1px solid var(--border);
-  }
-}
 .headerActions > .userMenu .userMenuButton svg { transform: none; }
 .userAvatar.userMenuAvatar,
 .userAvatar.userWorkspaceAvatar { border-radius: 7px; }

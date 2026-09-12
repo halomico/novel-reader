@@ -174,7 +174,8 @@ function normalizedTagSlugs(value: readonly string[] | undefined, label: string)
   return [...new Set(value.map((slug) => {
     if (typeof slug !== "string") throw new Error(`Invalid ${label}`);
     const normalized = slug.normalize("NFKC").trim().toLocaleLowerCase("en-US");
-    if (!normalized || normalized.length > 64 || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u.test(normalized)) {
+    // Imported SQLite tags can retain underscores in their legacy slugs.
+    if (!normalized || normalized.length > 64 || !/^[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$/u.test(normalized)) {
       throw new Error(`Invalid ${label}`);
     }
     return normalized;

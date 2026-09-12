@@ -115,6 +115,11 @@ test("advanced catalog search intersects tags and binds numeric page offsets", a
   assert.doesNotMatch(query.text, /OFFSET|COUNT\(\*\)/);
   assert.ok(query.values?.includes("fantasy"));
   assert.ok(query.values?.some((value) => Array.isArray(value) && value.includes("spoiler")));
+  const legacySlugQuery = await buildPostgresAdvancedCatalogSearchQuery(undefined, {
+    includeTagSlugs: ["boss_employee"],
+    limit: 15,
+  });
+  assert.ok(legacySlugQuery.values?.includes("boss_employee"));
   const numberedPage = await buildPostgresAdvancedCatalogSearchQuery(undefined, {
     includeTagSlugs: ["fantasy"],
     offset: 3_980,
