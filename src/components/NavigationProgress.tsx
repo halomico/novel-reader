@@ -44,6 +44,12 @@ export function beginReaderNavigationProgress() {
   dispatchNavigationProgress(true);
 }
 
+/** Clears the bar for work that ends without a route change — a step that failed, or one
+ *  that decided not to navigate after all. A completed navigation clears it on its own. */
+export function endNavigationProgress() {
+  window.dispatchEvent(new Event("novel:navigation-end"));
+}
+
 /**
  * Next's Link cancels the native click to navigate on the client, so the document click
  * listener below never sees Link navigations. Link wrappers report them instead: the
@@ -142,10 +148,12 @@ export function NavigationProgress() {
     // Listen after component handlers so preventDefault() can cancel feedback.
     document.addEventListener("click", handleDocumentClick);
     window.addEventListener("novel:navigation-start", handleManualStart);
+    window.addEventListener("novel:navigation-end", finish);
     window.addEventListener("pageshow", finish);
     return () => {
       document.removeEventListener("click", handleDocumentClick);
       window.removeEventListener("novel:navigation-start", handleManualStart);
+      window.removeEventListener("novel:navigation-end", finish);
       window.removeEventListener("pageshow", finish);
       clearTimers();
       finishRef.current = () => undefined;

@@ -18,7 +18,7 @@ import {
   Tags,
   Users,
 } from "lucide-react";
-import Link, { useLinkStatus } from "next/link";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { adminNavKeyForPathname } from "@/lib/admin-navigation";
@@ -41,18 +41,11 @@ const navItems = [
   { href: "/admin/settings", label: "系统设置", value: "settings", icon: Settings },
 ] as const;
 
-/** Marks its link while the destination is loading; rendered inside the link. */
-function AdminNavLabel({ label }: { label: string }) {
-  const { pending } = useLinkStatus();
-  return <span data-pending={pending || undefined}>{label}</span>;
-}
-
 function AdminNavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
-  // The highlight follows the committed URL only. Click feedback comes from each
-  // link's own pending status, so an interrupted or superseded navigation can never
-  // leave a stale item highlighted next to a different page.
+  // The highlight follows the committed URL only, so an interrupted or superseded
+  // navigation can never leave a stale item highlighted next to a different page.
   const active = adminNavKeyForPathname(pathname);
   const intentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -99,7 +92,7 @@ function AdminNavLinks({ onNavigate }: { onNavigate?: () => void }) {
             onClick={onNavigate}
           >
             <Icon size={18} aria-hidden="true" />
-            <AdminNavLabel label={item.label} />
+            {item.label}
           </Link>
         );
       })}

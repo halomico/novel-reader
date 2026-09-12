@@ -1,8 +1,8 @@
 "use client";
 
-import { LoaderCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { beginNavigationProgress, endNavigationProgress } from "@/components/NavigationProgress";
 
 function clientKey(mode: "new" | "edit", articleSlug?: string): string {
   const key = `novel-reader:original-draft-launch:${mode}:${articleSlug || "new"}`;
@@ -31,7 +31,9 @@ export function OriginalDraftLauncher({
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    // Fetch the editor bundle while the draft request is in flight.
+    // Fetch the editor bundle while the draft request is in flight. The top bar is the
+    // only progress this step shows, so it runs for the request as well as the route.
+    beginNavigationProgress();
     void import("./OriginalComposerShell");
     void (async () => {
       try {
@@ -52,6 +54,7 @@ export function OriginalDraftLauncher({
         if (!response.ok || !result.draftId) throw new Error(result.error || "无法创建草稿");
         router.replace(`/original/write/${result.draftId}`);
       } catch (reason) {
+        endNavigationProgress();
         setError(reason instanceof Error ? reason.message : "无法打开编辑器");
       }
     })();
@@ -66,10 +69,7 @@ export function OriginalDraftLauncher({
             <button type="button" onClick={() => location.reload()}>重试</button>
           </>
         ) : (
-          <>
-            <LoaderCircle size={18} aria-hidden="true" style={{ animation: "spin 1s linear infinite" }} />
-            <span style={{ fontSize: 13, color: "var(--muted)" }}>正在打开编辑器…</span>
-          </>
+          <span style={{ fontSize: 13, color: "var(--muted)" }}>正在打开编辑器…</span>
         )}
       </div>
     </main>

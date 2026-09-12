@@ -2,7 +2,6 @@
 
 import { Activity, FileText, MessageCircle, Settings, Sparkles, Store, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useLinkStatus } from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { AppLink as Link } from "@/components/AppLink";
 import { PageContextBar } from "@/components/PageContextBar";
@@ -48,12 +47,6 @@ export function UserWorkspaceContext({ locale }: {
   return <PageContextBar items={[{ label: uiText(locale, "首页"), href: "/" }, { label: labels[active] }]} />;
 }
 
-/** Marks its link while the destination is loading; rendered inside the link. */
-function NavigationLabel({ text }: { text: string }) {
-  const { pending } = useLinkStatus();
-  return <span data-pending={pending || undefined}>{text}</span>;
-}
-
 export function UserWorkspaceNavigation({
   locale,
   unreadMessages,
@@ -66,8 +59,8 @@ export function UserWorkspaceNavigation({
   showOriginal: boolean;
 }) {
   const { pathname, searchParams } = useWorkspaceRouteState();
-  // The highlight follows the committed URL only. Click feedback comes from each
-  // link's own pending status, so an interrupted navigation cannot strand it.
+  // The highlight follows the committed URL only, so an interrupted navigation cannot
+  // strand it on a section the reader never reached.
   const active = routeKey(pathname, searchParams);
   const [prevUnreadMessages, setPrevUnreadMessages] = useState(unreadMessages);
   const [unreadCount, setUnreadCount] = useState(unreadMessages);
@@ -96,7 +89,7 @@ export function UserWorkspaceNavigation({
             key={item.key}
           >
             <Icon size={17} aria-hidden="true" />
-            <NavigationLabel text={uiText(locale, item.label)} />
+            {uiText(locale, item.label)}
             {item.key === "messages" && unreadCount > 0 ? (
               <i className="userMenuUnreadDot" aria-label={`${unreadCount} 条未读消息`} />
             ) : null}

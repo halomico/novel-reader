@@ -1,13 +1,7 @@
 "use client";
 
 import { AppLink as Link } from "@/components/AppLink";
-import { useLinkStatus } from "next/link";
 import type { ReactNode } from "react";
-
-function TagLinkPendingState() {
-  const { pending } = useLinkStatus();
-  return <span className="tagLinkPendingState" data-pending={pending ? "true" : "false"} aria-hidden="true" />;
-}
 
 function recordTagClick(slug: string) {
   const body = JSON.stringify({ slug });
@@ -43,7 +37,6 @@ export function TagTrackedLink({
       data-tag-search={tagSearchText}
     >
       {children}
-      <TagLinkPendingState />
     </Link>
   );
 }

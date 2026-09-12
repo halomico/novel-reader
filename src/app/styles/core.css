@@ -838,11 +838,6 @@ mark {
   }
 }
 
-@keyframes tagLinkPendingSweep {
-  from { background-position: 120% 0; }
-  to { background-position: -120% 0; }
-}
-
 @media (max-width: 820px) {
 
   .tagLibrary {
