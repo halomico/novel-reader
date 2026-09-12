@@ -18,8 +18,6 @@ type NovelSourceOption = {
   slug: string;
   name: string;
   novelCount: number;
-  singleNovelCount: number;
-  chapterNovelCount: number;
 };
 
 export function NovelSourcePicker({

@@ -1,7 +1,9 @@
 ﻿"use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import Link from "@/components/LocalizedLink";
+// Page links prefetch on hover, touch or focus like the book links above them, so a page
+// turn can render from the router cache instead of waiting for the server.
+import { AppLink as Link } from "@/components/AppLink";
 import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState, useTransition } from "react";
 import { localeFromPathname, withLocalePath } from "@/lib/locale";

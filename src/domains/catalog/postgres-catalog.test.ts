@@ -11,6 +11,7 @@ import {
   getPostgresPublicNovel,
   listPostgresCatalogPage,
   listPostgresNovelChapters,
+  listPostgresNovelSources,
   listPostgresRandomCatalog,
   listPostgresTagsForNovels,
   resolvePostgresNovelLibraryScope,
@@ -193,12 +194,13 @@ test("library resolution uses one PostgreSQL query and preserves requested fallb
   const captured: SqlQuery[] = [];
   const source = await resolvePostgresNovelLibraryScope(executorWithRows([{
     id: 3, slug: "default", name: "默认", sort_order: 0,
-    novel_count: "8", single_novel_count: "5", chapter_novel_count: "3",
   }], captured), "missing", "configured");
-  assert.equal(source.kind, "source");
-  assert.equal(source.slug, "default");
+  assert.deepEqual(source, {
+    kind: "source", slug: "default", source: { id: 3, slug: "default", name: "默认", sortOrder: 0 },
+  });
   assert.deepEqual(captured[0].values, [["missing", "configured", "default"]]);
   assert.match(captured[0].text, /array_position\(\$1::text\[\], lower\(s\.slug\)\)/);
+  assert.doesNotMatch(captured[0].text, /\bnovels\b/, "resolving a library must not count its novels");
   assert.deepEqual(await resolvePostgresNovelLibraryScope(executorWithRows([]), "all"), {
     kind: "all", slug: "all", source: null,
   });
@@ -208,9 +210,22 @@ test("source lookup by id is parameterized and rejects invalid identifiers", asy
   const captured: SqlQuery[] = [];
   const source = await getPostgresNovelSourceById(executorWithRows([{
     id: 2, slug: "books", name: "书库", sort_order: 1,
-    novel_count: "4", single_novel_count: "2", chapter_novel_count: "2",
   }], captured), 2);
-  assert.equal(source?.slug, "books");
+  assert.deepEqual(source, { id: 2, slug: "books", name: "书库", sortOrder: 1 });
   assert.deepEqual(captured[0].values, [2]);
+  assert.doesNotMatch(captured[0].text, /\bnovels\b/, "every reader page looks a library up and must not count it");
   await assert.rejects(getPostgresNovelSourceById(executorWithRows([]), 0), /source id/);
+});
+
+test("the library list counts each library through its own index range", async () => {
+  const captured: SqlQuery[] = [];
+  const sources = await listPostgresNovelSources(executorWithRows([
+    { id: 1, slug: "default", name: "默认", sort_order: 0, novel_count: "73888" },
+  ], captured));
+  assert.deepEqual(sources, [{ id: 1, slug: "default", name: "默认", sortOrder: 0, novelCount: 73_888 }]);
+  assert.match(captured[0].text, /CROSS JOIN LATERAL \(SELECT count\(\*\) AS novel_count FROM novels n WHERE n\.source_id = s\.id\)/);
+  assert.doesNotMatch(captured[0].text, /storage_mode|GROUP BY/);
+  assert.match(captured[0].text, /WHERE counted\.novel_count > 0/);
+  await listPostgresNovelSources(executorWithRows([], captured), { includeEmpty: true });
+  assert.doesNotMatch(captured[1].text, /counted\.novel_count >/);
 });

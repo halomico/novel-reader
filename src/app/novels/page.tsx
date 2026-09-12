@@ -212,6 +212,11 @@ export default async function NovelsPage({ searchParams }: NovelsPageProps) {
     }));
     totalItems = total;
   } else {
+    // The library picker has already counted this library's novels; counting the
+    // catalog again would repeat that scan on every page turn.
+    const listedTotal = access === "all" && activeSource
+      ? allNovelSources.find((source) => source.id === activeSource.id)?.novelCount
+      : undefined;
     const [page, total] = await Promise.all([
       listPostgresCatalogPage(database("web"), {
         sourceId: activeSource?.id,
@@ -221,7 +226,7 @@ export default async function NovelsPage({ searchParams }: NovelsPageProps) {
         sortBy,
         sortOrder,
       }),
-      countPostgresCatalog(database("web"), { sourceId: activeSource?.id, access }),
+      listedTotal ?? countPostgresCatalog(database("web"), { sourceId: activeSource?.id, access }),
     ]);
     items = page.items;
     totalItems = total;

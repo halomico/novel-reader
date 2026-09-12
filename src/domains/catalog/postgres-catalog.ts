@@ -33,19 +33,21 @@ export type PostgresPublicNovel = {
   updatedAt: string;
 };
 
-export type PostgresPublicNovelSource = {
+/** A library as routing and reading need it: looking one up never counts its novels. */
+export type PostgresNovelLibrary = {
   id: number;
   slug: string;
   name: string;
   sortOrder: number;
+};
+
+export type PostgresPublicNovelSource = PostgresNovelLibrary & {
   novelCount: number;
-  singleNovelCount: number;
-  chapterNovelCount: number;
 };
 
 export type PostgresNovelLibraryScope =
   | { kind: "all"; slug: "all"; source: null }
-  | { kind: "source"; slug: string; source: PostgresPublicNovelSource };
+  | { kind: "source"; slug: string; source: PostgresNovelLibrary };
 
 export type PostgresCatalogCursor = {
   sortBy: PostgresCatalogSort;
@@ -471,35 +473,31 @@ export async function getPostgresPublicNovel(
   return result.rows[0] ? toNovel(result.rows[0]) : null;
 }
 
-type RawSource = QueryResultRow & {
+type RawLibrary = QueryResultRow & {
   id: number;
   slug: string;
   name: string;
   sort_order: number;
-  novel_count: string | number;
-  single_novel_count: string | number;
-  chapter_novel_count: string | number;
 };
 
-function toSource(row: RawSource): PostgresPublicNovelSource {
+type RawSource = RawLibrary & {
+  novel_count: string | number;
+};
+
+function toLibrary(row: RawLibrary): PostgresNovelLibrary {
   return {
     id: positiveInt32(row.id, "PostgreSQL source id"),
     slug: row.slug,
     name: row.name,
     sortOrder: row.sort_order,
-    novelCount: safeNonnegativeNumber(row.novel_count, "source novel count"),
-    singleNovelCount: safeNonnegativeNumber(row.single_novel_count, "source single-novel count"),
-    chapterNovelCount: safeNonnegativeNumber(row.chapter_novel_count, "source chapter-novel count"),
   };
 }
 
-const SOURCE_QUERY = `
-  SELECT s.id, s.slug, s.name, s.sort_order,
-         COUNT(n.id) AS novel_count,
-         COUNT(n.id) FILTER (WHERE n.storage_mode = 'single') AS single_novel_count,
-         COUNT(n.id) FILTER (WHERE n.storage_mode = 'chapters') AS chapter_novel_count
-  FROM novel_sources s
-  LEFT JOIN novels n ON n.source_id = s.id`;
+function toSource(row: RawSource): PostgresPublicNovelSource {
+  return { ...toLibrary(row), novelCount: safeNonnegativeNumber(row.novel_count, "source novel count") };
+}
+
+const LIBRARY_COLUMNS = "s.id, s.slug, s.name, s.sort_order";
 
 export async function listPostgresNovelSources(
   executor: SqlExecutor,
@@ -508,10 +506,14 @@ export async function listPostgresNovelSources(
   if (options.includeEmpty !== undefined && typeof options.includeEmpty !== "boolean") {
     throw new Error("Invalid include-empty option");
   }
+  // Catalog pages render this list on every page turn. Each library counts its novels
+  // as an index-only scan of its (source_id, …) range; joining novels to also count by
+  // storage mode read every novel row, about 55 ms against a 75k-novel library.
   const result = await executor.query<RawSource>({
-    text: `${SOURCE_QUERY}
-      GROUP BY s.id
-      ${options.includeEmpty ? "" : "HAVING COUNT(n.id) > 0"}
+    text: `SELECT ${LIBRARY_COLUMNS}, counted.novel_count
+      FROM novel_sources s
+      CROSS JOIN LATERAL (SELECT count(*) AS novel_count FROM novels n WHERE n.source_id = s.id) counted
+      ${options.includeEmpty ? "" : "WHERE counted.novel_count > 0"}
       ORDER BY CASE WHEN lower(s.slug) = 'default' THEN 0 ELSE 1 END,
                s.sort_order ASC, lower(s.name) COLLATE "C" ASC, s.id ASC`,
   });
@@ -522,15 +524,13 @@ export async function listPostgresNovelSources(
 export async function getPostgresNovelSourceById(
   executor: SqlExecutor,
   sourceId: number,
-): Promise<PostgresPublicNovelSource | null> {
+): Promise<PostgresNovelLibrary | null> {
   const id = positiveInt32(sourceId, "novel source id");
-  const result = await executor.query<RawSource>({
-    text: `${SOURCE_QUERY}
-      WHERE s.id = $1
-      GROUP BY s.id`,
+  const result = await executor.query<RawLibrary>({
+    text: `SELECT ${LIBRARY_COLUMNS} FROM novel_sources s WHERE s.id = $1`,
     values: [id],
   });
-  return result.rows[0] ? toSource(result.rows[0]) : null;
+  return result.rows[0] ? toLibrary(result.rows[0]) : null;
 }
 
 export async function resolvePostgresNovelLibraryScope(
@@ -543,15 +543,14 @@ export async function resolvePostgresNovelLibraryScope(
   const requested = normalize(requestedValue) || normalize(configuredDefault) || "default";
   if (requested === "all") return { kind: "all", slug: "all", source: null };
   const candidates = [...new Set([requested, normalize(configuredDefault), "default"].filter(Boolean))];
-  const result = await executor.query<RawSource>({
-    text: `${SOURCE_QUERY}
+  const result = await executor.query<RawLibrary>({
+    text: `SELECT ${LIBRARY_COLUMNS} FROM novel_sources s
       WHERE lower(s.slug) = ANY($1::text[])
-      GROUP BY s.id
       ORDER BY array_position($1::text[], lower(s.slug)), s.id
       LIMIT 1`,
     values: [candidates],
   });
-  const source = result.rows[0] ? toSource(result.rows[0]) : null;
+  const source = result.rows[0] ? toLibrary(result.rows[0]) : null;
   if (!source) throw new Error("PostgreSQL default novel library is not initialized");
   return { kind: "source", slug: source.slug, source };
 }
