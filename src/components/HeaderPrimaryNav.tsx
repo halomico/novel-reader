@@ -48,24 +48,24 @@ export function HeaderPrimaryNav({
   return (
     <nav className={className} aria-label={ariaLabel}>
       {showLibrary ? (
-        <Link href="/novels" aria-current={pathname.startsWith("/novels") || pathname.startsWith("/books") ? "page" : undefined} onClick={onNavigate}>
+        <Link href="/novels" prefetchPolicy="default" aria-current={pathname.startsWith("/novels") || pathname.startsWith("/books") ? "page" : undefined} onClick={onNavigate}>
           <NavigationLabel text={uiText(locale, "小说")} />
         </Link>
       ) : null}
       {showTags ? (
-        <Link href="/tags" aria-current={pathname.startsWith("/tags") ? "page" : undefined} onClick={onNavigate}>
+        <Link href="/tags" prefetchPolicy="default" aria-current={pathname.startsWith("/tags") ? "page" : undefined} onClick={onNavigate}>
           <NavigationLabel text={uiText(locale, "标签")} />
         </Link>
       ) : null}
       {showOriginal ? (
-        <Link href="/original" aria-current={pathname.startsWith("/original") ? "page" : undefined} onClick={onNavigate}>
+        <Link href="/original" prefetchPolicy="default" aria-current={pathname.startsWith("/original") ? "page" : undefined} onClick={onNavigate}>
           <NavigationLabel text={uiText(locale, "原创")} />
         </Link>
       ) : null}
       {mediaKinds.map((kind) => {
         const active = (pathname === "/media" && activeKind === kind) || (kind === "video" && pathname.startsWith("/media/tags"));
         return (
-          <Link href={`/media?kind=${kind}`} aria-current={active ? "page" : undefined} key={kind} onClick={onNavigate}>
+          <Link href={`/media?kind=${kind}`} prefetchPolicy="default" aria-current={active ? "page" : undefined} key={kind} onClick={onNavigate}>
             <NavigationLabel text={uiText(locale, MEDIA_LINKS[kind])} />
           </Link>
         );

@@ -92,12 +92,21 @@ export function HeaderUserMenu({
       >
         <Menu size={20} aria-hidden="true" />
       </button>
-      {open ? (
-        <div className={user ? "userMenuPanel hasIdentity" : "userMenuPanel"}>
+      <div
+        className={user ? "userMenuPanel hasIdentity" : "userMenuPanel"}
+        hidden={!open}
+        inert={!open ? true : undefined}
+      >
           {user ? (
             <>
               <AppLink className="userMenuIdentity" href="/account" onClick={closeMenu}>
-                <UserAvatar className="userMenuAvatar" userId={user.id} displayName={user.displayName} avatarPath={user.avatarPath} />
+                <UserAvatar
+                  className="userMenuAvatar"
+                  userId={user.id}
+                  displayName={user.displayName}
+                  avatarPath={user.avatarPath}
+                  loading="eager"
+                />
                 <span className="userMenuIdentityCopy">
                   <strong>{user.displayName}</strong>
                   <small>Lv.{user.trustLevel}</small>
@@ -157,8 +166,7 @@ export function HeaderUserMenu({
               </button>
             </form>
           ) : null}
-        </div>
-      ) : null}
+      </div>
     </div>
   );
 }
