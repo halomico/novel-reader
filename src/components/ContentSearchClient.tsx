@@ -36,6 +36,7 @@ type SearchApiResponse = {
   totalItems?: number;
   totalNovels?: number;
   totalPages?: number;
+  estimated?: boolean;
 };
 
 function highlightSnippet(
@@ -97,6 +98,7 @@ export function ContentSearchClient({
   const [items, setItems] = useState<PostgresContentSearchItem[]>([]);
   const [totalNovels, setTotalNovels] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [estimated, setEstimated] = useState(false);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const reportedAnalyticsRef = useRef("");
@@ -137,6 +139,7 @@ export function ContentSearchClient({
       }
       setTotalNovels(Number(data.totalNovels));
       setTotalPages(resultPages);
+      setEstimated(data.estimated === true);
       setItems(data.items);
       if (searchEventKey && page === 1) {
         const signature = `${searchEventKey}:${data.totalItems}:${data.totalNovels}`;
@@ -155,6 +158,7 @@ export function ContentSearchClient({
       setItems([]);
       setTotalNovels(0);
       setTotalPages(1);
+      setEstimated(false);
       setMessage(error instanceof Error ? error.message : tr("搜索失败"));
     }).finally(() => {
       if (!controller.signal.aborted) setLoading(false);
@@ -187,7 +191,7 @@ export function ContentSearchClient({
 
       {!loading && !message ? (
         <div className="contentSearchSummary">
-          <ResultCount count={totalNovels} />
+          <ResultCount count={totalNovels} prefix={estimated ? tr("约") : undefined} />
         </div>
       ) : null}
 

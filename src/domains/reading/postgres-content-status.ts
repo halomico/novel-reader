@@ -89,13 +89,15 @@ export async function readPostgresContentIndexStatus(
           AND d.normalization_version = $1
           AND d.active_content_version IS NOT DISTINCT FROM e.published_content_version
           AND g.state = 'published'
-          AND g.source_content_version IS NOT DISTINCT FROM e.content_hash AS ready,
+          AND g.source_content_version IS NOT DISTINCT FROM e.content_hash
+          AND sd.document_id IS NOT NULL AS ready,
         d.id IS NOT NULL AND d.state <> 'failed' AND NOT (
           d.state = 'ready' AND d.active_generation > 0
           AND d.normalization_version = $1
           AND d.active_content_version IS NOT DISTINCT FROM e.published_content_version
           AND g.state = 'published'
           AND g.source_content_version IS NOT DISTINCT FROM e.content_hash
+          AND sd.document_id IS NOT NULL
         ) AS stale,
         d.state = 'failed' AS failed,
         d.indexed_at
@@ -104,6 +106,10 @@ export async function readPostgresContentIndexStatus(
         ON d.novel_id = e.novel_id AND d.chapter_id IS NOT DISTINCT FROM e.chapter_id
       LEFT JOIN novel_content_generations g
         ON g.document_id = d.id AND g.generation = d.active_generation
+      -- A published book is not searchable until its search row exists, so a book still
+      -- waiting for index:search-text reads as stale here rather than as indexed.
+      LEFT JOIN novel_search_documents sd
+        ON sd.document_id = d.id AND sd.generation = d.active_generation
     ), books AS (
       SELECT novel_id, bool_and(ready) AS ready, bool_or(stale) AS stale,
              bool_or(failed) AS failed, max(indexed_at) AS indexed_at
@@ -119,7 +125,8 @@ export async function readPostgresContentIndexStatus(
       max(b.indexed_at) AS last_indexed_at,
       (pg_total_relation_size('novel_documents'::regclass)
        + pg_total_relation_size('novel_content_generations'::regclass)
-       + pg_total_relation_size('novel_content_blocks'::regclass))::text AS database_bytes
+       + pg_total_relation_size('novel_content_blocks'::regclass)
+       + pg_total_relation_size('novel_search_documents'::regclass))::text AS database_bytes
     FROM novel_sources s
     LEFT JOIN novels n ON n.source_id = s.id
     LEFT JOIN books b ON b.novel_id = n.id

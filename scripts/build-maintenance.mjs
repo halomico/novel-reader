@@ -6,6 +6,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 const maintenanceCommands = {
   "scan:books": "scan-books",
   "index:search": "reindex-postgres-content",
+  "index:search-text": "reindex-postgres-search-text",
   "index:originals": "reindex-postgres-originals",
   "optimize:media": "optimize-media",
   "media:serve": "media-node",

@@ -153,7 +153,8 @@ All commands defined in [`package.json`](package.json):
 | **`npm test`** | `node --import tsx --test "src/**/*.test.ts"` | Execute all automated unit and integration tests |
 | **`npm run check`** | Runtime dependency audit, strict types, tests, and production build | Full CI verification pipeline |
 | **`npm run scan:books`** | `tsx scripts/scan-books.ts` | Scan novel `.txt` files and update database catalog |
-| **`npm run index:search`** | `tsx scripts/reindex-postgres-content.ts` | Build pg_bigm full-text search index for novel content |
+| **`npm run index:search`** | `tsx scripts/reindex-postgres-content.ts` | Import novel content into PostgreSQL; publishing a document also writes its full-text search row |
+| **`npm run index:search-text`** | `tsx scripts/reindex-postgres-search-text.ts` | Rebuild full-text search rows from stored content without the library files (run once after migration 0027) |
 | **`npm run index:originals`**| `tsx scripts/reindex-postgres-originals.ts` | Rebuild full-text index for original articles |
 | **`npm run jobs:serve`** | `tsx scripts/postgres-content-worker.ts` | Run persistent background worker process |
 | **`npm run db:pg:migrate`** | `tsx scripts/db-migrate-postgres.ts` | Apply checksum-verified PostgreSQL migrations |

@@ -566,7 +566,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
             <AdminSwitchRow name="showProgressBars" title="显示索引进度条" description="仅控制后台索引构建的详细进度；前台搜索固定使用轻量状态提示。" defaultChecked={settings.showProgressBars} />
             <div className="adminFieldGrid">
               <label>
-                <span>前台全文最多显示 / 条</span>
+                <span>全文搜索可翻阅结果 / 条</span>
                 <input name="globalSearchMaxResults" type="number" min="1" max={MAX_GLOBAL_SEARCH_RESULTS} defaultValue={globalSearchMaxResults} />
               </label>
               <label>
@@ -574,7 +574,7 @@ export default async function AdminSettingsPage({ searchParams }: AdminSettingsP
                 <input name="frontendSearchConcurrencyLimit" type="number" min="1" max="100" defaultValue={frontendSearchConcurrencyLimit} />
               </label>
             </div>
-            <p className="adminFieldHint">全文搜索按索引顺序（最近建好索引的在前）逐条取用，取满这里的条数就停（上限 {MAX_GLOBAL_SEARCH_RESULTS}），所以这个值直接决定一次搜索的耗时：几百条通常在几十毫秒内返回，调到上千条会明显变慢。结果会缓存数分钟，翻页不再重新查库。并发上限按单个应用实例生效，繁忙时短暂排队。索引构建和取消统一在“搜索索引”页面管理。</p>
+            <p className="adminFieldHint">全文搜索每次都统计全部命中并给出总数，这里只限制最多能翻阅到第几条结果（上限 {MAX_GLOBAL_SEARCH_RESULTS}），防止请求跳到极深的页码；它不影响首页的搜索耗时，首页通常在几十毫秒内返回。关键词不是恰好两个字时，总数是上限估计并显示为“约”，列出的每一条仍是精确命中。并发上限按单个应用实例生效，繁忙时短暂排队。索引构建和取消统一在“搜索索引”页面管理。</p>
           </details>
 
           <div className="adminSettingsSaveBar">

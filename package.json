@@ -9,6 +9,7 @@
     "start": "node --env-file=.env .next/standalone/server.js",
     "scan:books": "node --import tsx scripts/scan-books.ts",
     "index:search": "node --import tsx scripts/reindex-postgres-content.ts",
+    "index:search-text": "node --import tsx scripts/reindex-postgres-search-text.ts",
     "index:originals": "node --import tsx scripts/reindex-postgres-originals.ts",
     "optimize:media": "node --import tsx scripts/optimize-media.ts",
     "media:serve": "node --import tsx scripts/media-node.ts",

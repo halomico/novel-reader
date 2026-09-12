@@ -16,7 +16,8 @@ from pathlib import Path, PurePosixPath
 
 
 MAINTENANCE = {
-    "scan-books.js", "reindex-postgres-content.js", "reindex-postgres-originals.js",
+    "scan-books.js", "reindex-postgres-content.js", "reindex-postgres-search-text.js",
+    "reindex-postgres-originals.js",
     "optimize-media.js", "media-node.js", "postgres-content-worker.js",
     "db-migrate-postgres.js", "db-verify-postgres.js", "init-postgres.js",
     "package.json",

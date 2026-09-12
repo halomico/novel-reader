@@ -311,6 +311,13 @@ test("real PostgreSQL 18 + pg_bigm integration", { timeout: 180_000 }, async (t)
           FROM pg_index WHERE indexrelid = 'novels_title_search_original_idx'::regclass`,
       });
       assert.match(index.rows[0].definition, /USING gin .*gin_bigm_ops/iu);
+      const contentIndex = await executor.query<{ definition: string }>({
+        text: `SELECT pg_get_indexdef(indexrelid) AS definition
+          FROM pg_index WHERE indexrelid = 'novel_search_documents_text_idx'::regclass`,
+      });
+      assert.match(contentIndex.rows[0].definition, /USING gin .*gin_bigm_ops/iu);
+      // Content search turns recheck off inside its own transaction only; everything else
+      // keeps exact LIKE semantics.
       const settings = await executor.query<{ enabled: string }>({ text: "SHOW pg_bigm.enable_recheck" });
       assert.equal(Object.values(settings.rows[0])[0], "on");
     }, { readOnly: true });
@@ -413,8 +420,18 @@ test("real PostgreSQL 18 + pg_bigm integration", { timeout: 180_000 }, async (t)
     const first = await readPublishedContentWindow(database(), { documentId: build.documentId, contentVersion: build.contentVersion, blockNo: 0 });
     assert.equal(first.blocks.length, 2);
     assert.equal(first.blocks[0].originalText + first.blocks[1].originalText, text.slice(0, first.blocks[1].charEnd));
-    const contentMatches = await searchPostgresContent(readOnlyContentSearchTransaction, parsedContentQuery("繁体龙门 终章"), { maxResults: 1_000 });
+    const contentMatches = await searchPostgresContent(readOnlyContentSearchTransaction, parsedContentQuery("繁体龙门 终章"), {});
     assert.deepEqual(contentMatches.items.map((item) => item.novelId), [novelId!]);
+    assert.deepEqual({ total: contentMatches.totalItems, estimated: contentMatches.estimated }, { total: 1, estimated: true },
+      "a four-character keyword is verified, so its total is reported as an upper bound");
+    const exactMatches = await searchPostgresContent(readOnlyContentSearchTransaction, parsedContentQuery("终章"), {});
+    assert.deepEqual({ total: exactMatches.totalItems, estimated: exactMatches.estimated }, { total: 1, estimated: false },
+      "a two-character keyword is one bigram, answered exactly with recheck off");
+    const searchRow = await pool.query<{ generation: number; block_starts: number[]; search_text: string }>(
+      "SELECT generation, block_starts, search_text FROM novel_search_documents WHERE document_id = $1", [build.documentId]);
+    assert.equal(searchRow.rows[0].generation, build.generation, "publishing writes the search row in the same transaction");
+    assert.equal(searchRow.rows[0].block_starts.length, first.blockCount);
+    assert.ok(searchRow.rows[0].search_text.includes("繁体龙门"), "the indexed form is the Hans one");
     await assert.rejects(
       readPublishedContentWindow(database(), { documentId: build.documentId, contentVersion: "stale", blockNo: 0 }),
       ContentVersionChangedError,
@@ -423,5 +440,6 @@ test("real PostgreSQL 18 + pg_bigm integration", { timeout: 180_000 }, async (t)
     await pool.query("DELETE FROM novels WHERE id = $1", [novelId!]);
     assert.equal((await pool.query("SELECT 1 FROM novel_documents WHERE id = $1", [build.documentId])).rowCount, 0);
     assert.equal((await pool.query("SELECT 1 FROM novel_content_blocks WHERE document_id = $1", [build.documentId])).rowCount, 0);
+    assert.equal((await pool.query("SELECT 1 FROM novel_search_documents WHERE document_id = $1", [build.documentId])).rowCount, 0);
   });
 });

@@ -3,6 +3,7 @@ import type { QueryResultRow } from "pg";
 import { withTransaction, type SqlExecutor } from "@/core/db/postgres";
 import { contentVersionForText } from "@/lib/content-version";
 import { CONTENT_NORMALIZATION_VERSION, createContentBlocks, type ContentBlock } from "./content-text";
+import { contentSearchDocument, writeContentSearchDocument, type ContentSearchDocument } from "./postgres-search-index";
 
 const MAX_BATCH_BLOCKS = 128;
 const MAX_BATCH_BYTES = 1_048_576;
@@ -130,8 +131,6 @@ function serializedBlocks(blocks: readonly ContentBlock[]): string {
   if (blocks.length < 1 || blocks.length > MAX_BATCH_BLOCKS) throw new Error(`A content batch must contain 1–${MAX_BATCH_BLOCKS} blocks`);
   const json = JSON.stringify(blocks.map((block) => ({
     block_no: block.blockNo, char_start: block.charStart, char_end: block.charEnd, original_text: block.originalText,
-    search_window_start: block.searchWindowStart, search_window_end: block.searchWindowEnd,
-    search_text_original: block.searchTextOriginal, search_text_hans: block.searchTextHans,
   })));
   if (Buffer.byteLength(json) > MAX_BATCH_BYTES) throw new Error("Content batch exceeds the byte budget");
   return json;
@@ -149,20 +148,16 @@ export async function appendContentBuildBatch(build: ContentBuild, blocks: reado
     for (const block of blocks) {
       if (!Number.isSafeInteger(block.blockNo) || block.blockNo !== expectedBlock || block.charStart !== expectedOffset ||
         !block.originalText || !block.originalText.isWellFormed() || block.originalText.includes("\0") ||
-        block.charEnd !== block.charStart + block.originalText.length || !Number.isSafeInteger(block.searchWindowStart) ||
-        !Number.isSafeInteger(block.searchWindowEnd) || block.searchWindowStart < 0 || block.searchWindowStart > block.charStart ||
-        block.searchWindowEnd < block.charEnd || block.searchWindowEnd > manifest.total_utf16_length) throw new Error("Invalid or non-contiguous content blocks");
+        block.charEnd !== block.charStart + block.originalText.length ||
+        block.charEnd > manifest.total_utf16_length) throw new Error("Invalid or non-contiguous content blocks");
       expectedBlock += 1;
       expectedOffset = block.charEnd;
     }
     if (blocks[0].blockNo < manifest.block_count) {
       const existing = await tx.query<{ equal: boolean }>({
         text: `SELECT count(*) = $4 AND coalesce(bool_and(
-          b.char_start = p.char_start AND b.char_end = p.char_end AND b.original_text = p.original_text
-          AND b.search_window_start = p.search_window_start AND b.search_window_end = p.search_window_end
-          AND b.search_text_original = p.search_text_original AND b.search_text_hans IS NOT DISTINCT FROM p.search_text_hans), false) AS equal
-          FROM jsonb_to_recordset($3::jsonb) AS p(block_no integer, char_start integer, char_end integer, original_text text,
-            search_window_start integer, search_window_end integer, search_text_original text, search_text_hans text)
+          b.char_start = p.char_start AND b.char_end = p.char_end AND b.original_text = p.original_text), false) AS equal
+          FROM jsonb_to_recordset($3::jsonb) AS p(block_no integer, char_start integer, char_end integer, original_text text)
           JOIN novel_content_blocks b ON b.document_id = $1 AND b.generation = $2 AND b.block_no = p.block_no`,
         values: [build.documentId, build.generation, json, blocks.length],
       });
@@ -173,11 +168,9 @@ export async function appendContentBuildBatch(build: ContentBuild, blocks: reado
       throw new Error("Content batch is out of sequence");
     }
     await tx.query({
-      text: `INSERT INTO novel_content_blocks (document_id, generation, block_no, char_start, char_end, original_text,
-        search_window_start, search_window_end, search_text_original, search_text_hans)
-        SELECT $1, $2, block_no, char_start, char_end, original_text, search_window_start, search_window_end, search_text_original, search_text_hans
-        FROM jsonb_to_recordset($3::jsonb) AS p(block_no integer, char_start integer, char_end integer, original_text text,
-          search_window_start integer, search_window_end integer, search_text_original text, search_text_hans text)`,
+      text: `INSERT INTO novel_content_blocks (document_id, generation, block_no, char_start, char_end, original_text)
+        SELECT $1, $2, block_no, char_start, char_end, original_text
+        FROM jsonb_to_recordset($3::jsonb) AS p(block_no integer, char_start integer, char_end integer, original_text text)`,
       values: [build.documentId, build.generation, json],
     });
     await tx.query({
@@ -188,7 +181,17 @@ export async function appendContentBuildBatch(build: ContentBuild, blocks: reado
   }, { role: "jobs" });
 }
 
-export async function publishContentBuild(build: ContentBuild, transaction: RunTransaction = withTransaction): Promise<ContentBuild> {
+/**
+ * Makes the build the published content and, in the same transaction, replaces the
+ * document's search row. Search reads that row alone, so publishing text and publishing
+ * its searchable form cannot come apart: there is no window in which a reader sees the
+ * new generation while search still answers from the old one, or the reverse.
+ */
+export async function publishContentBuild(
+  build: ContentBuild,
+  search: ContentSearchDocument,
+  transaction: RunTransaction = withTransaction,
+): Promise<ContentBuild> {
   return transaction(async (tx) => {
     const location = await tx.query<{ novel_id: number; chapter_id: number | null }>({
       text: "SELECT novel_id, chapter_id FROM novel_documents WHERE id = $1", values: [build.documentId],
@@ -218,6 +221,8 @@ export async function publishContentBuild(build: ContentBuild, transaction: RunT
         indexed_at = clock_timestamp(), updated_at = clock_timestamp() WHERE id = $1`,
       values: [build.documentId, build.generation, build.contentVersion, CONTENT_NORMALIZATION_VERSION],
     });
+    if (search.blockStarts.length !== manifest.block_count) throw new Error("Search text does not cover the published blocks");
+    await writeContentSearchDocument(tx, build.documentId, build.generation, search);
     return build;
   }, { role: "jobs" });
 }
@@ -248,9 +253,14 @@ export async function publishPostgresContent(
   try {
     let batch: ContentBlock[] = [];
     let bytes = 0;
+    // Blocks stream to keep one batch in memory; the normalized text does not, because a
+    // document is indexed whole. Even the longest novels in the library are a few hundred
+    // thousand characters, so this holds well under a megabyte.
+    const searchBlocks: { searchText: string }[] = [];
     for await (const block of createContentBlocks(input.text)) {
       input.signal?.throwIfAborted();
-      const blockBytes = Buffer.byteLength(JSON.stringify(block));
+      searchBlocks.push({ searchText: block.searchText });
+      const blockBytes = Buffer.byteLength(block.originalText) + 64;
       if (batch.length && (batch.length >= 64 || bytes + blockBytes > MAX_BATCH_BYTES / 2)) {
         await appendContentBuildBatch(build, batch, transaction);
         batch = []; bytes = 0;
@@ -259,7 +269,7 @@ export async function publishPostgresContent(
     }
     if (batch.length) await appendContentBuildBatch(build, batch, transaction);
     input.signal?.throwIfAborted();
-    return await publishContentBuild(build, transaction);
+    return await publishContentBuild(build, contentSearchDocument(searchBlocks), transaction);
   } catch (error) {
     await abandonContentBuild(build, transaction).catch(() => { /* Original build failure remains the actionable error. */ });
     throw error;

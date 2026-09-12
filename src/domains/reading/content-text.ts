@@ -1,7 +1,8 @@
-import { MAX_CONTENT_KEYWORD_CHARS } from "@/lib/search-query";
-
-/** Bump whenever Unicode processing, OpenCC dictionaries, matching rules or the indexed
- *  block layout change. v3: block search context is sized to the longest public keyword. */
+/** Bump whenever Unicode processing, OpenCC dictionaries or the block layout change, so
+ *  that stored offsets a reader or a search hit points at are rebuilt before they can be
+ *  read against different text. v3: 1200-code-point blocks over NFKC-folded text. The
+ *  search representation is versioned separately: it lives in novel_search_documents,
+ *  which is rebuilt from these blocks without re-reading the library. */
 export const CONTENT_NORMALIZATION_VERSION = 3;
 export const CONTENT_BLOCK_CODE_POINTS = 1_200;
 
@@ -13,11 +14,11 @@ export type ContentBlock = {
   blockNo: number;
   charStart: number;
   charEnd: number;
+  /** Displayed verbatim: punctuation, spacing and case as the author wrote them. */
   originalText: string;
-  searchWindowStart: number;
-  searchWindowEnd: number;
-  searchTextOriginal: string;
-  searchTextHans: string | null;
+  /** This block's own normalized text, in the one indexed form. Concatenating every
+   *  block of a document reproduces that document's search text exactly. */
+  searchText: string;
 };
 
 type Trie = { children: Map<string, Trie>; value?: string };
@@ -213,35 +214,43 @@ function lowerBound(positions: TextPosition[], offset: number, field: "start" | 
   return low;
 }
 
-/** Nonoverlapping original bodies retain a normalized boundary context, so
- * punctuation, whitespace, and length-changing Chinese conversion cannot hide
- * a term that crosses adjacent index blocks. The context is one character short of
- * the longest public keyword on each side: exactly enough for any keyword to match
- * whole, without indexing a wider overlap than any query can use.
+/**
+ * Splits a document into fixed-size display blocks and, alongside each one, that
+ * block's own normalized search text.
+ *
+ * Blocks used to carry a normalized context window reaching into their neighbours, so
+ * that a keyword straddling a boundary could still be found in a single block row. The
+ * search index is no longer built per block: a document is indexed as one contiguous
+ * normalized string, in which no boundary exists to straddle. So each block now carries
+ * exactly its own text, every normalized character belongs to exactly one block, and
+ * concatenating them reproduces the document's search text.
+ *
+ * One normalized form is produced, not two. OpenCC conversion is idempotent for text
+ * that is already Simplified, so indexing the converted form alone matches a query in
+ * either script while halving the columns, indexes and query branches it takes.
  */
 export async function* createContentBlocks(text: string, blockCodePoints = CONTENT_BLOCK_CODE_POINTS): AsyncGenerator<ContentBlock> {
   if (!Number.isSafeInteger(blockCodePoints) || blockCodePoints < 1 || blockCodePoints > 4_096) throw new Error("Invalid content block size");
-  const forms = await normalizeChineseSearchPositions(text);
-  const contextChars = MAX_CONTENT_KEYWORD_CHARS - 1;
+  const positions = (await normalizeChineseSearchPositions(text)).hans;
   let start = 0;
   let end = 0;
   let count = 0;
   let blockNo = 0;
+  // Every normalized character is assigned by where its source starts, using the same
+  // test for both bounds. A conversion's output shares its whole source range, so one
+  // straddling a boundary would satisfy an end-based lower bound and a start-based upper
+  // bound at once and be copied into both blocks; starts never decrease, so this is an
+  // exact partition.
   function block(charStart: number, charEnd: number): ContentBlock {
-    const contexts = [forms.original, forms.hans].map((positions) => {
-      const first = Math.max(0, lowerBound(positions, charStart, "end", true) - contextChars);
-      const last = Math.min(positions.length, lowerBound(positions, charEnd, "start", false) + contextChars);
-      return positions.slice(first, last);
-    });
-    // Both forms use the union of source windows, including length-changing
-    // conversions, so every simple keyword sees the same source range.
-    const searchWindowStart = Math.min(charStart, ...contexts.map((context) => context[0]?.start ?? charStart));
-    const searchWindowEnd = Math.max(charEnd, ...contexts.map((context) => context.at(-1)?.end ?? charEnd));
-    const values = [forms.original, forms.hans].map((positions) => positions
-      .slice(lowerBound(positions, searchWindowStart, "end", true), lowerBound(positions, searchWindowEnd, "start", false))
-      .map((position) => position.text).join(""));
-    return { blockNo: blockNo++, charStart, charEnd, originalText: text.slice(charStart, charEnd), searchWindowStart, searchWindowEnd,
-      searchTextOriginal: values[0], searchTextHans: values[0] === values[1] ? null : values[1] };
+    const first = lowerBound(positions, charStart, "start", false);
+    const last = lowerBound(positions, charEnd, "start", false);
+    return {
+      blockNo: blockNo++,
+      charStart,
+      charEnd,
+      originalText: text.slice(charStart, charEnd),
+      searchText: positions.slice(first, last).map((position) => position.text).join(""),
+    };
   }
   for (const character of text) {
     end += character.length;

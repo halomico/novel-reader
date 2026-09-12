@@ -1,5 +1,4 @@
 import type { QueryResultRow } from "pg";
-import { MAX_GLOBAL_SEARCH_RESULTS } from "@/core/config/site-settings-schema";
 import { postgresQueryTimeoutMs, withTransaction, type SqlExecutor, type SqlQuery } from "@/core/db/postgres";
 import type { ParsedSearchQuery } from "@/lib/search-query";
 import {
@@ -9,71 +8,52 @@ import {
 } from "./content-text";
 
 /*
- * Full-text search over indexed content blocks, shaped by how pg_bigm answers a Chinese
- * corpus:
+ * Full-text search over `novel_search_documents`, one row per published document holding
+ * that document's whole normalized text.
  *
- * 1. A 2-character keyword is a single bigram, so the index answers it exactly. Longer
- *    keywords get a superset that must be verified against block text, and reading that
- *    text is where the time goes.
- * 2. Documents are listed by `novel_documents.id` descending — most recently indexed
- *    first — because that is the order both scan strategies below already produce.
- *    Nothing is ranked or sorted at query time: a sort has to verify every candidate
- *    document before it can emit its first row, which is the difference between
- *    answering one page and reading the whole library.
- * 3. Keywords are tested in WHERE under a LIMIT, so a search costs what the results it
- *    lists cost rather than what the corpus costs.
+ * Everything here follows from one property of a bigram index built at document rather
+ * than block granularity: a keyword's posting list is as long as the number of documents
+ * that contain it, not the number of 1200-character blocks. A word in 96% of the library
+ * is tens of thousands of postings instead of millions, so the index can be asked how
+ * many documents match and which ones, and answer from the index alone.
  *
- * Two strategies produce that same order, and one search may use both:
- *  - walk: read documents newest first and verify each one. Cost follows the number of
- *    results asked for, so a keyword found almost everywhere answers immediately.
- *  - anchored: gather the longest keyword's candidate blocks from the bigm index, then
- *    verify the other keywords on those documents only. Cost follows how rare that
- *    keyword is, so a keyword nothing else would find is located at once.
+ * That removes the machinery the block index needed. There is no result cap, no time
+ * budget, no pair of competing scan strategies, and no cached result list: a page costs
+ * what that page costs, and the total beside it is counted, not guessed at.
  *
- * Measuring which one to use up front costs as much as the anchored plan itself — a GIN
- * bitmap is built whole whatever LIMIT it is given — so the search does not measure. It
- * walks under a short trial budget, and if that trial lists a match the rest of the
- * search keeps walking. An empty trial hands the remainder to the index. Because both
- * strategies list in the same order, the anchored continuation resumes below the last
- * id the walk listed: nothing is repeated and nothing is skipped.
+ * Two things still need care.
+ *
+ * 1. Recheck is disabled for the session. pg_bigm would otherwise re-evaluate every LIKE
+ *    against the candidate's text, which means detoasting each matching document -- the
+ *    exact work the index exists to avoid. A two-character keyword is a single bigram, so
+ *    the index answers it exactly and recheck was never needed for it. A longer keyword
+ *    gets a superset, which this module verifies itself (point 2). The same applies to a
+ *    book-title filter riding along in the same statement, so that filter carries its own
+ *    verification.
+ *
+ * 2. Verification is deferred until a page is being filled, never applied to the whole
+ *    candidate set. Written the obvious way -- the check in the same WHERE as the
+ *    keywords -- PostgreSQL evaluates it below the ordering and reads every candidate's
+ *    text: measured at 563 MB of I/O for a query whose every candidate matched. Ordering
+ *    the candidates in a MATERIALIZED CTE first and verifying above it costs 785 pages
+ *    for the same answer.
  */
 
-const STREAM_FETCH_ROWS = 256;
-
-/** Deployment-tunable budget, so a large library can be given more time without a code
- *  change. Values outside the bounds, and unset ones, use the default. */
-function budgetMs(name: string, fallback: number, minimum: number, maximum: number): number {
-  const parsed = Number(process.env[name]);
-  return Number.isFinite(parsed) ? Math.min(Math.max(Math.floor(parsed), minimum), maximum) : fallback;
-}
-
-/** Matching stops here and lists what it has, so a pathological query degrades to a
- *  shorter list instead of failing. A search holds a pooled connection for this long, so
- *  raising it far also wants a lower `frontendSearchConcurrencyLimit`, or other pages
- *  queue behind searches. */
-const MATCH_BUDGET_MS = budgetMs("SEARCH_MATCH_BUDGET_MS", 3_000, 500, 30_000);
-/** How long the ordered walk may take to prove the term is dense. The trial asks for one
- *  match, not a full page: a common word answers immediately, and an empty word can still
- *  fall through to the index instead of waiting hundreds of milliseconds for 21 misses. */
-const WALK_TRIAL_MS = budgetMs("SEARCH_WALK_TRIAL_MS", 120, 20, 5_000);
-/** A finished page is reused across repeat searches. The cache holds rendered excerpts,
- *  not multi-thousand-result id lists, so its memory is small and bounded. */
-const RESULT_CACHE_TTL_MS = budgetMs("SEARCH_RESULT_CACHE_MS", 300_000, 1_000, 3_600_000);
-const PARTIAL_CACHE_TTL_MS = 60_000;
-const RESULT_CACHE_ENTRIES = 256;
-/** Sorting and hashing room for one search. Matching carries only document ids, so this
- *  bounds the anchor's candidate set rather than any text. */
-const SEARCH_WORK_MEM = process.env.SEARCH_WORK_MEM?.trim() || "16MB";
-const STREAM_SAVEPOINT = "content_search_stream";
-const STREAM_CURSOR = "content_search_cursor";
-const MIN_STATEMENT_TIMEOUT_MS = 20;
-/** Left for the round trip, so the server cancels a statement before node-postgres
- *  abandons it on its own timer, which would fail the search instead of trimming it. */
-const STATEMENT_TIMEOUT_MARGIN_MS = 500;
+/** Documents whose text may be read to verify a keyword the index could only approximate.
+ *  Reaching this means a keyword's bigrams are common while the keyword itself is not --
+ *  a typo, usually -- and the honest answer is the short list this produces. */
+const VERIFY_SCAN_LIMIT = 2_000;
+/** A page deeper than this is not reachable through the UI; it exists so a crafted
+ *  request cannot ask PostgreSQL to count off a million rows. */
+const MAX_PAGE = 100_000;
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
 const CONTENT_SEARCH_SNIPPET_LENGTH = 280;
 const CONTENT_SEARCH_SNIPPET_LEADING_CONTEXT = 24;
+const MIN_STATEMENT_TIMEOUT_MS = 20;
+/** Left for the round trip, so the server cancels a statement before node-postgres
+ *  abandons it on its own timer, which would fail the search instead of ending it. */
+const STATEMENT_TIMEOUT_MARGIN_MS = 500;
 
 export type PostgresContentSearchOptions = {
   novelId?: number;
@@ -84,8 +64,6 @@ export type PostgresContentSearchOptions = {
   excludeTagSlugs?: readonly string[];
   titleQuery?: ParsedSearchQuery;
   audience?: "public" | "member" | "admin";
-  /** The most results a search lists. */
-  maxResults: number;
   pageSize?: number;
   page?: number;
 };
@@ -106,67 +84,41 @@ export type PostgresContentSearchItem = {
 export type PostgresContentSearchPage = {
   items: PostgresContentSearchItem[];
   page: number;
-  /** Results listed; every one of them can be paged to. */
   totalItems: number;
   totalNovels: number;
-  /** More documents match than the cap lists. */
-  capped: boolean;
-  /** Matching stopped at its time budget, so more matches exist than were listed. */
-  partial: boolean;
+  /** The totals are an upper bound rather than a count. True when some keyword spans more
+   *  than one bigram, so the index admitted documents that only the listed rows were
+   *  checked against. The rows themselves are exact either way. */
+  estimated: boolean;
 };
 
-/** Matching holds one connection for its cursor, so it runs inside a transaction. */
+/** A search holds one connection for the two statements it runs, so it runs in a
+ *  transaction: the page must be described by the same snapshot that counted it. */
 export type ContentSearchTransaction = <T>(operation: (executor: SqlExecutor) => Promise<T>) => Promise<T>;
 
 export const readOnlyContentSearchTransaction: ContentSearchTransaction = (operation) =>
   withTransaction(operation, { role: "web", readOnly: true });
 
-export type ContentSearchTermForm = { text: string; bigrams: readonly string[] };
-
 export type ContentSearchTerm = {
-  /** exact: every form is one bigram, answered exactly by the index. verify: the index
-   *  returns a superset that is checked against block text. unindexed: a single
-   *  character has no bigram, so it is only ever checked against text. */
-  kind: "exact" | "verify" | "unindexed";
-  forms: readonly ContentSearchTermForm[];
+  /** The normalized form actually searched for: one form, already Hans-folded. */
+  text: string;
   length: number;
+  /** exact: one bigram, which the index answers with no false positives.
+   *  verify: several bigrams, so the index returns a superset to be checked.
+   *  unindexed: a single character has no bigram and cannot narrow anything. */
+  kind: "exact" | "verify" | "unindexed";
 };
-
-export type ContentSearchPlan = { kind: "walk" } | { kind: "anchored" };
 
 type Builder = { values: unknown[]; parameter(value: unknown): string };
-type StreamRow = QueryResultRow & {
-  document_id: string;
-  novel_id: number;
-  chapter_id: number | null;
-  novel_title: string;
-  chapter_title: string | null;
-  content_version: string;
-  generation: number;
-  block_no: number;
-  char_start: number;
-  blocks: CandidateBlock[] | null;
-};
-type MatchedDocument = {
-  documentId: string;
-  novelId: number;
-  chapterId: number | null;
-  novelTitle: string;
-  chapterTitle: string | null;
-  contentVersion: string;
-  generation: number;
-  blockNo: number;
-  charStart: number;
-  blocks: CandidateBlock[];
-};
-type MatchList = { matches: MatchedDocument[]; capped: boolean; complete: boolean };
-type CandidateBlock = { blockNo: number; charStart: number; originalText: string };
 
 function builder(): Builder {
   const values: unknown[] = [];
   return { values, parameter(value) { values.push(value); return `$${values.length}`; } };
 }
 
+/** Escapes the LIKE wildcards for the default escape character, so no ESCAPE clause is
+ *  needed and pg_bigm sees the pattern shape it optimizes. Content normalization already
+ *  strips every one of these as punctuation; this keeps that from being load-bearing. */
 function escapeLike(value: string): string {
   return value.replace(/[\\%_]/gu, (character) => `\\${character}`);
 }
@@ -178,58 +130,23 @@ export async function planContentSearchTerms(query: ParsedSearchQuery): Promise<
   const seen = new Set<string>();
   const terms: ContentSearchTerm[] = [];
   for (const required of query.requiredTerms) {
-    const normalized = await normalizeChineseSearchForms(required.value, "content");
-    const texts = [...new Set([normalized.original, normalized.hans].filter((text): text is string => Boolean(text)))];
-    if (!texts.length) throw new Error("Content search term normalizes to an empty value");
-    const key = [...texts].sort().join("|");
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const forms = texts.map((text) => {
-      const characters = Array.from(text);
-      const bigrams = [...new Set(characters.slice(0, -1).map((character, index) => `${character}${characters[index + 1]}`))];
-      return { text, bigrams, length: characters.length };
-    });
-    const lengths = forms.map((form) => form.length);
-    const kind = lengths.some((length) => length < 2) ? "unindexed" : lengths.every((length) => length === 2) ? "exact" : "verify";
-    terms.push({ kind, forms: forms.map(({ text, bigrams }) => ({ text, bigrams })), length: Math.max(...lengths) });
+    const forms = await normalizeChineseSearchForms(required.value, "content");
+    // The index stores the converted form only, so a Traditional document and a
+    // Simplified query meet here rather than in a second column and a second index.
+    const text = forms.hans ?? forms.original;
+    if (!text) throw new Error("Content search term normalizes to an empty value");
+    if (seen.has(text)) continue;
+    seen.add(text);
+    const length = Array.from(text).length;
+    terms.push({ text, length, kind: length === 1 ? "unindexed" : length === 2 ? "exact" : "verify" });
   }
-  // Longest first: the rarest keyword is the one worth anchoring on, and the same term
-  // locates each result's snippet.
-  return terms.sort((left, right) => right.length - left.length);
-}
-
-/** Index-served candidate test: every bigram of some form occurs in the block. */
-function indexPredicate(sql: Builder, term: ContentSearchTerm, alias: string): string {
-  return `(${term.forms.flatMap((form) => {
-    const grams = form.bigrams.map((gram) => sql.parameter(escapeLike(gram)));
-    const all = (column: string) => grams
-      .map((gram) => `${alias}.${column} LIKE '%' || ${gram} || '%' ESCAPE E'\\\\'`)
-      .join(" AND ");
-    return [`(${all("search_text_original")})`, `(${alias}.search_text_hans IS NOT NULL AND ${all("search_text_hans")})`];
-  }).join(" OR ")})`;
-}
-
-/** Exact containment. strpos cannot use the bigram index, which keeps per-document
- *  verification from being planned as a fresh index scan for every document. */
-function matchPredicate(sql: Builder, term: ContentSearchTerm, alias: string): string {
-  return `(${term.forms.flatMap((form) => {
-    const text = sql.parameter(form.text);
-    return [
-      `strpos(${alias}.search_text_original, ${text}) > 0`,
-      `(${alias}.search_text_hans IS NOT NULL AND strpos(${alias}.search_text_hans, ${text}) > 0)`,
-    ];
-  }).join(" OR ")})`;
-}
-
-async function indexedTitleTermSql(sql: Builder, value: string): Promise<string> {
-  const forms = await normalizeChineseSearchForms(value, "title");
-  const terms = [...new Set([forms.original, forms.hans].filter((term): term is string => Boolean(term)))];
-  if (!terms.length) throw new Error("Title search term normalizes to an empty value");
-  return `(${terms.map((term) => {
-    const parameter = sql.parameter(escapeLike(term));
-    return `(n.title_search_original LIKE '%' || ${parameter} || '%' ESCAPE E'\\\\'
-      OR (n.title_search_hans IS NOT NULL AND n.title_search_hans LIKE '%' || ${parameter} || '%' ESCAPE E'\\\\'))`;
-  }).join(" OR ")})`;
+  // Longest first: the rarest keyword narrows the candidate set most, and the same term
+  // locates each result's excerpt.
+  terms.sort((left, right) => right.length - left.length);
+  if (terms[0] === undefined || terms[0].kind === "unindexed") {
+    throw new Error("Content search requires a keyword of at least two characters");
+  }
+  return terms;
 }
 
 function normalizedSlug(value: string, field: string): string {
@@ -249,11 +166,6 @@ function positiveInt32(value: number, field: string): number {
   return value;
 }
 
-function normalizedMaxResults(value: number): number {
-  if (!Number.isSafeInteger(value) || value < 1) throw new Error("Invalid content search result cap");
-  return Math.min(value, MAX_GLOBAL_SEARCH_RESULTS);
-}
-
 function normalizedPageSize(value: number | undefined): number {
   if (value === undefined) return DEFAULT_PAGE_SIZE;
   if (!Number.isSafeInteger(value) || value < 1) throw new Error("Invalid content search page size");
@@ -262,18 +174,52 @@ function normalizedPageSize(value: number | undefined): number {
 
 function normalizedPage(value: number | undefined): number {
   if (value === undefined) return 1;
-  if (!Number.isSafeInteger(value) || value < 1 || value > 1_000_000) throw new Error("Invalid content search page");
+  if (!Number.isSafeInteger(value) || value < 1 || value > MAX_PAGE) throw new Error("Invalid content search page");
   return value;
 }
 
+/** Book titles keep both scripts in their own columns, so both are matched. With recheck
+ *  off the index result is a superset for anything longer than one bigram, so the exact
+ *  test rides along; a title is short and always inline, which makes it free. */
+async function titleFilterSql(sql: Builder, value: string): Promise<string> {
+  const forms = await normalizeChineseSearchForms(value, "title");
+  const texts = [...new Set([forms.original, forms.hans].filter((text): text is string => Boolean(text)))];
+  if (!texts.length) throw new Error("Title search term normalizes to an empty value");
+  return `(${texts.map((text) => {
+    const pattern = sql.parameter(escapeLike(text));
+    const exact = sql.parameter(text);
+    return `((n.title_search_original LIKE '%' || ${pattern} || '%' AND strpos(n.title_search_original, ${exact}) > 0)
+      OR (n.title_search_hans IS NOT NULL AND n.title_search_hans LIKE '%' || ${pattern} || '%'
+        AND strpos(n.title_search_hans, ${exact}) > 0))`;
+  }).join(" OR ")})`;
+}
+
+/**
+ * Everything a document must satisfy besides its keywords. Library membership sits on the
+ * search row itself; tags and titles are correlated subqueries against the catalog, which
+ * keeps them filters on the driving relation instead of joins the planner may reorder
+ * ahead of the ordering that makes the limit stop the scan.
+ */
 async function scopeFilters(sql: Builder, options: PostgresContentSearchOptions): Promise<string[]> {
   const filters: string[] = [];
-  if (options.novelId !== undefined) filters.push(`n.id = ${sql.parameter(positiveInt32(options.novelId, "content search novel"))}`);
-  if (options.titleQuery) {
-    if (options.titleQuery.mode !== "title" || options.titleQuery.syntax !== "simple-and") {
-      throw new Error("PostgreSQL content title filter only supports simple AND title queries");
+  if (options.novelId !== undefined) {
+    filters.push(`s.novel_id = ${sql.parameter(positiveInt32(options.novelId, "content search novel"))}`);
+  }
+  if (options.sourceId !== undefined) {
+    filters.push(`s.source_id = ${sql.parameter(positiveInt32(options.sourceId, "content search source"))}`);
+  }
+  if (options.sourceSlug !== undefined) {
+    const slug = normalizedSlug(options.sourceSlug, "content search source slug");
+    if (slug !== "all") {
+      filters.push(`s.source_id = (SELECT lookup.id FROM novel_sources lookup WHERE lower(lookup.slug) = ${sql.parameter(slug)})`);
     }
-    for (const term of options.titleQuery.requiredTerms) filters.push(await indexedTitleTermSql(sql, term.value));
+  }
+  const excludedSources = normalizedSlugs(options.excludedSourceSlugs, "excluded content search source");
+  if (excludedSources.length) {
+    filters.push(`(s.source_id IS NULL OR s.source_id <> ALL(coalesce((
+      SELECT array_agg(excluded.id) FROM novel_sources excluded
+      WHERE lower(excluded.slug) = ANY(${sql.parameter(excludedSources)}::text[])
+    ), '{}'::integer[])))`);
   }
   const audience = options.audience ?? "public";
   if (audience !== "public" && audience !== "member" && audience !== "admin") throw new Error("Invalid content search audience");
@@ -284,344 +230,138 @@ async function scopeFilters(sql: Builder, options: PostgresContentSearchOptions)
       : "tag.visibility = 'public'";
   for (const slug of normalizedSlugs(options.includeTagSlugs, "included content search tag")) {
     filters.push(`EXISTS (
-      SELECT 1 FROM novel_tags tagged
-      JOIN tags tag ON tag.id = tagged.tag_id
-      WHERE tagged.novel_id = n.id AND tag.slug = ${sql.parameter(slug)} AND ${tagVisibility}
+      SELECT 1 FROM novel_tags tagged JOIN tags tag ON tag.id = tagged.tag_id
+      WHERE tagged.novel_id = s.novel_id AND tag.slug = ${sql.parameter(slug)} AND ${tagVisibility}
     )`);
   }
   const excludedTags = normalizedSlugs(options.excludeTagSlugs, "excluded content search tag");
   if (excludedTags.length) {
     filters.push(`NOT EXISTS (
-      SELECT 1 FROM novel_tags tagged
-      JOIN tags tag ON tag.id = tagged.tag_id
-      WHERE tagged.novel_id = n.id AND tag.slug = ANY(${sql.parameter(excludedTags)}::text[]) AND ${tagVisibility}
+      SELECT 1 FROM novel_tags tagged JOIN tags tag ON tag.id = tagged.tag_id
+      WHERE tagged.novel_id = s.novel_id AND tag.slug = ANY(${sql.parameter(excludedTags)}::text[]) AND ${tagVisibility}
     )`);
   }
-  return filters;
-}
-
-/** Library filters belong on `novel_documents`, the B-tree relation that supplies the
- *  keyset order. Keeping them inside the catalog EXISTS made a default-library search
- *  discard tens of thousands of newer documents one by one before its first result. */
-function documentSourceFilters(sql: Builder, options: PostgresContentSearchOptions): string[] {
-  const filters: string[] = [];
-  if (options.sourceId !== undefined) {
-    filters.push(`d.source_id = ${sql.parameter(positiveInt32(options.sourceId, "content search source"))}`);
-  }
-  if (options.sourceSlug !== undefined) {
-    const sourceSlug = normalizedSlug(options.sourceSlug, "content search source slug");
-    if (sourceSlug !== "all") {
-      filters.push(`d.source_id = (SELECT source_lookup.id FROM novel_sources source_lookup
-        WHERE lower(source_lookup.slug) = ${sql.parameter(sourceSlug)})`);
+  if (options.titleQuery) {
+    if (options.titleQuery.mode !== "title" || options.titleQuery.syntax !== "simple-and") {
+      throw new Error("PostgreSQL content title filter only supports simple AND title queries");
     }
-  }
-  const excludedSources = normalizedSlugs(options.excludedSourceSlugs, "excluded content search source");
-  if (excludedSources.length) {
-    filters.push(`(d.source_id IS NULL OR d.source_id <> ALL(coalesce((
-        SELECT array_agg(excluded_source.id) FROM novel_sources excluded_source
-        WHERE lower(excluded_source.slug) = ANY(${sql.parameter(excludedSources)}::text[])
-      ), '{}'::integer[])))`);
+    const titleTerms: string[] = [];
+    for (const term of options.titleQuery.requiredTerms) titleTerms.push(await titleFilterSql(sql, term.value));
+    filters.push(`EXISTS (SELECT 1 FROM novels n WHERE n.id = s.novel_id AND ${titleTerms.join("\n      AND ")})`);
   }
   return filters;
 }
 
-/** Only the longest keyword is ever anchored on, and only where the index can narrow
- *  anything: a single character has no bigram, and one book has too few documents for an
- *  index lookup to beat reading them. */
-export function canAnchorContentSearch(
+/**
+ * One statement producing the exact number of matching documents and novels, plus the
+ * ids on the requested page.
+ *
+ * `candidates` is MATERIALIZED so the keyword scan runs once and the three readers below
+ * it rescan a tuplestore that is already in the answer's order. Verification, when a
+ * keyword needs it, hangs off a LATERAL over that tuplestore: LATERAL is the one join
+ * PostgreSQL will not reorder, so the candidate order survives and the page limit stops
+ * the scan instead of every candidate being read first.
+ */
+export async function buildContentSearchCandidateQuery(
   terms: readonly ContentSearchTerm[],
   options: PostgresContentSearchOptions,
-): boolean {
-  return options.novelId === undefined && terms[0] !== undefined && terms[0].kind !== "unindexed";
-}
-
-/**
- * Everything a document must satisfy besides the keywords, written as correlated
- * subqueries rather than joins. A join can be reordered, and the moment PostgreSQL is
- * free to reorder it is also free to answer `ORDER BY d.id` with a sort on top — which
- * would have to verify every candidate in the library before emitting the first row. As
- * subqueries these are filters on one relation, so the only plan is to read documents in
- * id order and stop at the limit.
- */
-function eligibilityFilters(): string[] {
-  return [
-    "d.state = 'ready'",
-    "d.active_generation > 0",
-    `EXISTS (
-        SELECT 1 FROM novel_content_generations g
-        WHERE g.document_id = d.id AND g.generation = d.active_generation AND g.state = 'published'
-      )`,
-  ];
-}
-
-/**
- * Lists matching documents by descending id, at most `limit` of them, resuming below
- * `afterDocumentId`. Keywords are tested in WHERE, so PostgreSQL stops reading as soon as
- * the limit is met. The first matching block is returned with the document, so building
- * the excerpt does not scan the same document for the keyword a second time. An anchored
- * plan checks the longest keyword only on blocks carrying all of its bigrams.
- */
-export async function buildContentSearchStreamQuery(
-  terms: readonly ContentSearchTerm[],
-  plan: ContentSearchPlan,
-  options: PostgresContentSearchOptions,
-  limit: number,
-  afterDocumentId?: string,
+  window: { limit: number; offset: number },
 ): Promise<SqlQuery> {
-  if (!Number.isSafeInteger(limit) || limit < 1) throw new Error("Invalid content search limit");
-  if (afterDocumentId !== undefined && !/^[1-9]\d{0,18}$/u.test(afterDocumentId)) {
-    throw new Error("Invalid content search position");
-  }
-  const anchored = plan.kind === "anchored";
-  if (anchored && !canAnchorContentSearch(terms, options)) throw new Error("Invalid content search anchor");
+  if (!Number.isSafeInteger(window.limit) || window.limit < 1) throw new Error("Invalid content search limit");
+  if (!Number.isSafeInteger(window.offset) || window.offset < 0) throw new Error("Invalid content search offset");
   const sql = builder();
-  const anchorTerm = terms[0];
-  // The position rides on whichever relation drives the scan, so it narrows the anchor's
-  // candidate blocks rather than only filtering documents after the fact.
-  const after = (alias: string) => afterDocumentId === undefined
-    ? []
-    : [`${alias} < ${sql.parameter(afterDocumentId)}::bigint`];
-  const anchorCte = anchored
-    ? `WITH anchor AS MATERIALIZED (
-      SELECT b.document_id, b.generation, array_agg(b.block_no ORDER BY b.block_no) AS blocks
-      FROM novel_content_blocks b
-      WHERE ${[indexPredicate(sql, anchorTerm, "b"), ...after("b.document_id")].join("\n        AND ")}
-      GROUP BY b.document_id, b.generation
-      ORDER BY b.document_id DESC
-    )\n    `
-    : "";
-  const checks = terms.slice(1).flatMap((term) => {
-    return [`EXISTS (
-        SELECT 1 FROM novel_content_blocks v
-        WHERE v.document_id = d.id AND v.generation = d.active_generation AND ${matchPredicate(sql, term, "v")}
-      )`];
-  });
-  const firstMatch = anchored
-    ? `SELECT v.block_no, v.char_start,
-          coalesce((SELECT jsonb_agg(jsonb_build_object('blockNo', source.block_no, 'charStart', source.char_start,
-              'originalText', source.original_text) ORDER BY source.block_no)
-            FROM novel_content_blocks source
-            WHERE source.document_id = d.id AND source.generation = d.active_generation
-              AND source.block_no BETWEEN greatest(v.block_no - 1, 0) AND v.block_no + 1), '[]'::jsonb) AS blocks
-        FROM unnest(a.blocks) AS candidate(block_no)
-        JOIN novel_content_blocks v ON v.document_id = d.id AND v.generation = d.active_generation AND v.block_no = candidate.block_no
-        WHERE ${matchPredicate(sql, anchorTerm, "v")}
-        ORDER BY v.block_no
-        LIMIT 1`
-    : `SELECT v.block_no, v.char_start,
-        coalesce((SELECT jsonb_agg(jsonb_build_object('blockNo', source.block_no, 'charStart', source.char_start,
-            'originalText', source.original_text) ORDER BY source.block_no)
-          FROM novel_content_blocks source
-          WHERE source.document_id = d.id AND source.generation = d.active_generation
-            AND source.block_no BETWEEN greatest(v.block_no - 1, 0) AND v.block_no + 1), '[]'::jsonb) AS blocks
-      FROM novel_content_blocks v
-      WHERE v.document_id = d.id AND v.generation = d.active_generation AND ${matchPredicate(sql, anchorTerm, "v")}
-      ORDER BY v.block_no
-      LIMIT 1`;
+  const indexed = terms.filter((term) => term.kind !== "unindexed");
+  const verified = terms.filter((term) => term.kind !== "exact");
+  if (!indexed.length) throw new Error("Content search requires a keyword of at least two characters");
+  // A single character has no bigram, so naming it here would only turn the scan
+  // sequential; it is checked with the other verifications instead.
+  const keywordFilters = indexed.map((term) => `s.search_text LIKE '%' || ${sql.parameter(escapeLike(term.text))} || '%'`);
   const scope = await scopeFilters(sql, options);
-  const documentScope = documentSourceFilters(sql, options);
-  const scopeSql = scope.length ? `\n        AND ${scope.join("\n        AND ")}` : "";
-  const catalog = `SELECT n.title AS novel_title,
-        CASE WHEN d.chapter_id IS NULL THEN NULL ELSE coalesce(c.title_override, c.title) END AS chapter_title
-      FROM novels n
-      LEFT JOIN novel_chapters c ON c.novel_id = d.novel_id AND c.id = d.chapter_id
-      WHERE n.id = d.novel_id
-        AND d.active_content_version = CASE WHEN d.chapter_id IS NULL THEN n.published_content_version ELSE c.published_content_version END${scopeSql}`;
-  const documentFilters = [...documentScope, ...eligibilityFilters(), ...checks];
-  // An anchored scan is driven by the ordered candidate list: LATERAL makes PostgreSQL
-  // walk it one document at a time, so the limit stops the scan and the candidates' order
-  // is the result order. A walk is driven by the document table's own key order.
+  const page = verified.length
+    ? `SELECT scanned.document_id FROM (
+        SELECT c.document_id FROM candidates c LIMIT ${sql.parameter(window.offset + window.limit + VERIFY_SCAN_LIMIT)}
+      ) scanned
+      JOIN LATERAL (
+        SELECT 1 FROM novel_search_documents v
+        WHERE v.document_id = scanned.document_id
+          AND ${verified.map((term) => `strpos(v.search_text, ${sql.parameter(term.text)}) > 0`).join("\n          AND ")}
+      ) present ON true
+      LIMIT ${sql.parameter(window.limit)} OFFSET ${sql.parameter(window.offset)}`
+    : `SELECT c.document_id FROM candidates c
+      LIMIT ${sql.parameter(window.limit)} OFFSET ${sql.parameter(window.offset)}`;
   return {
-    text: anchored
-      ? `${anchorCte}SELECT a.document_id::text AS document_id, hit.novel_id, hit.chapter_id,
-      hit.novel_title, hit.chapter_title, hit.content_version, a.generation,
-      hit.block_no, hit.char_start, hit.blocks
-    FROM anchor a
-    JOIN LATERAL (
-      SELECT d.novel_id, d.chapter_id, catalog.novel_title, catalog.chapter_title,
-        d.active_content_version AS content_version, matched.block_no, matched.char_start, matched.blocks
-      FROM novel_documents d
-      JOIN LATERAL (${catalog}) catalog ON true
-      JOIN LATERAL (${firstMatch}) matched ON true
-      WHERE d.id = a.document_id AND d.active_generation = a.generation
-        AND ${documentFilters.join("\n        AND ")}
-    ) hit ON true
-    LIMIT ${sql.parameter(limit)}::integer`
-      : `SELECT d.id::text AS document_id, d.novel_id, d.chapter_id,
-      catalog.novel_title, catalog.chapter_title, d.active_content_version AS content_version,
-      d.active_generation AS generation, matched.block_no, matched.char_start, matched.blocks
-    FROM novel_documents d
-    JOIN LATERAL (${catalog}) catalog ON true
-    JOIN LATERAL (${firstMatch}) matched ON true
-    WHERE ${[...after("d.id"), ...documentFilters].join("\n      AND ")}
-    ORDER BY d.id DESC
-    LIMIT ${sql.parameter(limit)}::integer`,
+    text: `WITH candidates AS MATERIALIZED (
+      SELECT s.document_id, s.novel_id
+      FROM novel_search_documents s
+      WHERE ${[...keywordFilters, ...scope].join("\n        AND ")}
+      ORDER BY s.document_id DESC
+    ),
+    page AS (${page})
+    SELECT (SELECT count(*) FROM candidates)::text AS total_items,
+      (SELECT count(DISTINCT novel_id) FROM candidates)::text AS total_novels,
+      coalesce((SELECT array_agg(document_id::text ORDER BY document_id DESC) FROM page), '{}'::text[]) AS ids`,
     values: sql.values,
   };
 }
 
-/** No statement may outlive the driver's own timer: past it the query fails as a client
- *  error instead of a server cancellation the search can recover from. */
-function statementCeilingMs(): number {
-  return Math.max(MIN_STATEMENT_TIMEOUT_MS, postgresQueryTimeoutMs("web") - STATEMENT_TIMEOUT_MARGIN_MS);
-}
-
-async function setStatementTimeout(tx: SqlExecutor, milliseconds: number): Promise<void> {
-  const bounded = Math.min(Math.max(MIN_STATEMENT_TIMEOUT_MS, Math.ceil(milliseconds)), statementCeilingMs());
-  await tx.query({
-    text: "SELECT set_config('statement_timeout', $1, true)",
-    values: [`${bounded}ms`],
-  });
-}
-
-function isStatementTimeout(error: unknown): boolean {
-  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === "57014";
-}
-
-/**
- * Reads one scan's matches in batches, so a batch that runs out of time keeps every batch
- * before it. `complete` means the scan has nothing more to give: it either reached the
- * limit or ran off the end of its candidates.
- */
-async function streamMatches(
-  tx: SqlExecutor,
-  stream: SqlQuery,
-  need: number,
-  deadline: number,
-): Promise<{ matches: MatchedDocument[]; complete: boolean }> {
-  const matches: MatchedDocument[] = [];
-  if (deadline - performance.now() <= 0) return { matches, complete: false };
-  await tx.query({ text: `SAVEPOINT ${STREAM_SAVEPOINT}` });
-  try {
-    await setStatementTimeout(tx, deadline - performance.now());
-    await tx.query({ text: `DECLARE ${STREAM_CURSOR} NO SCROLL CURSOR FOR ${stream.text}`, values: stream.values });
-    let exhausted = false;
-    while (matches.length < need) {
-      const remaining = deadline - performance.now();
-      if (remaining <= 0) break;
-      await setStatementTimeout(tx, remaining);
-      const size = Math.min(STREAM_FETCH_ROWS, need - matches.length);
-      const batch = await tx.query<StreamRow>({ text: `FETCH ${size} FROM ${STREAM_CURSOR}` });
-      for (const row of batch.rows) {
-        matches.push({
-          documentId: row.document_id,
-          novelId: row.novel_id,
-          chapterId: row.chapter_id,
-          novelTitle: row.novel_title,
-          chapterTitle: row.chapter_title,
-          contentVersion: row.content_version,
-          generation: row.generation,
-          blockNo: row.block_no,
-          charStart: row.char_start,
-          blocks: row.blocks || [],
-        });
-      }
-      if (batch.rows.length < size) {
-        exhausted = true;
-        break;
-      }
-    }
-    await tx.query({ text: `CLOSE ${STREAM_CURSOR}` });
-    await tx.query({ text: `RELEASE SAVEPOINT ${STREAM_SAVEPOINT}` });
-    return { matches, complete: exhausted || matches.length >= need };
-  } catch (error) {
-    // The budget ran out inside a statement: keep the ordered prefix already fetched.
-    // Rolling back discards the cursor too, so this scan is over either way.
-    if (!isStatementTimeout(error)) throw error;
-    await tx.query({ text: `ROLLBACK TO SAVEPOINT ${STREAM_SAVEPOINT}` });
-    return { matches, complete: false };
-  }
-}
+type PageRow = QueryResultRow & {
+  document_id: string;
+  novel_id: number;
+  chapter_id: number | null;
+  novel_title: string;
+  chapter_title: string | null;
+  content_version: string;
+  block_no: number;
+  blocks: CandidateBlock[] | null;
+};
+type MatchedDocument = {
+  documentId: string;
+  novelId: number;
+  chapterId: number | null;
+  novelTitle: string;
+  chapterTitle: string | null;
+  contentVersion: string;
+  blockNo: number;
+  blocks: CandidateBlock[];
+};
+type CandidateBlock = { blockNo: number; charStart: number; originalText: string };
 
 /**
- * Lists up to `need` matches within the budget. The walk first tries to prove the term is
- * dense with a single match; if that row arrives in time, the rest of the page keeps
- * walking. A timeout with nothing listed still has no rate to project, so the index takes
- * over — but a common word is never asked to fill a whole page under the short trial.
- * Both plans list by descending document id, so the second scan resumes below the last id
- * the first one listed.
+ * Describes the page's documents: catalog titles, and the original text around the match.
+ *
+ * The match is located in the document's normalized text and mapped back to a block
+ * through `block_starts`, so nothing has to scan the document's blocks looking for the
+ * keyword. Three blocks are returned rather than one, because the excerpt window reaches
+ * past the block the keyword starts in.
  */
-export async function collectContentSearchMatches(
-  tx: SqlExecutor,
-  terms: readonly ContentSearchTerm[],
-  options: PostgresContentSearchOptions,
-  need: number,
-  deadline: number,
-): Promise<{ matches: MatchedDocument[]; complete: boolean }> {
-  const startedAt = performance.now();
-  const trialNeed = Math.min(1, need);
-  const walk = await streamMatches(
-    tx,
-    await buildContentSearchStreamQuery(terms, { kind: "walk" }, options, trialNeed),
-    trialNeed,
-    Math.min(deadline, startedAt + WALK_TRIAL_MS),
-  );
-  if (walk.matches.length >= need) return { matches: walk.matches.slice(0, need), complete: walk.complete };
-  // A listed trial row means the term is dense enough to keep walking. Projecting the
-  // remaining cap from that one row's wall time treats cursor setup as per-match cost
-  // and sends common words to the index as soon as the event loop is busy. Nothing
-  // listed still has no rate, so a term that can use the index does; in-book searches
-  // keep walking.
-  const plan: ContentSearchPlan = walk.matches.length > 0 || !canAnchorContentSearch(terms, options)
-    ? { kind: "walk" }
-    : { kind: "anchored" };
-  const need2 = need - walk.matches.length;
-  const rest = await streamMatches(
-    tx,
-    await buildContentSearchStreamQuery(
-      terms,
-      plan,
-      options,
-      need2,
-      walk.matches.at(-1)?.documentId,
-    ),
-    need2,
-    deadline,
-  );
-  return { matches: [...walk.matches, ...rest.matches], complete: rest.complete };
-}
-
-type CacheEntry = { expiresAt: number; list: MatchList };
-const cacheHolder = globalThis as typeof globalThis & { novelReaderContentSearchResults?: Map<string, CacheEntry> };
-
-/** Result lists are reused briefly, so paging through one costs a single page lookup and
- *  every page sees the same list. Stale entries only drop documents that are no longer
- *  published, which the page lookup excludes anyway. */
-function resultCache(): Map<string, CacheEntry> {
-  cacheHolder.novelReaderContentSearchResults ||= new Map();
-  return cacheHolder.novelReaderContentSearchResults;
-}
-
-function readCachedMatches(key: string): MatchList | null {
-  const cache = resultCache();
-  const entry = cache.get(key);
-  if (!entry) return null;
-  cache.delete(key);
-  if (entry.expiresAt <= Date.now()) return null;
-  cache.set(key, entry);
-  return entry.list;
-}
-
-function writeCachedMatches(key: string, list: MatchList): void {
-  const cache = resultCache();
-  cache.delete(key);
-  cache.set(key, { expiresAt: Date.now() + (list.complete ? RESULT_CACHE_TTL_MS : PARTIAL_CACHE_TTL_MS), list });
-  while (cache.size > RESULT_CACHE_ENTRIES) cache.delete(cache.keys().next().value!);
-}
-
-function cacheKey(terms: readonly ContentSearchTerm[], options: PostgresContentSearchOptions, maxResults: number): string {
-  return JSON.stringify({
-    terms: terms.map((term) => term.forms.map((form) => form.text).join("|")).sort(),
-    novelId: options.novelId ?? null,
-    sourceId: options.sourceId ?? null,
-    sourceSlug: options.sourceSlug === undefined ? null : normalizedSlug(options.sourceSlug, "content search source slug"),
-    excludedSources: normalizedSlugs(options.excludedSourceSlugs, "excluded content search source").sort(),
-    includeTags: normalizedSlugs(options.includeTagSlugs, "included content search tag").sort(),
-    excludeTags: normalizedSlugs(options.excludeTagSlugs, "excluded content search tag").sort(),
-    title: options.titleQuery?.requiredTerms.map((term) => term.value) ?? [],
-    audience: options.audience ?? "public",
-    maxResults,
-  });
+export function buildContentSearchPageQuery(documentIds: readonly string[], anchor: string): SqlQuery {
+  if (!documentIds.length) throw new Error("Content search page requires at least one document");
+  if (documentIds.some((id) => !/^[1-9]\d{0,18}$/u.test(id))) throw new Error("Invalid content search document id");
+  return {
+    text: `SELECT s.document_id::text AS document_id, s.novel_id, d.chapter_id, n.title AS novel_title,
+        CASE WHEN d.chapter_id IS NULL THEN NULL ELSE coalesce(c.title_override, c.title) END AS chapter_title,
+        d.active_content_version AS content_version, located.block_no,
+        coalesce((
+          SELECT jsonb_agg(jsonb_build_object('blockNo', b.block_no, 'charStart', b.char_start,
+            'originalText', b.original_text) ORDER BY b.block_no)
+          FROM novel_content_blocks b
+          WHERE b.document_id = s.document_id AND b.generation = s.generation
+            AND b.block_no BETWEEN greatest(located.block_no - 1, 0) AND located.block_no + 1
+        ), '[]'::jsonb) AS blocks
+      FROM novel_search_documents s
+      JOIN novel_documents d ON d.id = s.document_id
+      JOIN novels n ON n.id = s.novel_id
+      LEFT JOIN novel_chapters c ON c.novel_id = s.novel_id AND c.id = d.chapter_id
+      JOIN LATERAL (
+        SELECT greatest((
+          SELECT count(*) FROM unnest(s.block_starts) AS start_offset
+          WHERE start_offset <= greatest(strpos(s.search_text, $2) - 1, 0)
+        ) - 1, 0)::integer AS block_no
+      ) located ON true
+      WHERE s.document_id = ANY($1::bigint[])
+      ORDER BY s.document_id DESC`,
+    values: [documentIds, anchor],
+  };
 }
 
 async function snippet(
@@ -656,7 +396,7 @@ async function snippet(
   });
   return {
     text: `${prefix}${text.slice(contentStart, contentEnd)}${suffix}`,
-    charStart: (blocks[0]?.charStart ?? row.charStart) + matchStart,
+    charStart: (blocks[0]?.charStart ?? 0) + matchStart,
     highlightRanges,
   };
 }
@@ -665,7 +405,6 @@ async function pageItems(
   documents: readonly MatchedDocument[],
   needles: readonly string[],
 ): Promise<PostgresContentSearchItem[]> {
-  if (!documents.length) return [];
   return Promise.all(documents.map(async (document) => {
     const excerpt = await snippet(document, needles);
     return {
@@ -683,44 +422,60 @@ async function pageItems(
   }));
 }
 
+/**
+ * Turns off pg_bigm's recheck for this transaction, and caps how long a statement may
+ * run. `current_setting(..., true)` returns NULL where the extension is absent, which is
+ * how a development database on pg_trgm skips the setting instead of failing on it --
+ * pg_trgm rechecks unconditionally, so it is exact there without this.
+ */
+async function prepareSearchSession(executor: SqlExecutor): Promise<void> {
+  const timeout = Math.max(MIN_STATEMENT_TIMEOUT_MS, postgresQueryTimeoutMs("web") - STATEMENT_TIMEOUT_MARGIN_MS);
+  await executor.query({
+    text: `SELECT set_config('jit', 'off', true),
+      set_config('statement_timeout', $1, true),
+      (SELECT set_config('pg_bigm.enable_recheck', 'off', true)
+       WHERE current_setting('pg_bigm.enable_recheck', true) IS NOT NULL)`,
+    values: [`${Math.ceil(timeout)}ms`],
+  });
+}
+
 export async function searchPostgresContent(
   transaction: ContentSearchTransaction,
   query: ParsedSearchQuery,
   options: PostgresContentSearchOptions,
 ): Promise<PostgresContentSearchPage> {
-  const maxResults = normalizedMaxResults(options.maxResults);
   const pageSize = normalizedPageSize(options.pageSize);
   const page = normalizedPage(options.page);
   const terms = await planContentSearchTerms(query);
-  // Validate filters before borrowing a connection.
-  await scopeFilters(builder(), options);
-  documentSourceFilters(builder(), options);
-  const needles = await normalizeChineseSearchNeedles(query.highlightTerms.map((term) => term.value));
-  const key = cacheKey(terms, options, maxResults);
-  const cached = readCachedMatches(key);
-  const list = cached ?? await transaction(async (tx) => {
-    await tx.query({
-      text: "SELECT set_config('jit', 'off', true), set_config('work_mem', $1, true)",
-      values: [SEARCH_WORK_MEM],
-    });
-    // One match past the cap is what tells a list that stopped at it from one that ended.
-    const found = await collectContentSearchMatches(tx, terms, options, maxResults + 1, performance.now() + MATCH_BUDGET_MS);
-    const collected = {
-      matches: found.matches.slice(0, maxResults),
-      capped: found.matches.length > maxResults,
-      complete: found.complete,
-    };
-    writeCachedMatches(key, collected);
-    return collected;
+  const candidateQuery = await buildContentSearchCandidateQuery(terms, options, {
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
   });
-  const start = (page - 1) * pageSize;
-  const documents = list.matches.slice(start, start + pageSize);
+  const needles = await normalizeChineseSearchNeedles(query.highlightTerms.map((term) => term.value));
+  const found = await transaction(async (tx) => {
+    await prepareSearchSession(tx);
+    const summary = await tx.query<QueryResultRow & { total_items: string; total_novels: string; ids: string[] }>(candidateQuery);
+    const row = summary.rows[0];
+    const ids = row?.ids ?? [];
+    const documents = ids.length
+      ? (await tx.query<PageRow>(buildContentSearchPageQuery(ids, terms[0].text))).rows.map<MatchedDocument>((hit) => ({
+          documentId: hit.document_id,
+          novelId: hit.novel_id,
+          chapterId: hit.chapter_id,
+          novelTitle: hit.novel_title,
+          chapterTitle: hit.chapter_title,
+          contentVersion: hit.content_version,
+          blockNo: hit.block_no,
+          blocks: hit.blocks || [],
+        }))
+      : [];
+    return { documents, totalItems: Number(row?.total_items ?? 0), totalNovels: Number(row?.total_novels ?? 0) };
+  });
   return {
-    items: await pageItems(documents, needles),
+    items: await pageItems(found.documents, needles),
     page,
-    totalItems: list.matches.length,
-    totalNovels: new Set(list.matches.map((document) => document.novelId)).size,
-    capped: list.capped,
-    partial: !list.complete,
+    totalItems: found.totalItems,
+    totalNovels: found.totalNovels,
+    estimated: terms.some((term) => term.kind !== "exact"),
   };
 }

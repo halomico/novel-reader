@@ -15,6 +15,11 @@ async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
   return rows;
 }
 
+async function indexedForm(text: string): Promise<string> {
+  const forms = await normalizeChineseSearchForms(text);
+  return forms.hans ?? forms.original;
+}
+
 test("Chinese normalization uses one versioned NFKC and Traditional-to-Hans contract", async () => {
   assert.deepEqual(await normalizeChineseSearchForms("Ａ_龍門", "title"), {
     original: "a_龍門", hans: "a_龙门", version: CONTENT_NORMALIZATION_VERSION,
@@ -24,7 +29,7 @@ test("Chinese normalization uses one versioned NFKC and Traditional-to-Hans cont
   });
 });
 
-test("content blocks reconstruct original UTF-16 exactly and retain bounded search overlap", async () => {
+test("content blocks reconstruct the original text and partition its indexed form", async () => {
   const text = `甲😀龍${"　".repeat(60)}門乙`;
   const blocks = await collect(createContentBlocks(text, 2));
   assert.equal(blocks.map((block) => block.originalText).join(""), text);
@@ -34,23 +39,32 @@ test("content blocks reconstruct original UTF-16 exactly and retain bounded sear
     assert.equal(block.charStart, index === 0 ? 0 : blocks[index - 1].charEnd);
     assert.equal(block.charEnd, block.charStart + block.originalText.length);
   });
-  assert.ok(blocks.some((block) => block.searchTextOriginal.includes("龍門")));
-  assert.ok(blocks.some((block) => block.searchTextHans?.includes("龙门")));
+  const document = blocks.map((block) => block.searchText).join("");
+  assert.equal(document, await indexedForm(text));
+  assert.ok(document.includes("龙门"), "a word split by sixty spaces across many blocks is contiguous in the document");
 });
 
-test("block search context spans exactly the longest public keyword across a boundary", async () => {
-  // The index stores each block's normalized text plus just enough of its neighbours
-  // for a maximum-length keyword to be found whole: more context is duplicated
-  // index volume, less would make a keyword straddling two blocks unfindable.
-  const context = MAX_CONTENT_KEYWORD_CHARS - 1;
+test("every normalized character lands in exactly one block, including conversions that cross a boundary", async () => {
+  // Phrase conversions give every output character the whole phrase's source range, so
+  // a phrase straddling a boundary is the case a mismatched pair of bounds would copy
+  // into both blocks. Several block sizes put boundaries inside every phrase here.
+  const text = "臺灣的頭髮與著名的龍門客棧，裡面有許多隻貓。發現後來的變化。".repeat(12);
+  const expected = await indexedForm(text);
+  for (const size of [1, 2, 3, 5, 7, 64, 1_200]) {
+    const blocks = await collect(createContentBlocks(text, size));
+    assert.equal(blocks.map((block) => block.searchText).join(""), expected, `block size ${size}`);
+  }
+});
+
+test("blocks carry only their own text: a document-level index needs no boundary context", async () => {
   const keyword = "一二三四五六七八九十壹贰叁肆伍";
   assert.equal(Array.from(keyword).length, MAX_CONTENT_KEYWORD_CHARS);
+  const indexed = await indexedForm(keyword);
   const text = `${"甲".repeat(1_193)}${keyword}${"乙".repeat(1_200)}`;
   const blocks = await collect(createContentBlocks(text, 1_200));
-  assert.equal(blocks.length, 3);
-  assert.equal(blocks[0].searchTextOriginal.length, 1_200 + context, "leading block carries only trailing context");
-  assert.equal(blocks[1].searchTextOriginal.length, context + 1_200 + 8);
-  assert.ok(blocks[0].searchTextOriginal.includes(keyword), "a keyword crossing the boundary is findable whole");
+  assert.deepEqual(blocks.map((block) => block.searchText.length), [1_200, 1_200, 8]);
+  assert.ok(!blocks.some((block) => block.searchText.includes(indexed)), "no single block holds the straddling keyword");
+  assert.ok(blocks.map((block) => block.searchText).join("").includes(indexed), "the document text does");
 });
 
 test("content normalization rejects invalid Unicode", async () => {

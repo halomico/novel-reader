@@ -157,8 +157,10 @@ export async function POST(request: NextRequest) {
   if (titleValidation && !titleValidation.ok) return jsonError(titleValidation.message, 400);
 
   const pageSize = settings.searchResultsPageSize;
-  const maxResults = settings.globalSearchMaxResults;
-  const lastPage = Math.max(1, Math.ceil(maxResults / pageSize));
+  // Every match is counted, and each page is listed straight from the index. The setting
+  // bounds only how deep a page may be requested, so a crafted request cannot make
+  // PostgreSQL step over an unbounded offset.
+  const lastPage = Math.max(1, Math.ceil(settings.globalSearchMaxResults / pageSize));
   const pageInput = parsed.value.page === undefined ? 1 : Number(parsed.value.page);
   if (!Number.isSafeInteger(pageInput) || pageInput < 1) {
     return jsonError("页码无效", 400);
@@ -186,7 +188,6 @@ export async function POST(request: NextRequest) {
       excludeTagSlugs: filters?.excludeTags,
       titleQuery: titleValidation?.ok ? titleValidation.query : undefined,
       audience,
-      maxResults,
       pageSize,
       page: requestedPage,
     });
@@ -220,8 +221,7 @@ export async function POST(request: NextRequest) {
     page: page.page,
     totalItems: page.totalItems,
     totalNovels: page.totalNovels,
-    totalPages: Math.max(1, Math.ceil(page.totalItems / pageSize)),
-    capped: page.capped,
-    partial: page.partial,
+    totalPages: Math.min(lastPage, Math.max(1, Math.ceil(page.totalItems / pageSize))),
+    estimated: page.estimated,
   }, { headers: { "Cache-Control": "private, no-store" } });
 }

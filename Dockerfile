@@ -16,6 +16,7 @@ COPY scripts/build-maintenance.mjs \
   ./scripts/
 COPY scripts/scan-books.ts \
   scripts/reindex-postgres-content.ts \
+  scripts/reindex-postgres-search-text.ts \
   scripts/reindex-postgres-originals.ts \
   scripts/optimize-media.ts \
   scripts/media-node.ts \
