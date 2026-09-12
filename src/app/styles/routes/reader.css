@@ -145,7 +145,6 @@
 
 .bookSearchPage .searchResults {
   gap: 0;
-  border-top: 1px solid var(--border);
 }
 
 .bookSearchPage .searchResultCard {
@@ -164,6 +163,11 @@
 .bookSearchPage .searchResultCard:hover:not(:focus-visible) {
   border-bottom-color: var(--border);
   background: transparent;
+}
+
+.bookSearchPage .searchResultCard:last-child,
+.bookSearchPage .searchResultCard:last-child:hover {
+  border-bottom-color: transparent;
 }
 
 .bookSearchPage .searchResultBody {

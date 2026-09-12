@@ -84,9 +84,12 @@
   --advanced-exclude-tone: color-mix(in srgb, #7d6a88 76%, var(--text));
   display: grid;
   gap: 12px;
-  margin-bottom: 24px;
-  padding-block: 12px 14px;
-  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+  padding: 14px var(--card-padding) 16px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
 }
 
 .advancedTagSearchToolbar {
@@ -550,10 +553,6 @@
   opacity: .42;
 }
 
-.advancedTagSearchPage .bookGrid {
-  border-top: 0;
-}
-
 .tagDetailHeadingRow {
   display: flex;
   min-width: 0;
@@ -619,6 +618,19 @@
   gap: 0;
 }
 
+/* The public tag library is one card of tag groups; its edge closes the last group. */
+.tagLibrary > .tagGroupStack {
+  padding: 4px var(--card-padding);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+}
+
+.tagLibrary > .tagGroupStack > .tagGroupBlock:last-child {
+  border-bottom-color: transparent;
+}
+
 .tagGroupBlock {
   --tag-group-space: 12px;
   display: grid;
@@ -677,8 +689,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 4px 12px;
-  margin: -12px 0 6px;
-  border-bottom: 1px solid var(--border);
+  margin: -12px 0 8px;
 }
 
 .contentSearchNote {
@@ -702,6 +713,11 @@
 .contentSearchResults .searchResultCard:hover:not(:focus-visible) {
   border-bottom-color: var(--border);
   background: transparent;
+}
+
+.contentSearchResults .searchResultCard:last-child,
+.contentSearchResults .searchResultCard:last-child:hover {
+  border-bottom-color: transparent;
 }
 
 .contentSearchResults .searchResultBody {
@@ -965,7 +981,7 @@
 .advancedTagSearchHeader.userContentHeader {
   min-height: 48px;
   align-items: center;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 0;
   padding: 0;
 }
 

@@ -620,14 +620,26 @@
 }
 
 .bookGrid {
-  --book-divider: color-mix(in srgb, var(--border) 72%, transparent);
+  --book-divider: var(--card-divider);
   display: grid;
   min-width: 0;
   max-width: 100%;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   column-gap: 30px;
   row-gap: 0;
-  border-top: 1px solid var(--book-divider);
+  padding: 4px var(--card-padding);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+}
+
+/* The card's edge closes the list, so its last row draws no divider of its own. */
+@media (min-width: 1061px) {
+  .bookGrid > .bookCard:nth-child(3n + 1):nth-last-child(-n + 3),
+  .bookGrid > .bookCard:nth-child(3n + 1):nth-last-child(-n + 3) ~ .bookCard {
+    border-bottom-color: transparent;
+  }
 }
 
 .bookCard {
@@ -733,9 +745,10 @@
 
 .emptyState {
   padding: 36px;
-  border: 1px dashed var(--border);
-  border-radius: 8px;
-  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
   text-align: center;
 }
 
@@ -1314,6 +1327,15 @@ button.pageNumber {
   color: color-mix(in srgb, #a92d25 74%, var(--text));
 }
 
+/* Full-text results, on the search page and inside a book, are one card. */
+.contentSearchResults {
+  padding: 0 var(--card-padding);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+}
+
 .searchResultCard {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -1575,10 +1597,10 @@ button.pageNumber {
   display: grid;
   gap: 13px;
   padding: 18px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
 }
 
 .userPanel label {
@@ -1609,6 +1631,25 @@ button.pageNumber {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 14px;
+  padding: 0 var(--card-padding);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+}
+
+/* Inside the card the channel tabs need headroom, the resource list needs no outer
+   rules, and the video grid needs room below its last row. */
+.mediaLibrary > .mediaVideoChannels {
+  padding-top: 4px;
+}
+
+.mediaLibrary .mediaResourceList {
+  border-block: 0;
+}
+
+.mediaLibrary .mediaAssetGrid {
+  padding-bottom: 18px;
 }
 
 .breadcrumbs + .mediaLibrary {
@@ -2062,6 +2103,10 @@ button.pageNumber {
     grid-template-columns: 1fr;
   }
 
+  .bookGrid > .bookCard:last-child {
+    border-bottom-color: transparent;
+  }
+
   .readerTitle {
     gap: 8px;
   }
@@ -2452,6 +2497,11 @@ button.pageNumber {
 
   .bookGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bookGrid > .bookCard:nth-child(2n + 1):nth-last-child(-n + 2),
+  .bookGrid > .bookCard:nth-child(2n + 1):nth-last-child(-n + 2) ~ .bookCard {
+    border-bottom-color: transparent;
   }
 }
 .siteHeader.isAuthHeader {
@@ -3573,8 +3623,12 @@ button.pageNumber {
   line-height: 15px;
 }
 
-.homePortalCard:nth-child(-n + 2) {
-  border-top: 1px solid var(--border);
+/* The portal is one card; its edge closes the last row. */
+@media (min-width: 821px) {
+  .homePortalCard:nth-child(2n + 1):nth-last-child(-n + 2),
+  .homePortalCard:nth-child(2n + 1):nth-last-child(-n + 2) ~ .homePortalCard {
+    border-bottom-color: transparent;
+  }
 }
 
 .homePortalCard {
@@ -4155,8 +4209,8 @@ button.pageNumber {
     font-family: inherit;
   }
 
-  .homePortalCard:nth-child(2) {
-    border-top: 0;
+  .homePortalCard:last-child {
+    border-bottom-color: transparent;
   }
 
   .homePortalCard {
@@ -4903,7 +4957,19 @@ button.pageNumber {
 .favoriteBookGrid {
   grid-template-columns: minmax(0, 1fr);
   gap: 0;
-  border-top: 1px solid var(--border);
+}
+
+.favoriteBookGrid > :last-child > .bookCard {
+  border-bottom-color: transparent;
+}
+
+/* Tag directories (media and original) are one card: a title row over the tag cloud. */
+.mediaTagDirectory {
+  padding: 0 var(--card-padding) var(--card-padding);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
 }
 
 .favoriteBookGrid .favoriteSelectableItem,

@@ -317,10 +317,6 @@
   flex: 0 0 auto;
 }
 
-.originalMinePage .originalArticleList {
-  border-top: 0;
-}
-
 .originalTagDirectory {
   display: grid;
   min-width: 0;
@@ -412,7 +408,11 @@
   display: grid;
   min-width: 0;
   gap: 0;
-  border-top: 1px solid var(--border);
+  padding: 0 var(--card-padding);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
 }
 
 .originalArticleRow {
@@ -422,8 +422,14 @@
   grid-template-columns: 44px minmax(0, 1fr) auto;
   align-items: center;
   gap: 11px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--card-divider);
   padding: 11px 2px;
+}
+
+/* The card's edge closes the list; favourites wrap each row in a selectable item. */
+.originalArticleList > .originalArticleRow:last-child,
+.originalArticleList > :last-child > .originalArticleRow {
+  border-bottom-color: transparent;
 }
 
 .originalArticleRow.hasNoAvatar {

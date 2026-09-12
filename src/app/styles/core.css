@@ -3,13 +3,15 @@
  */
 :root {
   color-scheme: light;
+  /* One neutral family per theme: grounds, surfaces, rules and secondary text share
+     one hue, so no part of the page reads as tinted. */
   --theme-bg: #f6f6f6;
-  --theme-bg-soft: #fafbfc;
+  --theme-bg-soft: #fafafa;
   --theme-surface: #ffffff;
-  --theme-surface-strong: #f0f2f5;
-  --theme-text: #191b1f;
-  --theme-muted: #646a73;
-  --theme-border: #e5e6eb;
+  --theme-surface-strong: #f0f0f0;
+  --theme-text: #1a1a1a;
+  --theme-muted: #666666;
+  --theme-border: #e6e6e6;
   --palette-light-accent: #0d6efd;
   --palette-light-strong: #052c65;
   --palette-dark-accent: #6ea8fe;
@@ -52,8 +54,16 @@
   --action-primary-active: color-mix(in srgb, var(--accent-fill) 86%, #000);
   --action-primary-shadow: 0 2px 7px color-mix(in srgb, var(--accent-fill) 20%, transparent);
   --action-primary-focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
-  --shadow: 0 1px 2px rgb(31 45 54 / 7%);
-  --shadow-float: 0 14px 36px rgb(22 31 37 / 14%);
+  --shadow: 0 1px 3px rgb(0 0 0 / 6%);
+  --shadow-float: 0 14px 36px rgb(0 0 0 / 12%);
+  /* Lists and panels sit on the grey ground as white cards. Phones drop the frame and
+     let the page itself be the card; see the max-width: 820px block below. */
+  --card-bg: var(--surface);
+  --card-border: color-mix(in srgb, var(--border) 80%, transparent);
+  --card-divider: color-mix(in srgb, var(--border) 72%, transparent);
+  --card-radius: 8px;
+  --card-shadow: 0 1px 2px rgb(0 0 0 / 3%);
+  --card-padding: 20px;
   --reader-font-size: 18px;
   --reader-line-height: 1.7;
   --original-font-size: 17px;
@@ -63,13 +73,13 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --theme-bg: #15191c;
-    --theme-bg-soft: #1a1f23;
-    --theme-surface: #20262a;
-    --theme-surface-strong: #2a3237;
-    --theme-text: #edf1f3;
-    --theme-muted: #a7b2b9;
-    --theme-border: #39434a;
+    --theme-bg: #141414;
+    --theme-bg-soft: #191919;
+    --theme-surface: #1e1e1e;
+    --theme-surface-strong: #282828;
+    --theme-text: #ececec;
+    --theme-muted: #a0a0a0;
+    --theme-border: #333333;
     --accent: var(--palette-dark-accent);
     --accent-strong: var(--palette-dark-strong);
     --accent-text: var(--palette-dark-text);
@@ -83,13 +93,13 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --theme-bg: #15191c;
-  --theme-bg-soft: #1a1f23;
-  --theme-surface: #20262a;
-  --theme-surface-strong: #2a3237;
-  --theme-text: #edf1f3;
-  --theme-muted: #a7b2b9;
-  --theme-border: #39434a;
+  --theme-bg: #141414;
+  --theme-bg-soft: #191919;
+  --theme-surface: #1e1e1e;
+  --theme-surface-strong: #282828;
+  --theme-text: #ececec;
+  --theme-muted: #a0a0a0;
+  --theme-border: #333333;
   --accent: var(--palette-dark-accent);
   --accent-strong: var(--palette-dark-strong);
   --accent-text: var(--palette-dark-text);
@@ -103,12 +113,12 @@
 :root[data-theme="light"] {
   color-scheme: light;
   --theme-bg: #f6f6f6;
-  --theme-bg-soft: #fafbfc;
+  --theme-bg-soft: #fafafa;
   --theme-surface: #ffffff;
-  --theme-surface-strong: #f0f2f5;
-  --theme-text: #191b1f;
-  --theme-muted: #646a73;
-  --theme-border: #e5e6eb;
+  --theme-surface-strong: #f0f0f0;
+  --theme-text: #1a1a1a;
+  --theme-muted: #666666;
+  --theme-border: #e6e6e6;
   --accent: var(--palette-light-accent);
   --accent-strong: var(--palette-light-strong);
   --accent-text: var(--palette-light-text);
@@ -116,7 +126,7 @@
   --accent-fill-strong: var(--palette-light-fill-strong);
   --accent-foreground: #fff;
   --tag-color: var(--accent-text, var(--accent));
-  --shadow: 0 10px 28px rgb(31 45 54 / 9%);
+  --shadow: 0 1px 3px rgb(0 0 0 / 6%);
 }
 
 /* Some palette sources intentionally use the same display and strong swatch.
@@ -131,6 +141,18 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --accent-strong: color-mix(in srgb, var(--accent) 84%, var(--text) 16%);
+  }
+}
+
+/* Phones read straight off the page: the ground takes the card surface and cards drop
+   their frame, so content runs edge to edge on one plain surface. */
+@media (max-width: 820px) {
+  :root {
+    --bg: var(--surface);
+    --card-border: transparent;
+    --card-radius: 0;
+    --card-shadow: none;
+    --card-padding: 0px;
   }
 }
 

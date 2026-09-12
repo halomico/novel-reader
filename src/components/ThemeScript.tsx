@@ -66,7 +66,9 @@ export function ThemeScript({
           : ${JSON.stringify(DEFAULT_LOCALE)};
         root.lang = documentLocale;
         root.dataset.locale = documentLocale;
-        var readerRoute = /(?:^|\\/)books\\/\\d+(?:\\/|$)/.test(window.location.pathname) ||
+        // A book's own search page lists results on the site ground like other list pages;
+        // everything else under a book is the reader.
+        var readerRoute = /(?:^|\\/)books\\/\\d+(?:\\/(?!search(?:\\/|$))|$)/.test(window.location.pathname) ||
           /(?:^|\\/)original\\/(?!new(?:\\/|$)|mine(?:\\/|$)|tags(?:\\/|$)|author(?:\\/|$))[^/]+\\/?$/.test(window.location.pathname);
         var keepReaderChrome = sessionStorage.getItem(${JSON.stringify(READER_KEEP_CHROME_SESSION_KEY)}) === "1";
         if (readerRoute && window.matchMedia("(max-width: 820px)").matches && !keepReaderChrome) {

@@ -92,6 +92,23 @@
   display: grid;
 }
 
+/* The public announcement list is one card: its title row, then the entries. */
+.publicAnnouncementsPage {
+  padding: 0 var(--card-padding);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+}
+
+.publicAnnouncementsPage .announcementList {
+  border-top: 1px solid var(--card-divider);
+}
+
+.publicAnnouncementsPage .announcementListItem:last-child {
+  border-bottom-color: transparent;
+}
+
 .announcementListItem,
 .stationThreadList > a {
   display: grid;
@@ -603,7 +620,11 @@
 
 .announcementDetail {
   width: min(820px, 100%);
-  padding: 0 0 56px;
+  padding: 0 var(--card-padding) 32px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
 }
 
 .announcementDetailHeader {

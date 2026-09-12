@@ -297,11 +297,12 @@
   box-shadow: 0 12px 30px rgb(0 0 0 / 14%);
 }
 
+/* On wider screens the related-videos card below separates the info; phones keep a rule
+   because their cards have no frame. */
 .mediaVideoInfo {
   display: grid;
   gap: 12px;
   padding: 2px 0 16px;
-  border-bottom: 1px solid var(--border);
 }
 
 .mediaVideoInfoBar {
@@ -582,8 +583,11 @@
 .mediaRelatedVideos {
   display: grid;
   gap: 12px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
+  padding: 16px var(--card-padding) 18px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
 }
 
 .mediaRelatedVideos h2 {
@@ -1444,6 +1448,7 @@
   .mediaVideoInfo {
     gap: 10px;
     padding: 0 14px 13px;
+    border-bottom: 1px solid var(--border);
   }
 
   .mediaVideoInfo .mediaDescription {
