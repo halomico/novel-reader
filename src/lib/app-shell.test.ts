@@ -291,8 +291,12 @@ test("navigation keeps the current surface while loading and paged readers avoid
   }
   const appLink = read("src/components/AppLink.tsx");
   assert.match(appLink, /prefetch=\{prefetch \?\? \(prefetchPolicy === "default"\)\}/);
+  // Every speculative fetch renders a page on the server, so all of them share one budget
+  // per tab, and a touch (which starts every scroll) never prefetches.
+  assert.match(appLink, /tabPrefetchBudget\(\)\.tryAcquire\(localizedHref, intent\)/);
+  assert.match(appLink, /event\.pointerType === "touch"/);
   const primaryNavigation = read("src/components/HeaderPrimaryNav.tsx");
-  assert.equal((primaryNavigation.match(/prefetchPolicy="default"/g) || []).length, 4);
+  assert.doesNotMatch(primaryNavigation, /prefetchPolicy="default"|prefetch=\{true\}/);
   const trackedTagLink = read("src/components/TagTrackedLink.tsx");
   assert.doesNotMatch(trackedTagLink, /prefetch=\{false\}|prefetchPolicy="never"/);
   const userMenu = read("src/components/HeaderUserMenu.tsx");
@@ -333,7 +337,8 @@ test("navigation keeps the current surface while loading and paged readers avoid
   assert.match(pageTurnController, /shouldPrefetchReaderRoute/);
   assert.match(pageTurnController, /isReaderResumeNavigation/);
   assert.match(pageTurnController, /requestIdleCallback/);
-  assert.match(pageTurnController, /prefetchAdjacent\(true\)/);
+  assert.match(pageTurnController, /prefetchAdjacent\(true, 1\)/);
+  assert.match(pageTurnController, /tabPrefetchBudget\(\)\.tryAcquire\(target/);
   assert.match(pageTurnController, /timeout: 500/);
   assert.match(read("src/components/ReadingHistoryList.tsx"), /scroll=\{false\}/);
   assert.match(read("src/components/NovelViewTracker.tsx"), /1_500/);

@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useLayoutEffect, useRef } from "react";
 import { beginReaderNavigationProgress } from "@/components/NavigationProgress";
 import { localeFromPathname, withLocalePath } from "@/lib/locale";
+import { tabPrefetchBudget } from "@/lib/prefetch-budget";
 import {
   READER_CHROME_SHOW_EVENT,
   READER_ENTRY_EDGE_SESSION_KEY,
@@ -297,7 +298,8 @@ export function ReaderPageTurnController({
       if (entryAnchorTimer) window.clearTimeout(entryAnchorTimer);
       entryAnchorTimer = 0;
       metrics = pageMetrics(content!);
-      if (metrics.index <= 1 || metrics.index >= metrics.count - 2) prefetchAdjacent(true);
+      if (metrics.index <= 1) prefetchAdjacent(true, -1);
+      if (metrics.index >= metrics.count - 2) prefetchAdjacent(true, 1);
       drag = {
         pointerId: event.pointerId,
         startX: event.clientX,
@@ -390,9 +392,14 @@ export function ReaderPageTurnController({
           effectiveType: connection?.effectiveType,
           visible: document.visibilityState === "visible",
         });
-    function prefetchAdjacent(force = false) {
-      if (nextHref && canPrefetch(nextContentBytes, force)) router.prefetch(withLocalePath(nextHref, locale));
-      if (previousHref && canPrefetch(previousContentBytes, force)) router.prefetch(withLocalePath(previousHref, locale));
+    // Readers move forward, so an idle chapter warms only the next one, within the tab's
+    // prefetch budget. Reaching the first or last pages of a paged chapter is a much
+    // stronger signal, so that direction is prefetched like a press.
+    function prefetchAdjacent(force = false, direction: 1 | -1 = 1) {
+      const href = direction === 1 ? nextHref : previousHref;
+      if (!href || !canPrefetch(direction === 1 ? nextContentBytes : previousContentBytes, force)) return;
+      const target = withLocalePath(href, locale);
+      if (tabPrefetchBudget().tryAcquire(target, force ? "press" : "idle")) router.prefetch(target);
     }
     const win = window as Window & {
       requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;

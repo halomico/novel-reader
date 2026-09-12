@@ -11,9 +11,7 @@ import {
 } from "react";
 import { useLinkNavigationProgress } from "@/components/NavigationProgress";
 import { localeFromPathname, withLocalePath } from "@/lib/locale";
-
-const INTENT_PREFETCH_DELAY_MS = 30;
-const INTENT_PREFETCH_TTL_MS = 60_000;
+import { PREFETCH_HOVER_DELAY_MS, tabPrefetchBudget } from "@/lib/prefetch-budget";
 
 export type PrefetchPolicy = "default" | "intent" | "never";
 
@@ -36,7 +34,9 @@ function canPrefetch(): boolean {
 }
 
 /**
- * Localized application link with bounded intent prefetch.
+ * Localized application link. Intent links prefetch when a pointer rests on them or a
+ * mouse button goes down, never on touch (a scroll starts with one), and always within
+ * the tab's shared prefetch budget.
  */
 export function AppLink({
   href,
@@ -54,8 +54,6 @@ export function AppLink({
   const pathname = usePathname();
   const router = useRouter();
   const progress = useLinkNavigationProgress(onClick, onNavigate);
-  const prefetchedHrefRef = useRef<string | null>(null);
-  const prefetchedAtRef = useRef(0);
   const prefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const localizedHref = withLocalePath(href, localeFromPathname(pathname));
 
@@ -65,40 +63,37 @@ export function AppLink({
     prefetchTimerRef.current = null;
   }
 
-  function doPrefetch() {
-    if (prefetchPolicy === "never" || isPrefetched() || !canPrefetch()) return;
-    prefetchedHrefRef.current = localizedHref;
-    prefetchedAtRef.current = Date.now();
+  function doPrefetch(intent: "hover" | "press") {
+    if (prefetchPolicy === "never" || !canPrefetch()) return;
+    if (!tabPrefetchBudget().tryAcquire(localizedHref, intent)) return;
     try {
       router.prefetch(localizedHref);
     } catch {
-      prefetchedHrefRef.current = null;
+      // A failed prefetch only loses the head start; the click still fetches the page.
     }
-  }
-
-  function isPrefetched() {
-    return prefetchedHrefRef.current === localizedHref && Date.now() - prefetchedAtRef.current < INTENT_PREFETCH_TTL_MS;
   }
 
   function schedulePrefetch() {
     clearPrefetchTimer();
-    if (prefetchPolicy === "never" || isPrefetched() || !canPrefetch()) return;
+    if (prefetchPolicy === "never" || !canPrefetch()) return;
     prefetchTimerRef.current = setTimeout(() => {
       prefetchTimerRef.current = null;
-      doPrefetch();
-    }, INTENT_PREFETCH_DELAY_MS);
+      doPrefetch("hover");
+    }, PREFETCH_HOVER_DELAY_MS);
   }
 
   useEffect(() => clearPrefetchTimer, []);
 
   function handlePointerEnter(event: PointerEvent<HTMLAnchorElement>) {
     onPointerEnter?.(event);
-    if (!event.defaultPrevented) schedulePrefetch();
+    if (!event.defaultPrevented && event.pointerType !== "touch") schedulePrefetch();
   }
 
   function handlePointerDown(event: PointerEvent<HTMLAnchorElement>) {
     onPointerDown?.(event);
-    if (!event.defaultPrevented && event.button === 0) doPrefetch();
+    if (event.defaultPrevented || event.button !== 0 || event.pointerType === "touch") return;
+    clearPrefetchTimer();
+    doPrefetch("press");
   }
 
   function handlePointerLeave(event: PointerEvent<HTMLAnchorElement>) {

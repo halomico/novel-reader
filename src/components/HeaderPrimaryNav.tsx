@@ -12,8 +12,9 @@ const MEDIA_LINKS: Record<MediaKind, string> = {
 };
 
 /**
- * Every section is a dynamic page, so navigation links prefetch on intent
- * (hover, focus or press) instead of rendering all sections on every view.
+ * Every section is a dynamic page, so navigation links prefetch on intent (a resting
+ * pointer, focus or a press) within the tab's prefetch budget, instead of rendering all
+ * sections on every page view.
  */
 export function HeaderPrimaryNav({
   mediaKinds,
@@ -42,24 +43,24 @@ export function HeaderPrimaryNav({
   return (
     <nav className={className} aria-label={ariaLabel}>
       {showLibrary ? (
-        <Link href="/novels" prefetchPolicy="default" aria-current={pathname.startsWith("/novels") || pathname.startsWith("/books") ? "page" : undefined} onClick={onNavigate}>
+        <Link href="/novels" aria-current={pathname.startsWith("/novels") || pathname.startsWith("/books") ? "page" : undefined} onClick={onNavigate}>
           {uiText(locale, "小说")}
         </Link>
       ) : null}
       {showTags ? (
-        <Link href="/tags" prefetchPolicy="default" aria-current={pathname.startsWith("/tags") ? "page" : undefined} onClick={onNavigate}>
+        <Link href="/tags" aria-current={pathname.startsWith("/tags") ? "page" : undefined} onClick={onNavigate}>
           {uiText(locale, "标签")}
         </Link>
       ) : null}
       {showOriginal ? (
-        <Link href="/original" prefetchPolicy="default" aria-current={pathname.startsWith("/original") ? "page" : undefined} onClick={onNavigate}>
+        <Link href="/original" aria-current={pathname.startsWith("/original") ? "page" : undefined} onClick={onNavigate}>
           {uiText(locale, "原创")}
         </Link>
       ) : null}
       {mediaKinds.map((kind) => {
         const active = (pathname === "/media" && activeKind === kind) || (kind === "video" && pathname.startsWith("/media/tags"));
         return (
-          <Link href={`/media?kind=${kind}`} prefetchPolicy="default" aria-current={active ? "page" : undefined} key={kind} onClick={onNavigate}>
+          <Link href={`/media?kind=${kind}`} aria-current={active ? "page" : undefined} key={kind} onClick={onNavigate}>
             {uiText(locale, MEDIA_LINKS[kind])}
           </Link>
         );
