@@ -425,7 +425,8 @@ test("navigation keeps the current surface while loading and paged readers avoid
   assert.doesNotMatch(read("src/app/styles/routes/reader.css"), /\.readerSidePanel\.is-settings[\s\S]*width: 340px/);
   assert.match(read("src/app/styles/routes/catalog.css"), /\.catalogFilterPopover[\s\S]*min-width: 176px/);
   assert.match(read("src/components/SiteHeader.tsx"), /isStandardHeader/);
-  assert.match(read("src/app/styles/core.css"), /--font-brand: "OpenAI Sans"/);
+  assert.match(read("src/app/styles/core.css"), /--font-brand: var\(--font-brand-face, "OpenAI Sans"\)/);
+  assert.match(read("src/app/layout.tsx"), /localFont\(\{\s*src: "\.\/fonts\/OpenAISans-Regular\.woff2"/);
   assert.match(read("src/app/styles/core.css"), /\.brand\s*\{[\s\S]*color:\s*var\(--accent-text/);
   assert.match(read("src/app/styles/core.css"), /\.brand:hover,\s*\.brand:focus-visible\s*\{[^}]*color:\s*color-mix\(in oklab, var\(--accent-text/);
   assert.doesNotMatch(read("src/app/styles/core.css"), /\.brand:hover,[\s\S]*opacity: 0\.85/);

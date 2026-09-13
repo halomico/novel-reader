@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import localFont from "next/font/local";
 import { Suspense } from "react";
 import { DefaultPaletteRotation } from "@/components/DefaultPaletteRotation";
 import { NavigationProgress } from "@/components/NavigationProgress";
@@ -8,6 +9,15 @@ import { DEFAULT_LOCALE } from "@/lib/locale";
 import { getRootShellConfiguration } from "@/lib/root-shell";
 import "./styles/core.css";
 import "./styles/components.css";
+
+// Only the site name uses this face. next/font serves it from /_next/static and preloads
+// it with every page; `block` keeps the name from flashing in a fallback face first.
+const brandFont = localFont({
+  src: "./fonts/OpenAISans-Regular.woff2",
+  weight: "400",
+  display: "block",
+  variable: "--font-brand-face",
+});
 
 export async function generateMetadata(): Promise<Metadata> {
   const shell = await getRootShellConfiguration();
@@ -36,7 +46,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const shell = await getRootShellConfiguration();
   return (
-    <html lang={DEFAULT_LOCALE} data-locale={DEFAULT_LOCALE} suppressHydrationWarning>
+    <html lang={DEFAULT_LOCALE} data-locale={DEFAULT_LOCALE} className={brandFont.variable} suppressHydrationWarning>
       <head>
         <ThemeScript
           defaultTheme={shell.theme}
