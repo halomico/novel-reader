@@ -37,7 +37,7 @@
   --accent-foreground: #fff;
   --tag-color: var(--accent-text, var(--accent));
   --font-ui: "PingFang SC", "PingFang TC", -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
-  --font-brand: var(--font-brand-face, "OpenAI Sans"), ui-sans-serif, system-ui, "SF Pro Display", "Segoe UI Variable Display", "Inter", "PingFang SC", "PingFang TC", "Microsoft YaHei UI", sans-serif;
+  --font-brand: var(--font-brand-face, "Inter Display"), ui-sans-serif, system-ui, "SF Pro Display", "Segoe UI Variable Display", "Inter", "PingFang SC", "PingFang TC", "Microsoft YaHei UI", sans-serif;
   --font-title: var(--font-ui);
   --font-content-title: "PingFang SC", "PingFang TC", -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
   --font-reading: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -317,7 +317,7 @@ textarea {
   font-size: 23px;
   font-weight: 500;
   line-height: 1;
-  letter-spacing: -0.028em;
+  letter-spacing: -0.012em;
   text-rendering: geometricPrecision;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

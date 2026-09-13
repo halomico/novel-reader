@@ -10,11 +10,13 @@ import { getRootShellConfiguration } from "@/lib/root-shell";
 import "./styles/core.css";
 import "./styles/components.css";
 
-// Only the site name uses this face. next/font serves it from /_next/static and preloads
-// it with every page; `block` keeps the name from flashing in a fallback face first.
+// Only the site name uses this face: Inter Display, Inter's optical cut for 20px+ text,
+// subset to A-Z, a-z and 0-9 (every other character uses the fallback stack).
+// next/font serves it from /_next/static and preloads it with every page; `block` keeps
+// the name from flashing in a fallback face first.
 const brandFont = localFont({
-  src: "./fonts/OpenAISans-Regular.woff2",
-  weight: "400",
+  src: "./fonts/InterDisplay-Medium.woff2",
+  weight: "500",
   display: "block",
   variable: "--font-brand-face",
 });
