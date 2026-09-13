@@ -10,7 +10,7 @@ shared cache.
 | Response | Browser `Cache-Control` | Edge `Cloudflare-CDN-Cache-Control` |
 | --- | --- | --- |
 | `/_next/static/*` | `public, max-age=31536000, immutable` (Next.js) | — (browser header applies) |
-| Guest HTML documents (`Accept: text/html`): `/`, `/tags`, `/original/tags`, `/announcements`, `/announcements/{id}` (no query); `/novels`, `/novels/recent`, `/original`, `/original/tags/{slug}`, `/original/author/{id}`, `/tags/{slug}` (only `?page=`) | `private, max-age=0, must-revalidate` | `public, max-age=60, stale-while-revalidate=300, stale-if-error=86400` |
+| Guest HTML documents (`Accept: text/html`): `/`, `/tags`, `/original/tags`, `/announcements`, `/announcements/{id}` (no query); `/novels`, `/original`, `/original/tags/{slug}`, `/original/author/{id}`, `/tags/{slug}` (only `?page=`) | `private, max-age=0, must-revalidate` | `public, max-age=60, stale-while-revalidate=300, stale-if-error=86400` |
 | Guest reader HTML: `/books/{id}`, `/books/{id}/chapters/{id}` while the library is public; `/original/{slug}` without a query | `private, max-age=0, must-revalidate` | `public, max-age=300, stale-while-revalidate=300, stale-if-error=86400` |
 | HTML while site-wide access rules are enabled; everything except `/` while novel rules or rate policies are enabled | Next.js default (no store) | not set — IP/country/rate rules run at the origin |
 | Documents with a session or layout-preference cookie | Next.js default (no store) | `no-store` |

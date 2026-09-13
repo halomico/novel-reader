@@ -168,7 +168,6 @@ const TRADITIONAL_UI_TEXT: Readonly<Record<string, string>> = {
   "免费": "免費",
   "排序": "排序",
   "小说排序": "小說排序",
-  "最近更新": "最近更新",
   "最新": "最新",
   "时间": "時間",
   "字数": "字數",

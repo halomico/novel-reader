@@ -34,7 +34,6 @@ test("caches only anonymous public catalog documents", () => {
   );
   assert.equal(isPublicPageCacheCandidate(request("/original", "page=2")), true);
   assert.equal(isPublicPageCacheCandidate(request("/original/article-mtv")), true);
-  assert.equal(isPublicPageCacheCandidate(request("/novels/recent", "page=2")), true);
   assert.equal(isPublicPageCacheCandidate(request("/original/tags")), true);
   assert.equal(isPublicPageCacheCandidate(request("/original/tags/fantasy", "page=2")), true);
   assert.equal(isPublicPageCacheCandidate(request("/original/author/3", "page=2")), true);

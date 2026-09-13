@@ -138,7 +138,7 @@ function applyDocumentCachePolicy(
   accessControls: { global: boolean; novel: boolean },
 ): NextResponse {
   const hasUserSession = request.cookies.has(USER_SESSION_COOKIE);
-  const usesNovelCatalogSearchPreference = pathname === "/novels" || pathname === "/novels/recent";
+  const usesNovelCatalogSearchPreference = pathname === "/novels";
   const hasBrowserLayoutPreference =
     usesNovelCatalogSearchPreference && request.cookies.has(NOVEL_CATALOG_SEARCH_COOKIE);
   const isNovelPage = /^\/books\/[1-9]\d*(?:\/chapters\/[1-9]\d*)?$/.test(pathname);
@@ -272,7 +272,7 @@ function loadShedResponse(request: NextRequest): NextResponse | null {
       accept,
       hasUserSession: request.cookies.has(USER_SESSION_COOKIE),
       hasBrowserLayoutPreference:
-        (pathname === "/novels" || pathname === "/novels/recent") && request.cookies.has(NOVEL_CATALOG_SEARCH_COOKIE),
+        pathname === "/novels" && request.cookies.has(NOVEL_CATALOG_SEARCH_COOKIE),
       isRscRequest: false,
       isRouterPrefetch: false,
       allowPublicNovelPages: isNovelLibraryPublic(),
